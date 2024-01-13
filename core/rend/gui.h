@@ -62,7 +62,8 @@ enum class GuiState {
 	SelectDisk,
 	Loading,
 	NetworkStart,
-	Cheats
+	Cheats,
+	GGPOJoin
 };
 extern GuiState gui_state;
 
@@ -76,3 +77,5 @@ static inline bool gui_is_content_browser()
 {
 	return gui_state == GuiState::Main;
 }
+
+void gui_display_ggpo_join();

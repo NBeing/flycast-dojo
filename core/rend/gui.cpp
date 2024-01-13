@@ -2869,8 +2869,7 @@ static void gui_display_content()
     static ImGuiTextFilter filter;
 #if !defined(__ANDROID__) && !defined(TARGET_IPHONE) && !defined(TARGET_UWP) && !defined(__SWITCH__)
 	ImGui::SameLine(0, 32 * settings.display.uiScale);
-	filter.Draw("Filter", ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x - 32 * settings.display.uiScale
-			- ImGui::CalcTextSize("Settings").x - ImGui::GetStyle().FramePadding.x * 2.0f - ImGui::GetStyle().ItemSpacing.x);
+	filter.Draw("##Filter");
 #endif
     if (gui_state != GuiState::SelectDisk)
     {
@@ -2981,8 +2980,11 @@ static void gui_display_content()
 					{
 						pressed = ImGui::Selectable(gameName.c_str());
 					}
+					std::string popup_name = "Options " + gameName;
 					if (pressed)
 					{
+						ImGui::OpenPopup(popup_name.c_str(), false);
+						/*
 						if (gui_state == GuiState::SelectDisk)
 						{
 							settings.content.path = game.path;
@@ -3002,6 +3004,42 @@ static void gui_display_content()
 							ImGui::PopID();
 							break;
 						}
+						*/
+					}
+
+					if (ImGui::BeginPopupContextItem(popup_name.c_str()))
+					{
+						if (ImGui::MenuItem("Launch"))
+						{
+							if (gui_state == GuiState::SelectDisk)
+							{
+								settings.content.path = game.path;
+								try {
+									DiscSwap(game.path);
+									gui_setState(GuiState::Closed);
+								} catch (const FlycastException& e) {
+									gui_error(e.what());
+								}
+							}
+							else
+							{
+								config::GGPOEnable.set(false);
+								SaveSettings();
+
+								std::string gamePath(game.path);
+								scanner.get_mutex().unlock();
+								gui_start_game(gamePath);
+								scanner.get_mutex().lock();
+								ImGui::PopID();
+								break;
+							}
+						}
+						if (ImGui::MenuItem("Netplay"))
+						{
+							settings.content.path = game.path;
+							gui_setState(GuiState::GGPOJoin);
+						}
+						ImGui::EndPopup();
 					}
 					ImGui::PopID();
 				}
@@ -3251,6 +3289,9 @@ void gui_display_ui()
 	case GuiState::Cheats:
 		gui_cheats();
 		break;
+	case GuiState::GGPOJoin:
+		gui_display_ggpo_join();
+		break;
 	default:
 		die("Unknown UI state");
 		break;
@@ -3476,3 +3517,68 @@ bool __cdecl Concurrency::details::_Task_impl_base::_IsNonBlockingThread() {
 	return false;
 }
 #endif
+
+#ifndef __ANDROID__
+#include "sdl/sdl.h"
+#endif
+
+int current_delay = 0;
+
+void gui_display_ggpo_join()
+{
+	std::string title = "Connect to GGPO Opponent";
+	ImGui::OpenPopup(title.data());
+	if (ImGui::BeginPopupModal(title.data(), NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		static char si[128] = "";
+		std::string detect_address = "";
+
+		ImGui::InputTextWithHint("IP", "0.0.0.0", si, IM_ARRAYSIZE(si));
+		detect_address = std::string(si);
+#ifndef __ANDROID__
+		ImGui::SameLine();
+		if (ImGui::Button("Paste"))
+		{
+			char* pasted_txt = SDL_GetClipboardText();
+			memcpy(si, pasted_txt, strlen(pasted_txt));
+		}
+#endif
+
+		ImGui::SliderInt("", (int*)&current_delay, 0, 20);
+		ImGui::SameLine();
+		ImGui::Text("Delay");
+
+		if (ImGui::Button("Start"))
+		{
+			config::GGPOEnable.set(true);
+			config::NetworkEnable.set(false);
+			//config::ActAsServer.set(true);
+			config::NetworkServer.set(detect_address);
+			if (current_delay != config::GGPODelay.get())
+				config::GGPODelay.set(current_delay);
+
+			SaveSettings();
+
+			ImGui::CloseCurrentPopup();
+
+			scanner.get_mutex().unlock();
+			gui_start_game(settings.content.path);
+			scanner.get_mutex().lock();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+		{
+			config::GGPOEnable.set(false);
+			SaveSettings();
+
+			settings.content.path = "";
+			ImGui::CloseCurrentPopup();
+			gui_setState(GuiState::Main);
+		}
+
+		ImGui::SameLine(0, 128.0f + ImGui::CalcTextSize("IP").x + ImGui::CalcTextSize("Paste").x - ImGui::CalcTextSize("Start").x);
+
+		ImGui::EndPopup();
+	}
+}
