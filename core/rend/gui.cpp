@@ -61,6 +61,9 @@
 #include <mutex>
 #include <algorithm>
 
+#include "dojo/net_beacon.h"
+NetBeacon presence;
+
 static bool game_started;
 
 int insetLeft, insetRight, insetTop, insetBottom;
@@ -2897,6 +2900,7 @@ static void gui_display_content()
     scanner.fetch_game_list();
 
 	// Only if Filter and Settings aren't focused... ImGui::SetNextWindowFocus();
+	//ImGui::BeginChild(ImGui::GetID("library"), ImVec2(0, -(ImGui::CalcTextSize("Foo").y + ImGui::GetStyle().FramePadding.y * 4.0f)), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened);
 	ImGui::BeginChild(ImGui::GetID("library"), ImVec2(0, 0), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened);
     {
 		const float totalWidth = ImGui::GetContentRegionMax().x - (!ImGui::GetCurrentWindow()->ScrollbarY ? ImGui::GetStyle().ScrollbarSize : 0);
@@ -3051,6 +3055,7 @@ static void gui_display_content()
     scrollWhenDraggingOnVoid();
     windowDragScroll();
 	ImGui::EndChild();
+
 	ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleVar();
@@ -3266,6 +3271,7 @@ void gui_display_ui()
 		gui_display_content();
 		break;
 	case GuiState::Closed:
+		presence.beacon_active = false;
 		break;
 	case GuiState::Onboarding:
 		gui_display_onboarding();
@@ -3523,6 +3529,9 @@ bool __cdecl Concurrency::details::_Task_impl_base::_IsNonBlockingThread() {
 #endif
 
 int current_delay = 0;
+std::string selected_beacon = "";
+std::string detect_address = "";
+int hosting = 1;
 
 void gui_display_ggpo_join()
 {
@@ -3531,29 +3540,85 @@ void gui_display_ggpo_join()
 	if (ImGui::BeginPopupModal(title.data(), NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiInputTextFlags_EnterReturnsTrue))
 	{
 		static char si[128] = "";
-		std::string detect_address = "";
-
-		ImGui::InputTextWithHint("IP", "0.0.0.0", si, IM_ARRAYSIZE(si));
-		detect_address = std::string(si);
-#ifndef __ANDROID__
-		ImGui::SameLine();
-		if (ImGui::Button("Paste"))
+		if (ImGui::BeginTabBar("GGPOTabBar", ImGuiTabBarFlags_None))
 		{
-			char* pasted_txt = SDL_GetClipboardText();
-			memcpy(si, pasted_txt, strlen(pasted_txt));
-		}
+			if (ImGui::BeginTabItem("IP Entry"))
+			{
+				presence.beacon_active = false;
+				presence.lobby_active = false;
+				ImGui::InputTextWithHint("IP", "0.0.0.0", si, IM_ARRAYSIZE(si));
+				detect_address = std::string(si);
+#ifndef __ANDROID__
+				ImGui::SameLine();
+				if (ImGui::Button("Paste"))
+				{
+					char *pasted_txt = SDL_GetClipboardText();
+					memcpy(si, pasted_txt, strlen(pasted_txt));
+				}
 #endif
+				ImGui::EndTabItem();
+			}
 
-		ImGui::SliderInt("", (int*)&current_delay, 0, 20);
+			if (config::NetBeaconEnable)
+			{
+				if (ImGui::BeginTabItem("Local Network"))
+				{
+					if (!presence.beacon_active)
+					{
+						presence.beacon_active = true;
+						std::thread t3(&NetBeacon::BeaconThread, std::ref(presence));
+						t3.detach();
+					}
+
+					if (!presence.lobby_active)
+					{
+						presence.lobby_active = true;
+						std::thread t4(&NetBeacon::ListenerThread, std::ref(presence));
+						t4.detach();
+					}
+
+					if (ImGui::BeginChild("Beacons", ImVec2(0, 100.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
+					{
+						for (auto it = presence.active_beacons.begin(); it != presence.active_beacons.end(); ++it)
+						{
+							if (presence.last_seen[it->first.data()] + 5000 > presence.unix_timestamp() &&
+								(config::PlayerName.get() != it->first || it->first == "Player"))
+								if (ImGui::Selectable((it->first).data(), selected_beacon == (it->first).data()))
+								{
+									selected_beacon = it->first;
+									detect_address = it->second;
+								}
+						}
+						ImGui::EndChild();
+					}
+
+					ImGui::EndTabItem();
+				}
+			}
+		}
+
+		ImGui::SliderInt("", (int *)&current_delay, 0, 20);
 		ImGui::SameLine();
 		ImGui::Text("Delay");
 
+		ImGui::Columns(2, "hosting", false);
+		ImGui::RadioButton("Host", &hosting, 1);
+		ImGui::NextColumn();
+		ImGui::RadioButton("Join", &hosting, 0);
+		ImGui::Columns(1, NULL, false);
+
 		if (ImGui::Button("Start"))
 		{
+			if (hosting)
+				config::ActAsServer.set(true);
+			else
+				config::ActAsServer.set(false);
+
 			config::GGPOEnable.set(true);
 			config::NetworkEnable.set(false);
-			//config::ActAsServer.set(true);
 			config::NetworkServer.set(detect_address);
+
+			NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
 			if (current_delay != config::GGPODelay.get())
 				config::GGPODelay.set(current_delay);
 

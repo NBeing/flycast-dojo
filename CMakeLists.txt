@@ -1009,6 +1009,10 @@ if(NOT LIBRETRO)
 endif()
 
 target_sources(${PROJECT_NAME} PRIVATE
+		core/dojo/net_beacon.cpp
+		core/dojo/net_beacon.h)
+
+target_sources(${PROJECT_NAME} PRIVATE
 		core/imgread/cdi.cpp
 		core/imgread/chd.cpp
 		core/imgread/common.cpp

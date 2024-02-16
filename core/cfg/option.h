@@ -522,6 +522,13 @@ extern Option<int> GGPOChatTimeout;
 extern Option<bool> NetworkOutput;
 extern Option<int> MultiboardSlaves;
 extern Option<bool> BattleCableEnable;
+extern Option<int> GGPOPort;
+
+// Dojo
+extern Option<bool> NetBeaconEnable;
+extern OptionString BeaconMulticastAddress;
+extern OptionString BeaconMulticastPort;
+extern OptionString PlayerName;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

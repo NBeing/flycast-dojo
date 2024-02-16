@@ -145,7 +145,7 @@ OptionString DNS("DNS", "46.101.91.123", "network");
 OptionString NetworkServer("server", "", "network");
 Option<int> LocalPort("LocalPort", NaomiNetwork::SERVER_PORT, "network");
 Option<bool> EmulateBBA("EmulateBBA", false, "network");
-Option<bool> EnableUPnP("EnableUPnP", true, "network");
+Option<bool> EnableUPnP("EnableUPnP", false, "network");
 Option<bool> GGPOEnable("GGPO", false, "network");
 Option<int> GGPODelay("GGPODelay", 0, "network");
 Option<bool> NetworkStats("Stats", true, "network");
@@ -156,6 +156,13 @@ Option<int> GGPOChatTimeout("GGPOChatTimeout", 10, "network");
 Option<bool> NetworkOutput("NetworkOutput", false, "network");
 Option<int> MultiboardSlaves("MultiboardSlaves", 1, "network");
 Option<bool> BattleCableEnable("BattleCable", false, "network");
+Option<int> GGPOPort("GGPOPort", 19713, "network");
+
+// Dojo
+Option<bool> NetBeaconEnable("NetBeacon", true, "dojo");
+OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "dojo");
+OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
+OptionString PlayerName("PlayerName", "Player", "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

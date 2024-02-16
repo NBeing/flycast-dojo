@@ -96,7 +96,6 @@ namespace ggpo
 using namespace std::chrono;
 
 constexpr int MAX_PLAYERS = 2;
-constexpr int SERVER_PORT = 19713;
 
 constexpr u32 BTN_TRIGGER_LEFT	= DC_BTN_BITMAPPED_LAST << 1;
 constexpr u32 BTN_TRIGGER_RIGHT	= DC_BTN_BITMAPPED_LAST << 2;
@@ -581,7 +580,7 @@ void startSession(int localPort, int localPlayerNum)
 		if (peerIp == "127.0.0.1")
 			peerPort = localPort ^ 1;
 		else
-			peerPort = SERVER_PORT;
+			peerPort = config::GGPOPort.get();
 	}
 	else
 	{
@@ -790,15 +789,15 @@ std::future<bool> startNetwork()
 			if (config::EnableUPnP)
 			{
 				miniupnp.Init();
-				miniupnp.AddPortMapping(SERVER_PORT, false);
+				miniupnp.AddPortMapping(config::GGPOPort.get(), false);
 			}
 
 			try {
 				if (config::ActAsServer)
-					startSession(SERVER_PORT, 0);
+					startSession(config::GGPOPort.get(), 0);
 				else
-					// Use SERVER_PORT-1 as local port if connecting to ourselves
-					startSession(config::NetworkServer.get().empty() || config::NetworkServer.get() == "127.0.0.1" ? SERVER_PORT - 1 : SERVER_PORT, 1);
+					// Use config::GGPOPort-1 as local port if connecting to ourselves
+					startSession(config::NetworkServer.get().empty() || config::NetworkServer.get() == "127.0.0.1" ? config::GGPOPort.get() - 1 : config::GGPOPort.get(), 1);
 			} catch (...) {
 				miniupnp.Term();
 				throw;
