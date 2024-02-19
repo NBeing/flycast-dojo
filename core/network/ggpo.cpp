@@ -232,7 +232,8 @@ static bool on_event(GGPOEvent *info)
 		break;
 	case GGPO_EVENTCODE_DISCONNECTED_FROM_PEER:
 		INFO_LOG(NETWORK, "Disconnected from peer %d", info->u.disconnected.player);
-		throw FlycastException("Disconnected from peer");
+		gui_setState(GuiState::Disconnected);
+		//throw FlycastException("Disconnected from peer");
 		break;
 	case GGPO_EVENTCODE_TIMESYNC:
 		INFO_LOG(NETWORK, "Timesync: %d frames ahead", info->u.timesync.frames_ahead);

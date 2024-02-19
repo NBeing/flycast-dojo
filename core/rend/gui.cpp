@@ -61,7 +61,10 @@
 #include <mutex>
 #include <algorithm>
 
+#include "dojo/dojo_gui.h"
 #include "dojo/net_beacon.h"
+
+DojoGui dojo_gui;
 NetBeacon presence;
 
 static bool game_started;
@@ -75,7 +78,7 @@ static bool commandLineStart;
 static u32 mouseButtons;
 static int mouseX, mouseY;
 static float mouseWheel;
-static std::string error_msg;
+std::string error_msg;
 static bool error_msg_shown;
 static std::string osd_message;
 static double osd_message_end;
@@ -3297,6 +3300,9 @@ void gui_display_ui()
 		break;
 	case GuiState::GGPOJoin:
 		gui_display_ggpo_join();
+		break;
+	case GuiState::Disconnected:
+		dojo_gui.gui_display_disconnected();
 		break;
 	default:
 		die("Unknown UI state");
