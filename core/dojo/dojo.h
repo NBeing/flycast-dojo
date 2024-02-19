@@ -1,5 +1,7 @@
 #pragma once
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -20,6 +22,7 @@ public:
 
 	std::atomic<u32> FrameNumber = {0};
 
+	void InitScore();
 	void RegisterPlayerWin(int player);
 	bool ScoreAvailable();
 	void UpdateScore();
@@ -32,6 +35,8 @@ public:
 	uint32_t current_p2_wins = 0;
 
 	uint32_t last_score_frame = 0;
+
+	void WriteStringToOut(std::string name, std::string contents);
 };
 
 extern Dojo dojo;

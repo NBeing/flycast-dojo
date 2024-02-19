@@ -531,6 +531,7 @@ extern OptionString BeaconMulticastPort;
 extern OptionString PlayerName;
 extern Option<bool> EnablePlayerNameOverlay;
 extern Option<int> FirstTo;
+extern Option<bool> OutputStreamTxt;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

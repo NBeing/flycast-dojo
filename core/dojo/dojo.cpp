@@ -14,6 +14,24 @@ void Dojo::AssignPlayerNames()
 		player_1 = settings.dojo.OpponentName;
 		player_2 = settings.dojo.PlayerName;
 	}
+
+	if (config::OutputStreamTxt)
+	{
+		WriteStringToOut("p1name", player_1);
+		WriteStringToOut("p2name", player_2);
+	}
+}
+
+void Dojo::InitScore()
+{
+	p1_wins = 0;
+	p2_wins = 0;
+
+	if (config::OutputStreamTxt)
+	{
+		WriteStringToOut("p1wins", std::to_string(dojo.p1_wins));
+		WriteStringToOut("p2wins", std::to_string(dojo.p2_wins));
+	}
 }
 
 void Dojo::RegisterPlayerWin(int player)
@@ -23,16 +41,16 @@ void Dojo::RegisterPlayerWin(int player)
 		NOTICE_LOG(NETWORK, "P1 WIN", p1_wins);
 		p1_wins++;
 
-		// if (config::OutputStreamTxt)
-		//	dojo_file.WriteStringToOut("p1wins", std::to_string(p1_wins));
+		if (config::OutputStreamTxt)
+			WriteStringToOut("p1wins", std::to_string(p1_wins));
 	}
 	else if (player == 1)
 	{
 		NOTICE_LOG(NETWORK, "P2 WIN", p2_wins);
 		p2_wins++;
 
-		// if (config::OutputStreamTxt)
-		//	dojo_file.WriteStringToOut("p2wins", std::to_string(p2_wins));
+		if (config::OutputStreamTxt)
+			WriteStringToOut("p2wins", std::to_string(p2_wins));
 	}
 
 	last_score_frame = (u32)FrameNumber;
@@ -238,4 +256,18 @@ void Dojo::UpdateScore()
 
 		FirstToPoll();
 	}
+}
+
+void Dojo::WriteStringToOut(std::string name, std::string contents)
+{
+#ifndef __ANDROID__
+	auto dir_name = get_writable_config_path("out/");
+	if (!std::filesystem::exists(dir_name))
+		std::filesystem::create_directory(dir_name);
+
+	std::string path = dir_name + name + ".txt";
+	std::ofstream fout(path);
+	fout << contents;
+	fout.close();
+#endif
 }
