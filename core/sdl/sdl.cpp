@@ -98,7 +98,7 @@ static void captureMouse(bool capture)
 			SDL_SetRelativeMouseMode(SDL_FALSE);
 		else
 			SDL_ShowCursor(SDL_ENABLE);
-		SDL_SetWindowTitle(window, "Flycast");
+		SDL_SetWindowTitle(window, "Flycast Dojo");
 		mouseCaptured = false;
 	}
 	else
@@ -108,7 +108,7 @@ static void captureMouse(bool capture)
 		{
 			if (config::UseRawInput)
 				SDL_ShowCursor(SDL_DISABLE);
-			SDL_SetWindowTitle(window, "Flycast - mouse capture");
+			SDL_SetWindowTitle(window, "Flycast Dojo - mouse capture");
 			mouseCaptured = true;
 		}
 	}
@@ -123,7 +123,7 @@ static void emuEventCallback(Event event, void *)
 		if (!config::UseRawInput)
 			SDL_SetRelativeMouseMode(SDL_FALSE);
 		SDL_ShowCursor(SDL_ENABLE);
-		SDL_SetWindowTitle(window, "Flycast");
+		SDL_SetWindowTitle(window, "Flycast Dojo");
 		break;
 	case Event::Resume:
 		gameRunning = true;
@@ -643,7 +643,7 @@ bool sdl_recreate_window(u32 flags)
 	flags |= SDL_WINDOW_FULLSCREEN;
 #endif
 
-	window = SDL_CreateWindow("Flycast", windowPos.x, windowPos.y,
+	window = SDL_CreateWindow("Flycast Dojo", windowPos.x, windowPos.y,
 			windowPos.w * hdpiScaling, windowPos.h * hdpiScaling, flags);
 	if (window == nullptr)
 	{
