@@ -38,26 +38,26 @@
 class NetBeacon
 {
 public:
-    void BeaconThread();
-    void ListenerThread();
+	void BeaconThread();
+	void ListenerThread();
 
-    uint64_t unix_timestamp();
+	uint64_t unix_timestamp();
 
 	std::map<std::string, std::string> active_beacons;
 	std::map<std::string, uint64_t> last_seen;
 
-    bool beacon_active;
-    bool lobby_active;
+	bool beacon_active;
+	bool lobby_active;
 
 private:
-    int beacon_sock;
-    int Init();
-    void CloseSocket(int sock);
-    int BeaconLoop(sockaddr_in addr, int delay_secs);
-    sockaddr_in SetDestination(char *group, short port);
-    int beacon(char *group, int port, int delay_secs);
+	int beacon_sock;
+	int Init();
+	void CloseSocket(int sock);
+	int BeaconLoop(sockaddr_in addr, int delay_secs);
+	sockaddr_in SetDestination(char *group, short port);
+	int beacon(char *group, int port, int delay_secs);
 
-    int listener_sock;
-    int ListenerLoop(sockaddr_in addr);
-    int listener(char *group, int port);
+	int listener_sock;
+	int ListenerLoop(sockaddr_in addr);
+	int listener(char *group, int port);
 };

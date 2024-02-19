@@ -63,7 +63,7 @@ enum class GuiState {
 	Loading,
 	NetworkStart,
 	Cheats,
-	GGPOJoin,
+	GGPOConnect,
 	Disconnected
 };
 extern GuiState gui_state;
@@ -81,5 +81,3 @@ static inline bool gui_is_content_browser()
 
 extern std::string error_msg;
 extern void error_popup();
-
-void gui_display_ggpo_join();
