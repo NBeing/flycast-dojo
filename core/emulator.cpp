@@ -46,6 +46,8 @@
 #include "wsi/context.h"
 #include <chrono>
 
+#include "dojo/dojo.h"
+
 settings_t settings;
 
 static void loadSpecialSettings()
@@ -803,6 +805,7 @@ void Emulator::run()
 		runInternal();
 		if (ggpo::active())
 			ggpo::nextFrame();
+		dojo.UpdateScore();
 	} catch (...) {
 		setNetworkState(false);
 		state = Error;

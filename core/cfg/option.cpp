@@ -164,6 +164,7 @@ OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "doj
 OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
 OptionString PlayerName("PlayerName", "Player", "dojo");
 Option<bool> EnablePlayerNameOverlay("EnablePlayerNameOverlay", true, "dojo");
+Option<int> FirstTo("FirstTo", 0, "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

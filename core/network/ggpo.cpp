@@ -25,6 +25,8 @@
 #include "cfg/option.h"
 #include <algorithm>
 
+#include "dojo/dojo.h"
+
 void UpdateInputState();
 
 namespace ggpo
@@ -938,6 +940,7 @@ void endOfFrame()
 {
 	if (active())
 	{
+		dojo.FrameNumber++;
 		_endOfFrame = true;
 		sh4_cpu.Stop();
 	}

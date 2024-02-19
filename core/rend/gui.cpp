@@ -61,6 +61,7 @@
 #include <mutex>
 #include <algorithm>
 
+#include "dojo/dojo.h"
 #include "dojo/dojo_gui.h"
 #include "dojo/net_beacon.h"
 
@@ -531,6 +532,9 @@ void gui_start_game(const std::string& path)
 	emu.unloadGame();
 	reset_vmus();
     chat.reset();
+
+	dojo.p1_wins = 0;
+	dojo.p2_wins = 0;
 
 	scanner.stop();
 	gui_setState(GuiState::Loading);

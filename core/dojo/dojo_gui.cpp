@@ -164,11 +164,11 @@ void DojoGui::show_player_name_overlay(bool paused)
 		);
 
 		ImGui::TextUnformatted(dojo.player_1.c_str());
-		//if (dojo.ScoreAvailable())
-		//{
-		//	ImGui::SameLine();
-		//	ImGui::TextUnformatted(std::to_string(dojo.p1_wins).c_str());
-		//}
+		if (dojo.ScoreAvailable())
+		{
+			ImGui::SameLine();
+			ImGui::TextUnformatted(std::to_string(dojo.p1_wins).c_str());
+		}
 
 		ImGui::End();
 	}
@@ -192,11 +192,11 @@ void DojoGui::show_player_name_overlay(bool paused)
 		);
 
 		ImGui::TextUnformatted(dojo.player_2.c_str());
-		//if (dojo.ScoreAvailable())
-		//{
-		//	ImGui::SameLine();
-		//	ImGui::TextUnformatted(std::to_string(dojo.p2_wins).c_str());
-		//}
+		if (dojo.ScoreAvailable())
+		{
+			ImGui::SameLine();
+			ImGui::TextUnformatted(std::to_string(dojo.p2_wins).c_str());
+		}
 
 		ImGui::End();
 	}
