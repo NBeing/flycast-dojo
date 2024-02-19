@@ -2864,15 +2864,15 @@ static void gui_display_content()
     ImGui::Begin("##main", NULL, ImGuiWindowFlags_NoDecoration);
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ScaledVec2(20, 8));
-    ImGui::AlignTextToFramePadding();
-    ImGui::Indent(10 * settings.display.uiScale);
-    ImGui::Text("GAMES");
-    ImGui::Unindent(10 * settings.display.uiScale);
+    //ImGui::AlignTextToFramePadding();
+    //ImGui::Indent(10 * settings.display.uiScale);
+    //ImGui::Text("GAMES");
+    //ImGui::Unindent(10 * settings.display.uiScale);
 
     static ImGuiTextFilter filter;
 #if !defined(__ANDROID__) && !defined(TARGET_IPHONE) && !defined(TARGET_UWP) && !defined(__SWITCH__)
-	ImGui::SameLine(0, 32 * settings.display.uiScale);
-	filter.Draw("##Filter");
+	//ImGui::SameLine(0, 32 * settings.display.uiScale);
+	filter.Draw("##Filter", ImGui::GetContentRegionMax().x - ImGui::CalcTextSize("Settings").x - ImGui::GetStyle().FramePadding.x * 3.0f);
 #endif
     if (gui_state != GuiState::SelectDisk)
     {
@@ -3013,7 +3013,7 @@ static void gui_display_content()
 
 					if (ImGui::BeginPopupContextItem(popup_name.c_str()))
 					{
-						if (ImGui::MenuItem("Launch"))
+						if (ImGui::MenuItem("Launch Game"))
 						{
 							if (gui_state == GuiState::SelectDisk)
 							{
@@ -3038,7 +3038,7 @@ static void gui_display_content()
 								break;
 							}
 						}
-						if (ImGui::MenuItem("Netplay"))
+						if (ImGui::MenuItem("Netplay Session"))
 						{
 							settings.content.path = game.path;
 							gui_setState(GuiState::GGPOJoin);
