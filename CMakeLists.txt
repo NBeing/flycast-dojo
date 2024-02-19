@@ -1009,6 +1009,8 @@ if(NOT LIBRETRO)
 endif()
 
 target_sources(${PROJECT_NAME} PRIVATE
+		core/dojo/dojo.cpp
+		core/dojo/dojo.h
 		core/dojo/dojo_gui.cpp
 		core/dojo/dojo_gui.h
 		core/dojo/net_beacon.cpp

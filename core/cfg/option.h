@@ -529,6 +529,7 @@ extern Option<bool> NetBeaconEnable;
 extern OptionString BeaconMulticastAddress;
 extern OptionString BeaconMulticastPort;
 extern OptionString PlayerName;
+extern Option<bool> EnablePlayerNameOverlay;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

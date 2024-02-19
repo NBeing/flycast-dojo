@@ -163,6 +163,7 @@ Option<bool> NetBeaconEnable("NetBeacon", true, "dojo");
 OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "dojo");
 OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
 OptionString PlayerName("PlayerName", "Player", "dojo");
+Option<bool> EnablePlayerNameOverlay("EnablePlayerNameOverlay", true, "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

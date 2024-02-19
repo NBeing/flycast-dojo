@@ -207,6 +207,12 @@ struct settings_t
 
 	struct
 	{
+		std::string PlayerName;
+		std::string OpponentName;
+	} dojo;
+
+	struct
+	{
 		bool multiboard;
 		bool slave;
 		int drivingSimSlave;

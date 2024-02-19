@@ -3370,6 +3370,8 @@ void gui_display_osd()
 //		gui_plot_render_time(settings.display.width, settings.display.height);
 		if (ggpo::active())
 		{
+			if (config::EnablePlayerNameOverlay)
+				dojo_gui.show_player_name_overlay(false);
 			if (config::NetworkStats)
 				ggpo::displayStats();
 			chat.display();

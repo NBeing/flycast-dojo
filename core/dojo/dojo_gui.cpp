@@ -129,3 +129,78 @@ void DojoGui::gui_display_disconnected()
 
 	error_popup();
 }
+
+
+void DojoGui::show_player_name_overlay(bool paused)
+{
+	// if both player names are defaults, hide overlay
+	if (dojo.player_2.length() <= 1 ||
+		strcmp(dojo.player_1.data(), "Player") == 0 &&
+		strcmp(dojo.player_1.data(), dojo.player_2.data()) == 0)
+	{
+		return;
+	}
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.557f, 0.268f, 0.965f, 1.f));
+
+	if (dojo.player_1.length() > 1)
+	{
+		float font_size = ImGui::CalcTextSize(dojo.player_1.data()).x + 10;
+
+		ImGui::SetNextWindowPos(ImVec2((settings.display.width / 4) - ((font_size + 25) / 2), 0));
+#if defined(__APPLE__) || defined(__ANDROID__)
+		ImGui::SetNextWindowSize(ImVec2(font_size + 30, 42));
+#else
+		ImGui::SetNextWindowSize(ImVec2(font_size + 30, 35));
+#endif
+		ImGui::SetNextWindowBgAlpha(0.5f);
+		ImGui::Begin("#one", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
+
+		ImGui::SameLine(
+			(ImGui::GetContentRegionAvail().x / 2) -
+			font_size + (font_size / 2) + 5
+		);
+
+		ImGui::TextUnformatted(dojo.player_1.c_str());
+		//if (dojo.ScoreAvailable())
+		//{
+		//	ImGui::SameLine();
+		//	ImGui::TextUnformatted(std::to_string(dojo.p1_wins).c_str());
+		//}
+
+		ImGui::End();
+	}
+
+	if (dojo.player_2.length() > 1)
+	{
+		float font_size = ImGui::CalcTextSize(dojo.player_2.data()).x + 10;
+
+		ImGui::SetNextWindowPos(ImVec2(((settings.display.width / 4) * 3) - ((font_size + 25) / 2), 0));
+#if defined(__APPLE__) || defined(__ANDROID__)
+		ImGui::SetNextWindowSize(ImVec2(font_size + 30, 42));
+#else
+		ImGui::SetNextWindowSize(ImVec2(font_size + 30, 35));
+#endif
+		ImGui::SetNextWindowBgAlpha(0.5f);
+		ImGui::Begin("#two", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
+
+		ImGui::SameLine(
+			(ImGui::GetContentRegionAvail().x / 2) -
+			font_size + (font_size / 2) + 5
+		);
+
+		ImGui::TextUnformatted(dojo.player_2.c_str());
+		//if (dojo.ScoreAvailable())
+		//{
+		//	ImGui::SameLine();
+		//	ImGui::TextUnformatted(std::to_string(dojo.p2_wins).c_str());
+		//}
+
+		ImGui::End();
+	}
+
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar(2);
+}

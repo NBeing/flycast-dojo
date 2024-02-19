@@ -10,6 +10,11 @@
 #include "../ggpo_types.h"
 #include "bitvector.h"
 
+#include "cfg/option.h"
+#include "dojo/dojo.h"
+
+Dojo dojo;
+
 static const int UDP_HEADER_SIZE = 28;     /* Size of IP + UDP headers */
 static const int NUM_SYNC_PACKETS = 5;
 static const int SYNC_RETRY_INTERVAL = 2000;
@@ -275,6 +280,7 @@ UdpProtocol::SendSyncRequest()
    _state.sync.random = rand() & 0xFFFF;
    UdpMsg *msg = new UdpMsg(UdpMsg::SyncRequest);
    msg->u.sync_request.random_request = _state.sync.random;
+   strcpy(msg->u.sync_request.player_name, config::PlayerName.get().c_str());
    msg->verification_size = verification.size();
    if (!verification.empty())
 	   memcpy(&msg->u.sync_request.verification[0], &verification[0], verification.size());
@@ -480,6 +486,14 @@ UdpProtocol::OnSyncRequest(UdpMsg *msg, int len)
    reply->u.sync_reply.random_reply = msg->u.sync_request.random_request;
    // Calculate incoming verif data size
    msg->verification_size = 0;
+   // assign player name
+   char opponent_name[21];
+   strcpy(opponent_name, (char *)(&msg->u.sync_request.player_name[0]));
+
+   settings.dojo.OpponentName = std::string(opponent_name);
+   settings.dojo.PlayerName = config::PlayerName.get();
+   dojo.AssignPlayerNames();
+
    int msgVerifSize = len - msg->PacketSize();
    if (msgVerifSize != (int)verification.size()
 		   || (msgVerifSize != 0 && memcmp(&msg->u.sync_request.verification[0], &verification[0], msgVerifSize)))
