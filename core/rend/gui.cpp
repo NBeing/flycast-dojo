@@ -3307,6 +3307,12 @@ void gui_display_ui()
 	case GuiState::Disconnected:
 		dojo_gui.gui_display_disconnected();
 		break;
+	case GuiState::MatchCodeHostWait:
+		dojo_gui.gui_display_match_code_host_wait();
+		break;
+	case GuiState::MatchCodeGuestWait:
+		dojo_gui.gui_display_match_code_guest_wait();
+		break;
 	default:
 		die("Unknown UI state");
 		break;

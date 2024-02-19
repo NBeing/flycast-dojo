@@ -166,6 +166,10 @@ OptionString PlayerName("PlayerName", "Player", "dojo");
 Option<bool> EnablePlayerNameOverlay("EnablePlayerNameOverlay", true, "dojo");
 Option<int> FirstTo("FirstTo", 0, "dojo");
 Option<bool> OutputStreamTxt("OutputStreamTxt", false, "dojo");
+OptionString MatchmakingServerAddress("MatchmakingServerAddress", "match.dojo.ooo", "dojo");
+OptionString MatchmakingServerPort("MatchmakingServerPort", "52001", "dojo");
+OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
+OptionString DojoServerPort("ServerPort", "6000", "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

@@ -64,7 +64,9 @@ enum class GuiState {
 	NetworkStart,
 	Cheats,
 	GGPOConnect,
-	Disconnected
+	Disconnected,
+	MatchCodeHostWait,
+	MatchCodeGuestWait
 };
 extern GuiState gui_state;
 

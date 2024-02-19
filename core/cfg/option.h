@@ -532,6 +532,10 @@ extern OptionString PlayerName;
 extern Option<bool> EnablePlayerNameOverlay;
 extern Option<int> FirstTo;
 extern Option<bool> OutputStreamTxt;
+extern OptionString MatchmakingServerAddress;
+extern OptionString MatchmakingServerPort;
+extern OptionString DojoServerIP;
+extern OptionString DojoServerPort;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

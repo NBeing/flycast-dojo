@@ -1,15 +1,20 @@
 #pragma once
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
+
 
 #include "cfg/option.h"
 #include "emulator.h"
 #include "hw/sh4/sh4_mem.h"
 #include "network/ggpo.h"
 #include "rend/gui.h"
+
+#include "net_beacon.h"
 
 class Dojo
 {
@@ -37,6 +42,13 @@ public:
 	uint32_t last_score_frame = 0;
 
 	void WriteStringToOut(std::string name, std::string contents);
+
+	std::string match_code = "";
+
+	int StartSession();
+	bool disconnect_toggle = false;
+
+	NetBeacon presence;
 };
 
 extern Dojo dojo;
