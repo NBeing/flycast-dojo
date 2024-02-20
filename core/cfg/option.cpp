@@ -194,7 +194,7 @@ std::array<Option<MapleDeviceType>, 4> MapleMainDevices {
 };
 std::array<std::array<Option<MapleDeviceType>, 2>, 4> MapleExpansionDevices {
 	Option<MapleDeviceType>("device1.1", MDT_SegaVMU, "input"),
-	Option<MapleDeviceType>("device1.2", MDT_SegaVMU, "input"),
+	Option<MapleDeviceType>("device1.2", MDT_None, "input"),
 
 	Option<MapleDeviceType>("device2.1", MDT_None, "input"),
 	Option<MapleDeviceType>("device2.2", MDT_None, "input"),
