@@ -130,7 +130,6 @@ int NetBeacon::beacon(char *group, int port, int delay_secs)
 
 void NetBeacon::ListenerThread()
 {
-	lobby_active = true;
 	listener((char *)config::BeaconMulticastAddress.get().c_str(), std::stoi(config::BeaconMulticastPort.get()));
 }
 
@@ -230,4 +229,13 @@ int NetBeacon::listener(char *group, int port)
 	CloseSocket(listener_sock);
 
 	return 0;
+}
+
+void NetBeacon::Close()
+{
+	beacon_active = false;
+	lobby_active = false;
+
+	CloseSocket(beacon_sock);
+	CloseSocket(listener_sock);
 }

@@ -159,17 +159,18 @@ Option<bool> BattleCableEnable("BattleCable", false, "network");
 Option<int> GGPOPort("GGPOPort", 19713, "network");
 
 // Dojo
+OptionString PlayerName("PlayerName", "Player", "dojo");
+Option<bool> PlayerNameOverlayEnable("PlayerNameOverlay", true, "dojo");
 Option<bool> NetBeaconEnable("NetBeacon", true, "dojo");
 OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "dojo");
 OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
-OptionString PlayerName("PlayerName", "Player", "dojo");
-Option<bool> EnablePlayerNameOverlay("EnablePlayerNameOverlay", true, "dojo");
-Option<int> FirstTo("FirstTo", 0, "dojo");
-Option<bool> OutputStreamTxt("OutputStreamTxt", false, "dojo");
+Option<bool> MatchCodeEnable("MatchCodeEnable", true, "dojo");
 OptionString MatchmakingServerAddress("MatchmakingServerAddress", "match.dojo.ooo", "dojo");
 OptionString MatchmakingServerPort("MatchmakingServerPort", "52001", "dojo");
 OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
 OptionString DojoServerPort("ServerPort", "6000", "dojo");
+Option<int> FirstTo("FirstTo", 0, "dojo");
+Option<bool> StreamTxtOutput("StreamTxtOutput", false, "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

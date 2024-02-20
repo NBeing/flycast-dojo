@@ -525,15 +525,17 @@ extern Option<bool> BattleCableEnable;
 extern Option<int> GGPOPort;
 
 // Dojo
+extern OptionString PlayerName;
+extern Option<bool> PlayerNameOverlayEnable;
 extern Option<bool> NetBeaconEnable;
 extern OptionString BeaconMulticastAddress;
 extern OptionString BeaconMulticastPort;
-extern OptionString PlayerName;
-extern Option<bool> EnablePlayerNameOverlay;
-extern Option<int> FirstTo;
-extern Option<bool> OutputStreamTxt;
+extern Option<bool> MatchCodeEnable;
 extern OptionString MatchmakingServerAddress;
 extern OptionString MatchmakingServerPort;
+extern Option<int> FirstTo;
+extern Option<bool> StreamTxtOutput;
+
 extern OptionString DojoServerIP;
 extern OptionString DojoServerPort;
 

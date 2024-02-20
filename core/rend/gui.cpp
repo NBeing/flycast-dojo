@@ -1580,8 +1580,9 @@ static void gui_display_settings()
 
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ScaledVec2(16, 6));
 
-    if (ImGui::BeginTabBar("settings", ImGuiTabBarFlags_NoTooltip))
+    if (ImGui::BeginTabBar("settings", ImGuiTabBarFlags_NoTooltip | ImGuiTabBarFlags_FittingPolicyScroll))
     {
+		dojo_gui.settings_dojo_tab();
 		if (ImGui::BeginTabItem("General"))
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, normal_padding);
@@ -2488,18 +2489,12 @@ static void gui_display_settings()
 				DisabledScope scope(game_started);
 
 				int netType = 0;
-				if (config::GGPOEnable)
-					netType = 1;
-				else if (config::NetworkEnable)
+				if (config::NetworkEnable)
 					netType = 2;
 				else if (config::BattleCableEnable)
 					netType = 3;
 				ImGui::Columns(4, "networkType", false);
 				ImGui::RadioButton("Disabled", &netType, 0);
-				ImGui::NextColumn();
-				ImGui::RadioButton("GGPO", &netType, 1);
-				ImGui::SameLine(0, style.ItemInnerSpacing.x);
-				ShowHelpMarker("Enable networking using GGPO");
 				ImGui::NextColumn();
 				ImGui::RadioButton("Naomi", &netType, 2);
 				ImGui::SameLine(0, style.ItemInnerSpacing.x);
@@ -2514,9 +2509,6 @@ static void gui_display_settings()
 				config::NetworkEnable = false;
 				config::BattleCableEnable = false;
 				switch (netType) {
-				case 1:
-					config::GGPOEnable = true;
-					break;
 				case 2:
 					config::NetworkEnable = true;
 					break;
@@ -2525,50 +2517,12 @@ static void gui_display_settings()
 					break;
 				}
 			}
-			if (config::GGPOEnable || config::NetworkEnable || config::BattleCableEnable) {
+			if (config::NetworkEnable || config::BattleCableEnable) {
 				ImGui::Spacing();
 				header("Configuration");
 			}
 			{
-				if (config::GGPOEnable)
-				{
-					config::NetworkEnable = false;
-					OptionCheckbox("Play as Player 1", config::ActAsServer,
-							"Deselect to play as player 2");
-					char server_name[256];
-					strcpy(server_name, config::NetworkServer.get().c_str());
-					ImGui::InputText("Peer", server_name, sizeof(server_name), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
-					ImGui::SameLine();
-					ShowHelpMarker("Your peer IP address and optional port");
-					config::NetworkServer.set(server_name);
-					OptionSlider("Frame Delay", config::GGPODelay, 0, 20,
-						"Sets Frame Delay, advisable for sessions with ping >100 ms");
-
-					ImGui::Text("Left Thumbstick:");
-					OptionRadioButton<int>("Disabled", config::GGPOAnalogAxes, 0, "Left thumbstick not used");
-					ImGui::SameLine();
-					OptionRadioButton<int>("Horizontal", config::GGPOAnalogAxes, 1, "Use the left thumbstick horizontal axis only");
-					ImGui::SameLine();
-					OptionRadioButton<int>("Full", config::GGPOAnalogAxes, 2, "Use the left thumbstick horizontal and vertical axes");
-
-					OptionCheckbox("Enable Chat", config::GGPOChat, "Open the chat window when a chat message is received");
-					if (config::GGPOChat)
-					{
-						OptionCheckbox("Enable Chat Window Timeout", config::GGPOChatTimeoutToggle, "Automatically close chat window after 20 seconds");
-						if (config::GGPOChatTimeoutToggle)
-						{
-							char chatTimeout[256];
-							sprintf(chatTimeout, "%d", (int)config::GGPOChatTimeout);
-							ImGui::InputText("Chat Window Timeout (seconds)", chatTimeout, sizeof(chatTimeout), ImGuiInputTextFlags_CharsDecimal, nullptr, nullptr);
-							ImGui::SameLine();
-							ShowHelpMarker("Sets duration that chat window stays open after new message is received.");
-							config::GGPOChatTimeout.set(atoi(chatTimeout));
-						}
-					}
-					OptionCheckbox("Network Statistics", config::NetworkStats,
-							"Display network statistics on screen");
-				}
-				else if (config::NetworkEnable)
+				if (config::NetworkEnable)
 				{
 					OptionCheckbox("Act as Server", config::ActAsServer,
 							"Create a local server for Naomi network games");
@@ -3277,7 +3231,7 @@ void gui_display_ui()
 		gui_display_content();
 		break;
 	case GuiState::Closed:
-		presence.beacon_active = false;
+		presence.Close();
 		break;
 	case GuiState::Onboarding:
 		gui_display_onboarding();
@@ -3379,7 +3333,7 @@ void gui_display_osd()
 //		gui_plot_render_time(settings.display.width, settings.display.height);
 		if (ggpo::active())
 		{
-			if (config::EnablePlayerNameOverlay)
+			if (config::PlayerNameOverlayEnable)
 				dojo_gui.show_player_name_overlay(false);
 			if (config::NetworkStats)
 				ggpo::displayStats();

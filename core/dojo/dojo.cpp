@@ -15,7 +15,7 @@ void Dojo::AssignPlayerNames()
 		player_2 = settings.dojo.PlayerName;
 	}
 
-	if (config::OutputStreamTxt)
+	if (config::StreamTxtOutput)
 	{
 		WriteStringToOut("p1name", player_1);
 		WriteStringToOut("p2name", player_2);
@@ -27,7 +27,7 @@ void Dojo::InitScore()
 	p1_wins = 0;
 	p2_wins = 0;
 
-	if (config::OutputStreamTxt)
+	if (config::StreamTxtOutput)
 	{
 		WriteStringToOut("p1wins", std::to_string(dojo.p1_wins));
 		WriteStringToOut("p2wins", std::to_string(dojo.p2_wins));
@@ -41,7 +41,7 @@ void Dojo::RegisterPlayerWin(int player)
 		NOTICE_LOG(NETWORK, "P1 WIN", p1_wins);
 		p1_wins++;
 
-		if (config::OutputStreamTxt)
+		if (config::StreamTxtOutput)
 			WriteStringToOut("p1wins", std::to_string(p1_wins));
 	}
 	else if (player == 1)
@@ -49,7 +49,7 @@ void Dojo::RegisterPlayerWin(int player)
 		NOTICE_LOG(NETWORK, "P2 WIN", p2_wins);
 		p2_wins++;
 
-		if (config::OutputStreamTxt)
+		if (config::StreamTxtOutput)
 			WriteStringToOut("p2wins", std::to_string(p2_wins));
 	}
 

@@ -11,56 +11,61 @@ void DojoGui::gui_display_ggpo_connect()
 		{
 			if (ImGui::BeginTabBar("GGPOTabBar", ImGuiTabBarFlags_None))
 			{
-				if (ImGui::BeginTabItem("Match Codes"))
+				if (config::MatchCodeEnable)
 				{
-					local_tab = false;
-					if (ImGui::Button("Host Game", ScaledVec2(150, 150)))
+					if (ImGui::BeginTabItem("Match Codes"))
 					{
-						config::NetworkServer.set("");
-						config::GGPOEnable.set(true);
-						config::ActAsServer.set(true);
-						dojo.disconnect_toggle = false;
-						dojo.hosting = true;
-						hosting_opt = true;
-						matched = true;
-						try
+						local_tab = false;
+						dojo.presence.Close();
+
+						if (ImGui::Button("Host Game", ScaledVec2(150, 150)))
 						{
-							std::thread t2(&UdpClient::ClientThread, std::ref(client));
-							t2.detach();
+							config::NetworkServer.set("");
+							config::GGPOEnable.set(true);
+							config::ActAsServer.set(true);
+							dojo.disconnect_toggle = false;
+							dojo.hosting = true;
+							hosting_opt = true;
+							matched = true;
+							try
+							{
+								std::thread t2(&UdpClient::ClientThread, std::ref(client));
+								t2.detach();
+							}
+							catch (std::exception &)
+							{
+							}
+							gui_setState(GuiState::MatchCodeHostWait);
 						}
-						catch (std::exception &)
+						ImGui::SameLine();
+						if (ImGui::Button("Join Game", ScaledVec2(150, 150)))
 						{
+							config::NetworkServer.set("");
+							config::GGPOEnable.set(true);
+							config::ActAsServer.set(false);
+							dojo.disconnect_toggle = false;
+							dojo.hosting = false;
+							hosting_opt = false;
+							matched = true;
+							try
+							{
+								std::thread t2(&UdpClient::ClientThread, std::ref(client));
+								t2.detach();
+							}
+							catch (std::exception &)
+							{
+							}
+							gui_setState(GuiState::MatchCodeGuestWait);
 						}
-						gui_setState(GuiState::MatchCodeHostWait);
+						ImGui::EndTabItem();
 					}
-					ImGui::SameLine();
-					if (ImGui::Button("Join Game", ScaledVec2(150, 150)))
-					{
-						config::NetworkServer.set("");
-						config::GGPOEnable.set(true);
-						config::ActAsServer.set(false);
-						dojo.disconnect_toggle = false;
-						dojo.hosting = false;
-						hosting_opt = false;
-						matched = true;
-						try
-						{
-							std::thread t2(&UdpClient::ClientThread, std::ref(client));
-							t2.detach();
-						}
-						catch (std::exception &)
-						{
-						}
-						gui_setState(GuiState::MatchCodeGuestWait);
-					}
-					ImGui::EndTabItem();
 				}
 
 				if (ImGui::BeginTabItem("IP Entry"))
 				{
 					local_tab = true;
-					dojo.presence.beacon_active = false;
-					dojo.presence.lobby_active = false;
+					dojo.presence.Close();
+
 					ImGui::InputTextWithHint("IP", "0.0.0.0", si, IM_ARRAYSIZE(si));
 					detect_address = std::string(si);
 #ifndef __ANDROID__
@@ -160,6 +165,7 @@ void DojoGui::gui_display_ggpo_connect()
 		}
 		if (ImGui::Button("Cancel"))
 		{
+			dojo.presence.Close();
 			config::GGPOEnable.set(false);
 
 			settings.content.path = "";
@@ -352,4 +358,118 @@ void DojoGui::gui_display_match_code_guest_wait()
 		gui_setState(GuiState::GGPOConnect);
 
 	ImGui::End();
+}
+
+void DojoGui::settings_dojo_tab()
+{
+	if (ImGui::BeginTabItem("Dojo"))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImGui::GetStyle().FramePadding);
+
+		char PlayerName[256] = {0};
+		strcpy(PlayerName, config::PlayerName.get().c_str());
+		ImGui::InputText("Player Name", PlayerName, sizeof(PlayerName), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+		ImGui::SameLine();
+		ShowHelpMarker("Name visible to other players");
+		config::PlayerName = std::string(PlayerName, strlen(PlayerName));
+
+		OptionCheckbox("Enable Player Name Overlay", config::PlayerNameOverlayEnable,
+					   "Enable overlay showing player names during netplay sessions & replays");
+
+		OptionCheckbox("Output Session Details to Text Files", config::StreamTxtOutput,
+					   "Outputs in-game overlay details to external text files (in the 'out' folder). Useful for online streams.");
+
+		if (ImGui::CollapsingHeader("GGPO", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Text("Left Thumbstick:");
+			OptionRadioButton<int>("Disabled", config::GGPOAnalogAxes, 0, "Left thumbstick not used");
+			ImGui::SameLine();
+			OptionRadioButton<int>("Horizontal", config::GGPOAnalogAxes, 1, "Use the left thumbstick horizontal axis only");
+			ImGui::SameLine();
+			OptionRadioButton<int>("Full", config::GGPOAnalogAxes, 2, "Use the left thumbstick horizontal and vertical axes");
+
+			OptionCheckbox("Enable Chat", config::GGPOChat, "Open the chat window when a chat message is received");
+			if (config::GGPOChat)
+			{
+				OptionCheckbox("Enable Chat Window Timeout", config::GGPOChatTimeoutToggle, "Automatically close chat window after 20 seconds");
+				if (config::GGPOChatTimeoutToggle)
+				{
+					char chatTimeout[256];
+					sprintf(chatTimeout, "%d", (int)config::GGPOChatTimeout);
+					ImGui::InputText("Chat Window Timeout (seconds)", chatTimeout, sizeof(chatTimeout), ImGuiInputTextFlags_CharsDecimal, nullptr, nullptr);
+					ImGui::SameLine();
+					ShowHelpMarker("Sets duration that chat window stays open after new message is received.");
+					config::GGPOChatTimeout.set(atoi(chatTimeout));
+				}
+			}
+			OptionCheckbox("Network Statistics", config::NetworkStats,
+						   "Display network statistics on screen");
+
+			int GGPOPort = config::GGPOPort.get();
+			ImGui::InputInt("GGPO Local Port", &GGPOPort);
+			ImGui::SameLine();
+			ShowHelpMarker("The GGPO port to listen on");
+			if (GGPOPort != config::GGPOPort.get())
+				config::GGPOPort = GGPOPort;
+
+			std::string PortTitle;
+			std::string PortDescription;
+
+			PortTitle = "Handshake Port";
+			PortDescription = "The handshake port to listen on";
+
+			char ServerPort[256];
+			strcpy(ServerPort, config::DojoServerPort.get().c_str());
+
+			ImGui::InputText(PortTitle.c_str(), ServerPort, sizeof(ServerPort), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+			ImGui::SameLine();
+			ShowHelpMarker(PortDescription.c_str());
+			config::DojoServerPort = ServerPort;
+		}
+
+		if (ImGui::CollapsingHeader("Match Codes##MCHeader", ImGuiTreeNodeFlags_None))
+		{
+			OptionCheckbox("Enable Match Codes", config::MatchCodeEnable,
+						   "Establishes direct connection via public matchmaking relay.\nWorks with most home routers. Activates 'Match Codes' tab in GGPO Connection screen.");
+
+			if (config::MatchCodeEnable)
+			{
+				char MatchmakingServerAddress[256];
+
+				strcpy(MatchmakingServerAddress, config::MatchmakingServerAddress.get().c_str());
+				ImGui::InputText("Matchmaking Service Address", MatchmakingServerAddress, sizeof(MatchmakingServerAddress), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+				config::MatchmakingServerAddress = MatchmakingServerAddress;
+
+				char MatchmakingServerPort[256];
+
+				strcpy(MatchmakingServerPort, config::MatchmakingServerPort.get().c_str());
+				ImGui::InputText("Matchmaking Service Port", MatchmakingServerPort, sizeof(MatchmakingServerPort), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+				config::MatchmakingServerPort = MatchmakingServerPort;
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Local Network Lobby", ImGuiTreeNodeFlags_None))
+		{
+			OptionCheckbox("Enable Local Network Lobby", config::NetBeaconEnable,
+						   "Broadcasts and listens for peers on local network. Activates 'Local Networks' tab in GGPO Connection screen.");
+
+			if (config::NetBeaconEnable)
+			{
+				char BeaconMulticastAddress[256];
+
+				strcpy(BeaconMulticastAddress, config::BeaconMulticastAddress.get().c_str());
+				ImGui::InputText("Multicast Address", BeaconMulticastAddress, sizeof(BeaconMulticastAddress), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+				config::BeaconMulticastAddress = BeaconMulticastAddress;
+
+				char BeaconMulticastPort[256];
+
+				strcpy(BeaconMulticastPort, config::BeaconMulticastPort.get().c_str());
+				ImGui::InputText("Multicast Port", BeaconMulticastPort, sizeof(BeaconMulticastPort), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+				config::BeaconMulticastPort = BeaconMulticastPort;
+			}
+		}
+
+		ImGui::PopStyleVar();
+		ImGui::EndTabItem();
+	}
 }
