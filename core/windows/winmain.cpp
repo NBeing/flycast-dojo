@@ -51,6 +51,9 @@
 #include <windows.h>
 #include <windowsx.h>
 
+#include <shlobj.h>
+#include <filesystem>
+
 void os_SetupInput()
 {
 	input_sdl_init();
@@ -428,6 +431,23 @@ int main(int argc, char* argv[])
 #ifdef TARGET_UWP
 	if (config::ContentPath.get().empty())
 		config::ContentPath.get().push_back(get_writable_config_path(""));
+#else
+	std::filesystem::path path;
+	PWSTR path_tmp;
+
+	auto get_folder_path_ret = SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &path_tmp);
+
+	if (get_folder_path_ret != S_OK) {
+		CoTaskMemFree(path_tmp);
+		return 1;
+	}
+
+	path = path_tmp;
+	CoTaskMemFree(path_tmp);
+
+	auto fightcade_rom_path = path.string() + "\\Fightcade\\emulator\\flycast\\ROMs";
+	if (config::ContentPath.get().empty() && std::filesystem::exists(fightcade_rom_path))
+		config::ContentPath.get().push_back(fightcade_rom_path);
 #endif
 	os_InstallFaultHandler();
 
