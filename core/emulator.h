@@ -37,7 +37,12 @@ void flycast_term();
 void dc_exit();
 void dc_savestate(int index = 0);
 void dc_loadstate(int index = 0);
+void dc_loadstate(std::string filename);
+void dc_loadstate(int index, std::string filename);
 void dc_loadstate(Deserializer& deser);
+
+std::string get_savestate_file_path(int index, bool writable);
+std::string get_net_savestate_file_path(bool writable);
 
 enum class Event {
 	Start,

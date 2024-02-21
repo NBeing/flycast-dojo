@@ -623,6 +623,36 @@ static void gui_display_commands()
 	// track if # of buttons are even or odd for exit button size
 	int displayed_button_count = 0;
 
+	if (config::Training)
+	{
+		std::string net_state_path = get_net_savestate_file_path(false);
+
+		bool save_exists = false;
+		if(std::filesystem::exists(net_state_path))
+			save_exists = true;
+
+		if(!save_exists)
+		{
+			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+		}
+
+		if (ImGui::Button("Load Net State", ScaledVec2(150, 50)))
+		{
+			gui_state = GuiState::Closed;
+			dc_loadstate(net_state_path);
+		}
+
+		if(!save_exists)
+		{
+			ImGui::PopItemFlag();
+			ImGui::PopStyleVar();
+		}
+
+		displayed_button_count++;
+		ImGui::NextColumn();
+	}
+
 #if !defined(__APPLE__)
 	if (config::Training && dojo.GetTrainingLua() != "")
 	{
@@ -689,8 +719,6 @@ static void gui_display_commands()
 	}
 
 	displayed_button_count++;
-	ImGui::NextColumn();
-
 
 	ImVec2 exit_size;
 

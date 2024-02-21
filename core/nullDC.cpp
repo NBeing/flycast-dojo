@@ -15,6 +15,8 @@
 #include "stdclass.h"
 #include "serialize.h"
 
+#include <filesystem>
+
 int flycast_init(int argc, char* argv[])
 {
 #if defined(TEST_AUTOMATION)
@@ -150,10 +152,21 @@ void dc_savestate(int index)
 
 void dc_loadstate(int index)
 {
+	dc_loadstate(index, "");
+}
+
+void dc_loadstate(std::string filename)
+{
+	dc_loadstate(0, filename);
+}
+
+void dc_loadstate(int index, std::string filename)
+{
 	u32 total_size = 0;
 	FILE *f = nullptr;
 
-	std::string filename = hostfs::getSavestatePath(index, false);
+	if (filename.empty())
+		filename = hostfs::getSavestatePath(index, false);
 	RZipFile zipFile;
 	if (zipFile.Open(filename, false))
 	{
@@ -228,6 +241,41 @@ void dc_loadstate(int index)
 
 	free(data);
 	EventManager::event(Event::LoadState);
+}
+
+std::string get_savestate_file_path(int index, bool writable)
+{
+	std::string state_file = settings.content.path;
+	size_t lastindex = state_file.find_last_of('/');
+#ifdef _WIN32
+	size_t lastindex2 = state_file.find_last_of('\\');
+	if (lastindex == std::string::npos)
+		lastindex = lastindex2;
+	else if (lastindex2 != std::string::npos)
+		lastindex = std::max(lastindex, lastindex2);
+#endif
+	if (lastindex != std::string::npos)
+		state_file = state_file.substr(lastindex + 1);
+	lastindex = state_file.find_last_of('.');
+	if (lastindex != std::string::npos)
+		state_file = state_file.substr(0, lastindex);
+
+	char index_str[4] = "";
+	if (index != 0) // When index is 0, use same name before multiple states is added
+		sprintf(index_str, "_%d", index);
+
+	state_file = state_file + index_str + ".state";
+	if (writable)
+		return get_writable_data_path(state_file);
+	else
+		return get_readonly_data_path(state_file);
+}
+
+std::string get_net_savestate_file_path(bool writable)
+{
+	std::string path = get_savestate_file_path(0, writable);
+	path.append(".net");
+	return path;
 }
 
 #endif
