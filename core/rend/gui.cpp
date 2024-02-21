@@ -620,19 +620,8 @@ static void gui_display_commands()
 
 	ImGui::Columns(2, "buttons", false);
 
-	// Settings
-	if (ImGui::Button("Settings", ScaledVec2(150, 50)))
-	{
-		gui_setState(GuiState::Settings);
-	}
-	ImGui::NextColumn();
-	if (ImGui::Button("Resume", ScaledVec2(150, 50)))
-	{
-		GamepadDevice::load_system_mappings();
-		gui_setState(GuiState::Closed);
-	}
-
-	ImGui::NextColumn();
+	// track if # of buttons are even or odd for exit button size
+	int displayed_button_count = 0;
 
 #if !defined(__APPLE__)
 	if (config::Training && dojo.GetTrainingLua() != "")
@@ -645,8 +634,8 @@ static void gui_display_commands()
 		{
 			config::ShowTrainingGameOverlay = (config::ShowTrainingGameOverlay.get() ? false : true);
 		}
-		//displayed_button_count++;
 
+		displayed_button_count++;
 		ImGui::NextColumn();
 	}
 #endif
@@ -667,7 +656,10 @@ static void gui_display_commands()
 			gui_setState(GuiState::Closed);
 		}
 	}
+
+	displayed_button_count++;
 	ImGui::NextColumn();
+
 	}
 
 	// Cheats
@@ -677,11 +669,44 @@ static void gui_display_commands()
 		if (ImGui::Button("Cheats", ScaledVec2(150, 50)) && !settings.network.online)
 			gui_setState(GuiState::Cheats);
 	}
-	ImGui::Columns(1, nullptr, false);
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	// Settings
+	if (ImGui::Button("Settings", ScaledVec2(150, 50)))
+	{
+		gui_setState(GuiState::Settings);
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	if (ImGui::Button("Resume", ScaledVec2(150, 50)))
+	{
+		GamepadDevice::load_system_mappings();
+		gui_setState(GuiState::Closed);
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+
+	ImVec2 exit_size;
+
+	if (displayed_button_count % 2 == 0)
+	{
+		ImGui::Columns(1, nullptr, false);
+		exit_size = ScaledVec2(300, 50) + ImVec2(ImGui::GetStyle().ColumnsMinSpacing + ImGui::GetStyle().FramePadding.x * 2 - 1, 0);
+	}
+	else
+	{
+		ImGui::NextColumn();
+		exit_size = ScaledVec2(150, 50);
+	}
 
 	// Exit
-	if (ImGui::Button(commandLineStart ? "Exit" : "Close Game", ScaledVec2(300, 50)
-			+ ImVec2(ImGui::GetStyle().ColumnsMinSpacing + ImGui::GetStyle().FramePadding.x * 2 - 1, 0)))
+	if (ImGui::Button(commandLineStart ? "Exit" : "Close Game", exit_size))
 	{
 		gui_stop_game();
 	}
