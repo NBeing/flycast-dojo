@@ -2895,6 +2895,7 @@ static void gui_display_content()
 
 		int counter = 0;
 		int loadedImages = 0;
+		/*
 		if (gui_state != GuiState::SelectDisk && filter.PassFilter("Dreamcast BIOS"))
 		{
 			ImGui::PushID("bios");
@@ -2920,6 +2921,7 @@ static void gui_display_content()
 			ImGui::PopID();
 			counter++;
 		}
+		*/
 		{
 			scanner.get_mutex().lock();
 			for (const auto& game : scanner.get_game_list())
