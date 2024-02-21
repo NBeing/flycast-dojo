@@ -43,6 +43,7 @@ Option<int, false> UIScaling("UIScaling", 100);
 
 // Sound
 
+Option<bool> LimitFPS("aica.LimitFPS", true);
 Option<bool> DSPEnabled("aica.DSPEnabled", false);
 #if HOST_CPU == CPU_ARM
 Option<int> AudioBufferSize("aica.BufferSize", 5644);	// 128 ms

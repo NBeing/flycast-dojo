@@ -376,7 +376,7 @@ extern Option<int, false> UIScaling;
 
 // Sound
 
-constexpr bool LimitFPS = true;
+extern Option<bool> LimitFPS;
 extern Option<bool> DSPEnabled;
 extern Option<int> AudioBufferSize;	//In samples ,*4 for bytes
 extern Option<bool> AutoLatency;

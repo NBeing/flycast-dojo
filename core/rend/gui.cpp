@@ -2441,6 +2441,7 @@ static void gui_display_settings()
 		if (ImGui::BeginTabItem("Audio"))
 		{
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, normal_padding);
+			OptionCheckbox("Audio Frame Sync", config::LimitFPS, "Sync frames with audio output");
 			OptionCheckbox("Enable DSP", config::DSPEnabled,
 					"Enable the Dreamcast Digital Sound Processor. Only recommended on fast platforms");
             OptionCheckbox("Enable VMU Sounds", config::VmuSound, "Play VMU beeps when enabled.");
