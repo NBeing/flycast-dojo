@@ -193,6 +193,9 @@ CONFIG_ACCESSORS(GGPODelay)
 CONFIG_ACCESSORS(NetworkStats)
 CONFIG_ACCESSORS(GGPOAnalogAxes)
 
+// Dojo
+CONFIG_ACCESSORS(ShowTrainingGameOverlay)
+
 // Maple devices
 
 static int getMapleType(int bus, lua_State *L)
@@ -387,6 +390,32 @@ static void uiTextRightAligned(const std::string& text)
 	uiText(text);
 }
 
+static void uiTextColor(const std::string& text, float r, float g, float b, float a)
+{
+	ImGui::TextColored(ImVec4(r, g, b, a), "%s", text.c_str());
+}
+
+static void uiTextColorRightAligned(const std::string& text, float r, float g, float b, float a)
+{
+	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text.c_str()).x);
+	uiTextColor(text, r, g, b ,a);
+}
+
+static void uiSameLine()
+{
+	ImGui::SameLine();
+}
+
+static void uiSameLinePlaceholder(const std::string& text)
+{
+	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text.c_str()).x);
+}
+
+static void uiSameLinePlaceholderRightAligned(const std::string& text)
+{
+	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text.c_str()).x);
+}
+
 static void uiBargraph(float v)
 {
 	ImGui::ProgressBar(v, ImVec2(-1, 10.f * settings.display.uiScale), "");
@@ -524,6 +553,10 @@ static void luaRegister(lua_State *L)
 					.addFunction("setDeviceType", setMapleType)
 					.addFunction("setSubDeviceType", setMapleSubType)
 				.endNamespace()
+
+				.beginNamespace("dojo")
+					CONFIG_PROPERTY(ShowTrainingGameOverlay, bool)
+				.endNamespace()
 			.endNamespace()
 
 	  		.beginNamespace("memory")
@@ -568,6 +601,11 @@ static void luaRegister(lua_State *L)
 				.addFunction("endWindow", endWindow)
 				.addFunction("text", uiText)
 				.addFunction("rightText", uiTextRightAligned)
+				.addFunction("textColor", uiTextColor)
+				.addFunction("rightTextColor", uiTextColorRightAligned)
+				.addFunction("sameLine", uiSameLine)
+				.addFunction("sameLinePlaceholder", uiSameLinePlaceholder)
+				.addFunction("sameLinePlaceholderRight", uiSameLinePlaceholderRightAligned)
 				.addFunction("bargraph", uiBargraph)
 				.addFunction("button", uiButton)
 			.endNamespace()
@@ -635,6 +673,27 @@ void term()
     EventManager::unlisten(Event::VBlank, emuEventCallback);
 	lua_close(L);
 	L = nullptr;
+}
+
+void reinit(const std::string& initFile)
+{
+	term();
+	if (!file_exists(initFile))
+	{
+		init();
+		return;
+	}
+	L = luaL_newstate();
+	luaL_openlibs(L);
+	luaRegister(L);
+	EventManager::listen(Event::Start, emuEventCallback);
+	EventManager::listen(Event::Resume, emuEventCallback);
+	EventManager::listen(Event::Pause, emuEventCallback);
+	EventManager::listen(Event::Terminate, emuEventCallback);
+	EventManager::listen(Event::LoadState, emuEventCallback);
+	EventManager::listen(Event::VBlank, emuEventCallback);
+
+	doExec(initFile);
 }
 
 }

@@ -634,6 +634,25 @@ static void gui_display_commands()
 
 	ImGui::NextColumn();
 
+#if !defined(__APPLE__)
+	if (config::Training && dojo.GetTrainingLua() != "")
+	{
+		std::ostringstream lua_display_text;
+		lua_display_text << "Training Overlay ";
+
+		lua_display_text << (config::ShowTrainingGameOverlay.get() ? "On" : "Off");
+		if (ImGui::Button(lua_display_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+		{
+			config::ShowTrainingGameOverlay = (config::ShowTrainingGameOverlay.get() ? false : true);
+		}
+		//displayed_button_count++;
+
+		ImGui::NextColumn();
+	}
+#endif
+
+	if (!config::Training)
+	{
 	// Insert/Eject Disk
 	const char *disk_label = libGDR_GetDiscType() == Open ? "Insert Disk" : "Eject Disk";
 	if (ImGui::Button(disk_label, ScaledVec2(150, 50)))
@@ -649,6 +668,7 @@ static void gui_display_commands()
 		}
 	}
 	ImGui::NextColumn();
+	}
 
 	// Cheats
 	{
@@ -2987,6 +3007,7 @@ static void gui_display_content()
 							}
 							else
 							{
+								config::Training.set(false);
 								config::GGPOEnable.set(false);
 								SaveSettings();
 
@@ -3000,8 +3021,36 @@ static void gui_display_content()
 						}
 						if (ImGui::MenuItem("Netplay Session"))
 						{
+							config::Training.set(false);
 							settings.content.path = game.path;
 							gui_setState(GuiState::GGPOConnect);
+						}
+						if (ImGui::MenuItem("Training Mode"))
+						{
+							config::Training.set(true);
+
+							if (gui_state == GuiState::SelectDisk)
+							{
+								settings.content.path = game.path;
+								try {
+									DiscSwap(game.path);
+									gui_setState(GuiState::Closed);
+								} catch (const FlycastException& e) {
+									gui_error(e.what());
+								}
+							}
+							else
+							{
+								config::GGPOEnable.set(false);
+								SaveSettings();
+
+								std::string gamePath(game.path);
+								scanner.get_mutex().unlock();
+								gui_start_game(gamePath);
+								scanner.get_mutex().lock();
+								ImGui::PopID();
+								break;
+							}
 						}
 						ImGui::EndPopup();
 					}

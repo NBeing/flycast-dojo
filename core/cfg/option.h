@@ -535,6 +535,8 @@ extern OptionString MatchmakingServerAddress;
 extern OptionString MatchmakingServerPort;
 extern Option<int> FirstTo;
 extern Option<bool> StreamTxtOutput;
+extern Option<bool> Training;
+extern Option<bool> ShowTrainingGameOverlay;
 
 extern OptionString DojoServerIP;
 extern OptionString DojoServerPort;

@@ -171,6 +171,8 @@ OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
 OptionString DojoServerPort("ServerPort", "6000", "dojo");
 Option<int> FirstTo("FirstTo", 0, "dojo");
 Option<bool> StreamTxtOutput("StreamTxtOutput", false, "dojo");
+Option<bool> Training("Training", false, "dojo");
+Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

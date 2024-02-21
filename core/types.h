@@ -209,6 +209,7 @@ struct settings_t
 	{
 		std::string PlayerName;
 		std::string OpponentName;
+		bool Training;
 	} dojo;
 
 	struct

@@ -43,6 +43,8 @@ public:
 
 	void WriteStringToOut(std::string name, std::string contents);
 
+	std::string GetTrainingLua();
+
 	std::string match_code = "";
 
 	int StartSession();

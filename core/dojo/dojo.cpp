@@ -271,3 +271,37 @@ void Dojo::WriteStringToOut(std::string name, std::string contents)
 	fout.close();
 #endif
 }
+
+std::string Dojo::GetTrainingLua()
+{
+	if (settings.content.gameId == "T1249M")
+			return get_readonly_config_path("training/cvs2.lua");
+	else if (settings.content.gameId == "T1212N")
+			return get_readonly_config_path("training/mvsc2.lua");
+	else
+	{
+		// look up by game file name in training folder
+		std::string lua_file = settings.content.path;
+		size_t lastindex = lua_file.find_last_of('/');
+#ifdef _WIN32
+		size_t lastindex2 = lua_file.find_last_of('\\');
+		if (lastindex == std::string::npos)
+			lastindex = lastindex2;
+		else if (lastindex2 != std::string::npos)
+			lastindex = std::max(lastindex, lastindex2);
+#endif
+		if (lastindex != std::string::npos)
+			lua_file = lua_file.substr(lastindex + 1);
+		lastindex = lua_file.find_last_of('.');
+		if (lastindex != std::string::npos)
+			lua_file = lua_file.substr(0, lastindex);
+
+		lua_file = lua_file + ".lua";
+		auto lua_path = get_readonly_data_path("training/" + lua_file);
+
+		if (std::filesystem::exists(lua_path))
+			return lua_path;
+	}
+
+	return "";
+}
