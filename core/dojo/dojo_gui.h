@@ -30,6 +30,7 @@ private:
 	int current_delay = 0;
 	std::string selected_beacon = "";
 	std::string detect_address = "";
+	std::string own_ip = "";
 	int hosting_opt = 1;
 	bool local_tab = true;
 	UdpClient client;

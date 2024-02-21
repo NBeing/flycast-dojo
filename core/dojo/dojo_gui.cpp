@@ -102,11 +102,16 @@ void DojoGui::gui_display_ggpo_connect()
 						{
 							for (auto it = dojo.presence.active_beacons.begin(); it != dojo.presence.active_beacons.end(); ++it)
 							{
+								std::string beacon_msg = it->first;
+								if(beacon_msg == config::PlayerName.get() + "_" + dojo.presence.client_seed)
+									own_ip = it->second;
+
+								std::string player_name = beacon_msg.substr(0, beacon_msg.find('_'));
 								if (dojo.presence.last_seen[it->first.data()] + 5000 > dojo.presence.unix_timestamp() &&
-									(config::PlayerName.get() != it->first || it->first == "Player"))
-									if (ImGui::Selectable((it->first).data(), selected_beacon == (it->first).data()))
+									(beacon_msg != config::PlayerName.get() + "_" + dojo.presence.client_seed))
+									if (ImGui::Selectable(player_name.data(), selected_beacon == beacon_msg.data()))
 									{
-										selected_beacon = it->first;
+										selected_beacon = beacon_msg;
 										detect_address = it->second;
 									}
 							}
@@ -141,6 +146,9 @@ void DojoGui::gui_display_ggpo_connect()
 
 			if (ImGui::Button("Start"))
 			{
+				if (detect_address == own_ip)
+					detect_address = "127.0.0.1";
+
 				if (hosting_opt)
 					config::ActAsServer.set(true);
 				else

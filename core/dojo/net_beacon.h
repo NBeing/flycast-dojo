@@ -33,6 +33,8 @@
 #include <thread>
 #include <chrono>
 
+#include "deps/base64.h"
+
 #define MSGBUFSIZE 256
 
 class NetBeacon
@@ -51,6 +53,8 @@ public:
 
 	void Close();
 
+	std::string client_seed;
+
 private:
 	int beacon_sock;
 	int Init();
@@ -62,4 +66,7 @@ private:
 	int listener_sock;
 	int ListenerLoop(sockaddr_in addr);
 	int listener(char *group, int port);
+
+	unsigned long mix(unsigned long a, unsigned long b, unsigned long c);
+	std::string random_hex_string(int length, int seed);
 };

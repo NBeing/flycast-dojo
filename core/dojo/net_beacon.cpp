@@ -6,6 +6,40 @@ uint64_t NetBeacon::unix_timestamp()
 	return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
+// http://www.concentric.net/~Ttwang/tech/inthash.htm
+unsigned long NetBeacon::mix(unsigned long a, unsigned long b, unsigned long c)
+{
+	a=a-b;  a=a-c;  a=a^(c >> 13);
+	b=b-c;  b=b-a;  b=b^(a << 8);
+	c=c-a;  c=c-b;  c=c^(b >> 13);
+	a=a-b;  a=a-c;  a=a^(c >> 12);
+	b=b-c;  b=b-a;  b=b^(a << 16);
+	c=c-a;  c=c-b;  c=c^(b >> 5);
+	a=a-b;  a=a-c;  a=a^(c >> 3);
+	b=b-c;  b=b-a;  b=b^(a << 10);
+	c=c-a;  c=c-b;  c=c^(b >> 15);
+	return c;
+}
+
+std::string NetBeacon::random_hex_string(int length, int seed)
+{
+	srand(seed);
+
+	char hex_out[1024] = { 0 };
+	char hex_chars[] =
+		{'0','1','2','3','4','5','6','7',
+		 '8','9','A','B','C','D','E','F'};
+
+	for (int i = 0; i < length; i++)
+	{
+		hex_out[i] = hex_chars[rand() % 16];
+	}
+
+	std::string x_out(hex_out, strlen(hex_out));
+
+	return x_out;
+}
+
 char *get_ip_str(const struct sockaddr *sa, char *s, size_t maxlen)
 {
 	switch (sa->sa_family)
@@ -74,14 +108,14 @@ int NetBeacon::BeaconLoop(sockaddr_in addr, int delay_secs)
 	std::string status;
 	std::string data;
 
+	const char *message;
+	std::string message_str = "2001_" + config::PlayerName.get() + "_" + client_seed;
+	std::string encoded_message_str = to_base64(message_str);
+	message = encoded_message_str.data();
+
 	// sendto() destination
 	while (beacon_active)
 	{
-		const char *message;
-
-		std::string message_str = "2001_" + config::PlayerName.get();
-		message = message_str.data();
-
 		int nbytes = sendto(
 			beacon_sock,
 			message,
@@ -118,6 +152,12 @@ sockaddr_in NetBeacon::SetDestination(char *group, short port)
 
 int NetBeacon::beacon(char *group, int port, int delay_secs)
 {
+	if (client_seed == "")
+	{
+		unsigned long seed = mix(clock(), time(NULL), getpid());
+		client_seed = random_hex_string(20, seed);
+	}
+
 	beacon_sock = Init();
 
 	sockaddr_in addr = SetDestination(group, port);
@@ -155,16 +195,14 @@ int NetBeacon::ListenerLoop(sockaddr_in addr)
 		}
 		msgbuf[nbytes] = '\0';
 
+		auto incoming_msg = std::string(msgbuf);
+		auto decoded_msg = from_base64(incoming_msg);
+
 		get_ip_str((struct sockaddr *)&addr, ip_str, 128);
-		// NOTICE_LOG(NETWORK, "%s %u", ip_str, addr.sin_port);
 
-		// NOTICE_LOG(NETWORK, "%s", msgbuf);
-
-		if (memcmp(msgbuf, "2001_", strlen("2001_")) == 0)
+		if (memcmp(decoded_msg.data(), "2001_", strlen("2001_")) == 0)
 		{
-			std::stringstream bm;
-			bm << msgbuf + 5;
-			std::string beacon_id = bm.str();
+			std::string beacon_id = decoded_msg.substr(5);
 
 			if (active_beacons.count(beacon_id) == 0)
 			{

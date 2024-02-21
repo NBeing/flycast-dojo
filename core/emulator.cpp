@@ -811,6 +811,11 @@ void EventManager::broadcastEvent(Event event)
 void Emulator::run()
 {
 	verify(state == Running);
+
+	// close local network lobby after game start
+	if (dojo.presence.beacon_active || dojo.presence.lobby_active)
+		dojo.presence.Close();
+
 	startTime = sh4_sched_now64();
 	renderTimeout = false;
 	try {
