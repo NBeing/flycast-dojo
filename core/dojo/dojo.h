@@ -51,6 +51,8 @@ public:
 	bool disconnect_toggle = false;
 
 	NetBeacon presence;
+
+	std::string game_name;
 };
 
 extern Dojo dojo;

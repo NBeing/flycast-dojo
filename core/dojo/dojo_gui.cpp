@@ -2,7 +2,7 @@
 
 void DojoGui::gui_display_ggpo_connect()
 {
-	std::string title = "Connect to GGPO Opponent";
+	std::string title = "GGPO Connect - " + dojo.game_name;
 	ImGui::OpenPopup(title.data());
 	if (ImGui::BeginPopupModal(title.data(), NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiInputTextFlags_EnterReturnsTrue))
 	{

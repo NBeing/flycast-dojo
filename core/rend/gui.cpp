@@ -3079,6 +3079,8 @@ static void gui_display_content()
 						{
 							config::Training.set(false);
 							settings.content.path = game.path;
+							auto name_ext_loc = game.fileName.find_last_of('.');
+							dojo.game_name = game.fileName.substr(0, name_ext_loc);
 							gui_setState(GuiState::GGPOConnect);
 						}
 						if (ImGui::MenuItem("Training Mode"))
