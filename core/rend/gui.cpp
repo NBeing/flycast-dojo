@@ -66,7 +66,6 @@
 #include "dojo/net_beacon.h"
 
 DojoGui dojo_gui;
-NetBeacon presence;
 
 static bool game_started;
 
@@ -496,7 +495,7 @@ void gui_open_settings()
 	const LockGuard lock(guiMutex);
 	if (gui_state == GuiState::Closed && !settings.naomi.slave)
 	{
-		if (!ggpo::active())
+		if (dojo.play_match || !ggpo::active())
 		{
 			HideOSD();
 			try {
@@ -536,7 +535,13 @@ void gui_start_game(const std::string& path)
 	reset_vmus();
     chat.reset();
 
+	dojo.commandLineStart = commandLineStart;
 	dojo.InitScore();
+	if (!dojo.play_match)
+		ggpo::FillDelayFrames();
+
+	if (config::Replay)
+		cfgSetVirtual("network", "GGPO", "no");
 
 	scanner.stop();
 	gui_setState(GuiState::Loading);
@@ -548,6 +553,12 @@ void gui_stop_game(const std::string& message)
 	const LockGuard lock(guiMutex);
 	if (!commandLineStart)
 	{
+		if (dojo.play_match)
+		{
+			dojo.session_inputs.clear();
+			dojo.play_match = false;
+		}
+
 		// Exit to main menu
 		emu.unloadGame();
 		gui_setState(GuiState::Main);
@@ -578,6 +589,7 @@ static void gui_display_commands()
 
     ImGui::Begin("##commands", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
+    if (!dojo.play_match)
     {
     	if (card_reader::barcodeAvailable())
     	{
@@ -625,6 +637,9 @@ static void gui_display_commands()
 
 	// track if # of buttons are even or odd for exit button size
 	int displayed_button_count = 0;
+
+	if (!dojo.play_match)
+	{
 
 	if (config::Training)
 	{
@@ -706,6 +721,7 @@ static void gui_display_commands()
 	displayed_button_count++;
 	ImGui::NextColumn();
 
+	}
 	// Settings
 	if (ImGui::Button("Settings", ScaledVec2(150, 50)))
 	{
@@ -3095,10 +3111,10 @@ static void gui_display_content()
 							}
 							else
 							{
-								config::Training.set(false);
-								config::GGPOEnable.set(false);
-								SaveSettings();
+								cfgSetVirtual("dojo", "Training", "no");
+								cfgSetVirtual("network", "GGPO", "no");
 
+								settings.content.path = game.path;
 								std::string gamePath(game.path);
 								scanner.get_mutex().unlock();
 								gui_start_game(gamePath);
@@ -3131,8 +3147,7 @@ static void gui_display_content()
 							}
 							else
 							{
-								config::GGPOEnable.set(false);
-								SaveSettings();
+								cfgSetVirtual("network", "GGPO", "no");
 
 								std::string gamePath(game.path);
 								scanner.get_mutex().unlock();
@@ -3368,7 +3383,7 @@ void gui_display_ui()
 		gui_display_content();
 		break;
 	case GuiState::Closed:
-		presence.Close();
+		dojo.presence.Close();
 		break;
 	case GuiState::Onboarding:
 		gui_display_onboarding();
@@ -3397,6 +3412,9 @@ void gui_display_ui()
 		break;
 	case GuiState::Disconnected:
 		dojo_gui.gui_display_disconnected();
+		break;
+	case GuiState::ReplayEnd:
+		dojo_gui.gui_display_replay_end();
 		break;
 	case GuiState::MatchCodeHostWait:
 		dojo_gui.gui_display_match_code_host_wait();
@@ -3472,9 +3490,12 @@ void gui_display_osd()
 		{
 			if (config::PlayerNameOverlayEnable)
 				dojo_gui.show_player_name_overlay(false);
+			if (!dojo.play_match)
+			{
 			if (config::NetworkStats)
 				ggpo::displayStats();
 			chat.display();
+			}
 		}
 		lua::overlay();
 

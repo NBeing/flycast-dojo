@@ -14,6 +14,7 @@
 #include "backend.h"
 #include "timesync.h"
 #include "network/udp_proto.h"
+#include "dojo/dojo.h"
 
 class Peer2PeerBackend : public IQuarkBackend, IPollSink, Udp::Callbacks {
 public:

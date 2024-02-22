@@ -53,7 +53,7 @@ void Dojo::RegisterPlayerWin(int player)
 			WriteStringToOut("p2wins", std::to_string(p2_wins));
 	}
 
-	last_score_frame = (u32)FrameNumber;
+	last_score_frame = (u32)frame_number;
 }
 
 bool Dojo::ScoreAvailable()
@@ -90,14 +90,14 @@ bool Dojo::ScoreAvailable()
 
 void Dojo::FirstToPoll()
 {
-	if (config::FirstTo > 0 && (p1_wins == config::FirstTo.get() || p2_wins == config::FirstTo.get()))
+	if (config::FirstTo > 0 && (p1_wins == (unsigned int)config::FirstTo.get() || p2_wins == (unsigned int)config::FirstTo.get()))
 	{
 		u32 cooldown_frames = 1200;
-		u32 frame_num = (u32)FrameNumber.load();
+		u32 frame_num = (u32)frame_number.load();
 
 		if (frame_num > (last_score_frame + cooldown_frames))
 		{
-			if (ggpo::active)
+			if (ggpo::active())
 				ggpo::stopSession();
 			else if (config::GGPOEnable)
 				gui_setState(GuiState::Disconnected);
@@ -111,14 +111,14 @@ void Dojo::UpdateScore()
 {
 	uint32_t cooldown_frames = 600;
 
-	u32 frame_num = FrameNumber.load();
+	u32 frame_num = frame_number.load();
 	if (frame_num < (last_score_frame + cooldown_frames))
 		return;
 
 	if (ScoreAvailable())
 	{
-		uint32_t detected_p1_wins;
-		uint32_t detected_p2_wins;
+		uint32_t detected_p1_wins = 0;
+		uint32_t detected_p2_wins = 0;
 
 		if (settings.content.gameId == "MOERO JUSTICE GAKUEN  JAPAN" ||
 			settings.content.gameId == "SAMURAI SPIRITS 6" ||
@@ -275,9 +275,9 @@ void Dojo::WriteStringToOut(std::string name, std::string contents)
 std::string Dojo::GetTrainingLua()
 {
 	if (settings.content.gameId == "T1249M")
-			return get_readonly_config_path("training/cvs2.lua");
+		return get_readonly_config_path("training/cvs2.lua");
 	else if (settings.content.gameId == "T1212N")
-			return get_readonly_config_path("training/mvsc2.lua");
+		return get_readonly_config_path("training/mvsc2.lua");
 	else
 	{
 		// look up by game file name in training folder
@@ -304,4 +304,89 @@ std::string Dojo::GetTrainingLua()
 	}
 
 	return "";
+}
+
+std::string Dojo::GetEntryPath(std::string entry)
+{
+	// default arcade rom name + .zip
+	// fall back to dreamcast chd file
+	std::string entry_name = std::string(entry.data());
+	std::string zip_filename = entry_name + ".zip";
+	std::string chd_filename = entry_name + ".chd";
+	std::string gdi_filename = entry_name + ".gdi";
+	std::string cdi_filename = entry_name + ".cdi";
+	std::string dir_name = "ROMs";
+	std::string nested_dir = "";
+
+	auto rom_paths = config::ContentPath.get();
+
+	if (std::find(rom_paths.begin(), rom_paths.end(), "ROMs") == rom_paths.end())
+		rom_paths.push_back("ROMs");
+
+	for (unsigned int i = 0; i < rom_paths.size(); i++)
+	{
+		// check if destination filename exists, return if so
+		std::string target;
+		std::string chd_target = "";
+		std::string gdi_target = "";
+		std::string cdi_target = "";
+		if (nested_dir.empty())
+		{
+			target = rom_paths[i] + "/" + zip_filename;
+			if (!chd_filename.empty())
+				chd_target = rom_paths[i] + "/" + chd_filename;
+			if (!gdi_filename.empty())
+				gdi_target = rom_paths[i] + "/" + gdi_filename;
+			if (!cdi_filename.empty())
+				cdi_target = rom_paths[i] + "/" + cdi_filename;
+		}
+		else
+		{
+			target = rom_paths[i] + "/" + nested_dir + "/" + zip_filename;
+			if (!chd_filename.empty())
+				chd_target = rom_paths[i] + "/" + nested_dir + "/" + chd_filename;
+			if (!gdi_filename.empty())
+				gdi_target = rom_paths[i] + "/" + nested_dir + "/" + gdi_filename;
+			if (!cdi_filename.empty())
+				cdi_target = rom_paths[i] + "/" + nested_dir + "/" + cdi_filename;
+		}
+
+		if (!target.empty() && std::filesystem::exists(target))
+			return target;
+		if (!chd_target.empty() && std::filesystem::exists(chd_target))
+			return chd_target;
+		if (!gdi_target.empty() && std::filesystem::exists(gdi_target))
+			return gdi_target;
+		if (!cdi_target.empty() && std::filesystem::exists(cdi_target))
+			return cdi_target;
+	}
+
+	return "";
+}
+
+void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
+{
+	u32 frame_num = (unsigned int)frame;
+	std::vector<u8> m_inputs;
+
+	for (int i = 0; i < size; i++)
+	{
+		m_inputs.push_back((unsigned char)bits[i]);
+	}
+
+	session_inputs[frame_num] = m_inputs;
+
+	// create frame container for export
+	unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
+	memcpy(new_frame, (unsigned char *)&frame_num, sizeof(unsigned int));
+	memcpy(new_frame + 4, (unsigned char *)m_inputs.data(), m_inputs.size());
+	std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
+
+	if (config::RecordMatches && !dojo.play_match)
+		replay.AppendToFile(frame_, 3);
+
+	//NOTICE_LOG(NETWORK, "FRAME %u SIZE %u", frame, m_inputs.size());
+
+	// if (dojo.transmitter_started)
+	// dojo.transmission_frames.push_back(frame_);
 }

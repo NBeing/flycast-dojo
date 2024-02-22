@@ -8,6 +8,8 @@
 #include "network/ggpo.h"
 #include "hw/naomi/card_reader.h"
 
+#include "dojo/dojo.h"
+
 enum MaplePattern
 {
 	MP_Start,
@@ -145,7 +147,12 @@ static void maple_DoDma()
 	}
 #endif
 
-	ggpo::getInput(mapleInputState);
+	if (dojo.play_match)
+		ggpo::MapleApplyAction(mapleInputState);
+	else
+		ggpo::getInput(mapleInputState);
+
+	//NOTICE_LOG(NETWORK, "FRAME NUMBER %u", dojo.frame_number.load());
 	// TODO put this elsewhere and let the card readers handle being called multiple times
 	if (settings.platform.isNaomi())
 	{

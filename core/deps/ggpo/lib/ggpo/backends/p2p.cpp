@@ -9,6 +9,8 @@
 #include <chrono>
 #include <thread>
 
+#include "dojo/dojo.h"
+
 static const int RECOMMENDATION_INTERVAL           = 240;
 static const int DEFAULT_DISCONNECT_TIMEOUT        = 5000;
 static const int DEFAULT_DISCONNECT_NOTIFY_START   = 750;
@@ -133,7 +135,7 @@ Peer2PeerBackend::DoPoll(int timeout)
          Log("last confirmed frame in p2p backend is %d.", total_min_confirmed);
          if (total_min_confirmed >= 0) {
             ASSERT(total_min_confirmed != INT_MAX);
-            if (_num_spectators > 0) {
+            if (_num_spectators > 0 || config::RecordMatches) {
                while (_next_spectator_frame <= total_min_confirmed) {
                   Log("pushing frame %d to spectators.", _next_spectator_frame);
    
@@ -143,6 +145,10 @@ Peer2PeerBackend::DoPoll(int timeout)
                   _sync.GetConfirmedInputs(input.bits, _input_size * _num_players, _next_spectator_frame);
                   for (int i = 0; i < _num_spectators; i++) {
                      _spectators[i].SendInput(input);
+                  }
+                  if (config::RecordMatches)
+                  {
+                    ggpo::RecordAction(input.frame, input.size, (unsigned char*)input.bits);
                   }
                   _next_spectator_frame++;
                }

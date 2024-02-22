@@ -27,6 +27,7 @@ public:
 
 	void set_imgui_style();
 
+	void gui_display_replay_end();
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;

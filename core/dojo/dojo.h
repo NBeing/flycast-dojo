@@ -4,9 +4,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <string>
 #include <thread>
-
+#include <vector>
 
 #include "cfg/option.h"
 #include "emulator.h"
@@ -14,18 +15,41 @@
 #include "network/ggpo.h"
 #include "rend/gui.h"
 
+#include "message_writer.h"
+#include "message_reader.h"
+
 #include "net_beacon.h"
+#include "replay.h"
+
+#define MAPLE_FRAME_SIZE 28
+#define FRAME_BATCH 120
+
+#include "input/gamepad_device.h"
+
+constexpr int MAX_PLAYERS = 2;
+
+constexpr u32 BTN_TRIGGER_LEFT = DC_BTN_BITMAPPED_LAST << 1;
+constexpr u32 BTN_TRIGGER_RIGHT = DC_BTN_BITMAPPED_LAST << 2;
 
 class Dojo
 {
 public:
+	NetBeacon presence;
+	Replay replay;
+
 	void AssignPlayerNames();
 
 	bool hosting;
 	std::string player_1;
 	std::string player_2;
 
-	std::atomic<u32> FrameNumber = {0};
+	std::atomic<u32> frame_number = {0};
+	std::map<uint32_t, std::vector<uint8_t>> session_inputs;
+
+	std::string match_code = "";
+
+	bool play_match = false;
+	bool precise_triggers = true;
 
 	void InitScore();
 	void RegisterPlayerWin(int player);
@@ -38,21 +62,19 @@ public:
 
 	uint32_t current_p1_wins = 0;
 	uint32_t current_p2_wins = 0;
-
 	uint32_t last_score_frame = 0;
 
 	void WriteStringToOut(std::string name, std::string contents);
 
 	std::string GetTrainingLua();
 
-	std::string match_code = "";
-
-	int StartSession();
+	std::string game_name;
+	bool commandLineStart;
 	bool disconnect_toggle = false;
 
-	NetBeacon presence;
+	std::string GetEntryPath(std::string entry);
 
-	std::string game_name;
+	void PollRecordAction(int frame, int size, unsigned char *bits);
 };
 
 extern Dojo dojo;

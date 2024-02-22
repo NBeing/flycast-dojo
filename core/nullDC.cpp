@@ -16,6 +16,7 @@
 #include "serialize.h"
 
 #include <filesystem>
+#include "dojo/dojo.h"
 
 int flycast_init(int argc, char* argv[])
 {
@@ -60,6 +61,9 @@ int flycast_init(int argc, char* argv[])
 
 	if(config::ProfilerEnabled)
 		LogManager::GetInstance()->SetEnable(LogTypes::PROFILER, true);
+
+	if (config::Replay)
+		dojo.replay.Init();
 
 	return 0;
 }

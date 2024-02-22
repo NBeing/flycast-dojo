@@ -20,9 +20,9 @@ void DojoGui::gui_display_ggpo_connect()
 
 						if (ImGui::Button("Host Game", ScaledVec2(150, 150)))
 						{
-							config::NetworkServer.set("");
-							config::GGPOEnable.set(true);
-							config::ActAsServer.set(true);
+							cfgSetVirtual("network", "server", "");
+							cfgSetVirtual("network", "GGPO", "yes");
+							cfgSetVirtual("network", "ActAsServer", "yes");
 							dojo.disconnect_toggle = false;
 							dojo.hosting = true;
 							hosting_opt = true;
@@ -40,9 +40,9 @@ void DojoGui::gui_display_ggpo_connect()
 						ImGui::SameLine();
 						if (ImGui::Button("Join Game", ScaledVec2(150, 150)))
 						{
-							config::NetworkServer.set("");
-							config::GGPOEnable.set(true);
-							config::ActAsServer.set(false);
+							cfgSetVirtual("network", "server", "");
+							cfgSetVirtual("network", "GGPO", "yes");
+							cfgSetVirtual("network", "ActAsServer", "no");
 							dojo.disconnect_toggle = false;
 							dojo.hosting = false;
 							hosting_opt = false;
@@ -150,13 +150,13 @@ void DojoGui::gui_display_ggpo_connect()
 					detect_address = "127.0.0.1";
 
 				if (hosting_opt)
-					config::ActAsServer.set(true);
+					cfgSetVirtual("network", "GGPO", "yes");
 				else
-					config::ActAsServer.set(false);
+					cfgSetVirtual("network", "GGPO", "no");
 
-				config::GGPOEnable.set(true);
-				config::NetworkEnable.set(false);
-				config::NetworkServer.set(detect_address);
+				cfgSetVirtual("network", "GGPO", "yes");
+				cfgSetVirtual("network", "Enable", "no");
+				cfgSetVirtual("network", "server", detect_address);
 
 				NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
 				if (current_delay != config::GGPODelay.get())
@@ -174,7 +174,7 @@ void DojoGui::gui_display_ggpo_connect()
 		if (ImGui::Button("Cancel"))
 		{
 			dojo.presence.Close();
-			config::GGPOEnable.set(false);
+			cfgSetVirtual("network", "GGPO", "no");
 
 			settings.content.path = "";
 			ImGui::CloseCurrentPopup();
@@ -202,12 +202,34 @@ void DojoGui::gui_display_disconnected()
 	error_popup();
 }
 
+void DojoGui::gui_display_replay_end()
+{
+	ImGui::SetNextWindowPos(ImVec2(settings.display.width / 2.f, settings.display.height / 2.f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(330 * settings.display.uiScale, 0));
+
+	ImGui::Begin("##replay_end", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
+
+	ImGui::Text("End of Replay.");
+
+	if (ImGui::Button("Exit Game"))
+	{
+		if (!dojo.commandLineStart)
+			gui_stop_game();
+		else
+			dc_exit();
+	}
+
+	ImGui::End();
+
+	error_popup();
+}
+
 void DojoGui::show_player_name_overlay(bool paused)
 {
 	// if both player names are defaults, hide overlay
 	if (dojo.player_2.length() <= 1 ||
-		strcmp(dojo.player_1.data(), "Player") == 0 &&
-			strcmp(dojo.player_1.data(), dojo.player_2.data()) == 0)
+		(strcmp(dojo.player_1.data(), "Player") == 0 &&
+			strcmp(dojo.player_1.data(), dojo.player_2.data()) == 0))
 	{
 		return;
 	}

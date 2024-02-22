@@ -25,6 +25,8 @@ struct MapleInputState;
 namespace ggpo
 {
 
+struct Inputs;
+
 std::future<bool> startNetwork();
 void startSession(int localPort, int localPlayerNum);
 void stopSession();
@@ -41,5 +43,12 @@ static inline bool rollbacking() {
 
 	return inRollback;
 }
+
+void FillDelayFrames();
+void MapleRecordAction(MapleInputState inputState[4]);
+void MapleApplyAction(MapleInputState inputState[4]);
+void PrintInputs(int player, Inputs inputs);
+void PrintMapleInputState(MapleInputState inputState[4]);
+void RecordAction(int frame, int size, unsigned char *bits);
 
 }

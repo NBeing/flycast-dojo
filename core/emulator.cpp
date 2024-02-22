@@ -578,6 +578,9 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 				dc_loadstate(-1);
 			else if (config::AutoLoadState && !NaomiNetworkSupported() && !settings.naomi.multiboard)
 				dc_loadstate(config::SavestateSlot);
+
+			if (config::RecordMatches && !config::Replay)
+				dojo.replay.StartRecording();
 		}
 		EventManager::event(Event::Start);
 
@@ -842,8 +845,13 @@ void Emulator::run()
 	renderTimeout = false;
 	try {
 		runInternal();
+		if (!dojo.play_match)
+		{
 		if (ggpo::active())
 			ggpo::nextFrame();
+		}
+		if (!settings.network.online)
+			dojo.frame_number++;
 		dojo.UpdateScore();
 	} catch (...) {
 		setNetworkState(false);
@@ -968,8 +976,11 @@ void Emulator::vblank()
 	if (sh4_sched_now64() - startTime <= 10000000)
 		return;
 	renderTimeout = true;
+	if (!dojo.play_match)
+	{
 	if (ggpo::active())
 		ggpo::endOfFrame();
+	}
 	else if (!config::ThreadedRendering)
 		sh4_cpu.Stop();
 }

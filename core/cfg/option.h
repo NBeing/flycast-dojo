@@ -539,9 +539,14 @@ extern Option<int> FirstTo;
 extern Option<bool> StreamTxtOutput;
 extern Option<bool> Training;
 extern Option<bool> ShowTrainingGameOverlay;
-
 extern OptionString DojoServerIP;
 extern OptionString DojoServerPort;
+
+extern Option<bool> RecordMatches;
+extern Option<bool> Replay;
+extern OptionString ReplayFilename;
+
+extern Option<int> Delay;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

@@ -177,6 +177,12 @@ Option<bool> StreamTxtOutput("StreamTxtOutput", false, "dojo");
 Option<bool> Training("Training", false, "dojo");
 Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
 
+Option<bool> RecordMatches("RecordMatches", false, "dojo");
+Option<bool> Replay("Replay", false, "dojo");
+OptionString ReplayFilename("ReplayFilename", "", "dojo");
+
+Option<int> Delay("Delay", 0, "dojo");
+
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");
 #endif

@@ -1,7 +1,9 @@
 #pragma once
 
 #ifdef _WIN32
+#ifdef _MSC_VER
 #pragma comment(lib, "Ws2_32.lib")
+#endif
 #define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 
 #include <Winsock2.h> // before Windows.h, else Winsock 1 conflict
@@ -15,8 +17,6 @@
 #include <time.h>
 #include <unistd.h>
 #endif
-
-#define SOCKET_ERROR -1
 
 #include <map>
 
