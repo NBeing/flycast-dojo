@@ -480,6 +480,8 @@ extern Option<bool, false> VideoRoutingScale;
 extern Option<int, false> VideoRoutingVRes;
 #endif
 
+extern Option<int> FixedFrequency; // 0: off, 1: auto, 2: 59.94Hz, 3: 60Hz, 4: 50Hz, 5: 30Hz
+
 // Misc
 
 extern Option<bool> SerialConsole;

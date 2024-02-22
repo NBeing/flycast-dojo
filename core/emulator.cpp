@@ -173,6 +173,28 @@ static void loadSpecialSettings()
 			config::ExtraDepthScale.override(1000.f);
 		}
 
+		// Fixed Frequency Auto: Enforce Audio Sync
+		// Tech Romancer (USA)
+		// Spawn - In the Demon's Hand (USA)
+		// Tony Hawk's Pro Skater 2 (USA)
+		// Star Wars - Episode I - Racer (USA)
+		// Sonic Adventure 2 (USA)
+		if (prod_id == "T1208N" || prod_id == "T1216N" ||
+			prod_id == "T13006N" || prod_id == "T23001N" ||
+			prod_id == "MK-51117")
+		{
+			if (config::FixedFrequency == 1)
+				config::LimitFPS.override(true);
+		}
+		// GGPO Left Thumbstick Full
+		// Sonic Adventure 2 (USA)
+		// Golf Shiyou yo 2 - Aratanaru Chousen (Japan)
+		if (prod_id == "MK-51117" || prod_id == "T44501M")
+		{
+			if (config::GGPOEnable)
+				config::GGPOAnalogAxes.override(2);
+		}
+
 		std::string areas(ip_meta.area_symbols, sizeof(ip_meta.area_symbols));
 		bool region_usa = areas.find('U') != std::string::npos;
 		bool region_eu = areas.find('E') != std::string::npos;

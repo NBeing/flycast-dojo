@@ -43,7 +43,7 @@ Option<int, false> UIScaling("UIScaling", 100);
 
 // Sound
 
-Option<bool> LimitFPS("aica.LimitFPS", true);
+Option<bool> LimitFPS("aica.LimitFPS", false);
 Option<bool> DSPEnabled("aica.DSPEnabled", false);
 #if HOST_CPU == CPU_ARM
 Option<int> AudioBufferSize("aica.BufferSize", 5644);	// 128 ms
@@ -114,6 +114,8 @@ Option<bool, false> VideoRouting("rend.VideoRouting", false);
 Option<bool, false> VideoRoutingScale("rend.VideoRoutingScale", false);
 Option<int, false> VideoRoutingVRes("rend.VideoRoutingVRes", 720);
 #endif
+
+Option<int> FixedFrequency ("rend.FixedFrequency", 1);
 
 // Misc
 
