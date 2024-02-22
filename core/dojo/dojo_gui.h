@@ -25,6 +25,8 @@ public:
 
 	void settings_dojo_tab();
 
+	void set_imgui_style();
+
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;
