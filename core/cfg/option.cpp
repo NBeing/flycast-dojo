@@ -29,7 +29,7 @@ Option<int> Sh4Clock("Sh4Clock", 200);
 
 // General
 
-Option<int> Cable("Dreamcast.Cable", 3);			// TV Composite
+Option<int> Cable("Dreamcast.Cable", 0);			// VGA
 Option<int> Region("Dreamcast.Region", 1);			// USA
 Option<int> Broadcast("Dreamcast.Broadcast", 0);	// NTSC
 Option<int> Language("Dreamcast.Language", 1);		// English
@@ -193,7 +193,7 @@ Option<int> VirtualGamepadVibration("VirtualGamepadVibration", 20, "input");
 
 std::array<Option<MapleDeviceType>, 4> MapleMainDevices {
 	Option<MapleDeviceType>("device1", MDT_SegaController, "input"),
-	Option<MapleDeviceType>("device2", MDT_None, "input"),
+	Option<MapleDeviceType>("device2", MDT_SegaController, "input"),
 	Option<MapleDeviceType>("device3", MDT_None, "input"),
 	Option<MapleDeviceType>("device4", MDT_None, "input"),
 };
