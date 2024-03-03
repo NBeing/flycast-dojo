@@ -1093,6 +1093,33 @@ void ggpo::MapleApplyAction(MapleInputState inputState[4])
 
 	u32 inputSize = sizeof(Inputs);
 	std::vector<u8> current_inputs = dojo.session_inputs[dojo.frame_number];
+
+	if (config::Training)
+	{
+		if (dojo.player_switched)
+		{
+			auto swapped_frame = dojo.SwapPlayerInputs(current_inputs.size(), current_inputs.data());
+			current_inputs = swapped_frame;
+		}
+
+		if (dojo.recording)
+		{
+			auto filtered_frame = dojo.FilterPlayerInput(dojo.record_player, current_inputs.size(), current_inputs.data());
+			dojo.record_slot[dojo.current_record_slot].push_back(std::string((const char*)filtered_frame.data(), sizeof(Inputs) * MAX_PLAYERS));
+		}
+	}
+
+	if (!config::GGPOEnable && config::RecordMatches && !dojo.play_match)
+	{
+		// create frame container for export
+		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
+		memcpy(new_frame, (unsigned char *)&dojo.frame_number, sizeof(unsigned int));
+		memcpy(new_frame + 4, (unsigned char *)current_inputs.data(), current_inputs.size());
+		std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
+
+		dojo.replay.AppendToFile(frame_, 4);
+	}
+
 	Inputs *player_inputs;
 
 	for (int player = 0; player < MAX_PLAYERS; player++)
@@ -1118,15 +1145,6 @@ void ggpo::MapleApplyAction(MapleInputState inputState[4])
 		{
 			state.halfAxes[PJTI_R] = player_inputs->triggers.r << 8;
 			state.halfAxes[PJTI_L] = player_inputs->triggers.l << 8;
-		}
-	}
-
-	if (config::Training)
-	{
-		if (dojo.recording)
-		{
-			auto filtered_frame = dojo.FilterPlayerInput(dojo.record_player, current_inputs.size(), current_inputs.data());
-			dojo.record_slot[dojo.current_record_slot].push_back(std::string((const char*)filtered_frame.data(), sizeof(Inputs) * MAX_PLAYERS));
 		}
 	}
 

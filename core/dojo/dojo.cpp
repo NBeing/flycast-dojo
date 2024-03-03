@@ -379,19 +379,37 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 	}
 	session_inputs[frame_num] = m_inputs;
 
-	// create frame container for export
-	unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
-	memcpy(new_frame, (unsigned char *)&frame_num, sizeof(unsigned int));
-	memcpy(new_frame + 4, (unsigned char *)m_inputs.data(), m_inputs.size());
-	std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
+	if (config::GGPOEnable && config::RecordMatches && !dojo.play_match)
+	{
+		// create frame container for export
+		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
+		memcpy(new_frame, (unsigned char *)&frame_num, sizeof(unsigned int));
+		memcpy(new_frame + 4, (unsigned char *)m_inputs.data(), m_inputs.size());
+		std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
 
-	if (config::RecordMatches && !dojo.play_match)
-		replay.AppendToFile(frame_, 3);
+		replay.AppendToFile(frame_, 4);
+	}
 
 	//NOTICE_LOG(NETWORK, "FRAME %u SIZE %u", frame, m_inputs.size());
 
 	// if (dojo.transmitter_started)
 	// dojo.transmission_frames.push_back(frame_);
+}
+
+void Dojo::TrainingSwitchPlayer()
+{
+	record_player == 0 ?
+		record_player = 1 :
+		record_player = 0;
+
+	if (record_player != 0)
+		player_switched = true;
+	else
+		player_switched = false;
+
+	std::ostringstream NoticeStream;
+	NoticeStream << "Controlling Player " << record_player + 1;
+	gui_display_notification(NoticeStream.str().data(), 2000);
 }
 
 void Dojo::ToggleRecording(int slot)
@@ -503,6 +521,18 @@ std::vector<u8> Dojo::FilterPlayerInput(int player, int size, unsigned char *bit
 
 	int start = player * player_input_size;
 	memcpy(out_frame.data() + start, bits + start, player_input_size);
+
+	return out_frame;
+}
+
+
+std::vector<u8> Dojo::SwapPlayerInputs(int size, unsigned char *bits)
+{
+	int player_input_size = size / MAX_PLAYERS;
+	std::vector<u8> out_frame(size, 0);
+
+	memcpy(out_frame.data() + player_input_size, bits, player_input_size);
+	memcpy(out_frame.data(), bits + player_input_size, player_input_size);
 
 	return out_frame;
 }

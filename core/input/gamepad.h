@@ -53,6 +53,7 @@ enum DreamcastKey
 	EMU_BTN_BYPASS_KB,
 
 	// training
+	EMU_BTN_SWITCH_PLAYER,
 	EMU_BTN_RECORD,
 	EMU_BTN_PLAY,
 	EMU_BTN_RECORD_1,

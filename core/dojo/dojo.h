@@ -92,6 +92,7 @@ public:
 	std::vector<std::string> record_slot[3];
 	std::set<int> recorded_slots;
 
+	void TrainingSwitchPlayer();
 	void ToggleRecording(int slot);
 	void TogglePlayback(int slot);
 	void TogglePlayback(int slot, bool hide_slot);
@@ -100,6 +101,7 @@ public:
 	void ResetTraining();
 
 	std::vector<u8> FilterPlayerInput(int player, int size, unsigned char *bits);
+	std::vector<u8> SwapPlayerInputs(int size, unsigned char *bits);
 };
 
 extern Dojo dojo;

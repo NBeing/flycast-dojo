@@ -62,6 +62,7 @@ button_list[] =
 	{ EMU_BTN_SAVESTATE, "emulator", "btn_quick_save" },
 	{ EMU_BTN_BYPASS_KB, "emulator", "btn_bypass_kb" },
 
+	{ EMU_BTN_SWITCH_PLAYER, "emulator", "btn_switch_player" },
 	{ EMU_BTN_RECORD, "emulator", "btn_record" },
 	{ EMU_BTN_PLAY, "emulator", "btn_play" },
 	{ EMU_BTN_RECORD_1, "emulator", "btn_record_1_" },

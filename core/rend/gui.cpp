@@ -669,6 +669,16 @@ static void gui_display_commands()
 
 		displayed_button_count++;
 		ImGui::NextColumn();
+
+		std::ostringstream watch_text;
+		watch_text << "Controlling Player " << dojo.record_player + 1;
+		if (ImGui::Button(watch_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+		{
+			dojo.TrainingSwitchPlayer();
+		}
+		displayed_button_count++;
+		ImGui::NextColumn();
+
 	}
 
 #if !defined(__APPLE__)
@@ -956,6 +966,7 @@ const Mapping dcButtons[] = {
 	{ EMU_BTN_BYPASS_KB, "Bypass Emulated Keyboard" },
 
 	{ EMU_BTN_NONE, "Training Mode" },
+	{ EMU_BTN_SWITCH_PLAYER, "Switch Player" },
 	{ EMU_BTN_RECORD, "Record Input Slot 1" },
 	{ EMU_BTN_RECORD_1, "Record Input Slot 2" },
 	{ EMU_BTN_RECORD_2, "Record Input Slot 3" },

@@ -103,6 +103,12 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 			break;
 
 		// training
+		case EMU_BTN_SWITCH_PLAYER:
+			if (pressed && !gui_is_open() && config::Training)
+			{
+				dojo.TrainingSwitchPlayer();
+			}
+			break;
 		case EMU_BTN_RECORD:
 			if (pressed && !gui_is_open() && config::Training)
 			{
