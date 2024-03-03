@@ -71,7 +71,7 @@ static void getLocalInput(MapleInputState inputState[4])
 		mo_wheel_delta[player] -= wheel;
 		player_states.push_back(state);
 	}
-	if (!settings.network.online)
+	if (!config::GGPOEnable)
 		MapleRecordAction(player_states.data());
 	MapleApplyAction(inputState);
 }
@@ -1047,7 +1047,7 @@ void ggpo::MapleRecordAction(MapleInputState inputState[4])
 		}
 
 		// only record precise triggers offline
-		if (settings.network.online)
+		if (config::GGPOEnable)
 		{
 			if (rt[i] >= 0x4000)
 				inputs.kcode |= BTN_TRIGGER_RIGHT;
@@ -1071,10 +1071,7 @@ void ggpo::MapleRecordAction(MapleInputState inputState[4])
 	std::vector<u8> m_inputs(sizeof(Inputs) * MAX_PLAYERS);
 	std::memcpy(m_inputs.data(), maple_in.data(), sizeof(Inputs) * MAX_PLAYERS);
 
-	if (settings.network.online)
-		dojo.PollRecordAction(dojo.frame_number.load(), m_inputs.size(), m_inputs.data());
-	else
-		dojo.PollRecordAction(dojo.frame_number.load() + config::Delay, m_inputs.size(), m_inputs.data());
+	dojo.PollRecordAction(dojo.frame_number.load() + config::Delay, m_inputs.size(), m_inputs.data());
 }
 
 void ggpo::MapleApplyAction(MapleInputState inputState[4])
