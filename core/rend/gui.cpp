@@ -955,6 +955,29 @@ const Mapping dcButtons[] = {
 	{ EMU_BTN_SAVESTATE, "Save State" },
 	{ EMU_BTN_BYPASS_KB, "Bypass Emulated Keyboard" },
 
+	// button combinations
+	{ EMU_BTN_NONE, "Macros" },
+	{ EMU_CMB_X_Y_A_B, "X+Y+A+B" },
+	{ EMU_CMB_X_Y_A, "X+Y+A" },
+	{ EMU_CMB_X_Y_LT, "X+Y+LT" },
+	{ EMU_CMB_A_B_RT, "A+B+RT" },
+	{ EMU_CMB_1_2_4, "X+A+B" },
+	{ EMU_CMB_X_A, "X+A" },
+	{ EMU_CMB_Y_B, "Y+B" },
+	{ EMU_CMB_LT_RT, "LT+RT" },
+	{ EMU_CMB_2_4, "X+B" },
+	{ EMU_CMB_4_5, "X+Y" },
+	{ EMU_CMB_1_4, "X+A" },
+	{ EMU_CMB_1_5, "Y+A" },
+	{ EMU_CMB_1_2, "A+B" },
+	{ EMU_CMB_1_3, "A+C" },
+	{ EMU_CMB_1_2_3_4, "A+B+C+X" },
+	{ EMU_CMB_1_2_3, "A+B+C" },
+	{ EMU_CMB_4_5_6, "X+Y+Z" },
+	{ EMU_CMB_3_4, "X+C" },
+	{ EMU_CMB_2_3, "B+C" },
+	{ EMU_CMB_3_6, "C+Z" },
+
 	{ EMU_BTN_NONE, nullptr }
 };
 
@@ -1007,6 +1030,28 @@ const Mapping arcadeButtons[] = {
 	{ EMU_BTN_LOADSTATE, "Load State" },
 	{ EMU_BTN_SAVESTATE, "Save State" },
 	{ EMU_BTN_BYPASS_KB, "Bypass Emulated Keyboard" },
+
+	// button combinations
+	{ EMU_BTN_NONE, "Macros" },
+	{ EMU_CMB_X_Y_A_B, "1+2+4+5" },
+	{ EMU_CMB_X_Y_A, "1+2+4" },
+	{ EMU_CMB_1_2_3_4, "1+2+3+4" },
+	{ EMU_CMB_1_2_3, "1+2+3" },
+	{ EMU_CMB_4_5_6, "4+5+6" },
+	{ EMU_CMB_1_2_4, "1+2+4" },
+	{ EMU_CMB_1_2, "1+2" },
+	{ EMU_CMB_1_3, "1+3" },
+	{ EMU_CMB_X_A, "1+4" },
+	{ EMU_CMB_1_5, "1+5" },
+	{ EMU_CMB_2_3, "2+3" },
+	{ EMU_CMB_2_4, "2+4" },
+	{ EMU_CMB_Y_B, "2+5" },
+	{ EMU_CMB_3_4, "3+4" },
+	{ EMU_CMB_3_6, "3+6" },
+	{ EMU_CMB_4_5, "4+5" },
+	{ EMU_CMB_X_Y_LT, "1+2+LT" },
+	{ EMU_CMB_A_B_RT, "4+5+RT" },
+	{ EMU_CMB_LT_RT, "LT+RT" },
 
 	{ EMU_BTN_NONE, nullptr }
 };

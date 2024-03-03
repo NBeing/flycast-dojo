@@ -61,6 +61,29 @@ button_list[] =
 	{ EMU_BTN_LOADSTATE, "emulator", "btn_jump_state" },
 	{ EMU_BTN_SAVESTATE, "emulator", "btn_quick_save" },
 	{ EMU_BTN_BYPASS_KB, "emulator", "btn_bypass_kb" },
+
+	// button combinations
+	{ EMU_CMB_X_Y_A_B, "emulator", "cmb_x_y_a_b" },
+	{ EMU_CMB_X_Y_A, "emulator", "cmb_x_y_a" },
+	{ EMU_CMB_X_Y_LT, "emulator", "cmb_x_y_lt" },
+	{ EMU_CMB_A_B_RT, "emulator", "cmb_a_b_rt" },
+	{ EMU_CMB_X_A, "emulator", "cmb_x_a" },
+	{ EMU_CMB_Y_B, "emulator", "cmb_y_b" },
+	{ EMU_CMB_LT_RT, "emulator", "cmb_lt_rt" },
+	{ EMU_CMB_1_2_3, "emulator", "cmb_1_2_3_" },
+	{ EMU_CMB_4_5, "emulator", "cmb_4_5_" },
+	{ EMU_CMB_4_5_6, "emulator", "cmb_4_5_6_" },
+	{ EMU_CMB_1_4, "emulator", "cmb_1_4_" },
+	{ EMU_CMB_2_5, "emulator", "cmb_2_5_" },
+	{ EMU_CMB_3_4, "emulator", "cmb_3_4_" },
+	{ EMU_CMB_3_6, "emulator", "cmb_3_6_" },
+	{ EMU_CMB_1_2, "emulator", "cmb_1_2_" },
+	{ EMU_CMB_1_3, "emulator", "cmb_1_3_" },
+	{ EMU_CMB_2_3, "emulator", "cmb_2_3_" },
+	{ EMU_CMB_1_2_4, "emulator", "cmb_1_2_4_" },
+	{ EMU_CMB_1_2_3_4, "emulator", "cmb_1_2_3_4_" },
+	{ EMU_CMB_1_5, "emulator", "cmb_1_5_" },
+	{ EMU_CMB_2_4, "emulator", "cmb_2_4_" },
 };
 
 static struct
