@@ -403,7 +403,7 @@ void DojoGui::settings_dojo_tab()
 		ShowHelpMarker("Name visible to other players");
 		config::PlayerName = std::string(PlayerName, strlen(PlayerName));
 
-		OptionCheckbox("Enable Player Name Overlay", config::PlayerNameOverlayEnable,
+		OptionCheckbox("Enable Player Name Overlay", config::PlayerNameOverlay,
 					   "Enable overlay showing player names during netplay sessions & replays");
 
 		OptionCheckbox("Output Session Details to Text Files", config::StreamTxtOutput,
@@ -595,4 +595,39 @@ void DojoGui::set_imgui_style()
 	style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.0f, 1.0f, 1.0f, 0.699999988079071f);
 	style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.800000011920929f, 0.800000011920929f, 0.800000011920929f, 0.2000000029802322f);
 	style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.800000011920929f, 0.800000011920929f, 0.800000011920929f, 0.3499999940395355f);
+}
+
+void DojoGui::show_replay_position_overlay(int frame_num)
+{
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.557f, 0.268f, 0.965f, 1.f));
+
+	if (dojo.frame_number < dojo.session_inputs.size() ||
+		config::Training)
+	{
+		char text_pos[30] = { 0 };
+
+		if (dojo.play_match)
+			sprintf(text_pos, "%u / %u     ", frame_num, dojo.session_inputs.size());
+		else if (config::Training)
+			sprintf(text_pos, "%u     ", frame_num);
+
+		float font_size = ImGui::CalcTextSize(text_pos).x;
+
+		ImGui::SetNextWindowPos(ImVec2(settings.display.width - font_size, settings.display.height - 40));
+		ImGui::SetNextWindowSize(ImVec2(font_size, 40));
+		ImGui::SetNextWindowBgAlpha(0.5f);
+		ImGui::Begin("#pos", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
+
+		if (dojo.play_match)
+			ImGui::Text("%u / %u", frame_num, dojo.session_inputs.size());
+		else if (config::Training)
+			ImGui::Text("%u", frame_num);
+
+		ImGui::End();
+	}
+
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar(2);
 }

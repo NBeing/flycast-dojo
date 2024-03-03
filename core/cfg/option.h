@@ -528,7 +528,7 @@ extern Option<int> GGPOPort;
 
 // Dojo
 extern OptionString PlayerName;
-extern Option<bool> PlayerNameOverlayEnable;
+extern Option<bool> PlayerNameOverlay;
 extern Option<bool> NetBeaconEnable;
 extern OptionString BeaconMulticastAddress;
 extern OptionString BeaconMulticastPort;
@@ -545,6 +545,7 @@ extern OptionString DojoServerPort;
 extern Option<bool> RecordMatches;
 extern Option<bool> Replay;
 extern OptionString ReplayFilename;
+extern Option<bool> ReplayPositionOverlay;
 
 extern Option<int> Delay;
 

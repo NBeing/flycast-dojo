@@ -163,7 +163,7 @@ Option<int> GGPOPort("GGPOPort", 19713, "network");
 
 // Dojo
 OptionString PlayerName("PlayerName", "Player", "dojo");
-Option<bool> PlayerNameOverlayEnable("PlayerNameOverlay", true, "dojo");
+Option<bool> PlayerNameOverlay("PlayerNameOverlay", true, "dojo");
 Option<bool> NetBeaconEnable("NetBeacon", true, "dojo");
 OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "dojo");
 OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
@@ -180,6 +180,7 @@ Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
 Option<bool> RecordMatches("RecordMatches", false, "dojo");
 Option<bool> Replay("Replay", false, "dojo");
 OptionString ReplayFilename("ReplayFilename", "", "dojo");
+Option<bool> ReplayPositionOverlay("ReplayPositionOverlay", true, "dojo");
 
 Option<int> Delay("Delay", 0, "dojo");
 

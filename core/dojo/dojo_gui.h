@@ -28,6 +28,8 @@ public:
 	void set_imgui_style();
 
 	void gui_display_replay_end();
+	void show_replay_position_overlay(int frame_num);
+
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;

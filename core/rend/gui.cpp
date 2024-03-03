@@ -3486,9 +3486,17 @@ void gui_display_osd()
 		if (config::FloatVMUs)
 			imguiDriver->displayVmus();
 //		gui_plot_render_time(settings.display.width, settings.display.height);
+		if (dojo.play_match)
+		{
+			if (config::ReplayPositionOverlay)
+				dojo_gui.show_replay_position_overlay(dojo.frame_number);
+
+			if (config::PlayerNameOverlay)
+				dojo_gui.show_player_name_overlay(false);
+		}
 		if (ggpo::active())
 		{
-			if (config::PlayerNameOverlayEnable)
+			if (config::PlayerNameOverlay)
 				dojo_gui.show_player_name_overlay(false);
 			if (!dojo.play_match)
 			{
