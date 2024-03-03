@@ -62,6 +62,14 @@ button_list[] =
 	{ EMU_BTN_SAVESTATE, "emulator", "btn_quick_save" },
 	{ EMU_BTN_BYPASS_KB, "emulator", "btn_bypass_kb" },
 
+	{ EMU_BTN_RECORD, "emulator", "btn_record" },
+	{ EMU_BTN_PLAY, "emulator", "btn_play" },
+	{ EMU_BTN_RECORD_1, "emulator", "btn_record_1_" },
+	{ EMU_BTN_PLAY_1, "emulator", "btn_play_1_" },
+	{ EMU_BTN_RECORD_2, "emulator", "btn_record_2_" },
+	{ EMU_BTN_PLAY_2, "emulator", "btn_play_2_" },
+	{ EMU_BTN_PLAY_RND, "emulator", "btn_play_rnd_" },
+
 	// button combinations
 	{ EMU_CMB_X_Y_A_B, "emulator", "cmb_x_y_a_b" },
 	{ EMU_CMB_X_Y_A, "emulator", "cmb_x_y_a" },

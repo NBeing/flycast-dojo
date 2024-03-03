@@ -183,6 +183,7 @@ OptionString ReplayFilename("ReplayFilename", "", "dojo");
 Option<bool> ReplayPositionOverlay("ReplayPositionOverlay", true, "dojo");
 
 Option<int> Delay("Delay", 0, "dojo");
+Option<bool> HideRandomInputSlot("HideRandomInputSlot", true, "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

@@ -29,6 +29,8 @@
 #include <mutex>
 #include <vector>
 
+#include "dojo/dojo.h"
+
 #define MAPLE_PORT_CFG_PREFIX "maple_"
 
 // Gamepads
@@ -98,6 +100,50 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 		case EMU_BTN_SAVESTATE:
 			if (pressed)
 				gui_saveState();
+			break;
+
+		// training
+		case EMU_BTN_RECORD:
+			if (pressed && !gui_is_open() && config::Training)
+			{
+				dojo.ToggleRecording(0);
+			}
+			break;
+		case EMU_BTN_PLAY:
+			if (pressed && !gui_is_open() && config::Training)
+			{
+				dojo.TogglePlayback(0);
+			}
+			break;
+		case EMU_BTN_RECORD_1:
+			if (pressed && !gui_is_open() && config::Training)
+			{
+				dojo.ToggleRecording(1);
+			}
+			break;
+		case EMU_BTN_PLAY_1:
+			if (pressed && !gui_is_open() && config::Training)
+			{
+				dojo.TogglePlayback(1);
+			}
+			break;
+		case EMU_BTN_RECORD_2:
+			if (pressed && !gui_is_open() && config::Training)
+			{
+				dojo.ToggleRecording(2);
+			}
+			break;
+		case EMU_BTN_PLAY_2:
+			if (pressed && !gui_is_open() && config::Training)
+			{
+				dojo.TogglePlayback(2);
+			}
+			break;
+		case EMU_BTN_PLAY_RND:
+			if (pressed && !gui_is_open() && config::Training)
+			{
+				dojo.ToggleRandomPlayback();
+			}
 			break;
 
 		// button combinations

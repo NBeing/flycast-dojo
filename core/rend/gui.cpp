@@ -955,6 +955,15 @@ const Mapping dcButtons[] = {
 	{ EMU_BTN_SAVESTATE, "Save State" },
 	{ EMU_BTN_BYPASS_KB, "Bypass Emulated Keyboard" },
 
+	{ EMU_BTN_NONE, "Training Mode" },
+	{ EMU_BTN_RECORD, "Record Input Slot 1" },
+	{ EMU_BTN_RECORD_1, "Record Input Slot 2" },
+	{ EMU_BTN_RECORD_2, "Record Input Slot 3" },
+	{ EMU_BTN_PLAY, "Play Input Slot 1" },
+	{ EMU_BTN_PLAY_1, "Play Input Slot 2" },
+	{ EMU_BTN_PLAY_2, "Play Input Slot 3" },
+	{ EMU_BTN_PLAY_RND, "Play Random Input Slot" },
+
 	// button combinations
 	{ EMU_BTN_NONE, "Macros" },
 	{ EMU_CMB_X_Y_A_B, "X+Y+A+B" },

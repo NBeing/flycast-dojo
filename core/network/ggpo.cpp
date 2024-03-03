@@ -1118,7 +1118,15 @@ void ggpo::MapleApplyAction(MapleInputState inputState[4])
 		{
 			state.halfAxes[PJTI_R] = player_inputs->triggers.r << 8;
 			state.halfAxes[PJTI_L] = player_inputs->triggers.l << 8;
+		}
+	}
 
+	if (config::Training)
+	{
+		if (dojo.recording)
+		{
+			auto filtered_frame = dojo.FilterPlayerInput(dojo.record_player, current_inputs.size(), current_inputs.data());
+			dojo.record_slot[dojo.current_record_slot].push_back(std::string((const char*)filtered_frame.data(), sizeof(Inputs) * MAX_PLAYERS));
 		}
 	}
 

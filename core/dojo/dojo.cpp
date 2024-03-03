@@ -368,12 +368,15 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 {
 	u32 frame_num = (unsigned int)frame;
 	std::vector<u8> m_inputs;
+	std::vector<u8> existing(size, 0);
+
+	if (config::Training && session_inputs.count(frame_num))
+		existing = session_inputs[frame_num];
 
 	for (int i = 0; i < size; i++)
 	{
-		m_inputs.push_back((unsigned char)bits[i]);
+		m_inputs.push_back((unsigned char)(bits[i] | existing[i]));
 	}
-
 	session_inputs[frame_num] = m_inputs;
 
 	// create frame container for export
@@ -389,4 +392,131 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 
 	// if (dojo.transmitter_started)
 	// dojo.transmission_frames.push_back(frame_);
+}
+
+void Dojo::ToggleRecording(int slot)
+{
+	std::ostringstream NoticeStream;
+	if (recording)
+	{
+		recording = false;
+		recording_started = false;
+		NoticeStream << "Stop Recording Slot " << slot + 1 << " Player " << record_player + 1;
+	}
+	else
+	{
+		current_record_slot = slot;
+		record_slot[slot].clear();
+		recorded_slots.insert(slot);
+		recording = true;
+		//if (config::RecordOnFirstInput)
+		//	recording_started = false;
+		//else
+			recording_started = true;
+		NoticeStream << "Recording Slot " << slot + 1 << " Player " << record_player + 1;
+	}
+	gui_display_notification(NoticeStream.str().data(), 2000);
+}
+
+void Dojo::TogglePlayback(int slot)
+{
+	TogglePlayback(slot, false);
+}
+
+void Dojo::TogglePlayback(int slot, bool hide_slot = false)
+{
+	std::ostringstream NoticeStream;
+	if (dojo.playback_loop)
+	{
+		if (dojo.trigger_playback)
+		{
+			dojo.trigger_playback = false;
+			if (hide_slot)
+				NoticeStream << "Stop Loop";
+			else
+				NoticeStream << "Stop Loop Slot " << slot + 1;
+		}
+		else
+		{
+			current_record_slot = slot;
+			dojo.trigger_playback = true;
+			if (hide_slot)
+				NoticeStream << "Play Loop";
+			else
+				NoticeStream << "Play Loop Slot " << slot + 1;
+		}
+	}
+	else
+	{
+		current_record_slot = slot;
+		if (hide_slot)
+			NoticeStream << "Play Input";
+		else
+			NoticeStream << "Play Slot " << slot + 1;
+		dojo.PlayRecording(slot);
+	}
+	gui_display_notification(NoticeStream.str().data(), 2000);
+}
+
+void Dojo::ToggleRandomPlayback()
+{
+	if (recorded_slots.empty())
+	{
+		gui_display_notification("No Input Slots Recorded", 2000);
+		return;
+	}
+	if (!playing_input)
+	{
+		auto it = recorded_slots.cbegin();
+		srand(time(0));
+		int rnd = rand() % recorded_slots.size();
+		std::advance(it, rnd);
+		current_record_slot = *it;
+	}
+	dojo.TogglePlayback(current_record_slot, config::HideRandomInputSlot.get());
+}
+
+void Dojo::PlayRecording(int slot)
+{
+	if (!recording && !playing_input)
+	{
+		playing_input = true;
+		u8 to_add[MAPLE_FRAME_SIZE] = { 0 };
+		u32 target_frame = dojo.frame_number + 1 + config::Delay;
+		for (std::string frame : record_slot[slot])
+		{
+			//to_add[0] = (u8)port;
+			std::vector<u8> frame_record(MAPLE_FRAME_SIZE, 0);
+			memcpy(frame_record.data(), frame.data(), MAPLE_FRAME_SIZE);
+			PollRecordAction(target_frame, frame_record.size(), frame_record.data());
+			target_frame++;
+		}
+		next_playback_frame = target_frame;
+		playing_input = false;
+	}
+}
+
+std::vector<u8> Dojo::FilterPlayerInput(int player, int size, unsigned char *bits)
+{
+	int player_input_size = size / MAX_PLAYERS;
+	std::vector<u8> out_frame(size, 0);
+
+	int start = player * player_input_size;
+	memcpy(out_frame.data() + start, bits + start, player_input_size);
+
+	return out_frame;
+}
+
+void Dojo::ResetTraining()
+{
+	player_switched = false;
+	record_player = 0;
+	current_record_slot = 0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		record_slot[i].clear();
+	}
+
+	recorded_slots.clear();
 }

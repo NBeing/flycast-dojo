@@ -548,6 +548,7 @@ extern OptionString ReplayFilename;
 extern Option<bool> ReplayPositionOverlay;
 
 extern Option<int> Delay;
+extern Option<bool> HideRandomInputSlot;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

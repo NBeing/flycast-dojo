@@ -52,6 +52,15 @@ enum DreamcastKey
 	EMU_BTN_SAVESTATE,
 	EMU_BTN_BYPASS_KB,
 
+	// training
+	EMU_BTN_RECORD,
+	EMU_BTN_PLAY,
+	EMU_BTN_RECORD_1,
+	EMU_BTN_PLAY_1,
+	EMU_BTN_RECORD_2,
+	EMU_BTN_PLAY_2,
+	EMU_BTN_PLAY_RND,
+
 	// button combinations
 	EMU_CMB_X_Y_A_B,
 	EMU_CMB_X_Y_A,
