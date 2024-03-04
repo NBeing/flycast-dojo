@@ -1016,6 +1016,8 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/net_beacon.h
 		core/dojo/replay.cpp
 		core/dojo/replay.h
+		core/dojo/training.h
+		core/dojo/training.cpp
 		core/dojo/udp_client.cpp
 		core/dojo/udp_client.h
 		core/dojo/dojo.cpp

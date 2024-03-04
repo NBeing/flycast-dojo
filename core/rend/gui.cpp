@@ -671,20 +671,20 @@ static void gui_display_commands()
 		ImGui::NextColumn();
 
 		std::ostringstream watch_text;
-		watch_text << "Controlling Player " << dojo.record_player + 1;
+		watch_text << "Controlling Player " << dojo.training.record_player + 1;
 		if (ImGui::Button(watch_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
 		{
-			dojo.TrainingSwitchPlayer();
+			dojo.training.SwitchPlayer();
 		}
 		displayed_button_count++;
 		ImGui::NextColumn();
 
 		std::ostringstream playback_loop_text;
 		playback_loop_text << "Playback Loop ";
-		playback_loop_text << (dojo.playback_loop ? "On" : "Off");
+		playback_loop_text << (dojo.training.playback_loop ? "On" : "Off");
 		if (ImGui::Button(playback_loop_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
 		{
-			dojo.playback_loop = (dojo.playback_loop ? false : true);
+			dojo.training.playback_loop = (dojo.training.playback_loop ? false : true);
 		}
 		displayed_button_count++;
 		ImGui::NextColumn();

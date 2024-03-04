@@ -106,49 +106,49 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 		case EMU_BTN_SWITCH_PLAYER:
 			if (pressed && !gui_is_open() && config::Training)
 			{
-				dojo.TrainingSwitchPlayer();
+				dojo.training.SwitchPlayer();
 			}
 			break;
 		case EMU_BTN_RECORD:
 			if (pressed && !gui_is_open() && config::Training)
 			{
-				dojo.ToggleRecording(0);
+				dojo.training.ToggleRecording(0);
 			}
 			break;
 		case EMU_BTN_PLAY:
 			if (pressed && !gui_is_open() && config::Training)
 			{
-				dojo.TogglePlayback(0);
+				dojo.training.TogglePlayback(0);
 			}
 			break;
 		case EMU_BTN_RECORD_1:
 			if (pressed && !gui_is_open() && config::Training)
 			{
-				dojo.ToggleRecording(1);
+				dojo.training.ToggleRecording(1);
 			}
 			break;
 		case EMU_BTN_PLAY_1:
 			if (pressed && !gui_is_open() && config::Training)
 			{
-				dojo.TogglePlayback(1);
+				dojo.training.TogglePlayback(1);
 			}
 			break;
 		case EMU_BTN_RECORD_2:
 			if (pressed && !gui_is_open() && config::Training)
 			{
-				dojo.ToggleRecording(2);
+				dojo.training.ToggleRecording(2);
 			}
 			break;
 		case EMU_BTN_PLAY_2:
 			if (pressed && !gui_is_open() && config::Training)
 			{
-				dojo.TogglePlayback(2);
+				dojo.training.TogglePlayback(2);
 			}
 			break;
 		case EMU_BTN_PLAY_RND:
 			if (pressed && !gui_is_open() && config::Training)
 			{
-				dojo.ToggleRandomPlayback();
+				dojo.training.ToggleRandomPlayback();
 			}
 			break;
 
