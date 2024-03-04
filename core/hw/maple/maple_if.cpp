@@ -148,7 +148,7 @@ static void maple_DoDma()
 #endif
 
 	if (dojo.play_match)
-		ggpo::MapleApplyAction(mapleInputState);
+		dojo.MapleApplyAction(mapleInputState);
 	else
 		ggpo::getInput(mapleInputState);
 

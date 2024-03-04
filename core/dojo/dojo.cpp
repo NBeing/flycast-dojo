@@ -29,8 +29,8 @@ void Dojo::InitScore()
 
 	if (config::StreamTxtOutput)
 	{
-		WriteStringToOut("p1wins", std::to_string(dojo.p1_wins));
-		WriteStringToOut("p2wins", std::to_string(dojo.p2_wins));
+		WriteStringToOut("p1wins", std::to_string(p1_wins));
+		WriteStringToOut("p2wins", std::to_string(p2_wins));
 	}
 }
 
@@ -368,18 +368,17 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 {
 	u32 frame_num = (unsigned int)frame;
 	std::vector<u8> m_inputs;
-	std::vector<u8> existing(size, 0);
+	std::vector<u8> to_record(size, 0);
 
-	if (config::Training && session_inputs.count(frame_num))
-		existing = session_inputs[frame_num];
+	std::memcpy(to_record.data(), bits, size);
 
 	for (int i = 0; i < size; i++)
 	{
-		m_inputs.push_back((unsigned char)(bits[i] | existing[i]));
+		m_inputs.push_back((unsigned char)(to_record[i]));
 	}
 	session_inputs[frame_num] = m_inputs;
 
-	if (config::GGPOEnable && config::RecordMatches && !dojo.play_match)
+	if (config::GGPOEnable && config::RecordMatches && !play_match)
 	{
 		// create frame container for export
 		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
@@ -392,8 +391,23 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 
 	//NOTICE_LOG(NETWORK, "FRAME %u SIZE %u", frame, m_inputs.size());
 
-	// if (dojo.transmitter_started)
-	// dojo.transmission_frames.push_back(frame_);
+	// if (transmitter_started)
+	// transmission_frames.push_back(frame_);
+}
+
+void Dojo::RecRecordAction(int frame, int size, unsigned char *bits)
+{
+	u32 frame_num = (unsigned int)frame;
+	std::vector<u8> m_inputs;
+	std::vector<u8> to_record(size, 0);
+
+	std::memcpy(to_record.data(), bits, size);
+
+	for (int i = 0; i < size; i++)
+	{
+		m_inputs.push_back((unsigned char)(to_record[i]));
+	}
+	rec_inputs[frame_num] = m_inputs;
 }
 
 void Dojo::TrainingSwitchPlayer()
@@ -444,11 +458,11 @@ void Dojo::TogglePlayback(int slot)
 void Dojo::TogglePlayback(int slot, bool hide_slot = false)
 {
 	std::ostringstream NoticeStream;
-	if (dojo.playback_loop)
+	if (playback_loop)
 	{
-		if (dojo.trigger_playback)
+		if (trigger_playback)
 		{
-			dojo.trigger_playback = false;
+			trigger_playback = false;
 			if (hide_slot)
 				NoticeStream << "Stop Loop";
 			else
@@ -457,7 +471,7 @@ void Dojo::TogglePlayback(int slot, bool hide_slot = false)
 		else
 		{
 			current_record_slot = slot;
-			dojo.trigger_playback = true;
+			trigger_playback = true;
 			if (hide_slot)
 				NoticeStream << "Play Loop";
 			else
@@ -471,7 +485,7 @@ void Dojo::TogglePlayback(int slot, bool hide_slot = false)
 			NoticeStream << "Play Input";
 		else
 			NoticeStream << "Play Slot " << slot + 1;
-		dojo.PlayRecording(slot);
+		PlayRecording(slot);
 	}
 	gui_display_notification(NoticeStream.str().data(), 2000);
 }
@@ -491,7 +505,7 @@ void Dojo::ToggleRandomPlayback()
 		std::advance(it, rnd);
 		current_record_slot = *it;
 	}
-	dojo.TogglePlayback(current_record_slot, config::HideRandomInputSlot.get());
+	TogglePlayback(current_record_slot, config::HideRandomInputSlot.get());
 }
 
 void Dojo::PlayRecording(int slot)
@@ -500,13 +514,13 @@ void Dojo::PlayRecording(int slot)
 	{
 		playing_input = true;
 		u8 to_add[MAPLE_FRAME_SIZE] = { 0 };
-		u32 target_frame = dojo.frame_number + 1 + config::Delay;
+		u32 target_frame = frame_number + 1 + config::Delay;
 		for (std::string frame : record_slot[slot])
 		{
 			//to_add[0] = (u8)port;
 			std::vector<u8> frame_record(MAPLE_FRAME_SIZE, 0);
 			memcpy(frame_record.data(), frame.data(), MAPLE_FRAME_SIZE);
-			PollRecordAction(target_frame, frame_record.size(), frame_record.data());
+			RecRecordAction(target_frame, frame_record.size(), frame_record.data());
 			target_frame++;
 		}
 		next_playback_frame = target_frame;
@@ -549,4 +563,192 @@ void Dojo::ResetTraining()
 	}
 
 	recorded_slots.clear();
+}
+
+void Dojo::FillDelayFrames()
+{
+	// fill initial frames for delay
+	for (unsigned int i = 0; i < (unsigned int)config::Delay.get() + 1; i++)
+	{
+		for (int j = 0; j < MAX_PLAYERS; j++)
+		{
+			std::vector<u8> blank_inputs;
+			if (settings.network.online)
+				blank_inputs.resize(sizeof(u32) + replay.analog);
+			else
+				blank_inputs.resize(sizeof(FrameInputs));
+			std::fill(blank_inputs.begin(), blank_inputs.end(), 0);
+			PollRecordAction(i, blank_inputs.size(), blank_inputs.data());
+		}
+	}
+}
+
+void Dojo::MapleRecordAction(MapleInputState inputState[4])
+{
+	PrintMapleInputState(inputState);
+	std::vector<FrameInputs> maple_in;
+
+	for (int i = 0; i < MAX_PLAYERS; i++)
+	{
+		FrameInputs inputs;
+		inputs.kcode = ~inputState[i].kcode;
+		u32 analogAxes = replay.analog;
+		if (analogAxes > 0)
+		{
+			inputs.u.analog.x = inputState[i].fullAxes[PJAI_X1] >> 8;
+			if (analogAxes >= 2)
+				inputs.u.analog.y = inputState[i].fullAxes[PJAI_Y1] >> 8;
+		}
+
+		// only record precise triggers offline
+		if (config::GGPOEnable)
+		{
+			if (rt[i] >= 0x4000)
+				inputs.kcode |= BTN_TRIGGER_RIGHT;
+			else
+				inputs.kcode &= ~BTN_TRIGGER_RIGHT;
+			if (lt[i] >= 0x4000)
+				inputs.kcode |= BTN_TRIGGER_LEFT;
+			else
+				inputs.kcode &= ~BTN_TRIGGER_LEFT;
+		}
+		else
+		{
+			inputs.triggers.l = inputState[i].halfAxes[PJTI_L];
+			inputs.triggers.r = inputState[i].halfAxes[PJTI_R];
+		}
+
+		PrintInputs(i, inputs);
+		maple_in.push_back(inputs);
+	}
+
+	std::vector<u8> m_inputs(sizeof(FrameInputs) * MAX_PLAYERS);
+	std::memcpy(m_inputs.data(), maple_in.data(), sizeof(FrameInputs) * MAX_PLAYERS);
+
+	PollRecordAction(dojo.frame_number.load() + config::Delay, m_inputs.size(), m_inputs.data());
+}
+
+void Dojo::MapleApplyAction(MapleInputState inputState[4])
+{
+	if (dojo.session_inputs.empty())
+		return;
+
+	if (!settings.network.online && dojo.frame_number < config::Delay)
+		return;
+
+	if (dojo.play_match && (dojo.frame_number == dojo.session_inputs.size() - 1))
+		gui_setState(GuiState::ReplayEnd);
+
+	// set by reading replay/spectating header
+	u32 analogAxes = replay.analog;
+
+	u32 inputSize = sizeof(FrameInputs);
+	std::vector<u8> current_inputs = dojo.session_inputs[dojo.frame_number];
+
+	if (config::Training)
+	{
+		if (dojo.recording)
+		{
+			auto filtered_frame = dojo.FilterPlayerInput(dojo.record_player, current_inputs.size(), current_inputs.data());
+			dojo.record_slot[dojo.current_record_slot].push_back(std::string((const char*)filtered_frame.data(), sizeof(FrameInputs) * MAX_PLAYERS));
+		}
+
+		if (!dojo.recording && !dojo.playing_input &&
+			dojo.playback_loop && dojo.trigger_playback &&
+			dojo.frame_number > dojo.next_playback_frame)
+		{
+			dojo.PlayRecording(dojo.current_record_slot);
+		}
+
+		if (dojo.player_switched)
+		{
+			std::vector<u8> swapped_frame = dojo.SwapPlayerInputs(current_inputs.size(), current_inputs.data());
+			std::memcpy(current_inputs.data(), swapped_frame.data(), current_inputs.size());
+		}
+
+		if (dojo.rec_inputs.count(dojo.frame_number))
+		{
+			std::vector<u8> m_inputs;
+			std::vector<u8> existing = dojo.rec_inputs[dojo.frame_number];
+
+			for (int i = 0; i < current_inputs.size(); i++)
+			{
+				m_inputs.push_back((unsigned char)(current_inputs[i] | existing[i]));
+			}
+
+			std::memcpy(current_inputs.data(), m_inputs.data(), current_inputs.size());
+		}
+	}
+
+	if (!config::GGPOEnable && config::RecordMatches && !dojo.play_match)
+	{
+		// create frame container for export
+		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
+		memcpy(new_frame, (unsigned char *)&dojo.frame_number, sizeof(unsigned int));
+		memcpy(new_frame + 4, (unsigned char *)current_inputs.data(), current_inputs.size());
+		std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
+
+		dojo.replay.AppendToFile(frame_, 4);
+	}
+
+	FrameInputs *player_inputs;
+
+	for (int player = 0; player < MAX_PLAYERS; player++)
+	{
+		MapleInputState &state = inputState[player];
+		player_inputs = (FrameInputs *)(current_inputs.data() + (player * inputSize));
+		PrintInputs(player, *player_inputs);
+		state.kcode = ~player_inputs->kcode;
+		if (analogAxes > 0)
+		{
+			state.fullAxes[PJAI_X1] = player_inputs->u.analog.x << 8;
+			if (analogAxes >= 2)
+				state.fullAxes[PJAI_Y1] = player_inputs->u.analog.y << 8;
+		}
+
+		// only apply precise triggers offline
+		if (settings.network.online || (dojo.play_match && !dojo.precise_triggers))
+		{
+			state.halfAxes[PJTI_R] = (state.kcode & BTN_TRIGGER_RIGHT) == 0 ? 0xffff : 0;
+			state.halfAxes[PJTI_L] = (state.kcode & BTN_TRIGGER_LEFT) == 0 ? 0xffff : 0;
+		}
+		else
+		{
+			state.halfAxes[PJTI_R] = player_inputs->triggers.r << 8;
+			state.halfAxes[PJTI_L] = player_inputs->triggers.l << 8;
+		}
+	}
+
+	// if (config::ShowReplayInputDisplay)
+	//	dojo.AddToInputDisplay(mapleInputState);
+
+	PrintMapleInputState(inputState);
+}
+
+void Dojo::PrintInputs(int player, FrameInputs inputs)
+{
+	if (inputs.kcode == 0)
+		return;
+}
+
+void Dojo::PrintMapleInputState(MapleInputState inputState[4])
+{
+	for (int player = 0; player < 4; player++)
+	{
+		u32 kcode = ~inputState[player].kcode;
+		if (kcode == 0)
+			continue;
+	}
+}
+
+void Dojo::GGPORecordAction(int frame, int size, unsigned char *bits)
+{
+	std::vector<u8> m_inputs(sizeof(FrameInputs) * MAX_PLAYERS, 0);
+	int player_input_size = sizeof(u32) + replay.analog;
+	for (int p = 0; p < MAX_PLAYERS; p++)
+	{
+		std::memcpy(m_inputs.data() + (p * sizeof(FrameInputs)), bits + (p * player_input_size), player_input_size);
+	}
+
+	PollRecordAction(frame, m_inputs.size(), m_inputs.data());
 }

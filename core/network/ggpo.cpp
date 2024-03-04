@@ -72,8 +72,8 @@ static void getLocalInput(MapleInputState inputState[4])
 		player_states.push_back(state);
 	}
 	if (!config::GGPOEnable)
-		MapleRecordAction(player_states.data());
-	MapleApplyAction(inputState);
+		dojo.MapleRecordAction(player_states.data());
+	dojo.MapleApplyAction(inputState);
 }
 
 }
@@ -538,6 +538,7 @@ void startSession(int localPort, int localPlayerNum)
 		}
 		NOTICE_LOG(NETWORK, "GGPO: Using %d full analog axes", analogAxes);
 	}
+	dojo.replay.analog = analogAxes;
 	inputSize = sizeof(kcode[0]) + analogAxes + (int)absPointerPos * sizeof(Inputs::u.absPos)
 		+ (int)keyboardGame * sizeof(Inputs::u.keys) + (int)mouseGame * sizeof(Inputs::u.relPos);
 
@@ -1010,171 +1011,3 @@ void receiveChatMessages(void (*callback)(int playerNum, const std::string& msg)
 
 }
 #endif
-
-void ggpo::FillDelayFrames()
-{
-	// fill initial frames for delay
-	for (unsigned int i = 0; i < (unsigned int)config::Delay.get() + 1; i++)
-	{
-		for (int j = 0; j < MAX_PLAYERS; j++)
-		{
-			std::vector<u8> blank_inputs;
-			if (settings.network.online)
-				blank_inputs.resize(sizeof(u32) + analogAxes);
-			else
-				blank_inputs.resize(sizeof(Inputs));
-			std::fill(blank_inputs.begin(), blank_inputs.end(), 0);
-			dojo.PollRecordAction(i, blank_inputs.size(), blank_inputs.data());
-		}
-	}
-}
-
-void ggpo::MapleRecordAction(MapleInputState inputState[4])
-{
-	PrintMapleInputState(inputState);
-	std::vector<Inputs> maple_in;
-
-	for (int i = 0; i < MAX_PLAYERS; i++)
-	{
-		Inputs inputs;
-		inputs.kcode = ~inputState[i].kcode;
-		u32 analogAxes = dojo.replay.analog;
-		if (analogAxes > 0)
-		{
-			inputs.u.analog.x = inputState[i].fullAxes[PJAI_X1] >> 8;
-			if (analogAxes >= 2)
-				inputs.u.analog.y = inputState[i].fullAxes[PJAI_Y1] >> 8;
-		}
-
-		// only record precise triggers offline
-		if (config::GGPOEnable)
-		{
-			if (rt[i] >= 0x4000)
-				inputs.kcode |= BTN_TRIGGER_RIGHT;
-			else
-				inputs.kcode &= ~BTN_TRIGGER_RIGHT;
-			if (lt[i] >= 0x4000)
-				inputs.kcode |= BTN_TRIGGER_LEFT;
-			else
-				inputs.kcode &= ~BTN_TRIGGER_LEFT;
-		}
-		else
-		{
-			inputs.triggers.l = inputState[i].halfAxes[PJTI_L];
-			inputs.triggers.r = inputState[i].halfAxes[PJTI_R];
-		}
-
-		PrintInputs(i, inputs);
-		maple_in.push_back(inputs);
-	}
-
-	std::vector<u8> m_inputs(sizeof(Inputs) * MAX_PLAYERS);
-	std::memcpy(m_inputs.data(), maple_in.data(), sizeof(Inputs) * MAX_PLAYERS);
-
-	dojo.PollRecordAction(dojo.frame_number.load() + config::Delay, m_inputs.size(), m_inputs.data());
-}
-
-void ggpo::MapleApplyAction(MapleInputState inputState[4])
-{
-	if (dojo.session_inputs.empty())
-		return;
-
-	if (!settings.network.online && dojo.frame_number < config::Delay)
-		return;
-
-	if (dojo.play_match && (dojo.frame_number == dojo.session_inputs.size() - 1))
-		gui_setState(GuiState::ReplayEnd);
-
-	// set by reading replay/spectating header
-	u32 analogAxes = dojo.replay.analog;
-
-	u32 inputSize = sizeof(Inputs);
-	std::vector<u8> current_inputs = dojo.session_inputs[dojo.frame_number];
-
-	if (config::Training)
-	{
-		if (dojo.player_switched)
-		{
-			auto swapped_frame = dojo.SwapPlayerInputs(current_inputs.size(), current_inputs.data());
-			current_inputs = swapped_frame;
-		}
-
-		if (dojo.recording)
-		{
-			auto filtered_frame = dojo.FilterPlayerInput(dojo.record_player, current_inputs.size(), current_inputs.data());
-			dojo.record_slot[dojo.current_record_slot].push_back(std::string((const char*)filtered_frame.data(), sizeof(Inputs) * MAX_PLAYERS));
-		}
-	}
-
-	if (!config::GGPOEnable && config::RecordMatches && !dojo.play_match)
-	{
-		// create frame container for export
-		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
-		memcpy(new_frame, (unsigned char *)&dojo.frame_number, sizeof(unsigned int));
-		memcpy(new_frame + 4, (unsigned char *)current_inputs.data(), current_inputs.size());
-		std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
-
-		dojo.replay.AppendToFile(frame_, 4);
-	}
-
-	Inputs *player_inputs;
-
-	for (int player = 0; player < MAX_PLAYERS; player++)
-	{
-		MapleInputState &state = inputState[player];
-		player_inputs = (Inputs *)(current_inputs.data() + (player * inputSize));
-		PrintInputs(player, *player_inputs);
-		state.kcode = ~player_inputs->kcode;
-		if (analogAxes > 0)
-		{
-			state.fullAxes[PJAI_X1] = player_inputs->u.analog.x << 8;
-			if (analogAxes >= 2)
-				state.fullAxes[PJAI_Y1] = player_inputs->u.analog.y << 8;
-		}
-
-		// only apply precise triggers offline
-		if (settings.network.online || (dojo.play_match && !dojo.precise_triggers))
-		{
-			state.halfAxes[PJTI_R] = (state.kcode & BTN_TRIGGER_RIGHT) == 0 ? 0xffff : 0;
-			state.halfAxes[PJTI_L] = (state.kcode & BTN_TRIGGER_LEFT) == 0 ? 0xffff : 0;
-		}
-		else
-		{
-			state.halfAxes[PJTI_R] = player_inputs->triggers.r << 8;
-			state.halfAxes[PJTI_L] = player_inputs->triggers.l << 8;
-		}
-	}
-
-	// if (config::ShowReplayInputDisplay)
-	//	dojo.AddToInputDisplay(mapleInputState);
-
-	PrintMapleInputState(inputState);
-}
-
-void ggpo::PrintInputs(int player, Inputs inputs)
-{
-	if (inputs.kcode == 0)
-		return;
-}
-
-void ggpo::PrintMapleInputState(MapleInputState inputState[4])
-{
-	for (int player = 0; player < 4; player++)
-	{
-		u32 kcode = ~inputState[player].kcode;
-		if (kcode == 0)
-			continue;
-	}
-}
-
-void ggpo::RecordAction(int frame, int size, unsigned char *bits)
-{
-	std::vector<u8> m_inputs(sizeof(Inputs) * MAX_PLAYERS, 0);
-	int player_input_size = sizeof(u32) + analogAxes;
-	for (int p = 0; p < MAX_PLAYERS; p++)
-	{
-		std::memcpy(m_inputs.data() + (p * sizeof(Inputs)), bits + (p * player_input_size), player_input_size);
-	}
-
-	dojo.PollRecordAction(frame, m_inputs.size(), m_inputs.data());
-}

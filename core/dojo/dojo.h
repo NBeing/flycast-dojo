@@ -33,6 +33,36 @@ constexpr int MAX_PLAYERS = 2;
 constexpr u32 BTN_TRIGGER_LEFT = DC_BTN_BITMAPPED_LAST << 1;
 constexpr u32 BTN_TRIGGER_RIGHT = DC_BTN_BITMAPPED_LAST << 2;
 
+#pragma pack(push, 1)
+struct FrameInputs
+{
+	u32 kcode:20;
+	u32 mouseButtons:4;
+	u32 kbModifiers:8;
+
+	union {
+		struct {
+			u8 x;
+			u8 y;
+		} analog;
+		struct {
+			s16 x;
+			s16 y;
+		} absPos;
+		struct {
+			s16 x;
+			s16 y;
+			s16 wheel;
+		} relPos;
+		u8 keys[6];
+	} u;
+	struct {
+		u8 l;
+		u8 r;
+	} triggers;
+};
+#pragma pack(pop)
+
 class Dojo
 {
 public:
@@ -47,6 +77,7 @@ public:
 
 	std::atomic<u32> frame_number = {0};
 	std::map<uint32_t, std::vector<uint8_t>> session_inputs;
+	std::map<uint32_t, std::vector<uint8_t>> rec_inputs;
 
 	std::string match_code = "";
 
@@ -77,6 +108,14 @@ public:
 	std::string GetEntryPath(std::string entry);
 
 	void PollRecordAction(int frame, int size, unsigned char *bits);
+	void RecRecordAction(int frame, int size, unsigned char *bits);
+	void GGPORecordAction(int frame, int size, unsigned char *bits);
+
+	void FillDelayFrames();
+	void MapleRecordAction(MapleInputState inputState[4]);
+	void MapleApplyAction(MapleInputState inputState[4]);
+	void PrintInputs(int player, FrameInputs inputs);
+	void PrintMapleInputState(MapleInputState inputState[4]);
 
 	bool playback_loop;
 	bool playing_input;

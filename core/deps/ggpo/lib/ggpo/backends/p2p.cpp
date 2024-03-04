@@ -148,7 +148,7 @@ Peer2PeerBackend::DoPoll(int timeout)
                   }
                   if (config::RecordMatches)
                   {
-                    ggpo::RecordAction(input.frame, input.size, (unsigned char*)input.bits);
+                    dojo.GGPORecordAction(input.frame, input.size, (unsigned char*)input.bits);
                   }
                   _next_spectator_frame++;
                }

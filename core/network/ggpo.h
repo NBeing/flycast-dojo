@@ -44,11 +44,4 @@ static inline bool rollbacking() {
 	return inRollback;
 }
 
-void FillDelayFrames();
-void MapleRecordAction(MapleInputState inputState[4]);
-void MapleApplyAction(MapleInputState inputState[4]);
-void PrintInputs(int player, Inputs inputs);
-void PrintMapleInputState(MapleInputState inputState[4]);
-void RecordAction(int frame, int size, unsigned char *bits);
-
 }
