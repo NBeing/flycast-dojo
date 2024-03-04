@@ -604,13 +604,13 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.557f, 0.268f, 0.965f, 1.f));
 
 	if (dojo.frame_number < dojo.session_inputs.size() ||
-		config::Training)
+		cfgLoadBool("dojo", "Training", false))
 	{
 		char text_pos[30] = { 0 };
 
 		if (dojo.play_match)
 			sprintf(text_pos, "%u / %u     ", frame_num, dojo.session_inputs.size());
-		else if (config::Training)
+		else if (cfgLoadBool("dojo", "Training", false))
 			sprintf(text_pos, "%u     ", frame_num);
 
 		float font_size = ImGui::CalcTextSize(text_pos).x;
@@ -622,7 +622,7 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 
 		if (dojo.play_match)
 			ImGui::Text("%u / %u", frame_num, dojo.session_inputs.size());
-		else if (config::Training)
+		else if (cfgLoadBool("dojo", "Training", false))
 			ImGui::Text("%u", frame_num);
 
 		ImGui::End();

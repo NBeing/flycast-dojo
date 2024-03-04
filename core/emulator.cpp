@@ -560,7 +560,7 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 		// reload settings so that all settings can be overridden
 		loadGameSpecificSettings();
 
-		if (config::Training && config::ShowTrainingGameOverlay)
+		if (cfgLoadBool("dojo", "Training", false) && config::ShowTrainingGameOverlay)
 		{
 			auto lua_file = dojo.GetTrainingLua();
 			if (lua_file != "")

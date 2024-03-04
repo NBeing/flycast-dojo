@@ -641,7 +641,7 @@ static void gui_display_commands()
 	if (!dojo.play_match)
 	{
 
-	if (config::Training)
+	if (cfgLoadBool("dojo", "Training", false))
 	{
 		std::string net_state_path = get_net_savestate_file_path(false);
 
@@ -692,7 +692,7 @@ static void gui_display_commands()
 	}
 
 #if !defined(__APPLE__)
-	if (config::Training && dojo.GetTrainingLua() != "")
+	if (cfgLoadBool("dojo", "Training", false) && dojo.GetTrainingLua() != "")
 	{
 		std::ostringstream lua_display_text;
 		lua_display_text << "Training Overlay ";
@@ -708,7 +708,7 @@ static void gui_display_commands()
 	}
 #endif
 
-	if (!config::Training)
+	if (!cfgLoadBool("dojo", "Training", false))
 	{
 	// Insert/Eject Disk
 	const char *disk_label = libGDR_GetDiscType() == Open ? "Insert Disk" : "Eject Disk";
@@ -3200,7 +3200,7 @@ static void gui_display_content()
 						}
 						if (ImGui::MenuItem("Netplay Session"))
 						{
-							config::Training.set(false);
+							cfgSetVirtual("dojo", "Training", "no");
 							settings.content.path = game.path;
 							auto name_ext_loc = game.fileName.find_last_of('.');
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
@@ -3208,7 +3208,7 @@ static void gui_display_content()
 						}
 						if (ImGui::MenuItem("Training Mode"))
 						{
-							config::Training.set(true);
+							cfgSetVirtual("dojo", "Training", "yes");
 
 							if (gui_state == GuiState::SelectDisk)
 							{

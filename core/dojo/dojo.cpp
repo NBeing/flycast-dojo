@@ -490,7 +490,7 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	u32 inputSize = sizeof(FrameInputs);
 	std::vector<u8> current_inputs = dojo.session_inputs[dojo.frame_number];
 
-	if (config::Training)
+	if (cfgLoadBool("dojo", "Training", false))
 	{
 		if (training.recording)
 		{
