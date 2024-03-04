@@ -679,6 +679,16 @@ static void gui_display_commands()
 		displayed_button_count++;
 		ImGui::NextColumn();
 
+		std::ostringstream playback_loop_text;
+		playback_loop_text << "Playback Loop ";
+		playback_loop_text << (dojo.playback_loop ? "On" : "Off");
+		if (ImGui::Button(playback_loop_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+		{
+			dojo.playback_loop = (dojo.playback_loop ? false : true);
+		}
+		displayed_button_count++;
+		ImGui::NextColumn();
+
 	}
 
 #if !defined(__APPLE__)
