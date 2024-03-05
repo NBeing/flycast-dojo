@@ -376,6 +376,13 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 	{
 		m_inputs.push_back((unsigned char)(to_record[i]));
 	}
+
+	if (replay.ggpo_session)
+	{
+		if (session_inputs.count(frame_num))
+			return;
+	}
+
 	session_inputs[frame_num] = m_inputs;
 
 	if (config::GGPOEnable && config::RecordMatches && !play_match)
@@ -487,6 +494,12 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	// set by reading replay/spectating header
 	u32 analogAxes = replay.analog;
 
+	if (replay.ggpo_session)
+	{
+		if (last_applied_frame == frame_number)
+			return;
+	}
+
 	u32 inputSize = sizeof(FrameInputs);
 	std::vector<u8> current_inputs = dojo.session_inputs[dojo.frame_number];
 
@@ -544,6 +557,12 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		player_inputs = (FrameInputs *)(current_inputs.data() + (player * inputSize));
 		PrintInputs(player, *player_inputs);
 		state.kcode = ~player_inputs->kcode;
+
+		//if (player_inputs->kcode > 0)
+		//	NOTICE_LOG(NETWORK, "FRAME %u KCODE %d", dojo.frame_number.load(), player_inputs->kcode);
+		//else
+		//	NOTICE_LOG(NETWORK, "FRAME %u", dojo.frame_number.load());
+
 		if (analogAxes > 0)
 		{
 			state.fullAxes[PJAI_X1] = player_inputs->u.analog.x << 8;
@@ -564,10 +583,19 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		}
 	}
 
+	if (replay.ggpo_session)
+	{
+		last_applied_frame = dojo.frame_number;
+	}
+
 	// if (config::ShowReplayInputDisplay)
 	//	dojo.AddToInputDisplay(mapleInputState);
 
 	PrintMapleInputState(inputState);
+
+	if (!settings.network.online && !replay.ggpo_session)
+		dojo.frame_number++;
+	UpdateScore();
 }
 
 void Dojo::PrintInputs(int player, FrameInputs inputs)

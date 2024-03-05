@@ -71,7 +71,7 @@ static void getLocalInput(MapleInputState inputState[4])
 		mo_wheel_delta[player] -= wheel;
 		player_states.push_back(state);
 	}
-	if (!config::GGPOEnable)
+	if (!config::GGPOEnable && !dojo.play_match)
 		dojo.MapleRecordAction(player_states.data());
 	dojo.MapleApplyAction(inputState);
 }
@@ -678,6 +678,8 @@ void getInput(MapleInputState inputState[4])
 
 bool nextFrame()
 {
+	if (dojo.play_match)
+		return true;
 	if (!_endOfFrame)
 		return false;
 	_endOfFrame = false;
@@ -783,8 +785,8 @@ bool nextFrame()
 
 bool active()
 {
-	//if (dojo.play_match && dojo.replay.version >= 2)
-		//return true;
+	if (dojo.play_match && dojo.replay.ggpo_session)
+		return true;
 	return ggpoSession != nullptr;
 }
 

@@ -850,9 +850,6 @@ void Emulator::run()
 		if (ggpo::active())
 			ggpo::nextFrame();
 		}
-		if (!settings.network.online)
-			dojo.frame_number++;
-		dojo.UpdateScore();
 	} catch (...) {
 		setNetworkState(false);
 		state = Error;

@@ -2,12 +2,23 @@
 
 void Replay::Init()
 {
-	// NOTICE_LOG(NETWORK, "INIT REPLAY");
-	// config::GGPOEnable = true;
 	filename = config::ReplayFilename.get();
 	LoadReplayFile(filename);
 	dojo.play_match = true;
-	dojo.frame_number = 0;
+
+	if (ggpo_session)
+	{
+		std::cout << "GGPO SESSION ENABLED" << std::endl;
+		config::GGPOEnable = true;
+		dojo.frame_number = 9;
+	}
+	else
+	{
+		std::cout << "OFFLINE SESSION ENABLED" << std::endl;
+		config::GGPOEnable = false;
+		dojo.frame_number = 0;
+	}
+
 }
 
 void Replay::StartRecording()
@@ -171,6 +182,14 @@ void Replay::AppendHeaderToFile(std::string rom_name)
 	u32 precise_triggers = (u32)(!config::GGPOEnable.get());
 	spectate_start.AppendInt(precise_triggers);
 
+	u32 ggpo = 0;
+	if (config::GGPOEnable)
+	{
+		ggpo = 1;
+		std::cout << "GGPO SESSION DETECTED" << std::endl;
+	}
+	spectate_start.AppendInt(ggpo);
+
 	// if (version == 3)
 	//{
 	// spectate_start.AppendString(settings.dojo.state_md5);
@@ -211,6 +230,7 @@ void Replay::ProcessBody(unsigned int cmd, unsigned int body_size, const char *b
 		// std::string MatchCode = MessageReader::ReadString((const char*)buffer, offset);
 		unsigned int analog = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int precise_triggers = MessageReader::ReadInt((const char *)buffer, offset);
+		unsigned int ggpo = MessageReader::ReadInt((const char *)buffer, offset);
 
 		version = v;
 		dojo.game_name = GameName;
@@ -218,6 +238,8 @@ void Replay::ProcessBody(unsigned int cmd, unsigned int body_size, const char *b
 		// config::Quark = Quark;
 		// config::MatchCode = MatchCode;
 		dojo.precise_triggers = (bool)precise_triggers;
+		if (ggpo)
+			ggpo_session = true;
 
 		NOTICE_LOG(NETWORK, "v %u GameName %s PlayerName %s OpponentName %s analog %d", v, GameName.data(), PlayerName.data(), OpponentName.data(), analog);
 

@@ -81,6 +81,8 @@ public:
 	std::map<uint32_t, std::vector<uint8_t>> session_inputs;
 	std::map<uint32_t, std::vector<uint8_t>> rec_inputs;
 
+	u32 last_applied_frame = 0;
+
 	std::string match_code = "";
 
 	bool play_match = false;

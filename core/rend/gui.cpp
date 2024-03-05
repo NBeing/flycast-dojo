@@ -537,11 +537,6 @@ void gui_start_game(const std::string& path)
 
 	dojo.commandLineStart = commandLineStart;
 	dojo.InitScore();
-	if (!dojo.play_match)
-		dojo.FillDelayFrames();
-
-	if (config::Replay)
-		cfgSetVirtual("network", "GGPO", "no");
 
 	scanner.stop();
 	gui_setState(GuiState::Loading);

@@ -29,6 +29,8 @@ public:
 
     MessageWriter replay_msg;
     u32 replay_frame_count;
+
+    bool ggpo_session = false;
 };
 
 extern Replay replay;
