@@ -492,9 +492,15 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 
 	if (cfgLoadBool("dojo", "Training", false))
 	{
+		if (training.player_switched)
+		{
+			std::vector<u8> swapped_frame = training.SwapPlayerInputs(current_inputs.size(), current_inputs.data());
+			std::memcpy(current_inputs.data(), swapped_frame.data(), current_inputs.size());
+		}
+
 		if (training.recording)
 		{
-			auto filtered_frame = training.FilterPlayerInput(training.record_player, current_inputs.size(), current_inputs.data());
+			auto filtered_frame = training.FilterPlayerInput(training.control_player, current_inputs.size(), current_inputs.data());
 			training.record_slot[training.current_record_slot].push_back(std::string((const char*)filtered_frame.data(), sizeof(FrameInputs) * MAX_PLAYERS));
 		}
 
@@ -503,12 +509,6 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 			dojo.frame_number > training.next_playback_frame)
 		{
 			training.PlayRecording(training.current_record_slot);
-		}
-
-		if (training.player_switched)
-		{
-			std::vector<u8> swapped_frame = training.SwapPlayerInputs(current_inputs.size(), current_inputs.data());
-			std::memcpy(current_inputs.data(), swapped_frame.data(), current_inputs.size());
 		}
 
 		if (rec_inputs.count(frame_number))

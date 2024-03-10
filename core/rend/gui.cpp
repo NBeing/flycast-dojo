@@ -671,7 +671,7 @@ static void gui_display_commands()
 		ImGui::NextColumn();
 
 		std::ostringstream watch_text;
-		watch_text << "Controlling Player " << dojo.training.record_player + 1;
+		watch_text << "Controlling Player " << dojo.training.control_player + 1;
 		if (ImGui::Button(watch_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
 		{
 			dojo.training.SwitchPlayer();

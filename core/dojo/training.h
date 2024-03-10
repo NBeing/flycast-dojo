@@ -9,7 +9,7 @@ public:
 	bool playing_input;
 	bool trigger_playback;
 	u32 next_playback_frame;
-	int record_player = 0;
+	int control_player = 0;
 
 	bool player_switched;
 	int current_record_slot = 0;

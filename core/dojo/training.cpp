@@ -2,17 +2,17 @@
 
 void Training::SwitchPlayer()
 {
-	record_player == 0 ?
-		record_player = 1 :
-		record_player = 0;
+	control_player == 0 ?
+		control_player = 1 :
+		control_player = 0;
 
-	if (record_player != 0)
+	if (control_player != 0)
 		player_switched = true;
 	else
 		player_switched = false;
 
 	std::ostringstream NoticeStream;
-	NoticeStream << "Controlling Player " << record_player + 1;
+	NoticeStream << "Controlling Player " << control_player + 1;
 	gui_display_notification(NoticeStream.str().data(), 2000);
 }
 
@@ -24,7 +24,7 @@ void Training::ToggleRecording(int slot)
 	{
 		recording = false;
 		recording_started = false;
-		NoticeStream << "Stop Recording Slot " << slot + 1 << " Player " << record_player + 1;
+		NoticeStream << "Stop Recording Slot " << slot + 1 << " Player " << control_player + 1;
 	}
 	else
 	{
@@ -36,7 +36,7 @@ void Training::ToggleRecording(int slot)
 		//	recording_started = false;
 		//else
 			recording_started = true;
-		NoticeStream << "Recording Slot " << slot + 1 << " Player " << record_player + 1;
+		NoticeStream << "Recording Slot " << slot + 1 << " Player " << control_player + 1;
 	}
 	gui_display_notification(NoticeStream.str().data(), 2000);
 }
@@ -122,7 +122,7 @@ void Training::PlayRecording(int slot)
 void Training::ResetTraining()
 {
 	player_switched = false;
-	record_player = 0;
+	control_player = 0;
 	current_record_slot = 0;
 
 	for (int i = 0; i < 3; i++)
