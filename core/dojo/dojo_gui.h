@@ -30,6 +30,10 @@ public:
 	void gui_display_replay_end();
 	void show_replay_position_overlay(int frame_num);
 
+	void show_last_inputs_overlay();
+	void display_btn(std::string btn_str, bool* any_found);
+	void display_input_str(std::string input_str, std::string prev_str = "");
+
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;

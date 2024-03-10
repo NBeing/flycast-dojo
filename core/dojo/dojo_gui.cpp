@@ -103,7 +103,7 @@ void DojoGui::gui_display_ggpo_connect()
 							for (auto it = dojo.presence.active_beacons.begin(); it != dojo.presence.active_beacons.end(); ++it)
 							{
 								std::string beacon_msg = it->first;
-								if(beacon_msg == config::PlayerName.get() + "_" + dojo.presence.client_seed)
+								if (beacon_msg == config::PlayerName.get() + "_" + dojo.presence.client_seed)
 									own_ip = it->second;
 
 								std::string player_name = beacon_msg.substr(0, beacon_msg.find('_'));
@@ -229,7 +229,7 @@ void DojoGui::show_player_name_overlay(bool paused)
 	// if both player names are defaults, hide overlay
 	if (dojo.player_2.length() <= 1 ||
 		(strcmp(dojo.player_1.data(), "Player") == 0 &&
-			strcmp(dojo.player_1.data(), dojo.player_2.data()) == 0))
+		 strcmp(dojo.player_1.data(), dojo.player_2.data()) == 0))
 	{
 		return;
 	}
@@ -457,6 +457,24 @@ void DojoGui::settings_dojo_tab()
 			config::DojoServerPort = ServerPort;
 		}
 
+		if (ImGui::CollapsingHeader("Training", ImGuiTreeNodeFlags_None))
+		{
+			OptionCheckbox("Show Input Display", config::ShowTrainingInputDisplay);
+			ImGui::SameLine();
+			ShowHelpMarker("Shows controller input history in Training Mode\n(Temporarily disabled for Offline Delay > 0)");
+
+			if (config::ShowTrainingInputDisplay)
+			{
+				OptionCheckbox("Use Numpad Notation", config::UseAnimeInputNotation);
+				ImGui::SameLine();
+				ShowHelpMarker("Show inputs using Numpad/Anime Notation for Directions");
+			}
+
+			OptionCheckbox("Hide Random Input Slot", config::HideRandomInputSlot);
+			ImGui::SameLine();
+			ShowHelpMarker("Hides input slot is being played for random playback");
+		}
+
 		if (ImGui::CollapsingHeader("Match Codes##MCHeader", ImGuiTreeNodeFlags_None))
 		{
 			OptionCheckbox("Enable Match Codes", config::MatchCodeEnable,
@@ -606,7 +624,7 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 	if (dojo.frame_number < dojo.session_inputs.size() ||
 		cfgLoadBool("dojo", "Training", false))
 	{
-		char text_pos[30] = { 0 };
+		char text_pos[30] = {0};
 
 		if (dojo.play_match)
 			sprintf(text_pos, "%u / %u     ", frame_num, dojo.session_inputs.size());
@@ -630,4 +648,195 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 
 	ImGui::PopStyleColor();
 	ImGui::PopStyleVar(2);
+}
+
+void DojoGui::display_btn(std::string btn_str, bool *any_found)
+{
+	std::vector<std::string> btns = {"1", "2", "3", "4", "5", "6",
+									 "X", "Y", "LT", "A", "B", "RT",
+									 "C", "Z", "D", "Start"};
+
+	if (std::any_of(btns.begin(), btns.end(), [btn_str](std::string str)
+					{ return btn_str == str; }))
+	{
+		ImGui::SameLine();
+		*any_found = true;
+	}
+
+	if (btn_str == "1")
+		ImGui::TextColored(ImVec4(255, 0, 0, 1), "%s", ICON_KI_BUTTON_ONE);
+	else if (btn_str == "2")
+		ImGui::TextColored(ImVec4(0, 175, 255, 1), "%s", ICON_KI_BUTTON_TWO);
+	else if (btn_str == "3")
+		ImGui::TextColored(ImVec4(255, 255, 255, 1), "%s", ICON_KI_BUTTON_THREE);
+	else if (btn_str == "4")
+		ImGui::TextColored(ImVec4(255, 255, 0, 1), "%s    ", ICON_KI_BUTTON_FOUR);
+	else if (btn_str == "5")
+		ImGui::TextColored(ImVec4(0, 175, 0, 1), "%s    ", ICON_KI_BUTTON_FIVE);
+	else if (btn_str == "6")
+		ImGui::TextColored(ImVec4(255, 0, 175, 1), "%s    ", ICON_KI_BUTTON_SIX);
+	else if (btn_str == "X")
+		ImGui::TextColored(ImVec4(255, 255, 0, 1), "%s", ICON_KI_BUTTON_X);
+	else if (btn_str == "Y")
+		ImGui::TextColored(ImVec4(0, 255, 0, 1), "%s", ICON_KI_BUTTON_Y);
+	else if (btn_str == "LT")
+		ImGui::TextColored(ImVec4(255, 255, 255, 1), "%s", ICON_KI_BUTTON_L);
+	else if (btn_str == "A")
+		ImGui::TextColored(ImVec4(255, 0, 0, 1), "%s", ICON_KI_BUTTON_A);
+	else if (btn_str == "B")
+		ImGui::TextColored(ImVec4(0, 175, 255, 1), "%s", ICON_KI_BUTTON_B);
+	else if (btn_str == "RT")
+		ImGui::TextColored(ImVec4(255, 255, 255, 1), "%s", ICON_KI_BUTTON_R);
+	else if (btn_str == "C")
+		ImGui::TextColored(ImVec4(255, 255, 255, 1), "%s    ", ICON_KI_BUTTON_C);
+	else if (btn_str == "Z")
+		ImGui::TextColored(ImVec4(255, 75, 255, 1), "%s", ICON_KI_BUTTON_Z);
+	else if (btn_str == "D")
+		ImGui::TextColored(ImVec4(0, 0, 255, 1), "%s", ICON_KI_BUTTON_D);
+	else if (btn_str == "Start")
+		ImGui::Text("%s", ICON_KI_BUTTON_START);
+}
+
+void DojoGui::display_input_str(std::string input_str, std::string prev_str)
+{
+	bool any_found = false;
+	std::vector<std::string> arcade_btns = {"1", "2", "3", "4", "5", "6", "C", "Z", "D", "Start"};
+	std::vector<std::string> dc_btns = {"X", "Y", "LT", "A", "B", "RT", "C", "Start"};
+
+	std::vector<std::string> buttons = dc_btns;
+	if (settings.platform.isArcade())
+		buttons = arcade_btns;
+
+	std::string new_btns = "";
+	if (prev_str.length() > 0)
+	{
+		for (int i = 0; i < buttons.size(); i++)
+		{
+			if (prev_str.find(buttons[i]) != std::string::npos &&
+				input_str.find(buttons[i]) != std::string::npos)
+				display_btn(buttons[i], &any_found);
+			else if (prev_str.find(buttons[i]) == std::string::npos &&
+					 input_str.find(buttons[i]) != std::string::npos)
+				new_btns.append(buttons[i]);
+		}
+	}
+	else
+	{
+		new_btns = input_str;
+	}
+
+	for (int i = 0; i < buttons.size(); i++)
+	{
+		if (new_btns.find(buttons[i]) != std::string::npos)
+			display_btn(buttons[i], &any_found);
+	}
+
+	if (!any_found)
+		ImGui::Text("");
+}
+
+void DojoGui::show_last_inputs_overlay()
+{
+	if (config::Training && config::Delay > 0)
+		return;
+
+	for (int di = 0; di < 2; di++)
+	{
+		if (!dojo.displayed_inputs[di].empty())
+		{
+
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.557f, 0.268f, 0.965f, 1.f));
+
+#if defined(__APPLE__) || defined(__ANDROID__)
+			ImGui::SetNextWindowSize(ImVec2(290, ImGui::GetIO().DisplaySize.y - 230));
+#else
+			ImGui::SetNextWindowSize(ImVec2(210, ImGui::GetIO().DisplaySize.y - 150));
+#endif
+
+			if (di == 0)
+			{
+#if defined(__APPLE__) || defined(__ANDROID__)
+				ImGui::SetNextWindowPos(ImVec2(10, 180));
+#else
+				ImGui::SetNextWindowPos(ImVec2(10, 100));
+#endif
+				ImGui::SetNextWindowBgAlpha(0.4f);
+				ImGui::Begin("#one_input", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
+			}
+			else if (di == 1)
+			{
+#if defined(__APPLE__) || defined(__ANDROID__)
+				ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 300, 180));
+#else
+				ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 220, 100));
+#endif
+				ImGui::SetNextWindowBgAlpha(0.4f);
+				ImGui::Begin("#two_input", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
+			}
+
+			if (dojo.displayed_inputs[di].size() > 60)
+			{
+				dojo.displayed_inputs[di].erase(dojo.displayed_inputs[di].begin());
+				dojo.displayed_inputs_str[di].erase(dojo.displayed_inputs_str[di].begin());
+				dojo.displayed_dirs_str[di].erase(dojo.displayed_dirs_str[di].begin());
+				dojo.displayed_dirs[di].erase(dojo.displayed_dirs[di].begin());
+				dojo.displayed_inputs_duration[di].erase(dojo.displayed_inputs_duration[di].begin());
+				dojo.displayed_num_dirs[di].erase(dojo.displayed_num_dirs[di].begin());
+			}
+
+			std::map<u32, std::bitset<18>>::reverse_iterator it = dojo.displayed_inputs[di].rbegin();
+
+			u32 input_frame_num = it->first;
+			u32 input_duration = dojo.frame_number - input_frame_num;
+
+			dojo.displayed_inputs_duration[di][input_frame_num] = input_duration;
+			if (dojo.displayed_inputs_str[di].size() > 1)
+			{
+				it++;
+				dojo.last_displayed_inputs_str[di] = dojo.displayed_inputs_str[di][it->first];
+			}
+
+			for (auto rit = dojo.displayed_inputs[di].rbegin(); rit != dojo.displayed_inputs[di].rend(); ++rit)
+			{
+				ImGui::Text("%03u", dojo.displayed_inputs_duration[di][rit->first]);
+				ImGui::SameLine();
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.594f, 0.806f, 0.912f, 1.f));
+				if (config::UseAnimeInputNotation)
+				{
+					auto num = dojo.displayed_num_dirs[di][rit->first];
+					ImGui::Text("%d", num);
+				}
+				else
+				{
+					auto num = dojo.displayed_num_dirs[di][rit->first];
+					if (num == 1)
+						ImGui::Text("%s", ICON_KI_ARROW_BOTTOM_LEFT);
+					else if (num == 2)
+						ImGui::Text("%s", ICON_KI_ARROW_BOTTOM);
+					else if (num == 3)
+						ImGui::Text("%s", ICON_KI_ARROW_BOTTOM_RIGHT);
+					else if (num == 4)
+						ImGui::Text("%s", ICON_KI_ARROW_LEFT);
+					else if (num == 6)
+						ImGui::Text("%s", ICON_KI_ARROW_RIGHT);
+					else if (num == 7)
+						ImGui::Text("%s", ICON_KI_ARROW_TOP_LEFT);
+					else if (num == 8)
+						ImGui::Text("%s", ICON_KI_ARROW_TOP);
+					else if (num == 9)
+						ImGui::Text("%s", ICON_KI_ARROW_TOP_RIGHT);
+				}
+				ImGui::PopStyleColor();
+				ImGui::SameLine();
+				display_input_str(dojo.displayed_inputs_str[di][rit->first], dojo.last_displayed_inputs_str[di]);
+				dojo.last_displayed_inputs_str[di] = dojo.displayed_inputs_str[di][rit->first];
+			}
+			ImGui::End();
+
+			ImGui::PopStyleColor();
+			ImGui::PopStyleVar(2);
+		}
+	}
 }

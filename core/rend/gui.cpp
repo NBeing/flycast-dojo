@@ -686,6 +686,36 @@ static void gui_display_commands()
 
 	}
 
+	}
+
+	if (config::Training && config::Delay == 0 || dojo.play_match)
+	{
+		std::ostringstream input_display_text;
+		input_display_text << "Input Display ";
+
+		if (dojo.play_match)
+		{
+			input_display_text << (config::ShowReplayInputDisplay.get() ? "On" : "Off");
+			if (ImGui::Button(input_display_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+			{
+				config::ShowReplayInputDisplay = (config::ShowReplayInputDisplay.get() ? false : true);
+			}
+		}
+		else
+		{
+			input_display_text << (config::ShowTrainingInputDisplay.get() ? "On" : "Off");
+			if (ImGui::Button(input_display_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+			{
+				config::ShowTrainingInputDisplay = (config::ShowTrainingInputDisplay.get() ? false : true);
+			}
+		}
+		displayed_button_count++;
+
+		ImGui::NextColumn();
+	}
+
+	if (!dojo.play_match)
+	{
 #if !defined(__APPLE__)
 	if (cfgLoadBool("dojo", "Training", false) && dojo.GetTrainingLua() != "")
 	{
@@ -3585,6 +3615,11 @@ void gui_display_osd()
 			chat.display();
 			}
 		}
+
+		if (config::Training && config::ShowTrainingInputDisplay ||
+			config::Replay && config::ShowReplayInputDisplay)
+			dojo_gui.show_last_inputs_overlay();
+
 		lua::overlay();
 
 		gui_endFrame(gui_is_open());

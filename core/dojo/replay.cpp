@@ -346,7 +346,7 @@ void Replay::ProcessBody(unsigned int cmd, unsigned int body_size, const char *b
 				// buffer stream
 				/*
 				if (dojo.session_inputs.size() == config::RxFrameBuffer.get() &&
-					dojo.FrameNumber < dojo.last_consecutive_common_frame)
+					dojo.frame_number < dojo.last_consecutive_common_frame)
 					dojo.resume();
 					*/
 			}

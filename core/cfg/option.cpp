@@ -185,6 +185,10 @@ Option<bool> ReplayPositionOverlay("ReplayPositionOverlay", true, "dojo");
 Option<int> Delay("Delay", 0, "dojo");
 Option<bool> HideRandomInputSlot("HideRandomInputSlot", true, "dojo");
 
+Option<bool> ShowTrainingInputDisplay("ShowTrainingInputDisplay", true, "dojo");
+Option<bool> ShowReplayInputDisplay("ShowReplayInputDisplay", false, "dojo");
+Option<bool> UseAnimeInputNotation("UseAnimeInputNotation", false, "dojo");
+
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");
 #endif

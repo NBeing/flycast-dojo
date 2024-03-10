@@ -2,9 +2,7 @@
 
 void Training::SwitchPlayer()
 {
-	control_player == 0 ?
-		control_player = 1 :
-		control_player = 0;
+	control_player == 0 ? control_player = 1 : control_player = 0;
 
 	if (control_player != 0)
 		player_switched = true;
@@ -15,7 +13,6 @@ void Training::SwitchPlayer()
 	NoticeStream << "Controlling Player " << control_player + 1;
 	gui_display_notification(NoticeStream.str().data(), 2000);
 }
-
 
 void Training::ToggleRecording(int slot)
 {
@@ -32,10 +29,10 @@ void Training::ToggleRecording(int slot)
 		record_slot[slot].clear();
 		recorded_slots.insert(slot);
 		recording = true;
-		//if (config::RecordOnFirstInput)
+		// if (config::RecordOnFirstInput)
 		//	recording_started = false;
-		//else
-			recording_started = true;
+		// else
+		recording_started = true;
 		NoticeStream << "Recording Slot " << slot + 1 << " Player " << control_player + 1;
 	}
 	gui_display_notification(NoticeStream.str().data(), 2000);
@@ -104,11 +101,11 @@ void Training::PlayRecording(int slot)
 	if (!recording && !playing_input)
 	{
 		playing_input = true;
-		u8 to_add[MAPLE_FRAME_SIZE] = { 0 };
+		u8 to_add[MAPLE_FRAME_SIZE] = {0};
 		u32 target_frame = dojo.frame_number + 1 + config::Delay;
 		for (std::string frame : record_slot[slot])
 		{
-			//to_add[0] = (u8)port;
+			// to_add[0] = (u8)port;
 			std::vector<u8> frame_record(MAPLE_FRAME_SIZE, 0);
 			memcpy(frame_record.data(), frame.data(), MAPLE_FRAME_SIZE);
 			dojo.RecRecordAction(target_frame, frame_record.size(), frame_record.data());
@@ -143,7 +140,6 @@ std::vector<u8> Training::FilterPlayerInput(int player, int size, unsigned char 
 
 	return out_frame;
 }
-
 
 std::vector<u8> Training::SwapPlayerInputs(int size, unsigned char *bits)
 {

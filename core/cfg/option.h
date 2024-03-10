@@ -550,6 +550,10 @@ extern Option<bool> ReplayPositionOverlay;
 extern Option<int> Delay;
 extern Option<bool> HideRandomInputSlot;
 
+extern Option<bool> ShowTrainingInputDisplay;
+extern Option<bool> ShowReplayInputDisplay;
+extern Option<bool> UseAnimeInputNotation;
+
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;
 #endif

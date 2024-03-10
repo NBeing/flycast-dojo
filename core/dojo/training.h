@@ -29,7 +29,6 @@ public:
 
 	std::vector<u8> FilterPlayerInput(int player, int size, unsigned char *bits);
 	std::vector<u8> SwapPlayerInputs(int size, unsigned char *bits);
-
 };
 
 extern Training training;
