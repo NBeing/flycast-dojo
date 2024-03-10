@@ -972,13 +972,13 @@ const Mapping dcButtons[] = {
 
 	{ EMU_BTN_NONE, "Training Mode" },
 	{ EMU_BTN_SWITCH_PLAYER, "Switch Player" },
-	{ EMU_BTN_RECORD, "Record Input Slot 1" },
-	{ EMU_BTN_RECORD_1, "Record Input Slot 2" },
-	{ EMU_BTN_RECORD_2, "Record Input Slot 3" },
-	{ EMU_BTN_PLAY, "Play Input Slot 1" },
-	{ EMU_BTN_PLAY_1, "Play Input Slot 2" },
-	{ EMU_BTN_PLAY_2, "Play Input Slot 3" },
-	{ EMU_BTN_PLAY_RND, "Play Random Input Slot" },
+	{ EMU_BTN_RECORD, "Record Slot 1" },
+	{ EMU_BTN_RECORD_1, "Record Slot 2" },
+	{ EMU_BTN_RECORD_2, "Record Slot 3" },
+	{ EMU_BTN_PLAY, "Play Slot 1" },
+	{ EMU_BTN_PLAY_1, "Play Slot 2" },
+	{ EMU_BTN_PLAY_2, "Play Slot 3" },
+	{ EMU_BTN_PLAY_RND, "Play Random Slot" },
 
 	// button combinations
 	{ EMU_BTN_NONE, "Macros" },
@@ -1055,6 +1055,16 @@ const Mapping arcadeButtons[] = {
 	{ EMU_BTN_LOADSTATE, "Load State" },
 	{ EMU_BTN_SAVESTATE, "Save State" },
 	{ EMU_BTN_BYPASS_KB, "Bypass Emulated Keyboard" },
+
+	{ EMU_BTN_NONE, "Training Mode" },
+	{ EMU_BTN_SWITCH_PLAYER, "Switch Player" },
+	{ EMU_BTN_RECORD, "Record Slot 1" },
+	{ EMU_BTN_RECORD_1, "Record Slot 2" },
+	{ EMU_BTN_RECORD_2, "Record Slot 3" },
+	{ EMU_BTN_PLAY, "Play Slot 1" },
+	{ EMU_BTN_PLAY_1, "Play Slot 2" },
+	{ EMU_BTN_PLAY_2, "Play Slot 3" },
+	{ EMU_BTN_PLAY_RND, "Play Random Slot" },
 
 	// button combinations
 	{ EMU_BTN_NONE, "Macros" },
