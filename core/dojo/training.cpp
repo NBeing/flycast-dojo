@@ -29,10 +29,10 @@ void Training::ToggleRecording(int slot)
 		record_slot[slot].clear();
 		recorded_slots.insert(slot);
 		recording = true;
-		// if (config::RecordOnFirstInput)
-		//	recording_started = false;
-		// else
-		recording_started = true;
+		if (config::RecordOnFirstInput)
+			recording_started = false;
+		else
+			recording_started = true;
 		NoticeStream << "Recording Slot " << slot + 1 << " Player " << control_player + 1;
 	}
 	gui_display_notification(NoticeStream.str().data(), 2000);

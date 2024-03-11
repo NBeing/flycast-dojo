@@ -473,6 +473,10 @@ void DojoGui::settings_dojo_tab()
 			OptionCheckbox("Hide Random Input Slot", config::HideRandomInputSlot);
 			ImGui::SameLine();
 			ShowHelpMarker("Hides input slot is being played for random playback");
+
+			OptionCheckbox("Start Recording on First Input", config::RecordOnFirstInput);
+			ImGui::SameLine();
+			ShowHelpMarker("Delay dummy recording until the first input is registered");
 		}
 
 		if (ImGui::CollapsingHeader("Match Codes##MCHeader", ImGuiTreeNodeFlags_None))

@@ -184,6 +184,7 @@ Option<bool> ReplayPositionOverlay("ReplayPositionOverlay", true, "dojo");
 
 Option<int> Delay("Delay", 0, "dojo");
 Option<bool> HideRandomInputSlot("HideRandomInputSlot", true, "dojo");
+Option<bool> RecordOnFirstInput("RecordOnFirstInput", false, "dojo");
 
 Option<bool> ShowTrainingInputDisplay("ShowTrainingInputDisplay", true, "dojo");
 Option<bool> ShowReplayInputDisplay("ShowReplayInputDisplay", false, "dojo");
