@@ -68,7 +68,8 @@ enum class GuiState {
 	Disconnected,
 	ReplayEnd,
 	MatchCodeHostWait,
-	MatchCodeGuestWait
+	MatchCodeGuestWait,
+	ButtonCheck
 };
 extern GuiState gui_state;
 

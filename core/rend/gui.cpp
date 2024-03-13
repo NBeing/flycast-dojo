@@ -518,7 +518,7 @@ void gui_open_settings()
 	{
 		gameLoader.cancel();
 	}
-	else if (gui_state == GuiState::Commands)
+	else if (gui_state == GuiState::Commands || gui_state == GuiState::ButtonCheck)
 	{
 		gui_setState(GuiState::Closed);
 		GamepadDevice::load_system_mappings();
@@ -761,6 +761,14 @@ static void gui_display_commands()
 
 		if (ImGui::Button("Cheats", ScaledVec2(150, 50)) && !settings.network.online)
 			gui_setState(GuiState::Cheats);
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	if (ImGui::Button("Button Check", ScaledVec2(150, 50)) && !settings.network.online)
+	{
+		gui_setState(GuiState::ButtonCheck);
 	}
 
 	displayed_button_count++;
@@ -3532,6 +3540,9 @@ void gui_display_ui()
 	case GuiState::MatchCodeGuestWait:
 		dojo_gui.gui_display_match_code_guest_wait();
 		break;
+	case GuiState::ButtonCheck:
+		dojo_gui.show_button_check();
+	break;
 	default:
 		die("Unknown UI state");
 		break;

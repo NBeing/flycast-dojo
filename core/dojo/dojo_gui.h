@@ -5,6 +5,8 @@
 #include "rend/gui.h"
 #include "rend/gui_util.h"
 
+#include "hw/maple/maple_devs.h"
+
 #ifndef __ANDROID__
 #include "sdl/sdl.h"
 #endif
@@ -33,6 +35,8 @@ public:
 	void show_last_inputs_overlay();
 	void display_btn(std::string btn_str, bool* any_found);
 	void display_input_str(std::string input_str, std::string prev_str = "");
+
+	void show_button_check();
 
 private:
 	// GGPO Connect Screen

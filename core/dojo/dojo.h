@@ -139,6 +139,8 @@ public:
 	std::array<std::map<u32, int>, 2> displayed_num_dirs;
 
 	void AddToInputDisplay(MapleInputState inputState[4]);
+
+	std::set<int> button_check_pressed[2];
 };
 
 extern Dojo dojo;
