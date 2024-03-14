@@ -69,7 +69,8 @@ enum class GuiState {
 	ReplayEnd,
 	MatchCodeHostWait,
 	MatchCodeGuestWait,
-	ButtonCheck
+	ButtonCheck,
+	TestGame
 };
 extern GuiState gui_state;
 

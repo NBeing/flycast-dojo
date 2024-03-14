@@ -190,6 +190,8 @@ Option<bool> ShowTrainingInputDisplay("ShowTrainingInputDisplay", true, "dojo");
 Option<bool> ShowReplayInputDisplay("ShowReplayInputDisplay", false, "dojo");
 Option<bool> UseAnimeInputNotation("UseAnimeInputNotation", false, "dojo");
 
+Option<bool> TestGame("TestGame", false, "dojo");
+
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");
 #endif

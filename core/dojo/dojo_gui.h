@@ -6,6 +6,7 @@
 #include "rend/gui_util.h"
 
 #include "hw/maple/maple_devs.h"
+#include "hw/naomi/naomi_cart.h"
 
 #ifndef __ANDROID__
 #include "sdl/sdl.h"
@@ -37,7 +38,9 @@ public:
 	void display_input_str(std::string input_str, std::string prev_str = "");
 
 	void show_button_check();
+	void gui_display_test_game();
 
+	bool test_game_screen = false;
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;

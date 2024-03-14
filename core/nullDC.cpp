@@ -17,6 +17,7 @@
 
 #include <filesystem>
 #include "dojo/dojo.h"
+#include "dojo/dojo_gui.h"
 
 int flycast_init(int argc, char* argv[])
 {

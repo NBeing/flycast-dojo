@@ -518,6 +518,17 @@ void gui_open_settings()
 	{
 		gameLoader.cancel();
 	}
+	else if (gui_state == GuiState::ButtonCheck)
+	{
+		if (dojo_gui.test_game_screen)
+		{
+			gui_stop_game();
+		}
+		else
+		{
+			gui_setState(GuiState::Commands);
+		}
+	}
 	else if (gui_state == GuiState::Commands || gui_state == GuiState::ButtonCheck)
 	{
 		gui_setState(GuiState::Closed);
@@ -3473,6 +3484,11 @@ void gui_display_ui()
 		return;
 	if (gui_state == GuiState::Main)
 	{
+		if (cfgLoadBool("dojo", "TestGame", false))
+		{
+			gui_setState(GuiState::TestGame);
+			return;
+		}
 		if (!settings.content.path.empty() || settings.naomi.slave)
 		{
 #ifndef __ANDROID__
@@ -3542,7 +3558,10 @@ void gui_display_ui()
 		break;
 	case GuiState::ButtonCheck:
 		dojo_gui.show_button_check();
-	break;
+		break;
+	case GuiState::TestGame:
+		dojo_gui.gui_display_test_game();
+		break;
 	default:
 		die("Unknown UI state");
 		break;

@@ -869,8 +869,7 @@ void DojoGui::show_button_check()
 
 	ImGui::SameLine(
 		(ImGui::GetContentRegionAvail().x / 2) -
-		font_size + (font_size / 2) + 10
-	);
+		font_size + (font_size / 2) + 10);
 
 	ImGui::TextUnformatted(pause_text.c_str());
 
@@ -879,7 +878,7 @@ void DojoGui::show_button_check()
 	ImGui::PopStyleColor();
 	ImGui::PopStyleVar(2);
 
-	//int num_players = (ggpo_join_screen || test_game_screen) ? 1 : 2;
+	// int num_players = (ggpo_join_screen || test_game_screen) ? 1 : 2;
 	int num_players = 2;
 	for (int i = 0; i < num_players; i++)
 	{
@@ -907,13 +906,13 @@ void DojoGui::show_button_check()
 
 		auto areaWidth = ImGui::GetContentRegionAvail().x * 0.5f;
 
-		//if (ggpo_join_screen || test_game_screen)
+		// if (ggpo_join_screen || test_game_screen)
 		//{
 		//	std::string player_name = config::PlayerName.get();
 		//	ImGui::SetCursorPosX(10.0f + areaWidth - (ImGui::CalcTextSize(player_name.c_str()).x / 2.0f));
 		//	ImGui::Text("%s", player_name.c_str());
-		//}
-		//else
+		// }
+		// else
 		{
 			ImGui::SetCursorPosX(10.0f + areaWidth - (ImGui::CalcTextSize("Player X").x / 2.0f));
 			ImGui::Text("Player %d", i + 1);
@@ -973,8 +972,8 @@ void DojoGui::show_button_check()
 
 		if (settings.platform.isArcade())
 		{
-			//ImGui::Text("%s %s %s", ICON_KI_BUTTON_A, ICON_KI_BUTTON_B, ICON_KI_BUTTON_C);
-			//ImGui::Text("%s %s %s", ICON_KI_BUTTON_X, ICON_KI_BUTTON_Y, ICON_KI_BUTTON_Z);
+			// ImGui::Text("%s %s %s", ICON_KI_BUTTON_A, ICON_KI_BUTTON_B, ICON_KI_BUTTON_C);
+			// ImGui::Text("%s %s %s", ICON_KI_BUTTON_X, ICON_KI_BUTTON_Y, ICON_KI_BUTTON_Z);
 
 			if (dojo.button_check_pressed[i].count(DreamcastKey::DC_BTN_A) == 1)
 				ImGui::TextColored(ImVec4(255, 0, 0, 1), "%s", ICON_KI_BUTTON_A);
@@ -1016,7 +1015,7 @@ void DojoGui::show_button_check()
 			else
 				ImGui::Text("%s", ICON_KI_BUTTON_Z);
 
-			ImGui::SetCursorPosX(areaWidth - ImGui::CalcTextSize("A").x/2.0f);
+			ImGui::SetCursorPosX(areaWidth - ImGui::CalcTextSize("A").x / 2.0f);
 
 			if (dojo.button_check_pressed[i].count(DreamcastKey::DC_BTN_START) == 1)
 				ImGui::TextColored(ImVec4(165, 0, 255, 1), "%s", ICON_KI_CARET_TOP);
@@ -1028,15 +1027,15 @@ void DojoGui::show_button_check()
 			std::set<int>::reverse_iterator rit;
 			for (rit = dojo.button_check_pressed[i].rbegin(); rit != dojo.button_check_pressed[i].rend(); ++rit)
 			{
-				const char* button_name = GetCurrentGameButtonName((DreamcastKey)*rit);
+				const char *button_name = GetCurrentGameButtonName((DreamcastKey)*rit);
 				if (button_name != nullptr && strlen(button_name) > 0 && button_name != " ")
 					ImGui::Text("%s\n", button_name);
 			}
 		}
 		else
 		{
-			//ImGui::Text("%s %s %s", ICON_KI_BUTTON_X, ICON_KI_BUTTON_Y, ICON_KI_STICK_LEFT_TOP);
-			//ImGui::Text("%s %s %s", ICON_KI_BUTTON_A, ICON_KI_BUTTON_B, ICON_KI_STICK_RIGHT_TOP);
+			// ImGui::Text("%s %s %s", ICON_KI_BUTTON_X, ICON_KI_BUTTON_Y, ICON_KI_STICK_LEFT_TOP);
+			// ImGui::Text("%s %s %s", ICON_KI_BUTTON_A, ICON_KI_BUTTON_B, ICON_KI_STICK_RIGHT_TOP);
 
 			if (dojo.button_check_pressed[i].count(DreamcastKey::DC_BTN_X) == 1)
 				ImGui::TextColored(ImVec4(255, 255, 0, 1), "%s", ICON_KI_BUTTON_X);
@@ -1078,7 +1077,7 @@ void DojoGui::show_button_check()
 			else
 				ImGui::Text("%s", ICON_KI_STICK_RIGHT_TOP);
 
-			ImGui::SetCursorPosX(areaWidth - ImGui::CalcTextSize("A").x/2.0f);
+			ImGui::SetCursorPosX(areaWidth - ImGui::CalcTextSize("A").x / 2.0f);
 
 			if (dojo.button_check_pressed[i].count(DreamcastKey::DC_BTN_START) == 1)
 				ImGui::TextColored(ImVec4(165, 0, 255, 1), "%s", ICON_KI_CARET_TOP);
@@ -1113,8 +1112,7 @@ void DojoGui::show_button_check()
 
 	ImGui::SameLine(
 		(ImGui::GetContentRegionAvail().x / 2) -
-		msg_font_size + (msg_font_size / 2) + 10
-	);
+		msg_font_size + (msg_font_size / 2) + 10);
 
 	ImGui::TextUnformatted(msg_text.c_str());
 
@@ -1122,4 +1120,168 @@ void DojoGui::show_button_check()
 
 	ImGui::PopStyleColor();
 	ImGui::PopStyleVar(2);
+}
+
+void DojoGui::gui_display_test_game()
+{
+	const float scaling = settings.display.uiScale;
+
+	ImGui::SetNextWindowPos(ImVec2(settings.display.width / 2.f, settings.display.height / 2.f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(330 * scaling, 0));
+
+	ImGui::Begin("##test_game", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
+
+	ImGui::Columns(2, "buttons", false);
+
+	int displayed_button_count = 0;
+
+	std::string start_btn_txt = "Main Menu";
+	if (strlen(settings.content.path.data()) > 0)
+		start_btn_txt = "Start Game";
+	if (ImGui::Button(start_btn_txt.data(), ImVec2(150 * scaling, 50 * scaling)))
+	{
+		gui_setState(GuiState::Closed);
+
+		if (strlen(settings.content.path.data()) > 0)
+		{
+			std::string extension = get_file_extension(settings.content.path);
+			// dreamcast games use built-in bios by default
+			if (extension == "chd" || extension == "gdi" || extension == "cdi")
+			{
+				settings.platform.system = DC_PLATFORM_DREAMCAST;
+			}
+			else
+			{
+				int platform = naomi_cart_GetPlatform(settings.content.path.data());
+				settings.platform.system = platform;
+			}
+
+			gui_start_game(settings.content.path);
+		}
+		else
+		{
+			cfgSetVirtual("dojo", "TestGame", "no");
+			gui_setState(GuiState::Main);
+		}
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	if (settings.content.path.size() > 0)
+	{
+		if (ImGui::Button("Start Training", ImVec2(150 * scaling, 50 * scaling)))
+		{
+			config::Delay = 0;
+			cfgSetVirtual("dojo", "Training", "yes");
+			gui_setState(GuiState::Closed);
+
+			if (strlen(settings.content.path.data()) > 0)
+			{
+				std::string extension = get_file_extension(settings.content.path);
+				// dreamcast games use built-in bios by default
+				if (extension == "chd" || extension == "gdi" || extension == "cdi")
+				{
+					settings.platform.system = DC_PLATFORM_DREAMCAST;
+				}
+				else
+				{
+					int platform = naomi_cart_GetPlatform(settings.content.path.data());
+					settings.platform.system = platform;
+				}
+
+				gui_start_game(settings.content.path);
+			}
+			else
+			{
+				gui_setState(GuiState::Main);
+			}
+		}
+
+		displayed_button_count++;
+		ImGui::NextColumn();
+	}
+
+	if (ImGui::Button("Button Check", ScaledVec2(150, 50)) && !settings.network.online)
+	{
+		test_game_screen = true;
+		gui_setState(GuiState::Closed);
+
+		if (strlen(settings.content.path.data()) > 0)
+		{
+			std::string extension = get_file_extension(settings.content.path);
+			// dreamcast games use built-in bios by default
+			if (extension == "chd" || extension == "gdi" || extension == "cdi")
+			{
+				settings.platform.system = DC_PLATFORM_DREAMCAST;
+			}
+			else
+			{
+				int platform = naomi_cart_GetPlatform(settings.content.path.data());
+				settings.platform.system = platform;
+			}
+		}
+		gui_setState(GuiState::ButtonCheck);
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	if (ImGui::Button("Settings", ImVec2(150 * scaling, 50 * scaling)))
+	{
+		gui_setState(GuiState::Settings);
+	}
+
+	displayed_button_count++;
+
+	ImVec2 exit_size;
+
+	if (displayed_button_count % 2 == 0)
+	{
+		ImGui::Columns(1, nullptr, false);
+		exit_size = ScaledVec2(300, 50) + ImVec2(ImGui::GetStyle().ColumnsMinSpacing + ImGui::GetStyle().FramePadding.x * 2 - 1, 0);
+	}
+	else
+	{
+		ImGui::NextColumn();
+		exit_size = ScaledVec2(150, 50);
+	}
+
+	// Exit
+	if (ImGui::Button("Exit", exit_size))
+	{
+		dc_exit();
+	}
+
+	/*
+	ImGui::NextColumn();
+
+	std::string filename = settings.content.path.substr(settings.content.path.find_last_of("/\\") + 1);
+	std::string game_name = get_file_basename(filename);
+	std::string net_state_path = get_writable_data_path(game_name + ".state.net");
+
+	bool save_exists = false;
+	if(std::filesystem::exists(net_state_path))
+		save_exists = true;
+
+	if(!save_exists)
+	{
+		ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+	}
+
+	if (ImGui::Button("Delete Savestate", ImVec2(150 * scaling, 50 * scaling)))
+	{
+		if(std::filesystem::exists(net_state_path))
+			std::filesystem::remove(net_state_path);
+	}
+
+	if(!save_exists)
+	{
+		ImGui::PopItemFlag();
+		ImGui::PopStyleVar();
+	}
+	*/
+
+	ImGui::End();
 }

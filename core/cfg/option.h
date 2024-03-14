@@ -555,6 +555,8 @@ extern Option<bool> ShowTrainingInputDisplay;
 extern Option<bool> ShowReplayInputDisplay;
 extern Option<bool> UseAnimeInputNotation;
 
+extern Option<bool> TestGame;
+
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;
 #endif
