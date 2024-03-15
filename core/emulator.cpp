@@ -569,6 +569,11 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 					lua::reinit(lua_file);
 			}
 		}
+		else
+		{
+			lua::term();
+			lua::init();
+		}
 
 		NetworkHandshake::init();
 		settings.input.fastForwardMode = false;

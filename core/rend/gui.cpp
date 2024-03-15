@@ -548,6 +548,8 @@ void gui_start_game(const std::string& path)
 
 	dojo.commandLineStart = commandLineStart;
 	dojo.InitScore();
+	dojo.training.Reset();
+	dojo.ResetInputDisplay();
 
 	scanner.stop();
 	gui_setState(GuiState::Loading);
@@ -564,6 +566,10 @@ void gui_stop_game(const std::string& message)
 			dojo.session_inputs.clear();
 			dojo.play_match = false;
 		}
+
+		dojo.training.Reset();
+		dojo.ResetInputDisplay();
+		lua::term();
 
 		// Exit to main menu
 		emu.unloadGame();

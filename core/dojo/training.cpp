@@ -116,11 +116,19 @@ void Training::PlayRecording(int slot)
 	}
 }
 
-void Training::ResetTraining()
+void Training::Reset()
 {
-	player_switched = false;
+	playback_loop = false;
+	playing_input = false;
+	trigger_playback = false;
+	next_playback_frame = 0;
 	control_player = 0;
+
+	player_switched = false;
 	current_record_slot = 0;
+
+	recording = false;
+	recording_started = false;
 
 	for (int i = 0; i < 3; i++)
 	{

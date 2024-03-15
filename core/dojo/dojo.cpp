@@ -848,3 +848,18 @@ void Dojo::AddToInputDisplay(MapleInputState inputState[4])
 		}
 	}
 }
+
+void Dojo::ResetInputDisplay()
+{
+	int players = 2;
+	for (int p = 0; p < players; p++)
+	{
+		displayed_inputs[p].clear();
+		displayed_inputs_str[p].clear();
+		last_displayed_inputs_str.clear();
+		displayed_dirs_str[p].clear();
+		displayed_inputs_duration[p].clear();
+		displayed_dirs[p].clear();
+		displayed_num_dirs[p].clear();
+	}
+}
