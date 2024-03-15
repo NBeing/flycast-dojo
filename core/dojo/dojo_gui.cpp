@@ -459,6 +459,10 @@ void DojoGui::settings_dojo_tab()
 
 		if (ImGui::CollapsingHeader("Training", ImGuiTreeNodeFlags_None))
 		{
+			OptionCheckbox("Automatically Load Netplay Savestate", config::AutoLoadNetState);
+			ImGui::SameLine();
+			ShowHelpMarker("When available, loads netplay savestate on launch. Typically character or mode select screen");
+
 			OptionCheckbox("Show Input Display", config::ShowTrainingInputDisplay);
 			ImGui::SameLine();
 			ShowHelpMarker("Shows controller input history in Training Mode\n(Temporarily disabled for Offline Delay > 0)");

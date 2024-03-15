@@ -539,6 +539,7 @@ extern Option<int> FirstTo;
 extern Option<bool> StreamTxtOutput;
 extern Option<bool> Training;
 extern Option<bool> ShowTrainingGameOverlay;
+extern Option<bool> AutoLoadNetState;
 extern OptionString DojoServerIP;
 extern OptionString DojoServerPort;
 
