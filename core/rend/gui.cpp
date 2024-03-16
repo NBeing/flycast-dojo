@@ -592,6 +592,8 @@ static bool savestateAllowed()
 	return !settings.content.path.empty() && !settings.network.online && !settings.naomi.multiboard;
 }
 
+void quick_map();
+
 static void gui_display_commands()
 {
    	imguiDriver->displayVmus();
@@ -791,6 +793,15 @@ static void gui_display_commands()
 	displayed_button_count++;
 	ImGui::NextColumn();
 
+	std::shared_ptr<GamepadDevice> gamepad = GamepadDevice::GetGamepad(dojo.current_gamepad);
+	std::string quick_map_title = "Quick Map\n(" + gamepad->name() + ")";
+	if (ImGui::Button(quick_map_title.c_str(), ScaledVec2(150, 50)) && !settings.network.online)
+	{
+		gui_setState(GuiState::QuickMap);
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
 	}
 	// Settings
 	if (ImGui::Button("Settings", ScaledVec2(150, 50)))
@@ -1229,9 +1240,21 @@ static void detect_input_popup(const Mapping *mapping)
 	ImVec2 padding = ScaledVec2(20, 20);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, padding);
-	if (ImGui::BeginPopupModal("Map Control", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	std::string map_control_name = "Map Control " + std::string(mapping->name);
+	if (ImGui::BeginPopupModal(map_control_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 	{
-		ImGui::Text("Waiting for control '%s'...", mapping->name);
+		if (settings.platform.isArcade())
+		{
+			const char* button_name = GetCurrentGameButtonName((DreamcastKey)mapping->key);
+			if (button_name != nullptr && strlen(button_name) > 0 && button_name != " ")
+				ImGui::Text("Waiting for control '%s' (%s)...", mapping->name, button_name);
+			else
+				ImGui::Text("Waiting for control '%s'...", mapping->name);
+		}
+		else
+		{
+			ImGui::Text("Waiting for control '%s'...", mapping->name);
+		}
 		double now = os_GetSeconds();
 		ImGui::Text("Time out in %d s", (int)(5 - (now - map_start_time)));
 		if (mapped_code != (u32)-1)
@@ -1239,6 +1262,7 @@ static void detect_input_popup(const Mapping *mapping)
 			std::shared_ptr<InputMapping> input_mapping = mapped_device->get_input_mapping();
 			if (input_mapping != NULL)
 			{
+				NOTICE_LOG(INPUT, "gamepad_port %u, mapping->key %u, mapped_code %d", gamepad_port, mapping->key, mapped_code);
 				unmapControl(input_mapping, gamepad_port, mapping->key);
 				if (analogAxis)
 				{
@@ -1256,11 +1280,13 @@ static void detect_input_popup(const Mapping *mapping)
 					input_mapping->set_button(gamepad_port, mapping->key, mapped_code);
 			}
 			mapped_device = NULL;
+			dojo_gui.pending_map = false;
 			ImGui::CloseCurrentPopup();
 		}
 		else if (now - map_start_time >= 5)
 		{
 			mapped_device = NULL;
+			dojo_gui.pending_map = false;
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -1486,7 +1512,8 @@ static void controller_mapping_popup(const std::shared_ptr<GamepadDevice>& gamep
 			if (ImGui::Button("Map"))
 			{
 				map_start_time = os_GetSeconds();
-				ImGui::OpenPopup("Map Control");
+				std::string map_control_name = "Map Control " + std::string(systemMapping->name);
+				ImGui::OpenPopup(map_control_name.c_str());
 				mapped_device = gamepad;
 				mapped_code = -1;
 				gamepad->detectButtonOrAxisInput([](u32 code, bool analog, bool positive)
@@ -3568,6 +3595,9 @@ void gui_display_ui()
 	case GuiState::TestGame:
 		dojo_gui.gui_display_test_game();
 		break;
+	case GuiState::QuickMap:
+		quick_map();
+		break;
 	default:
 		die("Unknown UI state");
 		break;
@@ -3815,3 +3845,95 @@ bool __cdecl Concurrency::details::_Task_impl_base::_IsNonBlockingThread() {
 #ifndef __ANDROID__
 #include "sdl/sdl.h"
 #endif
+
+void quick_map()
+{
+	fullScreenWindow(false);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+
+    ImGui::Begin("Quick Map", NULL, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+	const Mapping minArcadeButtons[] = {
+		{ DC_BTN_A, "Button 1" },
+		{ DC_BTN_B, "Button 2" },
+		{ DC_BTN_C, "Button 3" },
+		{ DC_BTN_X, "Button 4" },
+		{ DC_BTN_Y, "Button 5" },
+		{ DC_BTN_Z, "Button 6" },
+
+		{ DC_BTN_START, "Start" },
+		//{ DC_BTN_D, "Coin" },
+	};
+
+	const Mapping minDcButtons[] = {
+		{ DC_BTN_A, "A" },
+		{ DC_BTN_B, "B" },
+		{ DC_BTN_X, "X" },
+		{ DC_BTN_Y, "Y" },
+
+		{ DC_AXIS_LT, "Left Trigger" },
+		{ DC_AXIS_RT, "Right Trigger" },
+
+		{ DC_BTN_START, "Start" },
+	};
+
+	const Mapping* quickMapping;
+	int mappingSize;
+	if (settings.platform.isArcade())
+	{
+		quickMapping = minArcadeButtons;
+		mappingSize = 7;
+	}
+	else
+	{
+		quickMapping = minDcButtons;
+		mappingSize = 7;
+	}
+
+	std::shared_ptr<GamepadDevice> gamepad = GamepadDevice::GetGamepad(dojo.current_gamepad);
+	if (!dojo_gui.pending_map)
+	{
+		if (dojo_gui.current_map_button < mappingSize)
+		{
+			const Mapping* currentMapping = quickMapping + dojo_gui.current_map_button;
+			const char * bn = currentMapping->name;
+			if (!dojo_gui.mapping_shown)
+			{
+				std::string map_control_name = "Map Control " + std::string(currentMapping->name);
+				map_start_time = os_GetSeconds();
+				ImGui::OpenPopup(map_control_name.c_str());
+				mapped_device = gamepad;
+				mapped_code = -1;
+				gamepad->detectButtonOrAxisInput([](u32 code, bool analog, bool positive)
+				{
+					dojo_gui.mapping_shown = false;
+					mapped_code = code;
+					analogAxis = analog;
+					positiveDirection = positive;
+					dojo_gui.pending_map = true;
+					dojo_gui.current_map_button++;
+				});
+				dojo_gui.mapping_shown = true;
+			}
+		}
+		else
+		{
+			gamepad->save_mapping();
+			gui_setState(GuiState::ButtonCheck);
+			dojo_gui.current_map_button = 0;
+		}
+	}
+
+	for (int i = 0; i < mappingSize; ++i)
+		detect_input_popup(quickMapping + i);
+
+	if (ImGui::Button("Done", ScaledVec2(100, 30)))
+	{
+		dojo_gui.current_map_button = 0 ;
+		dojo_gui.mapping_shown = false;
+		dojo_gui.pending_map = false;
+		gui_setState(GuiState::Closed);
+	}
+    ImGui::PopStyleVar();
+	ImGui::End();
+}

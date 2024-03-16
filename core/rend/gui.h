@@ -70,7 +70,8 @@ enum class GuiState {
 	MatchCodeHostWait,
 	MatchCodeGuestWait,
 	ButtonCheck,
-	TestGame
+	TestGame,
+	QuickMap
 };
 extern GuiState gui_state;
 

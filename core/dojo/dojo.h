@@ -142,6 +142,8 @@ public:
 	void ResetInputDisplay();
 
 	std::set<int> button_check_pressed[2];
+
+	std::string current_gamepad;
 };
 
 extern Dojo dojo;

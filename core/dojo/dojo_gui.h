@@ -34,13 +34,18 @@ public:
 	void show_replay_position_overlay(int frame_num);
 
 	void show_last_inputs_overlay();
-	void display_btn(std::string btn_str, bool* any_found);
+	void display_btn(std::string btn_str, bool *any_found);
 	void display_input_str(std::string input_str, std::string prev_str = "");
 
 	void show_button_check();
 	void gui_display_test_game();
 
 	bool test_game_screen = false;
+
+	int current_map_button = 0;
+	bool mapping_shown = false;
+	bool pending_map = false;
+
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;

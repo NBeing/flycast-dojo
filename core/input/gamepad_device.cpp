@@ -87,7 +87,10 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 			break;
 		case EMU_BTN_MENU:
 			if (pressed)
+			{
+				dojo.current_gamepad = _unique_id;
 				gui_open_settings();
+			}
 			break;
 		case EMU_BTN_FFORWARD:
 			if (pressed && !gui_is_open())
@@ -662,6 +665,19 @@ std::shared_ptr<GamepadDevice> GamepadDevice::GetGamepad(int index)
 		dev = _gamepads[index];
 	else
 		dev = NULL;
+	_gamepads_mutex.unlock();
+	return dev;
+}
+
+std::shared_ptr<GamepadDevice> GamepadDevice::GetGamepad(std::string uid)
+{
+	_gamepads_mutex.lock();
+	std::shared_ptr<GamepadDevice> dev = NULL;
+	for (int i = 0; i < _gamepads.size(); ++i)
+	{
+		if (_gamepads[i]->unique_id() == uid)
+			dev = _gamepads[i];
+	}
 	_gamepads_mutex.unlock();
 	return dev;
 }
