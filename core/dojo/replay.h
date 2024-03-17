@@ -19,7 +19,7 @@ public:
     std::string CreateReplayFile();
     std::string CreateReplayFile(std::string rom_name, int version = 1);
 
-    void LoadReplayFile(std::string path);
+    bool LoadReplayFile(std::string path);
     void LoadReplayFileV1(std::string path);
 
     u32 GetFrameNumber(u8 *data);

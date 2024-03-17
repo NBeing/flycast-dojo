@@ -3,22 +3,21 @@
 void Replay::Init()
 {
 	filename = config::ReplayFilename.get();
-	LoadReplayFile(filename);
+	if (!LoadReplayFile(filename))
+		return;
+
 	dojo.play_match = true;
 
 	if (ggpo_session)
 	{
-		std::cout << "GGPO SESSION ENABLED" << std::endl;
 		config::GGPOEnable = true;
 		dojo.frame_number = 9;
 	}
 	else
 	{
-		std::cout << "OFFLINE SESSION ENABLED" << std::endl;
 		config::GGPOEnable = false;
 		dojo.frame_number = 0;
 	}
-
 }
 
 void Replay::StartRecording()
@@ -122,22 +121,25 @@ std::string Replay::CreateReplayFile()
 
 std::string Replay::CreateReplayFile(std::string rom_name, int version)
 {
+	if (!std::filesystem::exists(get_writable_data_path("replays")))
+		std::filesystem::create_directory(get_writable_data_path("replays"));
+
 	// create timestamp string, iso8601 format
 	std::string timestamp = currentISO8601TimeUTC();
 	std::replace(timestamp.begin(), timestamp.end(), ':', '_');
-	std::string fn =
-		"replays/" + rom_name + "__" +
-		timestamp + "__" +
-		config::PlayerName.get() + "__" +
-		settings.dojo.OpponentName + "__";
+
+	std::string replay_name = rom_name + "__" +
+							  timestamp + "__" +
+							  config::PlayerName.get() + "__" +
+							  settings.dojo.OpponentName + "__";
 
 	if (version == 0)
-		fn.append(".flyreplay");
+		replay_name.append(".flyreplay");
 	else if (version >= 1)
-		fn.append(".flyr");
+		replay_name.append(".flyr");
 
 	std::filesystem::path replay_path =
-		std::filesystem::path(get_writable_config_path("")) / fn;
+		std::filesystem::path(get_writable_data_path("replays")) / replay_name;
 
 	// create replay file itself
 	std::ofstream file;
@@ -149,7 +151,7 @@ std::string Replay::CreateReplayFile(std::string rom_name, int version)
 	if (version > 0)
 		AppendHeaderToFile(rom_name);
 
-	return fn;
+	return replay_path.string();
 }
 
 void Replay::AppendHeaderToFile(std::string rom_name)
@@ -202,11 +204,19 @@ void Replay::AppendHeaderToFile(std::string rom_name)
 	fout.close();
 }
 
-void Replay::LoadReplayFile(std::string path)
+bool Replay::LoadReplayFile(std::string path)
 {
-
 	NOTICE_LOG(NETWORK, "LOAD REPLAY FILE %s", path.data());
-	LoadReplayFileV1(path);
+	if (std::filesystem::exists(path))
+	{
+		LoadReplayFileV1(path);
+		return true;
+	}
+	else
+	{
+		cfgSetVirtual("dojo", "Replay", "no");
+		return false;
+	}
 }
 
 u32 Replay::GetFrameNumber(u8 *data)
