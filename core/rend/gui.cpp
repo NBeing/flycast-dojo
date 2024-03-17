@@ -518,22 +518,18 @@ void gui_open_settings()
 	{
 		gameLoader.cancel();
 	}
-	else if (gui_state == GuiState::ButtonCheck)
+	else if (gui_state == GuiState::Commands || gui_state == GuiState::ButtonCheck)
 	{
-		if (dojo_gui.test_game_screen)
+		if (gui_state == GuiState::ButtonCheck && dojo_gui.test_game_screen)
 		{
 			gui_stop_game();
 		}
 		else
 		{
-			gui_setState(GuiState::Commands);
+			gui_setState(GuiState::Closed);
+			GamepadDevice::load_system_mappings();
+			emu.start();
 		}
-	}
-	else if (gui_state == GuiState::Commands || gui_state == GuiState::ButtonCheck)
-	{
-		gui_setState(GuiState::Closed);
-		GamepadDevice::load_system_mappings();
-		emu.start();
 	}
 }
 
@@ -593,6 +589,7 @@ static bool savestateAllowed()
 }
 
 void quick_map();
+void quick_player_select();
 
 static void gui_display_commands()
 {
@@ -798,6 +795,15 @@ static void gui_display_commands()
 	if (ImGui::Button(quick_map_title.c_str(), ScaledVec2(150, 50)) && !settings.network.online)
 	{
 		gui_setState(GuiState::QuickMap);
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	std::string quick_player_select_title = "Quick Player Select\n(" + gamepad->name() + ")";
+	if (ImGui::Button(quick_player_select_title.c_str(), ScaledVec2(150, 50)) && !settings.network.online)
+	{
+		gui_setState(GuiState::QuickPlayerSelect);
 	}
 
 	displayed_button_count++;
@@ -1180,6 +1186,7 @@ static bool positiveDirection;
 static double map_start_time;
 static bool arcade_button_mode;
 static u32 gamepad_port;
+static u32 button_id;
 
 static void unmapControl(const std::shared_ptr<InputMapping>& mapping, u32 gamepad_port, DreamcastKey key)
 {
@@ -3598,6 +3605,10 @@ void gui_display_ui()
 	case GuiState::QuickMap:
 		quick_map();
 		break;
+	case GuiState::QuickPlayerSelect:
+		dojo_gui.pending_player_assignment = true;
+		quick_player_select();
+		break;
 	default:
 		die("Unknown UI state");
 		break;
@@ -3935,5 +3946,116 @@ void quick_map()
 		gui_setState(GuiState::Closed);
 	}
     ImGui::PopStyleVar();
+	ImGui::End();
+}
+
+static void detect_player_select_input_popup()
+{
+	ImVec2 padding = ScaledVec2(20, 20);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, padding);
+	std::string player_select_name = "Player Select ";
+	if (ImGui::BeginPopupModal(player_select_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	{
+		ImGui::Text("LEFT - Player 1\nRIGHT - Player 2");
+		ImGui::Text("Waiting for control...");
+
+		double now = os_GetSeconds();
+		ImGui::Text("Time out in %d s", (int)(5 - (now - map_start_time)));
+		if (mapped_code != (u32)-1)
+		{
+			std::shared_ptr<InputMapping> input_mapping = mapped_device->get_input_mapping();
+			if (input_mapping != NULL)
+			{
+				button_id = (int)input_mapping->get_button_id(gamepad_port, mapped_code);
+				NOTICE_LOG(INPUT, "gamepad_port %u, mapped_code %d, button_id %d", gamepad_port, mapped_code, (int)input_mapping->get_button_id(gamepad_port, mapped_code));
+				if (button_id == (int)DC_DPAD_LEFT)
+					mapped_device->set_maple_port(0);
+				else if (button_id == (int)DC_DPAD_RIGHT)
+					mapped_device->set_maple_port(1);
+				
+				dojo_gui.mapping_shown = false;
+				gui_setState(GuiState::ButtonCheck);
+				/*
+				unmapControl(input_mapping, gamepad_port, mapping->key);
+				if (analogAxis)
+				{
+					input_mapping->set_axis(gamepad_port, mapping->key, mapped_code, positiveDirection);
+					DreamcastKey opposite = getOppositeDirectionKey(mapping->key);
+					// Map the axis opposite direction to the corresponding opposite dc button or axis,
+					// but only if the opposite direction axis isn't used and the dc button or axis isn't mapped.
+					if (opposite != EMU_BTN_NONE
+							&& input_mapping->get_axis_id(gamepad_port, mapped_code, !positiveDirection) == EMU_BTN_NONE
+							&& input_mapping->get_axis_code(gamepad_port, opposite).first == (u32)-1
+							&& input_mapping->get_button_code(gamepad_port, opposite) == (u32)-1)
+						input_mapping->set_axis(gamepad_port, opposite, mapped_code, !positiveDirection);
+				}
+				else
+					input_mapping->set_button(gamepad_port, mapping->key, mapped_code);
+				*/
+			}
+			mapped_device = NULL;
+			dojo_gui.pending_player_assignment = false;
+			ImGui::CloseCurrentPopup();
+		}
+		else if (now - map_start_time >= 5)
+		{
+			mapped_device = NULL;
+			dojo_gui.pending_player_assignment = false;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+	ImGui::PopStyleVar(2);
+}
+
+
+void quick_player_select()
+{
+	fullScreenWindow(false);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+
+    ImGui::Begin("Quick Player Select", NULL, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+
+	std::shared_ptr<GamepadDevice> gamepad = GamepadDevice::GetGamepad(dojo.current_gamepad);
+	if (dojo_gui.pending_player_assignment)
+	{
+			if (!dojo_gui.mapping_shown)
+			{
+				std::string map_control_name = "Player Select ";
+				map_start_time = os_GetSeconds();
+				ImGui::OpenPopup(map_control_name.c_str());
+				mapped_device = gamepad;
+				mapped_code = -1;
+				gamepad->detectButtonOrAxisInput([](u32 code, bool analog, bool positive)
+				{
+					mapped_code = code;
+					dojo_gui.pending_player_assignment = false;
+				});
+				dojo_gui.mapping_shown = true;
+			}
+	}
+
+	detect_player_select_input_popup();
+
+	if (ImGui::Button("Done", ScaledVec2(100, 30)))
+	{
+		std::string button_name = std::string(gamepad->get_button_name(mapped_code));
+		//if (button_name == "Left")
+		//{
+		//	NOTICE_LOG(INPUT, "PLAYER 1");
+		//	gamepad->set_maple_port(0);
+		//}
+		//else if (button_name == "Right")
+		//{
+		//	NOTICE_LOG(INPUT, "PLAYER 2");
+		//	gamepad->set_maple_port(1);
+		//}
+		dojo_gui.mapping_shown = false;
+		gui_setState(GuiState::Closed);
+	}
+
+	ImGui::PopStyleVar();
 	ImGui::End();
 }

@@ -45,6 +45,7 @@ public:
 	int current_map_button = 0;
 	bool mapping_shown = false;
 	bool pending_map = false;
+	bool pending_player_assignment = false;
 
 private:
 	// GGPO Connect Screen
