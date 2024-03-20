@@ -1251,7 +1251,8 @@ static void detect_input_popup(const Mapping *mapping)
 	ImVec2 padding = ScaledVec2(20, 20);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, padding);
-	std::string map_control_name = "Map Control " + std::string(mapping->name);
+	std::shared_ptr<GamepadDevice> gamepad = GamepadDevice::GetGamepad(dojo.current_gamepad);
+	std::string map_control_name = "P" + std::to_string(gamepad->maple_port() + 1) + " Map Control " + std::string(mapping->name);
 	if (ImGui::BeginPopupModal(map_control_name.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 	{
 		if (settings.platform.isArcade())
@@ -3914,7 +3915,7 @@ void quick_map()
 			const char * bn = currentMapping->name;
 			if (!dojo_gui.mapping_shown)
 			{
-				std::string map_control_name = "Map Control " + std::string(currentMapping->name);
+				std::string map_control_name = "P" + std::to_string(gamepad->maple_port() + 1) + " Map Control " + std::string(currentMapping->name);
 				map_start_time = os_GetSeconds();
 				ImGui::OpenPopup(map_control_name.c_str());
 				mapped_device = gamepad;
