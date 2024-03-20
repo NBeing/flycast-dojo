@@ -794,12 +794,14 @@ static void gui_display_commands()
 	std::string quick_map_title = "Quick Map\n(" + gamepad->name() + ")";
 	if (ImGui::Button(quick_map_title.c_str(), ScaledVec2(150, 50)) && !settings.network.online)
 	{
-		gui_setState(GuiState::QuickMap);
+		//gui_setState(GuiState::QuickMap);
+		gui_setState(GuiState::QuickPlayerSelect);
 	}
 
 	displayed_button_count++;
 	ImGui::NextColumn();
 
+/*
 	std::string quick_player_select_title = "Quick Player Select\n(" + gamepad->name() + ")";
 	if (ImGui::Button(quick_player_select_title.c_str(), ScaledVec2(150, 50)) && !settings.network.online)
 	{
@@ -808,6 +810,8 @@ static void gui_display_commands()
 
 	displayed_button_count++;
 	ImGui::NextColumn();
+*/
+
 	}
 	// Settings
 	if (ImGui::Button("Settings", ScaledVec2(150, 50)))
@@ -3975,24 +3979,8 @@ static void detect_player_select_input_popup()
 					mapped_device->set_maple_port(1);
 				
 				dojo_gui.mapping_shown = false;
-				gui_setState(GuiState::ButtonCheck);
-				/*
-				unmapControl(input_mapping, gamepad_port, mapping->key);
-				if (analogAxis)
-				{
-					input_mapping->set_axis(gamepad_port, mapping->key, mapped_code, positiveDirection);
-					DreamcastKey opposite = getOppositeDirectionKey(mapping->key);
-					// Map the axis opposite direction to the corresponding opposite dc button or axis,
-					// but only if the opposite direction axis isn't used and the dc button or axis isn't mapped.
-					if (opposite != EMU_BTN_NONE
-							&& input_mapping->get_axis_id(gamepad_port, mapped_code, !positiveDirection) == EMU_BTN_NONE
-							&& input_mapping->get_axis_code(gamepad_port, opposite).first == (u32)-1
-							&& input_mapping->get_button_code(gamepad_port, opposite) == (u32)-1)
-						input_mapping->set_axis(gamepad_port, opposite, mapped_code, !positiveDirection);
-				}
-				else
-					input_mapping->set_button(gamepad_port, mapping->key, mapped_code);
-				*/
+				//gui_setState(GuiState::ButtonCheck);
+				gui_setState(GuiState::QuickMap);
 			}
 			mapped_device = NULL;
 			dojo_gui.pending_player_assignment = false;
@@ -4042,16 +4030,6 @@ void quick_player_select()
 	if (ImGui::Button("Done", ScaledVec2(100, 30)))
 	{
 		std::string button_name = std::string(gamepad->get_button_name(mapped_code));
-		//if (button_name == "Left")
-		//{
-		//	NOTICE_LOG(INPUT, "PLAYER 1");
-		//	gamepad->set_maple_port(0);
-		//}
-		//else if (button_name == "Right")
-		//{
-		//	NOTICE_LOG(INPUT, "PLAYER 2");
-		//	gamepad->set_maple_port(1);
-		//}
 		dojo_gui.mapping_shown = false;
 		gui_setState(GuiState::Closed);
 	}
