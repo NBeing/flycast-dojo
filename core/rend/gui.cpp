@@ -524,6 +524,10 @@ void gui_open_settings()
 		{
 			gui_stop_game();
 		}
+		else if (gui_state == GuiState::ButtonCheck && dojo_gui.quick_map_settings_call)
+		{
+			gui_setState(GuiState::Settings);
+		}
 		else
 		{
 			gui_setState(GuiState::Closed);
@@ -794,7 +798,7 @@ static void gui_display_commands()
 	std::string quick_map_title = "Quick Map\n(" + gamepad->name() + ")";
 	if (ImGui::Button(quick_map_title.c_str(), ScaledVec2(150, 50)) && !settings.network.online)
 	{
-		//gui_setState(GuiState::QuickMap);
+		dojo_gui.quick_map_settings_call = false;
 		gui_setState(GuiState::QuickPlayerSelect);
 	}
 
@@ -1298,8 +1302,14 @@ static void detect_input_popup(const Mapping *mapping)
 		else if (now - map_start_time >= 5)
 		{
 			mapped_device = NULL;
+			dojo_gui.current_map_button = 0 ;
+			dojo_gui.mapping_shown = false;
 			dojo_gui.pending_map = false;
 			ImGui::CloseCurrentPopup();
+			if (dojo_gui.quick_map_settings_call)
+				gui_setState(GuiState::Settings);
+			else
+				gui_setState(GuiState::ButtonCheck);
 		}
 		ImGui::EndPopup();
 	}
@@ -2031,10 +2041,11 @@ static void gui_display_settings()
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, normal_padding);
 			header("Physical Devices");
 		    {
-				if (ImGui::BeginTable("physicalDevices", 4, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings))
+				if (ImGui::BeginTable("physicalDevices", 5, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings))
 				{
 					ImGui::TableSetupColumn("System", ImGuiTableColumnFlags_WidthFixed);
 					ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+					ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed);
 					ImGui::TableSetupColumn("Port", ImGuiTableColumnFlags_WidthFixed);
 					ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
 
@@ -2049,7 +2060,13 @@ static void gui_display_settings()
 					ImGui::TextColored(gray, "Name");
 
 					ImGui::TableSetColumnIndex(2);
+					ImGui::TextColored(gray, " ");
+
+					ImGui::TableSetColumnIndex(3);
 					ImGui::TextColored(gray, "Port");
+
+					ImGui::TableSetColumnIndex(4);
+					ImGui::TextColored(gray, "");
 
 					for (int i = 0; i < GamepadDevice::GetGamepadCount(); i++)
 					{
@@ -2064,6 +2081,26 @@ static void gui_display_settings()
 						ImGui::Text("%s", gamepad->name().c_str());
 
 						ImGui::TableSetColumnIndex(2);
+						ImGui::SameLine(0, 8 * settings.display.uiScale);
+
+						if (gamepad->unique_id().find("mouse") == std::string::npos)
+						{
+							std::string quick_map_btn = "Quick Map##" + gamepad->unique_id();
+							if (gamepad->remappable() && ImGui::Button(quick_map_btn.data()))
+							{
+								dojo.current_gamepad = gamepad->unique_id();
+								dojo_gui.current_map_button = 0;
+								dojo_gui.quick_map_settings_call = true;
+								if (game_started)
+									gui_setState(GuiState::QuickPlayerSelect);
+								else
+									gui_setState(GuiState::QuickSelectPlatform);
+							}
+						}
+
+						ImGui::SameLine();
+
+						ImGui::TableSetColumnIndex(3);
 						char port_name[32];
 						sprintf(port_name, "##mapleport%d", i);
 						ImGui::PushID(port_name);
@@ -2082,8 +2119,9 @@ static void gui_display_settings()
 							ImGui::EndCombo();
 						}
 
-						ImGui::TableSetColumnIndex(3);
+						ImGui::TableSetColumnIndex(4);
 						ImGui::SameLine(0, 8 * settings.display.uiScale);
+
 						if (gamepad->remappable() && ImGui::Button("Map"))
 						{
 							gamepad_port = 0;
@@ -3611,8 +3649,10 @@ void gui_display_ui()
 		quick_map();
 		break;
 	case GuiState::QuickPlayerSelect:
-		dojo_gui.pending_player_assignment = true;
 		quick_player_select();
+		break;
+	case GuiState::QuickSelectPlatform:
+		dojo_gui.gui_display_select_platform();
 		break;
 	default:
 		die("Unknown UI state");
@@ -3948,7 +3988,10 @@ void quick_map()
 		dojo_gui.current_map_button = 0 ;
 		dojo_gui.mapping_shown = false;
 		dojo_gui.pending_map = false;
-		gui_setState(GuiState::Closed);
+		if (dojo_gui.quick_map_settings_call)
+			gui_setState(GuiState::Settings);
+		else
+			gui_setState(GuiState::ButtonCheck);
 	}
     ImGui::PopStyleVar();
 	ImGui::End();
@@ -3984,14 +4027,18 @@ static void detect_player_select_input_popup()
 				gui_setState(GuiState::QuickMap);
 			}
 			mapped_device = NULL;
-			dojo_gui.pending_player_assignment = false;
 			ImGui::CloseCurrentPopup();
 		}
 		else if (now - map_start_time >= 5)
 		{
-			mapped_device = NULL;
-			dojo_gui.pending_player_assignment = false;
 			ImGui::CloseCurrentPopup();
+			mapped_device = NULL;
+			mapped_code = 0;
+			dojo_gui.mapping_shown = false;
+			if (dojo_gui.quick_map_settings_call)
+				gui_setState(GuiState::Settings);
+			else
+				gui_setState(GuiState::ButtonCheck);
 		}
 		ImGui::EndPopup();
 	}
@@ -4008,31 +4055,32 @@ void quick_player_select()
 		| ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
 	std::shared_ptr<GamepadDevice> gamepad = GamepadDevice::GetGamepad(dojo.current_gamepad);
-	if (dojo_gui.pending_player_assignment)
+	if (!dojo_gui.mapping_shown)
 	{
-			if (!dojo_gui.mapping_shown)
-			{
-				std::string map_control_name = "Player Select ";
-				map_start_time = os_GetSeconds();
-				ImGui::OpenPopup(map_control_name.c_str());
-				mapped_device = gamepad;
-				mapped_code = -1;
-				gamepad->detectButtonOrAxisInput([](u32 code, bool analog, bool positive)
-				{
-					mapped_code = code;
-					dojo_gui.pending_player_assignment = false;
-				});
-				dojo_gui.mapping_shown = true;
-			}
+		std::string map_control_name = "Player Select ";
+		map_start_time = os_GetSeconds();
+		ImGui::OpenPopup(map_control_name.c_str());
+		mapped_device = gamepad;
+		mapped_code = -1;
+		gamepad->detectButtonOrAxisInput([](u32 code, bool analog, bool positive)
+		{
+			mapped_code = code;
+		});
+		dojo_gui.mapping_shown = true;
 	}
 
 	detect_player_select_input_popup();
 
 	if (ImGui::Button("Done", ScaledVec2(100, 30)))
 	{
-		std::string button_name = std::string(gamepad->get_button_name(mapped_code));
+		ImGui::CloseCurrentPopup();
+		mapped_device = NULL;
+		mapped_code = 0;
 		dojo_gui.mapping_shown = false;
-		gui_setState(GuiState::Closed);
+		if (dojo_gui.quick_map_settings_call)
+			gui_setState(GuiState::Settings);
+		else
+			gui_setState(GuiState::ButtonCheck);
 	}
 
 	ImGui::PopStyleVar();

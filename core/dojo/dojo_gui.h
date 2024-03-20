@@ -39,13 +39,14 @@ public:
 
 	void show_button_check();
 	void gui_display_test_game();
+	void gui_display_select_platform();
 
 	bool test_game_screen = false;
 
 	int current_map_button = 0;
 	bool mapping_shown = false;
 	bool pending_map = false;
-	bool pending_player_assignment = false;
+	bool quick_map_settings_call = false;
 
 private:
 	// GGPO Connect Screen
