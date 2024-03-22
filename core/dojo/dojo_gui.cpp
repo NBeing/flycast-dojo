@@ -851,6 +851,24 @@ void DojoGui::show_last_inputs_overlay()
 
 void DojoGui::show_button_check()
 {
+	if (test_game_screen)
+	{
+		if (strlen(settings.content.path.data()) > 0)
+		{
+			std::string extension = get_file_extension(settings.content.path);
+			if (extension == "chd" || extension == "gdi" || extension == "cdi")
+			{
+				settings.platform.system = DC_PLATFORM_DREAMCAST;
+			}
+			else
+			{
+				int platform = naomi_cart_GetPlatform(settings.content.path.data());
+				settings.platform.system = platform;
+			}
+		}
+		GamepadDevice::load_system_mappings();
+	}
+
 	const float scaling = settings.display.uiScale;
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
@@ -1209,21 +1227,6 @@ void DojoGui::gui_display_test_game()
 	if (ImGui::Button("Button Check", ScaledVec2(150, 50)) && !settings.network.online)
 	{
 		test_game_screen = true;
-		gui_setState(GuiState::Closed);
-
-		if (strlen(settings.content.path.data()) > 0)
-		{
-			std::string extension = get_file_extension(settings.content.path);
-			if (extension == "chd" || extension == "gdi" || extension == "cdi")
-			{
-				settings.platform.system = DC_PLATFORM_DREAMCAST;
-			}
-			else
-			{
-				int platform = naomi_cart_GetPlatform(settings.content.path.data());
-				settings.platform.system = platform;
-			}
-		}
 		gui_setState(GuiState::ButtonCheck);
 	}
 
