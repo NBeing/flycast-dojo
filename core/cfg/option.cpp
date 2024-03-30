@@ -176,6 +176,7 @@ Option<int> FirstTo("FirstTo", 0, "dojo");
 Option<bool> StreamTxtOutput("StreamTxtOutput", false, "dojo");
 Option<bool> Training("Training", false, "dojo");
 Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
+Option<bool> EnableTrainingLua("EnableTrainingLua", true, "dojo");
 Option<bool> AutoLoadNetState("AutoLoadNetState", true, "dojo");
 
 Option<bool> RecordMatches("RecordMatches", false, "dojo");
