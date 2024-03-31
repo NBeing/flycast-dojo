@@ -536,6 +536,13 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 			training.playback_loop && training.trigger_playback &&
 			dojo.frame_number > training.next_playback_frame)
 		{
+			if (training.rnd_playback_loop)
+			{
+				auto it = training.recorded_slots.cbegin();
+				int rnd = rand() % training.recorded_slots.size();
+				std::advance(it, rnd);
+				training.current_record_slot = *it;
+			}
 			training.PlayRecording(training.current_record_slot);
 		}
 

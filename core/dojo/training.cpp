@@ -50,6 +50,7 @@ void Training::TogglePlayback(int slot, bool hide_slot = false)
 	{
 		if (trigger_playback)
 		{
+			rnd_playback_loop = false;
 			trigger_playback = false;
 			if (hide_slot)
 				NoticeStream << "Stop Loop";
@@ -85,14 +86,26 @@ void Training::ToggleRandomPlayback()
 		gui_display_notification("No Input Slots Recorded", 2000);
 		return;
 	}
-	if (!playing_input)
+
+	srand(time(0));
+	if (rnd_playback_loop)
+	{
+		rnd_playback_loop = false;
+	}
+	else
+	{
+		if (playback_loop)
+			rnd_playback_loop = true;
+	}
+
+	if (!playing_input && !playback_loop)
 	{
 		auto it = recorded_slots.cbegin();
-		srand(time(0));
 		int rnd = rand() % recorded_slots.size();
 		std::advance(it, rnd);
 		current_record_slot = *it;
 	}
+
 	TogglePlayback(current_record_slot, config::HideRandomInputSlot.get());
 }
 

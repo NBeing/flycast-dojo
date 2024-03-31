@@ -700,6 +700,8 @@ static void gui_display_commands()
 		if (ImGui::Button(playback_loop_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
 		{
 			dojo.training.playback_loop = (dojo.training.playback_loop ? false : true);
+			if (!dojo.training.playback_loop)
+				dojo.training.rnd_playback_loop = false;
 		}
 		displayed_button_count++;
 		ImGui::NextColumn();
