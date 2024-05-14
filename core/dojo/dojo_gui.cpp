@@ -150,9 +150,9 @@ void DojoGui::gui_display_ggpo_connect()
 					detect_address = "127.0.0.1";
 
 				if (hosting_opt)
-					cfgSetVirtual("network", "GGPO", "yes");
+					cfgSetVirtual("network", "ActAsServer", "yes");
 				else
-					cfgSetVirtual("network", "GGPO", "no");
+					cfgSetVirtual("network", "ActAsServer", "no");
 
 				cfgSetVirtual("network", "GGPO", "yes");
 				cfgSetVirtual("network", "Enable", "no");
@@ -160,11 +160,10 @@ void DojoGui::gui_display_ggpo_connect()
 
 				NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
 				if (current_delay != config::GGPODelay.get())
-					config::GGPODelay.set(current_delay);
-
-				SaveSettings();
+					cfgSetVirtual("network", "GGPODelay", std::to_string(current_delay));
 
 				ImGui::CloseCurrentPopup();
+				gui_setState(GuiState::Closed);
 
 				gui_start_game(settings.content.path);
 			}
