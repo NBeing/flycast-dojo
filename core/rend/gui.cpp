@@ -600,7 +600,7 @@ static void gui_display_commands()
    	imguiDriver->displayVmus();
 
     centerNextWindow();
-    ImGui::SetNextWindowSize(ScaledVec2(330, 0));
+    ImGui::SetNextWindowSize(ScaledVec2(430, 0));
 
     ImGui::Begin("##commands", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
@@ -617,7 +617,7 @@ static void gui_display_commands()
     	DisabledScope scope(!savestateAllowed());
 
 		// Load State
-		if (ImGui::Button("Load State", ScaledVec2(110, 50)) && savestateAllowed())
+		if (ImGui::Button("Load State", ScaledVec2(160, 40)) && savestateAllowed())
 		{
 			gui_setState(GuiState::Closed);
 			dc_loadstate(config::SavestateSlot);
@@ -626,7 +626,7 @@ static void gui_display_commands()
 
 		// Slot #
 		std::string slot = "Slot " + std::to_string((int)config::SavestateSlot + 1);
-		if (ImGui::Button(slot.c_str(), ImVec2(80 * settings.display.uiScale - ImGui::GetStyle().FramePadding.x, 50 * settings.display.uiScale)))
+		if (ImGui::Button(slot.c_str(), ImVec2(80 * settings.display.uiScale - ImGui::GetStyle().FramePadding.x, 40 * settings.display.uiScale)))
 			ImGui::OpenPopup("slot_select_popup");
 		if (ImGui::BeginPopup("slot_select_popup"))
 		{
@@ -641,7 +641,7 @@ static void gui_display_commands()
 		ImGui::SameLine();
 
 		// Save State
-		if (ImGui::Button("Save State", ScaledVec2(110, 50)) && savestateAllowed())
+		if (ImGui::Button("Save State", ScaledVec2(160, 40)) && savestateAllowed())
 		{
 			gui_setState(GuiState::Closed);
 			dc_savestate(config::SavestateSlot);
@@ -670,7 +670,7 @@ static void gui_display_commands()
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 		}
 
-		if (ImGui::Button("Load Net State", ScaledVec2(150, 50)))
+		if (ImGui::Button("Load Net State", ScaledVec2(200, 40)))
 		{
 			gui_state = GuiState::Closed;
 			dc_loadstate(net_state_path);
@@ -687,7 +687,7 @@ static void gui_display_commands()
 
 		std::ostringstream watch_text;
 		watch_text << "Controlling Player " << dojo.training.control_player + 1;
-		if (ImGui::Button(watch_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+		if (ImGui::Button(watch_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 		{
 			dojo.training.SwitchPlayer();
 		}
@@ -697,7 +697,7 @@ static void gui_display_commands()
 		std::ostringstream playback_loop_text;
 		playback_loop_text << "Playback Loop ";
 		playback_loop_text << (dojo.training.playback_loop ? "On" : "Off");
-		if (ImGui::Button(playback_loop_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+		if (ImGui::Button(playback_loop_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 		{
 			dojo.training.playback_loop = (dojo.training.playback_loop ? false : true);
 			if (!dojo.training.playback_loop)
@@ -718,7 +718,7 @@ static void gui_display_commands()
 		if (dojo.play_match)
 		{
 			input_display_text << (config::ShowReplayInputDisplay.get() ? "On" : "Off");
-			if (ImGui::Button(input_display_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+			if (ImGui::Button(input_display_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 			{
 				config::ShowReplayInputDisplay = (config::ShowReplayInputDisplay.get() ? false : true);
 			}
@@ -726,7 +726,7 @@ static void gui_display_commands()
 		else
 		{
 			input_display_text << (config::ShowTrainingInputDisplay.get() ? "On" : "Off");
-			if (ImGui::Button(input_display_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+			if (ImGui::Button(input_display_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 			{
 				config::ShowTrainingInputDisplay = (config::ShowTrainingInputDisplay.get() ? false : true);
 			}
@@ -785,7 +785,7 @@ static void gui_display_commands()
 	{
 	// Insert/Eject Disk
 	const char *disk_label = libGDR_GetDiscType() == Open ? "Insert Disk" : "Eject Disk";
-	if (ImGui::Button(disk_label, ScaledVec2(150, 50)))
+	if (ImGui::Button(disk_label, ScaledVec2(200, 40)))
 	{
 		if (libGDR_GetDiscType() == Open)
 		{
@@ -807,14 +807,14 @@ static void gui_display_commands()
 	{
 		DisabledScope scope(settings.network.online);
 
-		if (ImGui::Button("Cheats", ScaledVec2(150, 50)) && !settings.network.online)
+		if (ImGui::Button("Cheats", ScaledVec2(200, 40)) && !settings.network.online)
 			gui_setState(GuiState::Cheats);
 	}
 
 	displayed_button_count++;
 	ImGui::NextColumn();
 
-	if (ImGui::Button("Button Check", ScaledVec2(150, 50)) && !settings.network.online)
+	if (ImGui::Button("Button Check", ScaledVec2(200, 40)) && !settings.network.online)
 	{
 		gui_setState(GuiState::ButtonCheck);
 	}
@@ -824,7 +824,7 @@ static void gui_display_commands()
 
 	std::shared_ptr<GamepadDevice> gamepad = GamepadDevice::GetGamepad(dojo.current_gamepad);
 	std::string quick_map_title = "Quick Map\n(" + gamepad->name() + ")";
-	if (ImGui::Button(quick_map_title.c_str(), ScaledVec2(150, 50)) && !settings.network.online)
+	if (ImGui::Button(quick_map_title.c_str(), ScaledVec2(200, 40)) && !settings.network.online)
 	{
 		dojo_gui.quick_map_settings_call = false;
 		gui_setState(GuiState::QuickPlayerSelect);
@@ -835,7 +835,7 @@ static void gui_display_commands()
 
 /*
 	std::string quick_player_select_title = "Quick Player Select\n(" + gamepad->name() + ")";
-	if (ImGui::Button(quick_player_select_title.c_str(), ScaledVec2(150, 50)) && !settings.network.online)
+	if (ImGui::Button(quick_player_select_title.c_str(), ScaledVec2(200, 40)) && !settings.network.online)
 	{
 		gui_setState(GuiState::QuickPlayerSelect);
 	}
@@ -846,7 +846,7 @@ static void gui_display_commands()
 
 	}
 	// Settings
-	if (ImGui::Button("Settings", ScaledVec2(150, 50)))
+	if (ImGui::Button("Settings", ScaledVec2(200, 40)))
 	{
 		gui_setState(GuiState::Settings);
 	}
@@ -854,7 +854,7 @@ static void gui_display_commands()
 	displayed_button_count++;
 	ImGui::NextColumn();
 
-	if (ImGui::Button("Resume", ScaledVec2(150, 50)))
+	if (ImGui::Button("Resume", ScaledVec2(200, 40)))
 	{
 		GamepadDevice::load_system_mappings();
 		gui_setState(GuiState::Closed);
@@ -872,7 +872,7 @@ static void gui_display_commands()
 	else
 	{
 		ImGui::NextColumn();
-		exit_size = ScaledVec2(150, 50);
+		exit_size = ScaledVec2(200, 40);
 	}
 
 	// Exit
@@ -889,10 +889,12 @@ static void gui_display_commands()
 		snprintf(buffer, 10, "%s", ICON_KI_SOUND_ON);
 	else
 		snprintf(buffer, 10, "%s", ICON_KI_SOUND_OFF);
+	ImGui::PushItemWidth(370);
 	if (OptionSlider(buffer, config::AudioVolume, 0, 100, "Adjust the emulator's audio level"))
 	{
 		config::AudioVolume.calcDbPower();
 	};
+	ImGui::PopItemWidth();
 
 	ImGui::End();
 }
