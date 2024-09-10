@@ -111,7 +111,7 @@ void Training::ToggleRandomPlayback()
 
 void Training::SelectRecordSlot()
 {
-	selected_record_slot = (selected_record_slot + 1) % 3;
+	selected_record_slot = (selected_record_slot + 1) % 6;
 
 	std::ostringstream NoticeStream;
 	NoticeStream << "Selected Input Slot " << selected_record_slot + 1;
