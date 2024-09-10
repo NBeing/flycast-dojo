@@ -227,6 +227,8 @@ void gui_initFonts()
     font_cfg.MergeMode = true;
 	static const ImWchar ki_ranges[] = { ICON_MIN_KI, ICON_MAX_KI, 0 };
     io.Fonts->AddFontFromMemoryCompressedTTF(kenney_icon_font_extended_compressed_data, kenney_icon_font_extended_compressed_size, fontSize, &font_cfg, ki_ranges);
+    static const ImWchar fa_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    io.Fonts->AddFontFromMemoryCompressedTTF(font_awesome_6_compressed_data, font_awesome_6_compressed_size, fontSize, &font_cfg, fa_ranges);
 #ifdef _WIN32
     u32 cp = GetACP();
     std::string fontDir = std::string(nowide::getenv("SYSTEMROOT")) + "\\Fonts\\";
@@ -3195,30 +3197,36 @@ static void gui_display_content()
     //ImGui::Unindent(10 * settings.display.uiScale);
 
     static ImGuiTextFilter filter;
+
+	char settings_txt[64];
+	sprintf(settings_txt, "%s ", ICON_FA_WRENCH);
+
 #if !defined(__ANDROID__) && !defined(TARGET_IPHONE) && !defined(TARGET_UWP) && !defined(__SWITCH__)
 	//ImGui::SameLine(0, 32 * settings.display.uiScale);
-	filter.Draw("##Filter", ImGui::GetContentRegionMax().x - ImGui::CalcTextSize("Settings").x - ImGui::GetStyle().FramePadding.x * 3.0f);
+	filter.Draw("##Filter", ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(settings_txt).x - ImGui::GetStyle().FramePadding.x * 3.0f);
 #endif
     if (gui_state != GuiState::SelectDisk)
     {
 #ifdef TARGET_UWP
     	void gui_load_game();
-		ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize("Settings").x
+		ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(settings_txt).x
 				- ImGui::GetStyle().FramePadding.x * 4.0f  - ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize("Load...").x);
 		if (ImGui::Button("Load..."))
 			gui_load_game();
 		ImGui::SameLine();
 #elif defined(__SWITCH__)
-		ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize("Settings").x
+		ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(settings_txt).x
 				- ImGui::GetStyle().FramePadding.x * 4.0f  - ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize("Exit").x);
 		if (ImGui::Button("Exit"))
 			dc_exit();
 		ImGui::SameLine();
 #else
-		ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize("Settings").x - ImGui::GetStyle().FramePadding.x * 2.0f);
+		ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(settings_txt).x - ImGui::GetStyle().FramePadding.x * 2.0f);
 #endif
-		if (ImGui::Button("Settings"))
-			gui_setState(GuiState::Settings);
+
+        if (ImGui::Button(settings_txt))
+            gui_setState(GuiState::Settings);
+        gameTooltip("Settings");
     }
     ImGui::PopStyleVar();
 
@@ -3340,7 +3348,9 @@ static void gui_display_content()
 
 					if (ImGui::BeginPopupContextItem(popup_name.c_str()))
 					{
-						if (ImGui::MenuItem("Launch Game"))
+						char launch_txt[64];
+						sprintf(launch_txt, " %s  Launch Game", ICON_FA_CIRCLE_PLAY);
+						if (ImGui::MenuItem(launch_txt))
 						{
 							if (gui_state == GuiState::SelectDisk)
 							{
@@ -3366,7 +3376,9 @@ static void gui_display_content()
 								break;
 							}
 						}
-						if (ImGui::MenuItem("Netplay Session"))
+						char netplay_txt[64];
+						sprintf(netplay_txt, " %s  Netplay Session", ICON_FA_BOLT);
+						if (ImGui::MenuItem(netplay_txt))
 						{
 							cfgSetVirtual("dojo", "Training", "no");
 							settings.content.path = game.path;
@@ -3374,7 +3386,9 @@ static void gui_display_content()
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
 							gui_setState(GuiState::GGPOConnect);
 						}
-						if (ImGui::MenuItem("Training Mode"))
+						char train_txt[64];
+						sprintf(train_txt, "%s  Training Mode", ICON_FA_DUMBBELL);
+						if (ImGui::MenuItem(train_txt))
 						{
 							cfgSetVirtual("dojo", "Training", "yes");
 

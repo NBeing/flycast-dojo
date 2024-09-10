@@ -19,6 +19,8 @@
 #pragma once
 #include "types.h"
 #include "dojo/kenney_icon_font_extended.h"
+#include "dojo/IconsFontAwesome6.h"
+#include "dojo/font_awesome_6_compressed.h"
 
 #include <string>
 
