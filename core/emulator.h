@@ -44,6 +44,8 @@ void dc_loadstate(Deserializer& deser);
 std::string get_savestate_file_path(int index, bool writable);
 std::string get_net_savestate_file_path(bool writable);
 
+extern std::string get_game_name();
+
 enum class Event {
 	Start,
 	Pause,

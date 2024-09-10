@@ -870,3 +870,235 @@ void Dojo::ResetInputDisplay()
 		displayed_num_dirs[p].clear();
 	}
 }
+
+void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buffer, int *offset)
+{
+	// NOTICE_LOG(NETWORK, "CMD %u", cmd);
+	if (cmd == 0)
+		return;
+
+	if (cmd == SPECTATE_START)
+	{
+		unsigned int v = MessageReader::ReadInt((const char *)buffer, offset);
+		std::string GameName = MessageReader::ReadString((const char *)buffer, offset);
+		std::string PlayerName = MessageReader::ReadString((const char *)buffer, offset);
+		std::string OpponentName = MessageReader::ReadString((const char *)buffer, offset);
+		// std::string Quark = MessageReader::ReadString((const char*)buffer, offset);
+		// std::string MatchCode = MessageReader::ReadString((const char*)buffer, offset);
+		unsigned int analog = MessageReader::ReadInt((const char *)buffer, offset);
+		unsigned int precise_triggers = MessageReader::ReadInt((const char *)buffer, offset);
+		unsigned int ggpo = MessageReader::ReadInt((const char *)buffer, offset);
+
+		replay.version = v;
+		game_name = GameName;
+		settings.content.path = dojo.GetEntryPath(dojo.game_name);
+		// config::Quark = Quark;
+		// config::MatchCode = MatchCode;
+		precise_triggers = (bool)precise_triggers;
+		if (ggpo)
+			replay.ggpo_session = true;
+
+		NOTICE_LOG(NETWORK, "v %u GameName %s PlayerName %s OpponentName %s analog %d", v, GameName.data(), PlayerName.data(), OpponentName.data(), analog);
+
+		// settings.content.path = GetEntryPath(GameName);
+		// std::string entry_path =  GetEntryPath(game_name);
+		// settings.content.path = entry_path + ".zip";
+		// NOTICE_LOG(NETWORK, "ENTRY %s", settings.content.path.data());
+
+		// if (version >= 3)
+		//{
+		//	settings.dojo.state_md5 = MessageReader::ReadString((const char*)buffer, offset);
+		//	settings.dojo.state_commit = MessageReader::ReadString((const char*)buffer, offset);
+		// }
+
+		std::cout << "Replay Version: " << replay.version << std::endl;
+
+		if (replay.version >= 2)
+		{
+			replay.analog = analog;
+			// last_consecutive_common_frame = 0;
+			frame_number = 0;
+		}
+		else
+			replay.analog = 0;
+
+		// std::cout << "REPLAY VERSION " << version << "ANALOG " << analog << std::endl;
+
+		std::cout << "Game: " << GameName << std::endl;
+
+		// if (!received_player_info)
+		//{
+		//	settings.dojo.PlayerName = PlayerName;
+		//	settings.dojo.OpponentName = OpponentName;
+		//	AssignPlayerNames();
+		//	std::cout << "Player: " << PlayerName << std::endl;
+		//	std::cout << "Opponent: " << OpponentName << std::endl;
+		// }
+
+		// std::cout << "Quark: " << Quark << std::endl;
+		// std::cout << "Match Code: " << MatchCode << std::endl;
+
+		// if (version == 3)
+		//{
+		//	std::cout << "Savestate MD5: " << settings.dojo.state_md5 << std::endl;
+		//	std::cout << "Savestate Commit SHA: " << settings.dojo.state_commit << std::endl;
+		// }
+
+		// dojo.receiver_header_read = true;
+		// dojo.receiver_start_read = true;
+	}
+	else if (cmd == PLAYER_INFO)
+	{
+		auto p1_info = MessageReader::ReadPlayerInfo(buffer, offset);
+		auto p2_info = MessageReader::ReadPlayerInfo(buffer, offset);
+
+		auto player_name = p1_info[0];
+		auto opponent_name = p2_info[0];
+
+		std::cout << "P1: " << player_name << std::endl;
+		std::cout << "P2: " << opponent_name << std::endl;
+
+		settings.dojo.PlayerName = player_name;
+		settings.dojo.OpponentName = opponent_name;
+
+		// received_player_info = true;
+
+		// AssignPlayerNames();
+	}
+	else if (cmd == MAPLE_BUFFER)
+	{
+		unsigned int frame_size = MessageReader::ReadInt((const char *)buffer, offset);
+
+		// read frames
+		while ((unsigned int)*offset < body_size)
+		{
+			std::string frame = MessageReader::ReadContinuousData((const char *)buffer, offset, frame_size);
+
+			// if (memcmp(frame.data(), { 0 }, FRAME_SIZE) == 0)
+			if (memcmp(frame.data(), "00000000000000000000", MAPLE_FRAME_SIZE) == 0)
+			{
+				// dojo.receiver_ended = true;
+			}
+			else
+			{
+				u32 frame_num = replay.GetFrameNumber((u8 *)frame.data());
+				// NOTICE_LOG(NETWORK, "FRAME NUM %u", frame_num);
+				std::string maple_input(frame.data() + 4, (MAPLE_FRAME_SIZE - 4));
+				std::vector<u8> inputs(maple_input.begin(), maple_input.end());
+
+				session_inputs[frame_num] = inputs;
+
+				/*
+				std::cout << "GGPO FRAME " << frame_num << " ";
+
+				for (int i = 0; i < (MAPLE_FRAME_SIZE - 4); i++)
+				{
+				  std::bitset<8> b(inputs[i]);
+				  std::cout << b.to_string();
+				}
+
+				std::cout << std::endl;
+				*/
+
+				// buffer stream
+				/*
+				if (dojo.session_inputs.size() == config::RxFrameBuffer.get() &&
+					dojo.frame_number < dojo.last_consecutive_common_frame)
+					dojo.resume();
+					*/
+			}
+		}
+	}
+	else if (cmd == PLAYER_WIN)
+	{
+		// u32 player = MessageReader::ReadPlayerWin(buffer, offset);
+
+		// if (player == 0)
+		//	final_p1_wins++;
+		// else if (player == 1)
+		//	final_p2_wins++;
+	}
+	else if (cmd == RECORD_BUFFER)
+	{
+		unsigned int slot_index = MessageReader::ReadInt((const char*)buffer, offset);
+		unsigned int slot_size = MessageReader::ReadInt((const char*)buffer, offset);
+
+		training.record_slot[slot_index].clear();
+		training.recorded_slots.insert(slot_index);
+
+		while (*offset < body_size)
+		{
+			std::string frame = MessageReader::ReadContinuousData((const char*)buffer, offset, MAPLE_FRAME_SIZE);
+			training.record_slot[slot_index].push_back(frame);
+		}
+	}
+}
+
+void Dojo::SaveRecordSlotsFile()
+{
+	std::string rec_dir = get_writable_data_path("recordings");
+	std::string game_rec_dir = rec_dir + "/" + get_game_name();
+
+	if (!std::filesystem::exists(game_rec_dir))
+		std::filesystem::create_directories(game_rec_dir);
+
+	std::string filename = game_rec_dir + "/" + get_game_name() + "_" + std::to_string(config::RecSlotFile.get()) + ".rec";
+
+	std::ofstream fout(filename,
+			std::ios::out | std::ios::binary | std::ios_base::app);
+
+	for (unsigned int i : training.recorded_slots)
+	{
+		MessageWriter record_msg;
+		record_msg.AppendHeader(0, RECORD_BUFFER);
+		record_msg.AppendInt(i);
+		record_msg.AppendInt(training.record_slot[i].size());
+
+		for (auto s: training.record_slot[i])
+		{
+			record_msg.AppendContinuousData(s.data(), MAPLE_FRAME_SIZE);
+		}
+
+		std::vector<unsigned char> message = record_msg.Msg();
+		fout.write((const char*)&message[0], message.size());
+	}
+
+	fout.close();
+}
+
+void Dojo::LoadRecordSlotsFile()
+{
+	std::string rec_dir = get_writable_data_path("recordings");
+	std::string game_rec_dir = rec_dir + "/" + get_game_name();
+	std::string filename = game_rec_dir + "/" + get_game_name() + "_" + std::to_string(config::RecSlotFile.get()) + ".rec";
+
+	if (!std::filesystem::exists(filename))
+		return;
+
+	std::ifstream fin(filename,
+		std::ios::in | std::ios::binary);
+
+	char header_buf[HEADER_LEN] = { 0 };
+	std::vector<unsigned char> body_buf;
+
+	training.recorded_slots.clear();
+
+	while (fin)
+	{
+		// read header
+		memset((void*)header_buf, 0, HEADER_LEN);
+		fin.read(header_buf, HEADER_LEN);
+
+		unsigned int body_size = HeaderReader::GetSize((unsigned char*)header_buf);
+		unsigned int seq = HeaderReader::GetSeq((unsigned char*)header_buf);
+		unsigned int cmd = HeaderReader::GetCmd((unsigned char*)header_buf);
+
+		// read body
+		body_buf.resize(body_size);
+		fin.read((char*)body_buf.data(), body_size);
+
+		int offset = 0;
+
+		ProcessBody(cmd, body_size, (const char*)body_buf.data(), &offset);
+	}
+}

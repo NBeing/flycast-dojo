@@ -552,6 +552,7 @@ extern Option<bool> ReplayPositionOverlay;
 extern Option<int> Delay;
 extern Option<bool> HideRandomInputSlot;
 extern Option<bool> RecordOnFirstInput;
+extern Option<int, false> RecSlotFile;
 
 extern Option<bool> ShowTrainingInputDisplay;
 extern Option<bool> ShowReplayInputDisplay;

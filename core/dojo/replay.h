@@ -23,7 +23,6 @@ public:
     void LoadReplayFileV1(std::string path);
 
     u32 GetFrameNumber(u8 *data);
-    void ProcessBody(unsigned int cmd, unsigned int body_size, const char *buffer, int *offset);
 
     bool replay_loaded = false;
 

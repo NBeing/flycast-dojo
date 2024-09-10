@@ -144,6 +144,11 @@ public:
 	std::set<int> button_check_pressed[2];
 
 	std::string current_gamepad;
+
+	void ProcessBody(unsigned int cmd, unsigned int body_size, const char *buffer, int *offset);
+
+	void SaveRecordSlotsFile();
+	void LoadRecordSlotsFile();
 };
 
 extern Dojo dojo;

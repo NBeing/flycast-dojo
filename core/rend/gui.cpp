@@ -654,6 +654,41 @@ static void gui_display_commands()
 		}
     }
 
+	if (cfgLoadBool("dojo", "Training", false))
+	{
+		if (ImGui::Button("Load Record Slots", ScaledVec2(160, 40)))
+		{
+			dojo.LoadRecordSlotsFile();
+		}
+
+		ImGui::SameLine();
+
+		// Slot #
+		char film_ico_txt[64];
+		sprintf(film_ico_txt, "%s  ", ICON_FA_FILM);
+		std::string slot = std::string(film_ico_txt) + std::to_string((int)config::RecSlotFile + 1);
+		if (ImGui::Button(slot.c_str(), ImVec2(80 * settings.display.uiScale - ImGui::GetStyle().FramePadding.x, 40 * settings.display.uiScale)))
+			ImGui::OpenPopup("rec_slot_select_popup");
+		if (ImGui::BeginPopup("rec_slot_select_popup"))
+		{
+			for (int i = 0; i < 10; i++)
+				if (ImGui::Selectable(std::to_string(i + 1).c_str(), config::RecSlotFile == i, 0,
+						ImVec2(ImGui::CalcTextSize("File 8").x, 0))) {
+					config::RecSlotFile = i;
+					SaveSettings();
+				}
+			ImGui::EndPopup();
+		}
+		ImGui::SameLine();
+
+		if (ImGui::Button("Save Record Slots", ScaledVec2(160, 40)))
+		{
+			dojo.SaveRecordSlotsFile();
+		}
+
+		ImGui::NextColumn();
+	}
+
 	ImGui::Columns(2, "buttons", false);
 
 	// track if # of buttons are even or odd for exit button size
