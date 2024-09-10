@@ -65,6 +65,8 @@
 #include "dojo/dojo_gui.h"
 #include "dojo/net_beacon.h"
 
+#include "cheats.h"
+
 DojoGui dojo_gui;
 
 static bool game_started;
@@ -627,7 +629,9 @@ static void gui_display_commands()
 		ImGui::SameLine();
 
 		// Slot #
-		std::string slot = "Slot " + std::to_string((int)config::SavestateSlot + 1);
+		char file_ico_txt[64];
+		sprintf(file_ico_txt, "%s  ", ICON_FA_FLOPPY_DISK);
+		std::string slot = std::string(file_ico_txt) + std::to_string((int)config::SavestateSlot + 1);
 		if (ImGui::Button(slot.c_str(), ImVec2(80 * settings.display.uiScale - ImGui::GetStyle().FramePadding.x, 40 * settings.display.uiScale)))
 			ImGui::OpenPopup("slot_select_popup");
 		if (ImGui::BeginPopup("slot_select_popup"))
@@ -672,7 +676,9 @@ static void gui_display_commands()
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
 		}
 
-		if (ImGui::Button("Load Net State", ScaledVec2(200, 40)))
+		char net_state_txt[64];
+		sprintf(net_state_txt, "%s  Load Net State", ICON_FA_GLOBE);
+		if (ImGui::Button(net_state_txt, ScaledVec2(200, 40)))
 		{
 			gui_state = GuiState::Closed;
 			dc_loadstate(net_state_path);
@@ -687,8 +693,14 @@ static void gui_display_commands()
 		displayed_button_count++;
 		ImGui::NextColumn();
 
+		char player_ico_txt[64];
+		if (dojo.training.control_player == 0)
+			sprintf(player_ico_txt, "%s ", ICON_FA_USER_LARGE);
+		else
+			sprintf(player_ico_txt, "%s ", ICON_FA_USER_GROUP);
+
 		std::ostringstream watch_text;
-		watch_text << "Controlling Player " << dojo.training.control_player + 1;
+		watch_text << std::string(player_ico_txt) << " Control Player " << dojo.training.control_player + 1;
 		if (ImGui::Button(watch_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 		{
 			dojo.training.SwitchPlayer();
@@ -696,8 +708,14 @@ static void gui_display_commands()
 		displayed_button_count++;
 		ImGui::NextColumn();
 
+		char loop_ico_txt[64];
+		if (dojo.training.playback_loop)
+			sprintf(loop_ico_txt, "%s  ", ICON_FA_REPEAT);
+		else
+			sprintf(loop_ico_txt, "%s  ", ICON_FA_ARROW_RIGHT);
+
 		std::ostringstream playback_loop_text;
-		playback_loop_text << "Playback Loop ";
+		playback_loop_text << std::string(loop_ico_txt) << "Playback Loop ";
 		playback_loop_text << (dojo.training.playback_loop ? "On" : "Off");
 		if (ImGui::Button(playback_loop_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 		{
@@ -714,8 +732,15 @@ static void gui_display_commands()
 
 	if (config::Training && config::Delay == 0 || dojo.play_match)
 	{
+		char disp_ico_txt[64];
+		if ((dojo.play_match && config::ShowReplayInputDisplay.get()) ||
+			(config::Training && config::ShowTrainingInputDisplay.get()))
+			sprintf(disp_ico_txt, "%s  ", ICON_FA_EYE);
+		else
+			sprintf(disp_ico_txt, "%s  ", ICON_FA_EYE_SLASH);
+
 		std::ostringstream input_display_text;
-		input_display_text << "Input Display ";
+		input_display_text << std::string(disp_ico_txt) << "Input Display ";
 
 		if (dojo.play_match)
 		{
@@ -743,9 +768,14 @@ static void gui_display_commands()
 #if !defined(__APPLE__)
 	if (cfgLoadBool("dojo", "Training", false) && dojo.GetTrainingLua() != "")
 	{
-		std::ostringstream lua_display_text;
-		lua_display_text << "Training Lua ";
+		char lua_ico_txt[64];
+		if (config::EnableTrainingLua.get())
+			sprintf(lua_ico_txt, "%s  ", ICON_FA_MOON);
+		else
+			sprintf(lua_ico_txt, "%s  ", ICON_FA_CLOUD);
 
+		std::ostringstream lua_display_text;
+		lua_display_text << std::string(lua_ico_txt) << "Training Lua ";
 		lua_display_text << (config::EnableTrainingLua.get() ? "On" : "Off");
 		if (ImGui::Button(lua_display_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
 		{
@@ -786,8 +816,12 @@ static void gui_display_commands()
 	if (!cfgLoadBool("dojo", "Training", false))
 	{
 	// Insert/Eject Disk
-	const char *disk_label = libGDR_GetDiscType() == Open ? "Insert Disk" : "Eject Disk";
-	if (ImGui::Button(disk_label, ScaledVec2(200, 40)))
+	char disc_label_txt[64];\
+	if (libGDR_GetDiscType() == Open)
+		sprintf(disc_label_txt, "%s  Insert Disc", ICON_FA_COMPACT_DISC);
+	else
+		sprintf(disc_label_txt, "%s  Eject Disc", ICON_FA_EJECT);
+	if (ImGui::Button(disc_label_txt, ScaledVec2(200, 40)))
 	{
 		if (libGDR_GetDiscType() == Open)
 		{
@@ -809,14 +843,24 @@ static void gui_display_commands()
 	{
 		DisabledScope scope(settings.network.online);
 
-		if (ImGui::Button("Cheats", ScaledVec2(200, 40)) && !settings.network.online)
+		char cheats_txt[64];
+		if (cheatManager.enabledCheatCount() == 0)
+			sprintf(cheats_txt, "%s  Cheats Disabled", ICON_FA_FLASK);
+		else if (cheatManager.enabledCheatCount() == 1)
+			sprintf(cheats_txt, "%s  %d Cheat Enabled", ICON_FA_FLASK_VIAL, cheatManager.enabledCheatCount());
+		else
+			sprintf(cheats_txt, "%s  %d Cheats Enabled", ICON_FA_FLASK_VIAL, cheatManager.enabledCheatCount());
+
+		if (ImGui::Button(cheats_txt, ScaledVec2(200, 40)) && !settings.network.online)
 			gui_setState(GuiState::Cheats);
 	}
 
 	displayed_button_count++;
 	ImGui::NextColumn();
 
-	if (ImGui::Button("Button Check", ScaledVec2(200, 40)) && !settings.network.online)
+	char button_check_txt[64];
+	sprintf(button_check_txt, "%s  Button Check", ICON_FA_BULLSEYE);
+	if (ImGui::Button(button_check_txt, ScaledVec2(200, 40)) && !settings.network.online)
 	{
 		gui_setState(GuiState::ButtonCheck);
 	}
@@ -824,8 +868,10 @@ static void gui_display_commands()
 	displayed_button_count++;
 	ImGui::NextColumn();
 
+	char quick_ico_txt[64];
+	sprintf(quick_ico_txt, "%s  ", ICON_FA_GAMEPAD);
 	std::shared_ptr<GamepadDevice> gamepad = GamepadDevice::GetGamepad(dojo.current_gamepad);
-	std::string quick_map_title = "Quick Map\n(" + gamepad->name() + ")";
+	std::string quick_map_title = std::string(quick_ico_txt) + "Quick Map\n(" + gamepad->name() + ")";
 	if (ImGui::Button(quick_map_title.c_str(), ScaledVec2(200, 40)) && !settings.network.online)
 	{
 		dojo_gui.quick_map_settings_call = false;
@@ -848,7 +894,9 @@ static void gui_display_commands()
 
 	}
 	// Settings
-	if (ImGui::Button("Settings", ScaledVec2(200, 40)))
+	char settings_txt[64];
+	sprintf(settings_txt, "%s  Settings", ICON_FA_WRENCH);
+	if (ImGui::Button(settings_txt, ScaledVec2(200, 40)))
 	{
 		gui_setState(GuiState::Settings);
 	}
@@ -856,7 +904,9 @@ static void gui_display_commands()
 	displayed_button_count++;
 	ImGui::NextColumn();
 
-	if (ImGui::Button("Resume", ScaledVec2(200, 40)))
+	char resume_txt[64];
+	sprintf(resume_txt, "%s  Resume", ICON_FA_PLAY);
+	if (ImGui::Button(resume_txt, ScaledVec2(200, 40)))
 	{
 		GamepadDevice::load_system_mappings();
 		gui_setState(GuiState::Closed);
@@ -869,7 +919,7 @@ static void gui_display_commands()
 	if (displayed_button_count % 2 == 0)
 	{
 		ImGui::Columns(1, nullptr, false);
-		exit_size = ScaledVec2(300, 50) + ImVec2(ImGui::GetStyle().ColumnsMinSpacing + ImGui::GetStyle().FramePadding.x * 2 - 1, 0);
+		exit_size = ScaledVec2(400, 40) + ImVec2(ImGui::GetStyle().ColumnsMinSpacing + ImGui::GetStyle().FramePadding.x * 2 - 1, 0);
 	}
 	else
 	{
@@ -878,7 +928,13 @@ static void gui_display_commands()
 	}
 
 	// Exit
-	if (ImGui::Button(commandLineStart ? "Exit" : "Close Game", exit_size))
+	char exit_txt[64];
+	if (commandLineStart)
+		sprintf(exit_txt, "%s  Exit", ICON_FA_DOOR_OPEN);
+	else
+		sprintf(exit_txt, "%s  Close Game", ICON_FA_DOOR_OPEN);
+
+	if (ImGui::Button(exit_txt, exit_size))
 	{
 		gui_stop_game();
 	}

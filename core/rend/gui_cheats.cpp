@@ -94,8 +94,8 @@ void gui_cheats()
     ImGui::Indent(10 * settings.display.uiScale);
     ImGui::Text("CHEATS");
 
-	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize("Add").x  - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x * 6.f
-    	- ImGui::CalcTextSize("Load").x - ImGui::GetStyle().ItemSpacing.x * 2);
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize("Add").x  - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x * 8.f
+    	- ImGui::CalcTextSize("Load").x - ImGui::CalcTextSize("Unload").x - ImGui::GetStyle().ItemSpacing.x * 6);
 	if (ImGui::Button("Add"))
 		addingCheat = true;
 	ImGui::SameLine();
@@ -112,6 +112,11 @@ void gui_cheats()
 		}, true, "cht");
 #endif
 
+	ImGui::SameLine();
+	if (ImGui::Button("Unload"))
+	{
+		cheatManager.reset();
+	}
 	ImGui::SameLine();
 	if (ImGui::Button("Close"))
 		gui_setState(GuiState::Commands);
