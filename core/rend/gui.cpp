@@ -1147,6 +1147,9 @@ const Mapping dcButtons[] = {
 	{ EMU_BTN_PLAY_1, "Play Slot 2" },
 	{ EMU_BTN_PLAY_2, "Play Slot 3" },
 	{ EMU_BTN_PLAY_RND, "Play Random Slot" },
+	{ EMU_BTN_SELECT_SLOT, "Select Input Slot" },
+	{ EMU_BTN_RECORD_SLOT, "Record Selected Input Slot" },
+	{ EMU_BTN_PLAY_SLOT, "Play Selected Input Slot" },
 
 	// button combinations
 	{ EMU_BTN_NONE, "Macros" },
@@ -1233,6 +1236,9 @@ const Mapping arcadeButtons[] = {
 	{ EMU_BTN_PLAY_1, "Play Slot 2" },
 	{ EMU_BTN_PLAY_2, "Play Slot 3" },
 	{ EMU_BTN_PLAY_RND, "Play Random Slot" },
+	{ EMU_BTN_SELECT_SLOT, "Select Input Slot" },
+	{ EMU_BTN_RECORD_SLOT, "Record Selected Input Slot" },
+	{ EMU_BTN_PLAY_SLOT, "Play Selected Input Slot" },
 
 	// button combinations
 	{ EMU_BTN_NONE, "Macros" },

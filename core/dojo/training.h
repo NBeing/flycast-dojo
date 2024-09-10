@@ -28,6 +28,12 @@ public:
 	void PlayRecording(int slot);
 	void Reset();
 
+	int selected_record_slot = 0;
+
+	void SelectRecordSlot();
+	void ToggleSelectedRecording();
+	void ToggleSelectedPlayback();
+
 	std::vector<u8> FilterPlayerInput(int player, int size, unsigned char *bits);
 	std::vector<u8> SwapPlayerInputs(int size, unsigned char *bits);
 };

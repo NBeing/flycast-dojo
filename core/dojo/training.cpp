@@ -109,6 +109,25 @@ void Training::ToggleRandomPlayback()
 	TogglePlayback(current_record_slot, config::HideRandomInputSlot.get());
 }
 
+void Training::SelectRecordSlot()
+{
+	selected_record_slot = (selected_record_slot + 1) % 3;
+
+	std::ostringstream NoticeStream;
+	NoticeStream << "Selected Input Slot " << selected_record_slot + 1;
+	gui_display_notification(NoticeStream.str().data(), 2000);
+}
+
+void Training::ToggleSelectedRecording()
+{
+	ToggleRecording(selected_record_slot);
+}
+
+void Training::ToggleSelectedPlayback()
+{
+	TogglePlayback(selected_record_slot, false);
+}
+
 void Training::PlayRecording(int slot)
 {
 	if (!recording && !playing_input)

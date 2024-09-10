@@ -61,6 +61,9 @@ enum DreamcastKey
 	EMU_BTN_RECORD_2,
 	EMU_BTN_PLAY_2,
 	EMU_BTN_PLAY_RND,
+	EMU_BTN_SELECT_SLOT,
+	EMU_BTN_PLAY_SLOT,
+	EMU_BTN_RECORD_SLOT,
 
 	// button combinations
 	EMU_CMB_X_Y_A_B,

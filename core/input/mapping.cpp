@@ -70,6 +70,9 @@ button_list[] =
 	{ EMU_BTN_RECORD_2, "emulator", "btn_record_2_" },
 	{ EMU_BTN_PLAY_2, "emulator", "btn_play_2_" },
 	{ EMU_BTN_PLAY_RND, "emulator", "btn_play_rnd_" },
+	{ EMU_BTN_SELECT_SLOT, "emulator", "btn_select_slot_" },
+	{ EMU_BTN_PLAY_SLOT, "emulator", "btn_play_slot_" },
+	{ EMU_BTN_RECORD_SLOT, "emulator", "btn_record_slot_" },
 
 	// button combinations
 	{ EMU_CMB_X_Y_A_B, "emulator", "cmb_x_y_a_b" },

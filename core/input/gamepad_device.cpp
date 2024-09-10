@@ -154,6 +154,24 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 				dojo.training.ToggleRandomPlayback();
 			}
 			break;
+		case EMU_BTN_SELECT_SLOT:
+			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			{
+				dojo.training.SelectRecordSlot();
+			}
+			break;
+		case EMU_BTN_PLAY_SLOT:
+			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			{
+				dojo.training.ToggleSelectedPlayback();
+			}
+			break;
+		case EMU_BTN_RECORD_SLOT:
+			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			{
+				dojo.training.ToggleSelectedRecording();
+			}
+			break;
 
 		// button combinations
 		case EMU_CMB_X_Y_A_B:
