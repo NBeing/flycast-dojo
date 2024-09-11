@@ -3908,7 +3908,7 @@ void gui_display_osd()
 		}
 
 		if (config::Training && config::ShowTrainingInputDisplay ||
-			config::Replay && config::ShowReplayInputDisplay)
+			dojo.play_match && config::ShowReplayInputDisplay)
 			dojo_gui.show_last_inputs_overlay();
 
 		lua::overlay();

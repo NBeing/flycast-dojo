@@ -611,7 +611,7 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	}
 
 	if (config::Training && config::ShowTrainingInputDisplay ||
-		config::Replay && config::ShowReplayInputDisplay)
+		dojo.play_match && config::ShowReplayInputDisplay)
 		AddToInputDisplay(inputState);
 
 	PrintMapleInputState(inputState);
