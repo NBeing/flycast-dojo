@@ -555,6 +555,9 @@ void gui_start_game(const std::string& path)
 	dojo.training.Reset();
 	dojo.ResetInputDisplay();
 
+	if (config::Replay)
+		dojo.replay.Init();
+
 	scanner.stop();
 	gui_setState(GuiState::Loading);
 	gameLoader.load(path);
@@ -3458,7 +3461,7 @@ static void gui_display_content()
 					if (ImGui::BeginPopupContextItem(popup_name.c_str()))
 					{
 						char launch_txt[64];
-						sprintf(launch_txt, " %s  Launch Game", ICON_FA_CIRCLE_PLAY);
+						sprintf(launch_txt, "  %s   Launch Game", ICON_FA_CIRCLE_PLAY);
 						if (ImGui::MenuItem(launch_txt))
 						{
 							if (gui_state == GuiState::SelectDisk)
@@ -3486,7 +3489,7 @@ static void gui_display_content()
 							}
 						}
 						char netplay_txt[64];
-						sprintf(netplay_txt, " %s  Netplay Session", ICON_FA_BOLT);
+						sprintf(netplay_txt, "  %s   Netplay Session", ICON_FA_BOLT);
 						if (ImGui::MenuItem(netplay_txt))
 						{
 							cfgSetVirtual("dojo", "Training", "no");
@@ -3496,7 +3499,7 @@ static void gui_display_content()
 							gui_setState(GuiState::GGPOConnect);
 						}
 						char train_txt[64];
-						sprintf(train_txt, "%s  Training Mode", ICON_FA_DUMBBELL);
+						sprintf(train_txt, " %s   Training Mode", ICON_FA_DUMBBELL);
 						if (ImGui::MenuItem(train_txt))
 						{
 							cfgSetVirtual("dojo", "Training", "yes");
@@ -3522,6 +3525,15 @@ static void gui_display_content()
 								ImGui::PopID();
 								break;
 							}
+						}
+						char replay_txt[64];
+						sprintf(replay_txt, " %s   Watch Replays", ICON_FA_EYE);
+						if (ImGui::MenuItem(replay_txt))
+						{
+							settings.content.path = game.path;
+							auto name_ext_loc = game.fileName.find_last_of('.');
+							dojo.game_name = game.fileName.substr(0, name_ext_loc);
+							gui_setState(GuiState::Replays);
 						}
 						ImGui::EndPopup();
 					}
@@ -3807,6 +3819,9 @@ void gui_display_ui()
 		break;
 	case GuiState::QuickSelectPlatform:
 		dojo_gui.gui_display_select_platform();
+		break;
+	case GuiState::Replays:
+		dojo_gui.gui_display_replays();
 		break;
 	default:
 		die("Unknown UI state");

@@ -41,6 +41,8 @@ public:
 	void gui_display_test_game();
 	void gui_display_select_platform();
 
+	void gui_display_replays();
+
 	bool test_game_screen = false;
 
 	int current_map_button = 0;

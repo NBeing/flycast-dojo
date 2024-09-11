@@ -121,8 +121,11 @@ std::string Replay::CreateReplayFile()
 
 std::string Replay::CreateReplayFile(std::string rom_name, int version)
 {
-	if (!std::filesystem::exists(get_writable_data_path("replays")))
-		std::filesystem::create_directory(get_writable_data_path("replays"));
+	auto replays_dir = std::filesystem::path(get_writable_data_path("replays"));
+	auto game_replays_dir = replays_dir / get_game_name();
+
+	if (!std::filesystem::exists(game_replays_dir))
+		std::filesystem::create_directories(game_replays_dir);
 
 	// create timestamp string, iso8601 format
 	std::string timestamp = currentISO8601TimeUTC();
@@ -139,7 +142,7 @@ std::string Replay::CreateReplayFile(std::string rom_name, int version)
 		replay_name.append(".flyr");
 
 	std::filesystem::path replay_path =
-		std::filesystem::path(get_writable_data_path("replays")) / replay_name;
+		std::filesystem::path(game_replays_dir) / replay_name;
 
 	// create replay file itself
 	std::ofstream file;

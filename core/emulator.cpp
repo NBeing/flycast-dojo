@@ -584,7 +584,7 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 			else if (config::AutoLoadState && !NaomiNetworkSupported() && !settings.naomi.multiboard)
 				dc_loadstate(config::SavestateSlot);
 
-			if (config::RecordMatches && !config::Replay)
+			if (!dojo.play_match && config::RecordMatches)
 				dojo.replay.StartRecording();
 		}
 		EventManager::event(Event::Start);

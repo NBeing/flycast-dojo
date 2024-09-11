@@ -75,7 +75,8 @@ enum class GuiState {
 	TestGame,
 	QuickMap,
 	QuickPlayerSelect,
-	QuickSelectPlatform
+	QuickSelectPlatform,
+	Replays
 };
 extern GuiState gui_state;
 

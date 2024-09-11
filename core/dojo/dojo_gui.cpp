@@ -1372,3 +1372,60 @@ void DojoGui::gui_display_select_platform()
 
 	ImGui::End();
 }
+
+void DojoGui::gui_display_replays()
+{
+	char replays_txt[128];
+	sprintf(replays_txt, "%s Replays - %s ", ICON_FA_FILM, dojo.game_name.c_str());
+	ImGui::OpenPopup(replays_txt);
+	ImGui::SetNextWindowSize(ImVec2(400, 300));
+	if (ImGui::BeginPopupModal(replays_txt, NULL, ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		if (ImGui::BeginTabBar("GGPOTabBar", ImGuiTabBarFlags_None))
+		{
+			bool is_selected;
+
+			char local_txt[128];
+			sprintf(local_txt, " %s Local ", ICON_FA_HARD_DRIVE);
+			if (ImGui::BeginTabItem(local_txt))
+			{
+				auto replays_dir = std::filesystem::path(get_writable_data_path("replays"));
+				auto game_replays_dir = replays_dir / get_game_name();
+
+				if (!std::filesystem::exists(game_replays_dir))
+					std::filesystem::create_directories(game_replays_dir);
+
+				if (ImGui::BeginChild("Replays##LocalReplays", ImVec2(0, 200.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
+				{
+					for (const auto& entry : std::filesystem::directory_iterator(game_replays_dir))
+					{
+						std::string filename = entry.path().filename().string();
+						if (ImGui::Selectable(filename.data(), &is_selected))
+						{
+							config::Replay = true;
+							config::ReplayFilename = entry.path().string();
+							ImGui::CloseCurrentPopup();
+							gui_setState(GuiState::Main);
+						}
+					}
+					ImGui::EndChild();
+				}
+
+				ImGui::EndTabItem();
+			}
+
+			char close_btn_txt[128];
+			sprintf(close_btn_txt, "%s Close", ICON_FA_CIRCLE_XMARK);
+
+			if (ImGui::Button(close_btn_txt))
+			{
+				settings.content.path = "";
+				dojo.game_name = "";
+				ImGui::CloseCurrentPopup();
+				gui_setState(GuiState::Main);
+			}
+		}
+
+		ImGui::EndPopup();
+	}
+}
