@@ -236,13 +236,19 @@ void DojoGui::gui_display_disconnected()
 void DojoGui::gui_display_replay_end()
 {
 	ImGui::SetNextWindowPos(ImVec2(settings.display.width / 2.f, settings.display.height / 2.f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(330 * settings.display.uiScale, 0));
+	ImGui::SetNextWindowSize(ImVec2(130 * settings.display.uiScale, 0));
 
 	ImGui::Begin("##replay_end", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
 	ImGui::Text("End of Replay.");
 
-	if (ImGui::Button("Exit Game"))
+	char exit_txt[64];
+	if (dojo.commandLineStart)
+		sprintf(exit_txt, "%s  Exit", ICON_FA_DOOR_OPEN);
+	else
+		sprintf(exit_txt, "%s  Close Game", ICON_FA_DOOR_OPEN);
+
+	if (ImGui::Button(exit_txt))
 	{
 		if (!dojo.commandLineStart)
 			gui_stop_game();

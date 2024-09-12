@@ -50,6 +50,7 @@ public:
 	bool pending_map = false;
 	bool quick_map_settings_call = false;
 
+	bool gui_start = false;
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;

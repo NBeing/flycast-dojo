@@ -3530,6 +3530,7 @@ static void gui_display_content()
 						sprintf(replay_txt, " %s   Watch Replays", ICON_FA_EYE);
 						if (ImGui::MenuItem(replay_txt))
 						{
+							dojo_gui.gui_start = true;
 							settings.content.path = game.path;
 							auto name_ext_loc = game.fileName.find_last_of('.');
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
@@ -3741,7 +3742,8 @@ void gui_display_ui()
 		if (!settings.content.path.empty() || settings.naomi.slave)
 		{
 #ifndef __ANDROID__
-			commandLineStart = true;
+			if (!dojo_gui.gui_start)
+				commandLineStart = true;
 #endif
 			gui_start_game(settings.content.path);
 			return;
