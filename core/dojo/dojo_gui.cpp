@@ -504,6 +504,21 @@ void DojoGui::settings_dojo_tab()
 			config::DojoServerPort = ServerPort;
 		}
 
+		if (ImGui::CollapsingHeader("Replays", ImGuiTreeNodeFlags_None))
+		{
+			OptionCheckbox("Show Frame Position", config::ReplayPositionOverlay);
+			ImGui::SameLine();
+			ShowHelpMarker("Shows current frame position on playback.");
+
+			OptionCheckbox("Record All Sessions", config::RecordMatches);
+			ImGui::SameLine();
+			ShowHelpMarker("Record all gameplay sessions to a local file");
+
+			OptionCheckbox("Show Input Display", config::ShowReplayInputDisplay);
+			ImGui::SameLine();
+			ShowHelpMarker("Shows controller input history in replays");
+		}
+
 		if (ImGui::CollapsingHeader("Training", ImGuiTreeNodeFlags_None))
 		{
 			OptionCheckbox("Automatically Load Netplay Savestate", config::AutoLoadNetState);
