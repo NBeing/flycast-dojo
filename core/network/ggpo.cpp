@@ -586,10 +586,17 @@ void startSession(int localPort, int localPlayerNum)
 	u32 peerPort;
 	if (colon == std::string::npos)
 	{
-		if (peerIp == "127.0.0.1")
-			peerPort = localPort ^ 1;
+		if (peerIp == "127.0.0.1" && config::GGPOPort.get() == config::GGPORemotePort.get())
+		{
+			if (config::ActAsServer)
+				peerPort = config::GGPORemotePort.get() - 1;
+			else
+				peerPort = config::GGPORemotePort.get();
+		}
 		else
-			peerPort = config::GGPOPort.get();
+		{
+			peerPort = config::GGPORemotePort.get();
+		}
 	}
 	else
 	{
@@ -809,8 +816,14 @@ std::future<bool> startNetwork()
 				if (config::ActAsServer)
 					startSession(config::GGPOPort.get(), 0);
 				else
+				{
 					// Use config::GGPOPort-1 as local port if connecting to ourselves
-					startSession(config::NetworkServer.get().empty() || config::NetworkServer.get() == "127.0.0.1" ? config::GGPOPort.get() - 1 : config::GGPOPort.get(), 1);
+					if ((config::NetworkServer.get().empty() || config::NetworkServer.get() == "127.0.0.1") &&
+							config::GGPOPort.get() == config::GGPORemotePort.get())
+						startSession(config::GGPOPort.get() - 1, 1);
+					else
+						startSession(config::GGPOPort.get(), 1);
+				}
 			} catch (...) {
 				miniupnp.Term();
 				throw;

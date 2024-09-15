@@ -5,7 +5,7 @@
 #include "dojo.h"
 #include "network/net_platform.h"
 
-class UdpClient
+class MatchClient
 {
 public:
     void ClientThread();

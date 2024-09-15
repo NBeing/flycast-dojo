@@ -26,6 +26,7 @@
 #include "net_beacon.h"
 #include "replay.h"
 #include "training.h"
+#include "relay_client.h"
 
 #define MAPLE_FRAME_SIZE 28
 #define FRAME_BATCH 120
@@ -149,6 +150,10 @@ public:
 
 	void SaveRecordSlotsFile();
 	void LoadRecordSlotsFile();
+
+	void Split(std::string const &str, const char delim, std::vector<std::string> &out);
+
+	RelayClient relay_client;
 };
 
 extern Dojo dojo;

@@ -1,13 +1,569 @@
 #include "dojo_gui.h"
 
-void DojoGui::gui_display_ggpo_connect()
+void DojoGui::copy_btn(const char *si, std::string name)
+{
+#ifndef __ANDROID__
+	ImGui::SameLine();
+	char copy_btn_txt[128];
+	if (name.size() == 0)
+		sprintf(copy_btn_txt, "%s", ICON_FA_CLONE);
+	else
+		sprintf(copy_btn_txt, "%s##%s", ICON_FA_CLONE, name.c_str());
+	if (ImGui::Button(copy_btn_txt))
+	{
+		SDL_SetClipboardText(si);
+	}
+	std::string tooltip_txt = "Copy";
+	if (name.size() > 0)
+		tooltip_txt.append(" " + name);
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		ImGui::SetTooltip(tooltip_txt.c_str());
+#endif
+}
+
+void DojoGui::paste_btn(char *si, float width, std::string name)
+{
+#ifndef __ANDROID__
+	char paste_btn_txt[128];
+	if (name.size() == 0)
+		sprintf(paste_btn_txt, "%s", ICON_FA_CLIPBOARD);
+	else
+		sprintf(paste_btn_txt, "%s##Paste%s", ICON_FA_CLIPBOARD, name.c_str());
+	if (ImGui::Button(paste_btn_txt))
+	{
+		char *pasted_txt = SDL_GetClipboardText();
+		memcpy(si, pasted_txt, strlen(pasted_txt));
+	}
+	std::string tooltip_txt = "Paste";
+	if (name.size() > 0)
+		tooltip_txt.append(" " + name);
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		ImGui::SetTooltip(tooltip_txt.c_str());
+	ImGui::SameLine();
+#endif
+}
+
+float DojoGui::paste_btn_width()
+{
+#ifndef __ANDROID__
+	char paste_btn_txt[128];
+	sprintf(paste_btn_txt, "%s", ICON_FA_CLIPBOARD);
+	return ImGui::CalcTextSize(paste_btn_txt).x + ImGui::GetStyle().ItemSpacing.x * 2.0f;
+#else
+	return 0;
+#endif
+}
+
+void DojoGui::netplay_body_head(bool local, bool presence)
+{
+	local_tab = local;
+	if (!presence)
+		dojo.presence.Close();
+}
+
+void DojoGui::netplay_ip_entry_body()
+{
+	char start_btn_txt[128];
+	char cancel_btn_txt[128];
+	sprintf(start_btn_txt, "%s Start", ICON_FA_CIRCLE_PLAY);
+	sprintf(cancel_btn_txt, "%s Cancel", ICON_FA_CIRCLE_XMARK);
+
+	static char si[128] = "";
+
+	netplay_body_head(true);
+
+	ImGui::Text("");
+	ImGui::SameLine(local_spacer - paste_btn_width());
+	paste_btn(si, 256.0, "IP");
+
+	ImGui::SameLine(local_spacer);
+	ImGui::TextColored(ImVec4(0, 175, 255, 1), "%s", ICON_FA_GLOBE);
+	ImGui::SameLine();
+
+	ImGui::InputTextWithHint(" IP", "0.0.0.0", si, IM_ARRAYSIZE(si));
+	detect_address = std::string(si);
+
+	ImGui::Text("");
+	ImGui::SameLine(local_spacer);
+
+	ImGui::TextDisabled("%s", ICON_FA_GAUGE);
+	ImGui::SameLine();
+
+	ImGui::SliderInt("###CurrentDelay", (int *)&current_delay, 0, 20);
+	ImGui::SameLine();
+	ImGui::Text("Delay");
+
+	if (!matched)
+	{
+		ImGui::Columns(2, "hosting", false);
+		ImGui::Text("");
+		ImGui::SameLine(local_spacer);
+		ImGui::TextDisabled("%s ", ICON_FA_SIGNS_POST);
+		ImGui::SameLine();
+
+		ImGui::RadioButton("Host", &hosting_opt, 1);
+		ImGui::NextColumn();
+		ImGui::RadioButton("Join", &hosting_opt, 0);
+		ImGui::Columns(1, NULL, false);
+	}
+
+	float font_size = ImGui::GetFontSize() * (strlen(start_btn_txt) + strlen(cancel_btn_txt)) / 2;
+	ImGui::Text(" ");
+	ImGui::SameLine(ImGui::GetWindowSize().x / 2 - font_size + (font_size / 2));
+
+	if (ImGui::Button(start_btn_txt))
+	{
+		if (detect_address == own_ip)
+			detect_address = "127.0.0.1";
+
+		if (hosting_opt)
+		{
+			cfgSetVirtual("network", "ActAsServer", "yes");
+		}
+		else
+		{
+			cfgSetVirtual("network", "ActAsServer", "no");
+		}
+		cfgSetVirtual("network", "GGPO", "yes");
+		cfgSetVirtual("network", "Enable", "no");
+		cfgSetVirtual("network", "server", detect_address);
+
+		NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
+		if (current_delay != config::GGPODelay.get())
+			cfgSetVirtual("network", "GGPODelay", std::to_string(current_delay));
+
+		ImGui::CloseCurrentPopup();
+		gui_setState(GuiState::Closed);
+
+		gui_start_game(settings.content.path);
+	}
+
+	ImGui::SameLine();
+}
+
+void DojoGui::netplay_match_code_body()
+{
+	netplay_body_head(false);
+
+	ImGui::Text("");
+	ImGui::SameLine((netplay_popup_width / 2) - 150);
+
+	char host_txt[128];
+	sprintf(host_txt, "  %s  \nHost", ICON_FA_SATELLITE);
+	if (ImGui::Button(host_txt, ScaledVec2(150, 150)))
+	{
+		cfgSetVirtual("network", "server", "");
+		cfgSetVirtual("network", "GGPO", "yes");
+		cfgSetVirtual("network", "ActAsServer", "yes");
+		dojo.disconnect_toggle = false;
+		dojo.hosting = true;
+		hosting_opt = true;
+		matched = true;
+		try
+		{
+			std::thread t2(&MatchClient::ClientThread, std::ref(client));
+			t2.detach();
+		}
+		catch (std::exception &)
+		{
+		}
+		gui_setState(GuiState::MatchCodeHostWait);
+	}
+	ImGui::SameLine();
+	char join_txt[128];
+	sprintf(join_txt, "  %s  \nJoin", ICON_FA_SATELLITE_DISH);
+	if (ImGui::Button(join_txt, ScaledVec2(150, 150)))
+	{
+		cfgSetVirtual("network", "server", "");
+		cfgSetVirtual("network", "GGPO", "yes");
+		cfgSetVirtual("network", "ActAsServer", "no");
+		dojo.disconnect_toggle = false;
+		dojo.hosting = false;
+		hosting_opt = false;
+		matched = true;
+		try
+		{
+			std::thread t2(&MatchClient::ClientThread, std::ref(client));
+			t2.detach();
+		}
+		catch (std::exception &)
+		{
+		}
+		gui_setState(GuiState::MatchCodeGuestWait);
+	}
+}
+
+void DojoGui::netplay_relay_body()
+{
+	char start_btn_txt[128];
+	char cancel_btn_txt[128];
+	sprintf(start_btn_txt, "%s Start", ICON_FA_CIRCLE_PLAY);
+	sprintf(cancel_btn_txt, "%s Cancel", ICON_FA_CIRCLE_XMARK);
+
+	static char si[128] = "";
+	static char rk[128] = "";
+
+	netplay_body_head(true);
+
+	ImGui::Text("");
+	ImGui::SameLine(local_spacer - paste_btn_width());
+	paste_btn(si, 256.0, "Server");
+	ImGui::TextColored(ImVec4(0, 175, 255, 1), "%s", ICON_FA_GLOBE);
+	ImGui::SameLine();
+
+	std::string addr_lbl_txt = " Server";
+
+	const bool is_input_text_enter_pressed = ImGui::InputText(addr_lbl_txt.data(), si, IM_ARRAYSIZE(si), ImGuiInputTextFlags_EnterReturnsTrue);
+	const bool is_input_text_active = ImGui::IsItemActive();
+	const bool is_input_text_activated = ImGui::IsItemActivated();
+
+	auto address_history = dojo.relay_client.GetRelayAddressHistory();
+	if (address_history.size() > 0 && is_input_text_activated)
+		ImGui::OpenPopup("##popup");
+	{
+		ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y));
+		ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
+		if (ImGui::BeginPopup("##popup", ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_ChildWindow))
+		{
+			for (int i = 0; i < address_history.size(); i++)
+			{
+				if (strstr(address_history.at(i).data(), si) == NULL)
+					continue;
+				if (ImGui::Selectable(address_history.at(i).data()))
+				{
+					ImGui::ClearActiveID();
+					strcpy(si, address_history.at(i).data());
+				}
+			}
+
+			if (is_input_text_enter_pressed || (!is_input_text_active && !ImGui::IsWindowFocused()))
+				ImGui::CloseCurrentPopup();
+
+			ImGui::EndPopup();
+		}
+	}
+
+	detect_address = std::string(si);
+
+	ImGui::Text("");
+	ImGui::SameLine(local_spacer);
+
+	ImGui::TextDisabled("%s", ICON_FA_GAUGE);
+	ImGui::SameLine();
+
+	ImGui::SliderInt("###CurrentDelay", (int *)&current_delay, 0, 20);
+	ImGui::SameLine();
+	ImGui::Text("Delay");
+
+	if (!hosting_opt)
+	{
+		ImGui::Text("");
+		ImGui::SameLine(local_spacer - paste_btn_width());
+		paste_btn(rk, 256.0, "Key");
+		ImGui::TextColored(ImVec4(255, 255, 0, 1), "%s", ICON_FA_KEY);
+		ImGui::SameLine();
+
+		ImGui::InputText(" Key", rk, IM_ARRAYSIZE(rk));
+	}
+
+	if (!matched)
+	{
+		ImGui::Columns(2, "hosting", false);
+		ImGui::Text("");
+		ImGui::SameLine(local_spacer);
+		ImGui::TextDisabled("%s ", ICON_FA_SIGNS_POST);
+		ImGui::SameLine();
+
+		ImGui::RadioButton("Host", &hosting_opt, 1);
+		ImGui::NextColumn();
+		ImGui::RadioButton("Join", &hosting_opt, 0);
+		ImGui::Columns(1, NULL, false);
+	}
+
+	float font_size = ImGui::GetFontSize() * (strlen(start_btn_txt) + strlen(cancel_btn_txt)) / 2;
+	ImGui::Text(" ");
+	ImGui::SameLine(ImGui::GetWindowSize().x / 2 - font_size + (font_size / 2));
+
+	if (ImGui::Button(start_btn_txt))
+	{
+		if (hosting_opt)
+			cfgSetVirtual("network", "ActAsServer", "yes");
+		else
+			cfgSetVirtual("network", "ActAsServer", "no");
+
+		cfgSetVirtual("network", "GGPO", "yes");
+		cfgSetVirtual("network", "Enable", "no");
+		cfgSetVirtual("network", "server", detect_address);
+
+		cfgSetVirtual("dojo", "Relay", "yes");
+
+		int port = config::DefaultRelayPort.get();
+		if (!dojo.commandLineStart)
+		{
+			std::string server_input = std::string(si, strlen(si));
+			dojo.relay_client.AddToRelayAddressHistory(server_input);
+			std::vector<std::string> name_info;
+			dojo.Split(server_input, ':', name_info);
+
+			if (strlen(si) == 0)
+			{
+				config::NetworkServer.set("127.0.0.1");
+			}
+			else if (name_info.size() > 1)
+			{
+				dojo.relay_client.target_hostname = name_info[0];
+				config::NetworkServer.set(name_info[0]);
+				port = std::stoi(name_info[1]);
+			}
+			else
+			{
+				dojo.relay_client.target_hostname = name_info[0];
+				config::NetworkServer.set(name_info[0]);
+			}
+		}
+		config::GGPORemotePort.set(port);
+		cfgSetVirtual("network", "GGPORemotePort", std::to_string(port).data());
+
+		if (!config::ActAsServer && !(dojo.commandLineStart && cfgLoadStr("dojo", "RelayKey", "").size() > 0))
+		{
+			std::string relay_key = std::string(rk);
+			cfgSetVirtual("dojo", "RelayKey", relay_key);
+		}
+
+		if (current_delay != config::GGPODelay.get())
+			config::GGPODelay.set(current_delay);
+
+		try
+		{
+			dojo.relay_client.disconnect_toggle = false;
+			std::thread t2(&RelayClient::ClientThread, std::ref(dojo.relay_client));
+			t2.detach();
+		}
+		catch (std::exception &)
+		{
+		}
+
+		auto start = std::chrono::system_clock::now();
+		auto end = start + std::chrono::seconds(5);
+		auto current = std::chrono::system_clock::now();
+		bool relay_wait = std::chrono::system_clock::now() < end;
+		while (
+			relay_wait &&
+			((cfgLoadStr("dojo", "RelayKey", "").size() == 0) ||
+			 (!config::ActAsServer && !dojo.relay_client.disconnect_toggle)))
+		{
+			current = std::chrono::system_clock::now();
+			relay_wait = current < end;
+		}
+
+		if (cfgLoadStr("dojo", "RelayKey", "").rfind("NOKEY", 0) == 0)
+		{
+			cfgSetVirtual("dojo", "RelayKey", "");
+			std::cout << "No Key Found" << std::endl;
+			ImGui::OpenPopup("No Key Found");
+		}
+		else if (cfgLoadStr("dojo", "RelayKey", "").rfind("MAXCN", 0) == 0)
+		{
+			cfgSetVirtual("dojo", "RelayKey", "");
+			std::cout << "Maximum Connections Hit" << std::endl;
+			ImGui::OpenPopup("Max Connections Hit");
+		}
+		else if (cfgLoadStr("dojo", "RelayKey", "").size() == 0)
+		{
+			dojo.relay_client.disconnect_toggle = true;
+			config::NetworkServer.set("");
+			ImGui::OpenPopup("Timeout");
+		}
+		else if (config::ActAsServer && cfgLoadStr("dojo", "RelayKey", "").size() > 0 ||
+				 dojo.relay_client.start_game && cfgLoadStr("dojo", "RelayKey", "").size() > 0)
+		{
+			ImGui::CloseCurrentPopup();
+			gui_setState(GuiState::Closed);
+			gui_start_game(settings.content.path);
+		}
+	}
+
+	if (ImGui::BeginPopupModal("Timeout", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar))
+	{
+		ImGui::Text("Relay connection timed out.\n");
+		if (dojo.commandLineStart)
+		{
+			if (ImGui::Button("Exit"))
+			{
+				exit(0);
+			}
+		}
+		else
+		{
+			if (ImGui::Button("Cancel"))
+			{
+				dojo.relay_client.disconnect_toggle = true;
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::EndPopup();
+	}
+
+	if (ImGui::BeginPopupModal("Max Connections Hit", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar))
+	{
+		ImGui::Text("Maximum active relay connections hit. Please try again later or use another relay.\n");
+		if (dojo.commandLineStart)
+		{
+			if (ImGui::Button("Exit"))
+			{
+				exit(0);
+			}
+		}
+		else
+		{
+			char back_btn_txt[128];
+			sprintf(back_btn_txt, "%s Back", ICON_FA_CIRCLE_CHEVRON_LEFT);
+			if (ImGui::Button(back_btn_txt))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::EndPopup();
+	}
+
+	if (ImGui::BeginPopupModal("No Key Found", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar))
+	{
+		ImGui::Text("Relay Key not found.\n");
+		if (dojo.commandLineStart)
+		{
+			if (ImGui::Button("Exit"))
+			{
+				exit(0);
+			}
+		}
+		else
+		{
+			char back_btn_txt[128];
+			sprintf(back_btn_txt, "%s Back", ICON_FA_CIRCLE_CHEVRON_LEFT);
+			if (ImGui::Button(back_btn_txt))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::EndPopup();
+	}
+
+	ImGui::SameLine();
+}
+
+void DojoGui::netplay_lan_body()
+{
+	char start_btn_txt[128];
+	char cancel_btn_txt[128];
+	sprintf(start_btn_txt, "%s Start", ICON_FA_CIRCLE_PLAY);
+	sprintf(cancel_btn_txt, "%s Cancel", ICON_FA_CIRCLE_XMARK);
+
+	netplay_body_head(true, true);
+	if (!dojo.presence.beacon_active)
+	{
+		dojo.presence.beacon_active = true;
+		std::thread t3(&NetBeacon::BeaconThread, std::ref(dojo.presence));
+		t3.detach();
+	}
+
+	if (!dojo.presence.lobby_active)
+	{
+		dojo.presence.lobby_active = true;
+		std::thread t4(&NetBeacon::ListenerThread, std::ref(dojo.presence));
+		t4.detach();
+	}
+
+	if (ImGui::BeginChild("Beacons", ImVec2(0, 100.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
+	{
+		for (auto it = dojo.presence.active_beacons.begin(); it != dojo.presence.active_beacons.end(); ++it)
+		{
+			std::string beacon_msg = it->first;
+			if (beacon_msg == config::PlayerName.get() + "_" + dojo.presence.client_seed)
+				own_ip = it->second;
+
+			std::string player_name = beacon_msg.substr(0, beacon_msg.find('_'));
+			if (dojo.presence.last_seen[it->first.data()] + 5000 > dojo.presence.unix_timestamp() &&
+				(beacon_msg != config::PlayerName.get() + "_" + dojo.presence.client_seed))
+				if (ImGui::Selectable(player_name.data(), selected_beacon == beacon_msg.data()))
+				{
+					selected_beacon = beacon_msg;
+					detect_address = it->second;
+				}
+		}
+		ImGui::EndChild();
+	}
+
+	ImGui::Text("");
+	ImGui::SameLine(local_spacer);
+
+	ImGui::TextDisabled("%s", ICON_FA_GAUGE);
+	ImGui::SameLine();
+
+	ImGui::SliderInt("###CurrentDelay", (int *)&current_delay, 0, 20);
+	ImGui::SameLine();
+	ImGui::Text("Delay");
+
+	if (!matched)
+	{
+		ImGui::Columns(2, "hosting", false);
+		ImGui::Text("");
+		ImGui::SameLine(local_spacer);
+		ImGui::TextDisabled("%s ", ICON_FA_SIGNS_POST);
+		ImGui::SameLine();
+
+		ImGui::RadioButton("Host", &hosting_opt, 1);
+		ImGui::NextColumn();
+		ImGui::RadioButton("Join", &hosting_opt, 0);
+		ImGui::Columns(1, NULL, false);
+	}
+
+	float font_size = ImGui::GetFontSize() * (strlen(start_btn_txt) + strlen(cancel_btn_txt)) / 2;
+	ImGui::Text(" ");
+	ImGui::SameLine(ImGui::GetWindowSize().x / 2 - font_size + (font_size / 2));
+
+	if (ImGui::Button(start_btn_txt))
+	{
+		if (detect_address == own_ip)
+			detect_address = "127.0.0.1";
+
+		if (hosting_opt)
+			cfgSetVirtual("network", "ActAsServer", "yes");
+		else
+			cfgSetVirtual("network", "ActAsServer", "no");
+
+		cfgSetVirtual("network", "GGPO", "yes");
+		cfgSetVirtual("network", "Enable", "no");
+		cfgSetVirtual("network", "server", detect_address);
+
+		NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
+		if (current_delay != config::GGPODelay.get())
+			cfgSetVirtual("network", "GGPODelay", std::to_string(current_delay));
+
+		ImGui::CloseCurrentPopup();
+		gui_setState(GuiState::Closed);
+
+		gui_start_game(settings.content.path);
+	}
+
+	ImGui::SameLine();
+}
+
+void DojoGui::gui_display_netplay_connect()
 {
 	char netplay_session_txt[128];
 	sprintf(netplay_session_txt, "%s Netplay Session - %s ", ICON_FA_BOLT, dojo.game_name.c_str());
+
 	ImGui::OpenPopup(netplay_session_txt);
+	ImGui::SetNextWindowSize(ScaledVec2(netplay_popup_width, 0));
 	if (ImGui::BeginPopupModal(netplay_session_txt, NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiInputTextFlags_EnterReturnsTrue))
 	{
 		static char si[128] = "";
+
+		char start_btn_txt[128];
+		char cancel_btn_txt[128];
+		sprintf(start_btn_txt, "%s Start", ICON_FA_CIRCLE_PLAY);
+		sprintf(cancel_btn_txt, "%s Cancel", ICON_FA_CIRCLE_XMARK);
+
 		if (!matched)
 		{
 			if (ImGui::BeginTabBar("GGPOTabBar", ImGuiTabBarFlags_None))
@@ -18,76 +574,25 @@ void DojoGui::gui_display_ggpo_connect()
 					sprintf(match_codes_txt, " %s Match Codes ", ICON_FA_NETWORK_WIRED);
 					if (ImGui::BeginTabItem(match_codes_txt))
 					{
-						local_tab = false;
-						dojo.presence.Close();
-
-						char host_txt[128];
-						sprintf(host_txt, "  %s  \nHost", ICON_FA_SATELLITE);
-						if (ImGui::Button(host_txt, ScaledVec2(150, 150)))
-						{
-							cfgSetVirtual("network", "server", "");
-							cfgSetVirtual("network", "GGPO", "yes");
-							cfgSetVirtual("network", "ActAsServer", "yes");
-							dojo.disconnect_toggle = false;
-							dojo.hosting = true;
-							hosting_opt = true;
-							matched = true;
-							try
-							{
-								std::thread t2(&UdpClient::ClientThread, std::ref(client));
-								t2.detach();
-							}
-							catch (std::exception &)
-							{
-							}
-							gui_setState(GuiState::MatchCodeHostWait);
-						}
-						ImGui::SameLine();
-						char join_txt[128];
-						sprintf(join_txt, "  %s  \nJoin", ICON_FA_SATELLITE_DISH);
-						if (ImGui::Button(join_txt, ScaledVec2(150, 150)))
-						{
-							cfgSetVirtual("network", "server", "");
-							cfgSetVirtual("network", "GGPO", "yes");
-							cfgSetVirtual("network", "ActAsServer", "no");
-							dojo.disconnect_toggle = false;
-							dojo.hosting = false;
-							hosting_opt = false;
-							matched = true;
-							try
-							{
-								std::thread t2(&UdpClient::ClientThread, std::ref(client));
-								t2.detach();
-							}
-							catch (std::exception &)
-							{
-							}
-							gui_setState(GuiState::MatchCodeGuestWait);
-						}
+						netplay_match_code_body();
 						ImGui::EndTabItem();
 					}
 				}
+
+				char relay_txt[128];
+				sprintf(relay_txt, " %s Relay ", ICON_FA_TOWER_BROADCAST);
+				if (ImGui::BeginTabItem(relay_txt))
+				{
+					netplay_relay_body();
+					ImGui::EndTabItem();
+				}
+
 				char ip_entry_txt[128];
-				sprintf(ip_entry_txt, " %s IP Entry ", ICON_FA_ETHERNET);	
+				sprintf(ip_entry_txt, " %s IP Entry ", ICON_FA_ETHERNET);
+
 				if (ImGui::BeginTabItem(ip_entry_txt))
 				{
-					local_tab = true;
-					dojo.presence.Close();
-
-					ImGui::InputTextWithHint(" IP", "0.0.0.0", si, IM_ARRAYSIZE(si));
-					detect_address = std::string(si);
-#ifndef __ANDROID__
-					ImGui::SameLine();
-					char paste_btn_txt[128];
-					sprintf(paste_btn_txt, "%s", ICON_FA_CLIPBOARD);
-					if (ImGui::Button(paste_btn_txt))
-					{
-						char *pasted_txt = SDL_GetClipboardText();
-						memcpy(si, pasted_txt, strlen(pasted_txt));
-					}
-					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-						ImGui::SetTooltip("Paste");
-#endif
+					netplay_ip_entry_body();
 					ImGui::EndTabItem();
 				}
 
@@ -97,41 +602,7 @@ void DojoGui::gui_display_ggpo_connect()
 					sprintf(local_net_txt, " %s LAN ", ICON_FA_NETWORK_WIRED);
 					if (ImGui::BeginTabItem(local_net_txt))
 					{
-						local_tab = true;
-						if (!dojo.presence.beacon_active)
-						{
-							dojo.presence.beacon_active = true;
-							std::thread t3(&NetBeacon::BeaconThread, std::ref(dojo.presence));
-							t3.detach();
-						}
-
-						if (!dojo.presence.lobby_active)
-						{
-							dojo.presence.lobby_active = true;
-							std::thread t4(&NetBeacon::ListenerThread, std::ref(dojo.presence));
-							t4.detach();
-						}
-
-						if (ImGui::BeginChild("Beacons", ImVec2(0, 100.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
-						{
-							for (auto it = dojo.presence.active_beacons.begin(); it != dojo.presence.active_beacons.end(); ++it)
-							{
-								std::string beacon_msg = it->first;
-								if (beacon_msg == config::PlayerName.get() + "_" + dojo.presence.client_seed)
-									own_ip = it->second;
-
-								std::string player_name = beacon_msg.substr(0, beacon_msg.find('_'));
-								if (dojo.presence.last_seen[it->first.data()] + 5000 > dojo.presence.unix_timestamp() &&
-									(beacon_msg != config::PlayerName.get() + "_" + dojo.presence.client_seed))
-									if (ImGui::Selectable(player_name.data(), selected_beacon == beacon_msg.data()))
-									{
-										selected_beacon = beacon_msg;
-										detect_address = it->second;
-									}
-							}
-							ImGui::EndChild();
-						}
-
+						netplay_lan_body();
 						ImGui::EndTabItem();
 					}
 				}
@@ -143,64 +614,11 @@ void DojoGui::gui_display_ggpo_connect()
 			local_tab = true;
 		}
 
-
-		char start_btn_txt[128];
-		char cancel_btn_txt[128];
-		
-		sprintf(start_btn_txt, "%s Start", ICON_FA_CIRCLE_PLAY);
-		sprintf(cancel_btn_txt, "%s Cancel", ICON_FA_CIRCLE_XMARK);
-
-		if (local_tab)
-		{
-			ImGui::SliderInt("", (int *)&current_delay, 0, 20);
-			ImGui::SameLine();
-			ImGui::Text("Delay");
-
-			if (!matched)
-			{
-				ImGui::Columns(2, "hosting", false);
-				ImGui::RadioButton("Host", &hosting_opt, 1);
-				ImGui::NextColumn();
-				ImGui::RadioButton("Join", &hosting_opt, 0);
-				ImGui::Columns(1, NULL, false);
-			}
-
-			float font_size = ImGui::GetFontSize() * (strlen(start_btn_txt) + strlen(cancel_btn_txt)) / 2;
-			ImGui::Text(" ");
-			ImGui::SameLine(ImGui::GetWindowSize().x / 2 - font_size + (font_size / 2));
-
-			if (ImGui::Button(start_btn_txt))
-			{
-				if (detect_address == own_ip)
-					detect_address = "127.0.0.1";
-
-				if (hosting_opt)
-					cfgSetVirtual("network", "ActAsServer", "yes");
-				else
-					cfgSetVirtual("network", "ActAsServer", "no");
-
-				cfgSetVirtual("network", "GGPO", "yes");
-				cfgSetVirtual("network", "Enable", "no");
-				cfgSetVirtual("network", "server", detect_address);
-
-				NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
-				if (current_delay != config::GGPODelay.get())
-					cfgSetVirtual("network", "GGPODelay", std::to_string(current_delay));
-
-				ImGui::CloseCurrentPopup();
-				gui_setState(GuiState::Closed);
-
-				gui_start_game(settings.content.path);
-			}
-
-			ImGui::SameLine();
-		}
-		
 		if (!local_tab)
 		{
 			float font_size = ImGui::GetFontSize() * (strlen(cancel_btn_txt)) / 2;
 			ImGui::Text(" ");
-			ImGui::SameLine(ImGui::GetWindowSize().x / 2 - font_size + (font_size / 2));
+			ImGui::SameLine(ImGui::GetWindowSize().x / 2 - (font_size / 2));
 		}
 		if (ImGui::Button(cancel_btn_txt))
 		{
@@ -367,12 +785,12 @@ void DojoGui::gui_display_match_code_host_wait()
 		hosting_opt = true;
 		dojo.hosting = false;
 		config::GGPOEnable.set(false);
-		gui_setState(GuiState::GGPOConnect);
+		gui_setState(GuiState::NetplayConnect);
 	}
 
 	if (!config::NetworkServer.get().empty())
 	{
-		gui_setState(GuiState::GGPOConnect);
+		gui_setState(GuiState::NetplayConnect);
 	}
 
 	ImGui::End();
@@ -424,7 +842,7 @@ void DojoGui::gui_display_match_code_guest_wait()
 				hosting_opt = true;
 				dojo.hosting = false;
 				config::GGPOEnable.set(false);
-				gui_setState(GuiState::GGPOConnect);
+				gui_setState(GuiState::NetplayConnect);
 			}
 
 			ImGui::EndPopup();
@@ -432,7 +850,7 @@ void DojoGui::gui_display_match_code_guest_wait()
 	}
 
 	if (!config::NetworkServer.get().empty())
-		gui_setState(GuiState::GGPOConnect);
+		gui_setState(GuiState::NetplayConnect);
 
 	ImGui::End();
 }
@@ -488,6 +906,13 @@ void DojoGui::settings_dojo_tab()
 			ShowHelpMarker("The GGPO port to listen on");
 			if (GGPOPort != config::GGPOPort.get())
 				config::GGPOPort = GGPOPort;
+
+			int GGPORemotePort = config::GGPORemotePort.get();
+			ImGui::InputInt("GGPO Remote Port", &GGPORemotePort);
+			ImGui::SameLine();
+			ShowHelpMarker("The GGPO port to transmit to");
+			if (GGPORemotePort != config::GGPORemotePort.get())
+				config::GGPORemotePort = GGPORemotePort;
 
 			std::string PortTitle;
 			std::string PortDescription;
@@ -1418,7 +1843,7 @@ void DojoGui::gui_display_replays()
 
 				if (ImGui::BeginChild("Replays##LocalReplays", ImVec2(0, 200.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
 				{
-					for (const auto& entry : std::filesystem::directory_iterator(game_replays_dir))
+					for (const auto &entry : std::filesystem::directory_iterator(game_replays_dir))
 					{
 						std::string filename = entry.path().filename().string();
 						if (ImGui::Selectable(filename.data(), &is_selected))

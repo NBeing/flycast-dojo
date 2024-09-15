@@ -3496,7 +3496,7 @@ static void gui_display_content()
 							settings.content.path = game.path;
 							auto name_ext_loc = game.fileName.find_last_of('.');
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
-							gui_setState(GuiState::GGPOConnect);
+							gui_setState(GuiState::NetplayConnect);
 						}
 						char train_txt[64];
 						sprintf(train_txt, " %s   Training Mode", ICON_FA_DUMBBELL);
@@ -3620,13 +3620,18 @@ static std::future<bool> networkStatus;
 static void gui_network_start()
 {
 	centerNextWindow();
-	ImGui::SetNextWindowSize(ScaledVec2(330, 180));
+	if (cfgLoadBool("dojo", "Relay", false) && cfgLoadBool("network", "ActAsServer", "no"))
+		ImGui::SetNextWindowSize(ScaledVec2(330, 210));
+	else
+		ImGui::SetNextWindowSize(ScaledVec2(330, 180));
 
 	ImGui::Begin("##network", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize);
 
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ScaledVec2(20, 10));
 	ImGui::AlignTextToFramePadding();
 	ImGui::SetCursorPosX(20.f * settings.display.uiScale);
+
+	std::string current_notification = get_notification();
 
 	if (networkStatus.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
 	{
@@ -3642,15 +3647,61 @@ static void gui_network_start()
 	}
 	else
 	{
-		ImGui::Text("Starting Network...");
-		if (NetworkHandshake::instance->canStartNow())
+		std::string relay_key = cfgLoadStr("dojo", "RelayKey", "");
+		if (cfgLoadBool("dojo", "Relay", false) && cfgLoadBool("network", "ActAsServer", "no") && relay_key.size() > 0 && current_notification.size() == 0)
+		{
+			if (relay_key.rfind("max_active_sessions_hit", 0) == 0)
+			{
+				ImGui::Text("Maximum active sessions exceeded.");
+				ImGui::SetCursorPosX(20.f * settings.display.uiScale);
+				ImGui::Text("Use another Relay server or try again later.");
+			}
+			else
+			{
+				ImGui::Text("Waiting for opponent to connect...");
+				ImGui::SetCursorPosX(20.f * settings.display.uiScale);
+
+				ImGui::TextColored(ImVec4(0.063f, 0.412f, 0.812f, 1.000f), "%s", ICON_FA_COMPACT_DISC);
+				ImGui::SameLine();
+				ImGui::Text(dojo.game_name.c_str());
+
+				ImGui::SetCursorPosX(20.f * settings.display.uiScale);
+				ImGui::TextColored(ImVec4(0, 175, 255, 1), "%s", ICON_FA_GLOBE);
+				ImGui::SameLine();
+				ImGui::Text("%s", dojo.relay_client.target_hostname.data());
+
+				if (!config::HideKey)
+				{
+					ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ScaledVec2(3, 4));
+					dojo_gui.copy_btn(dojo.relay_client.target_hostname.data(), "Address");
+					ImGui::PopStyleVar();
+
+					ImGui::SetCursorPosX(20.f * settings.display.uiScale);
+					ImGui::TextColored(ImVec4(255, 255, 0, 1), "%s", ICON_FA_KEY);
+					ImGui::SameLine();
+					ImGui::Text(" %s", relay_key.data());
+					ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ScaledVec2(3, 4));
+					dojo_gui.copy_btn(relay_key.data(), "Key");
+					ImGui::PopStyleVar();
+				}
+			}
+		}
+		else
+		{
+			ImGui::Text("Starting Network...");
+		}
+
+		if (NetworkHandshake::instance->canStartNow() && !config::GGPOEnable)
 			ImGui::Text("Press Start to start the game now.");
 	}
 	ImGui::Text("%s", get_notification().c_str());
 
 	float currentwidth = ImGui::GetContentRegionAvail().x;
 	ImGui::SetCursorPosX((currentwidth - 100.f * settings.display.uiScale) / 2.f + ImGui::GetStyle().WindowPadding.x);
-	ImGui::SetCursorPosY(126.f * settings.display.uiScale);
+	if (cfgLoadBool("dojo", "Relay", false) && cfgLoadBool("network", "ActAsServer", "no"))
+		ImGui::SetCursorPosY(148.f * settings.display.uiScale);
+	else
+		ImGui::SetCursorPosY(126.f * settings.display.uiScale);
 	if (ImGui::Button("Cancel", ScaledVec2(100.f, 0)) && NetworkHandshake::instance != nullptr)
 	{
 		NetworkHandshake::instance->stop();
@@ -3660,6 +3711,12 @@ static void gui_network_start()
 		catch (const FlycastException& e) {
 		}
 		gui_stop_game();
+
+		if (cfgLoadBool("dojo", "Relay", false))
+		{
+			dojo.relay_client.disconnect_toggle = true;
+			cfgSetVirtual("dojo", "RelayKey", "");
+		}
 	}
 	ImGui::PopStyleVar();
 
@@ -3792,8 +3849,8 @@ void gui_display_ui()
 	case GuiState::Cheats:
 		gui_cheats();
 		break;
-	case GuiState::GGPOConnect:
-		dojo_gui.gui_display_ggpo_connect();
+	case GuiState::NetplayConnect:
+		dojo_gui.gui_display_netplay_connect();
 		break;
 	case GuiState::Disconnected:
 		dojo_gui.gui_display_disconnected();

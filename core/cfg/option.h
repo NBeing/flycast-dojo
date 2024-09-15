@@ -525,6 +525,7 @@ extern Option<bool> NetworkOutput;
 extern Option<int> MultiboardSlaves;
 extern Option<bool> BattleCableEnable;
 extern Option<int> GGPOPort;
+extern Option<int> GGPORemotePort;
 
 // Dojo
 extern OptionString PlayerName;
@@ -559,6 +560,13 @@ extern Option<bool> ShowReplayInputDisplay;
 extern Option<bool> UseAnimeInputNotation;
 
 extern Option<bool> TestGame;
+
+extern Option<bool> Relay;
+extern OptionString RelayKey;
+extern Option<int> DefaultRelayPort;
+extern OptionString RelayAddressHistory;
+
+extern Option<bool> HideKey;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

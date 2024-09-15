@@ -1020,15 +1020,15 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 	}
 	else if (cmd == RECORD_BUFFER)
 	{
-		unsigned int slot_index = MessageReader::ReadInt((const char*)buffer, offset);
-		unsigned int slot_size = MessageReader::ReadInt((const char*)buffer, offset);
+		unsigned int slot_index = MessageReader::ReadInt((const char *)buffer, offset);
+		unsigned int slot_size = MessageReader::ReadInt((const char *)buffer, offset);
 
 		training.record_slot[slot_index].clear();
 		training.recorded_slots.insert(slot_index);
 
 		while (*offset < body_size)
 		{
-			std::string frame = MessageReader::ReadContinuousData((const char*)buffer, offset, MAPLE_FRAME_SIZE);
+			std::string frame = MessageReader::ReadContinuousData((const char *)buffer, offset, MAPLE_FRAME_SIZE);
 			training.record_slot[slot_index].push_back(frame);
 		}
 	}
@@ -1045,7 +1045,7 @@ void Dojo::SaveRecordSlotsFile()
 	std::string filename = game_rec_dir + "/" + get_game_name() + "_" + std::to_string(config::RecSlotFile.get()) + ".rec";
 
 	std::ofstream fout(filename,
-			std::ios::out | std::ios::binary | std::ios_base::app);
+					   std::ios::out | std::ios::binary | std::ios_base::app);
 
 	for (unsigned int i : training.recorded_slots)
 	{
@@ -1054,13 +1054,13 @@ void Dojo::SaveRecordSlotsFile()
 		record_msg.AppendInt(i);
 		record_msg.AppendInt(training.record_slot[i].size());
 
-		for (auto s: training.record_slot[i])
+		for (auto s : training.record_slot[i])
 		{
 			record_msg.AppendContinuousData(s.data(), MAPLE_FRAME_SIZE);
 		}
 
 		std::vector<unsigned char> message = record_msg.Msg();
-		fout.write((const char*)&message[0], message.size());
+		fout.write((const char *)&message[0], message.size());
 	}
 
 	fout.close();
@@ -1076,9 +1076,9 @@ void Dojo::LoadRecordSlotsFile()
 		return;
 
 	std::ifstream fin(filename,
-		std::ios::in | std::ios::binary);
+					  std::ios::in | std::ios::binary);
 
-	char header_buf[HEADER_LEN] = { 0 };
+	char header_buf[HEADER_LEN] = {0};
 	std::vector<unsigned char> body_buf;
 
 	training.recorded_slots.clear();
@@ -1086,19 +1086,31 @@ void Dojo::LoadRecordSlotsFile()
 	while (fin)
 	{
 		// read header
-		memset((void*)header_buf, 0, HEADER_LEN);
+		memset((void *)header_buf, 0, HEADER_LEN);
 		fin.read(header_buf, HEADER_LEN);
 
-		unsigned int body_size = HeaderReader::GetSize((unsigned char*)header_buf);
-		unsigned int seq = HeaderReader::GetSeq((unsigned char*)header_buf);
-		unsigned int cmd = HeaderReader::GetCmd((unsigned char*)header_buf);
+		unsigned int body_size = HeaderReader::GetSize((unsigned char *)header_buf);
+		unsigned int seq = HeaderReader::GetSeq((unsigned char *)header_buf);
+		unsigned int cmd = HeaderReader::GetCmd((unsigned char *)header_buf);
 
 		// read body
 		body_buf.resize(body_size);
-		fin.read((char*)body_buf.data(), body_size);
+		fin.read((char *)body_buf.data(), body_size);
 
 		int offset = 0;
 
-		ProcessBody(cmd, body_size, (const char*)body_buf.data(), &offset);
+		ProcessBody(cmd, body_size, (const char *)body_buf.data(), &offset);
+	}
+}
+
+void Dojo::Split(std::string const &str, const char delim, std::vector<std::string> &out)
+{
+	size_t start;
+	size_t end = 0;
+
+	while ((start = str.find_first_not_of(delim, end)) != std::string::npos)
+	{
+		end = str.find(delim, start);
+		out.push_back(str.substr(start, end - start));
 	}
 }

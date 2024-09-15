@@ -13,13 +13,23 @@
 #endif
 
 #include "dojo.h"
-#include "udp_client.h"
+#include "match_client.h"
 #include "net_beacon.h"
 
 class DojoGui
 {
 public:
-	void gui_display_ggpo_connect();
+	void copy_btn(const char *si, std::string name);
+	void paste_btn(char *si, float width, std::string name);
+	float paste_btn_width();
+
+	void netplay_body_head(bool local, bool presence = false);
+	void netplay_ip_entry_body();
+	void netplay_match_code_body();
+	void netplay_relay_body();
+	void netplay_lan_body();
+	void gui_display_netplay_connect();
+
 	void gui_display_disconnected();
 	void show_player_name_overlay(bool paused);
 
@@ -51,6 +61,7 @@ public:
 	bool quick_map_settings_call = false;
 
 	bool gui_start = false;
+
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;
@@ -59,9 +70,12 @@ private:
 	std::string own_ip = "";
 	int hosting_opt = 1;
 	bool local_tab = true;
-	UdpClient client;
+	MatchClient client;
 
 	bool matched = false;
+
+	float netplay_popup_width = 430;
+	float local_spacer = 40;
 };
 
 extern DojoGui dojo_gui;

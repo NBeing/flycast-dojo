@@ -160,6 +160,7 @@ Option<bool> NetworkOutput("NetworkOutput", false, "network");
 Option<int> MultiboardSlaves("MultiboardSlaves", 1, "network");
 Option<bool> BattleCableEnable("BattleCable", false, "network");
 Option<int> GGPOPort("GGPOPort", 19713, "network");
+Option<int> GGPORemotePort("GGPORemotePort", 19713, "network");
 
 // Dojo
 OptionString PlayerName("PlayerName", "Player", "dojo");
@@ -194,6 +195,13 @@ Option<bool> ShowReplayInputDisplay("ShowReplayInputDisplay", false, "dojo");
 Option<bool> UseAnimeInputNotation("UseAnimeInputNotation", false, "dojo");
 
 Option<bool> TestGame("TestGame", false, "dojo");
+
+Option<bool> Relay("Relay", false, "dojo");
+OptionString RelayKey("RelayKey", "", "dojo");
+Option<int> DefaultRelayPort("DefaultRelayPort", 8001, "dojo");
+OptionString RelayAddressHistory("RelayAddressHistory", "", "dojo");
+
+Option<bool> HideKey("HideKey", false, "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

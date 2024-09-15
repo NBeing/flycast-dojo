@@ -1,20 +1,7 @@
-#include "udp_client.h"
-
-void split(std::string const &str, const char delim,
-		   std::vector<std::string> &out)
-{
-	size_t start;
-	size_t end = 0;
-
-	while ((start = str.find_first_not_of(delim, end)) != std::string::npos)
-	{
-		end = str.find(delim, start);
-		out.push_back(str.substr(start, end - start));
-	}
-}
+#include "match_client.h"
 
 // connects to matchmaking server
-void UdpClient::ConnectMMServer()
+void MatchClient::ConnectMMServer()
 {
 	struct hostent *mm_host;
 	mm_host = gethostbyname(config::MatchmakingServerAddress.get().data());
@@ -46,7 +33,7 @@ void UdpClient::ConnectMMServer()
 	INFO_LOG(NETWORK, "Connecting to Matchmaking Relay");
 }
 
-sock_t UdpClient::CreateAndBind(int port)
+sock_t MatchClient::CreateAndBind(int port)
 {
 	sock_t sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (!VALID(sock))
@@ -73,7 +60,7 @@ sock_t UdpClient::CreateAndBind(int port)
 	return sock;
 }
 
-bool UdpClient::CreateLocalSocket(int port)
+bool MatchClient::CreateLocalSocket(int port)
 {
 	if (!VALID(local_socket))
 		local_socket = CreateAndBind(port);
@@ -81,7 +68,7 @@ bool UdpClient::CreateLocalSocket(int port)
 	return VALID(local_socket);
 }
 
-bool UdpClient::Init(bool hosting)
+bool MatchClient::Init(bool hosting)
 {
 #ifdef _WIN32
 	WSADATA wsaData;
@@ -104,7 +91,7 @@ bool UdpClient::Init(bool hosting)
 	}
 }
 
-void UdpClient::ClientLoop()
+void MatchClient::ClientLoop()
 {
 	isLoopStarted = true;
 
@@ -126,7 +113,7 @@ void UdpClient::ClientLoop()
 			{
 				std::string data = std::string(buffer + 8, strlen(buffer + 5));
 				std::vector<std::string> opp;
-				split(data, ':', opp);
+				dojo.Split(data, ':', opp);
 
 				config::NetworkServer = opp[0];
 
@@ -149,7 +136,7 @@ void UdpClient::ClientLoop()
 	}
 }
 
-void UdpClient::ClientThread()
+void MatchClient::ClientThread()
 {
 	Init(dojo.hosting);
 

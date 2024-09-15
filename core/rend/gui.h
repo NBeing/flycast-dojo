@@ -66,7 +66,7 @@ enum class GuiState {
 	Loading,
 	NetworkStart,
 	Cheats,
-	GGPOConnect,
+	NetplayConnect,
 	Disconnected,
 	ReplayEnd,
 	MatchCodeHostWait,

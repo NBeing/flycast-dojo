@@ -1010,18 +1010,20 @@ endif()
 
 target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/deps/base64.h
+		core/dojo/dojo.cpp
+		core/dojo/dojo.h
 		core/dojo/dojo_gui.cpp
 		core/dojo/dojo_gui.h
+		core/dojo/match_client.cpp
+		core/dojo/match_client.h
 		core/dojo/net_beacon.cpp
 		core/dojo/net_beacon.h
+		core/dojo/relay_client.cpp
+		core/dojo/relay_client.h
 		core/dojo/replay.cpp
 		core/dojo/replay.h
 		core/dojo/training.h
-		core/dojo/training.cpp
-		core/dojo/udp_client.cpp
-		core/dojo/udp_client.h
-		core/dojo/dojo.cpp
-		core/dojo/dojo.h)
+		core/dojo/training.cpp)
 
 target_sources(${PROJECT_NAME} PRIVATE
 		core/imgread/cdi.cpp
