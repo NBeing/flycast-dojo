@@ -543,6 +543,17 @@ void gui_open_settings()
 
 void gui_start_game(const std::string& path)
 {
+	if (cfgLoadBool("network", "GGPO", false) &&
+		cfgLoadBool("dojo", "AutoLoadNetState", false) &&
+		!dojo_file.NetSaveExists(path) &&
+		!dojo_file.no_save_launch)
+	{
+		dojo_gui.invoke_download_save_popup(path, &dojo_gui.net_save_download, true);
+		return;
+	}
+
+	dojo_file.Reset();
+
 	const LockGuard lock(guiMutex);
 	if (gui_state != GuiState::Main && gui_state != GuiState::Closed && gui_state != GuiState::Commands)
 		return;
@@ -3626,6 +3637,14 @@ static void gui_display_content()
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
 							gui_setState(GuiState::Replays);
 						}
+
+						char dl_txt[128];
+						sprintf(dl_txt, " %s   Download State", ICON_FA_DOWNLOAD);
+						if (ImGui::MenuItem(dl_txt))
+						{
+							dojo_gui.invoke_download_save_popup(game.path, &dojo_gui.net_save_download, false);
+						}
+
 						ImGui::EndPopup();
 					}
 					ImGui::PopID();
@@ -3971,6 +3990,9 @@ void gui_display_ui()
 		break;
 	case GuiState::Replays:
 		dojo_gui.gui_display_replays();
+		break;
+	case GuiState::DownloadState:
+		dojo_gui.gui_display_savestate_dl();
 		break;
 	default:
 		die("Unknown UI state");

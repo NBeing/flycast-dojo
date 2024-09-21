@@ -579,7 +579,7 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 		settings.input.fastForwardMode = false;
 		if (!settings.content.path.empty())
 		{
-			if (config::GGPOEnable || (config::Training && config::AutoLoadNetState))
+			if ((config::GGPOEnable && config::AutoLoadNetState) || (config::Training && config::AutoLoadTrainingNetState))
 				dc_loadstate(-1);
 			else if (config::AutoLoadState && !NaomiNetworkSupported() && !settings.naomi.multiboard)
 				dc_loadstate(config::SavestateSlot);

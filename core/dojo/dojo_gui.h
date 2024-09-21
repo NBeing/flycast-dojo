@@ -53,6 +53,10 @@ public:
 
 	void gui_display_replays();
 
+	void invoke_download_save_popup(std::string game_path, bool* net_save_download, bool launch_game);
+	void gui_display_savestate_dl();
+
+	bool net_save_download = false;
 	bool test_game_screen = false;
 
 	int current_map_button = 0;

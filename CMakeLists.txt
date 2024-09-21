@@ -440,10 +440,8 @@ if(NOT LIBRETRO)
 		target_compile_definitions(${PROJECT_NAME} PRIVATE USE_SDL USE_SDL_AUDIO)
 		target_sources(${PROJECT_NAME} PRIVATE core/sdl/sdl.cpp core/sdl/sdl.h core/sdl/sdl_gamepad.h core/sdl/sdl_keyboard.h)
 
-		if((UNIX AND NOT APPLE) OR NINTENDO_SWITCH)
-			find_package(CURL REQUIRED)
-			target_link_libraries(${PROJECT_NAME} PRIVATE CURL::libcurl)
-		endif()
+		find_package(CURL REQUIRED)
+		target_link_libraries(${PROJECT_NAME} PRIVATE CURL::libcurl)
 	endif()
 
 	find_package(ZLIB)
@@ -1012,6 +1010,8 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/deps/base64.h
 		core/dojo/dojo.cpp
 		core/dojo/dojo.h
+		core/dojo/dojo_file.cpp
+		core/dojo/dojo_file.h
 		core/dojo/dojo_gui.cpp
 		core/dojo/dojo_gui.h
 		core/dojo/match_client.cpp

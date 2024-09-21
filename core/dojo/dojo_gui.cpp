@@ -882,6 +882,10 @@ void DojoGui::settings_dojo_tab()
 			OptionRadioButton<int>("Horizontal", config::GGPOAnalogAxes, 1, "Use the left thumbstick horizontal axis only");
 			ImGui::SameLine();
 			OptionRadioButton<int>("Full", config::GGPOAnalogAxes, 2, "Use the left thumbstick horizontal and vertical axes");
+	
+			OptionCheckbox("Automatically Load Netplay Savestate", config::AutoLoadNetState);
+			ImGui::SameLine();
+			ShowHelpMarker("When available, loads netplay savestate on launch. Typically character or mode select screen");
 
 			OptionCheckbox("Enable Chat", config::GGPOChat, "Open the chat window when a chat message is received");
 			if (config::GGPOChat)
@@ -946,7 +950,7 @@ void DojoGui::settings_dojo_tab()
 
 		if (ImGui::CollapsingHeader("Training", ImGuiTreeNodeFlags_None))
 		{
-			OptionCheckbox("Automatically Load Netplay Savestate", config::AutoLoadNetState);
+			OptionCheckbox("Automatically Load Netplay Savestate", config::AutoLoadTrainingNetState);
 			ImGui::SameLine();
 			ShowHelpMarker("When available, loads netplay savestate on launch. Typically character or mode select screen");
 
@@ -1868,6 +1872,181 @@ void DojoGui::gui_display_replays()
 				dojo.game_name = "";
 				ImGui::CloseCurrentPopup();
 				gui_setState(GuiState::Main);
+			}
+		}
+
+		ImGui::EndPopup();
+	}
+}
+
+void DojoGui::invoke_download_save_popup(std::string game_path, bool *net_save_download, bool launch_game)
+{
+	dojo_file.Reset();
+
+	std::string filename = game_path.substr(game_path.find_last_of("/\\") + 1);
+	std::string short_game_name = std::filesystem::path(filename).stem().string();
+	dojo.game_name = short_game_name;
+	dojo_file.entry_name = short_game_name;
+	dojo_file.post_save_launch = launch_game;
+	dojo_file.game_path = game_path;
+
+	std::thread save_thread([&]()
+							{ dojo_file.DownloadCurrentNetSave(); });
+	save_thread.detach();
+
+	*net_save_download = true;
+	gui_setState(GuiState::DownloadState);
+}
+
+void DojoGui::gui_display_savestate_dl()
+{
+	char dl_savestate_txt[128];
+	sprintf(dl_savestate_txt, "%s Download Savestate - %s ", ICON_FA_BOLT, dojo.game_name.c_str());
+
+	char save_success_txt[128];
+	sprintf(save_success_txt, "%s.state.net successfully downloaded.", dojo.game_name.c_str());
+
+	ImGui::OpenPopup(dl_savestate_txt);
+	float window_size = 420;
+	if (ImGui::CalcTextSize(save_success_txt).x + 10 > 420)
+		window_size = ImGui::CalcTextSize(save_success_txt).x + 10;
+	ImGui::SetNextWindowSize(ScaledVec2(window_size, 0));
+	if (ImGui::BeginPopupModal(dl_savestate_txt, NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		if (dojo_file.status_text.find("Idle") != std::string::npos || dojo_file.status_text.find("Unable to") != std::string::npos)
+		{
+			char manual_txt[128];
+			sprintf(manual_txt, "%s Manual Download", ICON_FA_DOWNLOAD);
+
+			char destination_txt[128];
+			sprintf(destination_txt, "%s Destination Folder", ICON_FA_FOLDER_OPEN);
+
+			ImGui::TextUnformatted("Unable to connect to server.\nDownload file manually and copy to the destination folder.");
+			if (ImGui::Button(manual_txt))
+			{
+#ifdef _WIN32
+				ShellExecute(0, 0, dojo_file.source_url.data(), 0, 0, SW_SHOW);
+#elif defined(__APPLE__)
+				std::string cmd = "open \"" + dojo_file.source_url + "\"";
+				system(cmd.data());
+#elif defined(__linux__)
+				std::string cmd = "xdg-open \"" + dojo_file.source_url + "\"";
+				system(cmd.data());
+#endif
+			}
+			ImGui::SameLine();
+			if (ImGui::Button(destination_txt))
+			{
+#ifdef _WIN32
+				ShellExecuteA(NULL, "open", dojo_file.dest_path.data(), NULL, NULL, SW_SHOWDEFAULT);
+#elif defined(__APPLE__)
+				std::string cmd = "open \"" + dojo_file.dest_path + "\"";
+				system(cmd.data());
+#elif defined(__linux__)
+				std::string cmd = "xdg-open \"" + dojo_file.dest_path + "\"";
+				system(cmd.data());
+#endif
+			}
+
+			ImGui::SameLine();
+
+			char close_btn_txt[128];
+			sprintf(close_btn_txt, "%s Close", ICON_FA_CIRCLE_XMARK);
+
+			if (ImGui::Button(close_btn_txt))
+			{
+				if (dojo.commandLineStart)
+					exit(0);
+				else
+				{
+					dojo_file.Reset();
+					settings.content.path = "";
+					ImGui::CloseCurrentPopup();
+					gui_setState(GuiState::Main);
+				}
+			}
+		}
+		else
+		{
+			if (!dojo_file.not_found)
+			{
+				ImGui::PushItemWidth(window_size - 20);
+				if (dojo_file.total_size > 0)
+				{
+					float progress = float(dojo_file.downloaded_size) / float(dojo_file.total_size);
+					char buf[32];
+					sprintf(buf, "%d/%d", (int)(progress * dojo_file.total_size), dojo_file.total_size);
+					ImGui::ProgressBar(progress, ImVec2(0.f, 0.f), buf);
+				}
+				else
+				{
+					ImGui::ProgressBar(0, ImVec2(0.f, 0.f), "");
+				}
+			}
+
+			ImGui::TextUnformatted(dojo_file.status_text.data());
+
+			char launch_btn_txt[128];
+			if (dojo_file.post_save_launch)
+				sprintf(launch_btn_txt, "%s Launch Game", ICON_FA_BOLT);
+			else
+				sprintf(launch_btn_txt, "%s Launch Training", ICON_FA_DUMBBELL);
+
+			char cancel_btn_txt[128];
+			if ((dojo_file.total_size > 0 && dojo_file.total_size == dojo_file.downloaded_size) || !dojo_file.NetSaveExists(dojo_file.game_path))
+				sprintf(cancel_btn_txt, "%s Close", ICON_FA_CIRCLE_XMARK);
+			else
+				sprintf(cancel_btn_txt, "%s Cancel", ICON_FA_CIRCLE_XMARK);
+
+			float font_size = ImGui::GetFontSize() * (strlen(cancel_btn_txt)) / 2;
+			if (dojo_file.not_found ||
+				(dojo_file.total_size > 0 && dojo_file.total_size == dojo_file.downloaded_size && dojo_file.NetSaveExists(dojo_file.game_path)))
+				font_size = ImGui::GetFontSize() * (strlen(cancel_btn_txt) + strlen(launch_btn_txt)) / 2;
+
+			ImGui::Text(" ");
+			ImGui::SameLine(ImGui::GetWindowSize().x / 2 - (font_size / 2));
+
+			if (dojo_file.not_found ||
+				(dojo_file.total_size > 0 && dojo_file.total_size == dojo_file.downloaded_size && dojo_file.NetSaveExists(dojo_file.game_path)))
+			{
+				if (dojo_file.post_save_launch)
+				{
+					if (ImGui::Button(launch_btn_txt))
+					{
+						if (dojo_file.not_found)
+							dojo_file.no_save_launch = true;
+
+						ImGui::CloseCurrentPopup();
+						gui_setState(GuiState::Closed);
+						gui_start_game(dojo_file.game_path);
+					}
+				}
+				else
+				{
+					if (ImGui::Button(launch_btn_txt))
+					{
+						cfgSetVirtual("network", "GGPO", "no");
+						cfgSetVirtual("dojo", "Training", "yes");
+						ImGui::CloseCurrentPopup();
+						gui_setState(GuiState::Closed);
+						gui_start_game(dojo_file.game_path);
+					}
+				}
+
+				ImGui::SameLine();
+			}
+
+			if (ImGui::Button(cancel_btn_txt))
+			{
+				if (dojo.commandLineStart)
+					exit(0);
+				else
+				{
+					dojo_file.Reset();
+					settings.content.path = "";
+					ImGui::CloseCurrentPopup();
+					gui_setState(GuiState::Main);
+				}
 			}
 		}
 

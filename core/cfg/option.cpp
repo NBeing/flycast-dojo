@@ -178,6 +178,7 @@ Option<bool> StreamTxtOutput("StreamTxtOutput", false, "dojo");
 Option<bool> Training("Training", false, "dojo");
 Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
 Option<bool> EnableTrainingLua("EnableTrainingLua", true, "dojo");
+Option<bool> AutoLoadTrainingNetState("AutoLoadTrainingNetState", true, "dojo");
 Option<bool> AutoLoadNetState("AutoLoadNetState", true, "dojo");
 
 Option<bool> RecordMatches("RecordMatches", false, "dojo");
@@ -202,6 +203,8 @@ Option<int> DefaultRelayPort("DefaultRelayPort", 8001, "dojo");
 OptionString RelayAddressHistory("RelayAddressHistory", "", "dojo");
 
 Option<bool> HideKey("HideKey", false, "dojo");
+
+OptionString NetSaveBase("NetSaveBase", "https://github.com/blueminder/flycast-netplay-savestates/raw/main/", "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

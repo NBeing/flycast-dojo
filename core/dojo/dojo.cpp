@@ -1114,3 +1114,13 @@ void Dojo::Split(std::string const &str, const char delim, std::vector<std::stri
 		out.push_back(str.substr(start, end - start));
 	}
 }
+
+void Dojo::Replace(std::string &subject, const std::string &search, const std::string &replace)
+{
+	size_t pos = 0;
+	while ((pos = subject.find(search, pos)) != std::string::npos)
+	{
+		subject.replace(pos, search.length(), replace);
+		pos += replace.length();
+	}
+}

@@ -541,6 +541,7 @@ extern Option<bool> StreamTxtOutput;
 extern Option<bool> Training;
 extern Option<bool> ShowTrainingGameOverlay;
 extern Option<bool> EnableTrainingLua;
+extern Option<bool> AutoLoadTrainingNetState;
 extern Option<bool> AutoLoadNetState;
 extern OptionString DojoServerIP;
 extern OptionString DojoServerPort;
@@ -567,6 +568,8 @@ extern Option<int> DefaultRelayPort;
 extern OptionString RelayAddressHistory;
 
 extern Option<bool> HideKey;
+
+extern OptionString NetSaveBase;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;
