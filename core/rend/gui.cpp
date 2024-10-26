@@ -730,7 +730,53 @@ static void gui_display_commands()
 
 		displayed_button_count++;
 		ImGui::NextColumn();
+	}
 
+	char resume_txt[64];
+	sprintf(resume_txt, "%s  Resume", ICON_FA_PLAY);
+	if (ImGui::Button(resume_txt, ScaledVec2(200, 40)))
+	{
+		GamepadDevice::load_system_mappings();
+		gui_setState(GuiState::Closed);
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	// Cheats
+	{
+		DisabledScope scope(settings.network.online);
+
+		char cheats_txt[64];
+		if (cheatManager.enabledCheatCount() == 0)
+			sprintf(cheats_txt, "%s  Cheats Disabled", ICON_FA_FLASK);
+		else if (cheatManager.enabledCheatCount() == 1)
+			sprintf(cheats_txt, "%s  %d Cheat Enabled", ICON_FA_FLASK_VIAL, cheatManager.enabledCheatCount());
+		else
+			sprintf(cheats_txt, "%s  %d Cheats Enabled", ICON_FA_FLASK_VIAL, cheatManager.enabledCheatCount());
+
+		if (cheatManager.enabledCheatCount() == 0)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.492f, 0.101f, 0.000f, 1.000f)); //dark red
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.706f, 0.145f, 0.000f, 1.000f)); //red
+		}
+		else
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.054f, 0.196f, 0.054f, 1.000f)); //dark green
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.087f, 0.492f, 0.000f, 0.900f)); //green
+		}
+
+		if (ImGui::Button(cheats_txt, ScaledVec2(200, 40)) && !settings.network.online)
+			gui_setState(GuiState::Cheats);
+	}
+
+	ImGui::PopStyleColor();
+	ImGui::PopStyleColor();
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	if (cfgLoadBool("dojo", "Training", false))
+	{
 		char player_ico_txt[64];
 		if (dojo.training.control_player == 0)
 			sprintf(player_ico_txt, "%s ", ICON_FA_USER_LARGE);
@@ -739,10 +785,15 @@ static void gui_display_commands()
 
 		std::ostringstream watch_text;
 		watch_text << std::string(player_ico_txt) << " Control Player " << dojo.training.control_player + 1;
+
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.054f, 0.196f, 0.054f, 1.000f)); //dark green
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.087f, 0.492f, 0.000f, 0.900f)); //green
 		if (ImGui::Button(watch_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 		{
 			dojo.training.SwitchPlayer();
 		}
+		ImGui::PopStyleColor();
+		ImGui::PopStyleColor();
 		displayed_button_count++;
 		ImGui::NextColumn();
 
@@ -751,6 +802,17 @@ static void gui_display_commands()
 			sprintf(loop_ico_txt, "%s  ", ICON_FA_REPEAT);
 		else
 			sprintf(loop_ico_txt, "%s  ", ICON_FA_ARROW_RIGHT);
+
+		if (dojo.training.playback_loop)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.054f, 0.196f, 0.054f, 1.000f)); //dark green
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.087f, 0.492f, 0.000f, 0.900f)); //green
+		}
+		else
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.492f, 0.101f, 0.000f, 1.000f)); //dark red
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.706f, 0.145f, 0.000f, 1.000f)); //red
+		}
 
 		std::ostringstream playback_loop_text;
 		playback_loop_text << std::string(loop_ico_txt) << "Playback Loop ";
@@ -761,9 +823,10 @@ static void gui_display_commands()
 			if (!dojo.training.playback_loop)
 				dojo.training.rnd_playback_loop = false;
 		}
+		ImGui::PopStyleColor();
+		ImGui::PopStyleColor();
 		displayed_button_count++;
 		ImGui::NextColumn();
-
 	}
 
 	}
@@ -782,6 +845,17 @@ static void gui_display_commands()
 
 		if (dojo.play_match)
 		{
+			if (config::ShowReplayInputDisplay.get())
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.054f, 0.196f, 0.054f, 1.000f)); //dark green
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.087f, 0.492f, 0.000f, 0.900f)); //green
+			}
+			else
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.492f, 0.101f, 0.000f, 1.000f)); //dark red
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.706f, 0.145f, 0.000f, 1.000f)); //red
+			}
+
 			input_display_text << (config::ShowReplayInputDisplay.get() ? "On" : "Off");
 			if (ImGui::Button(input_display_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 			{
@@ -790,12 +864,25 @@ static void gui_display_commands()
 		}
 		else
 		{
+			if (config::ShowTrainingInputDisplay.get())
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.054f, 0.196f, 0.054f, 1.000f)); //dark green
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.087f, 0.492f, 0.000f, 0.900f)); //green
+			}
+			else
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.492f, 0.101f, 0.000f, 1.000f)); //dark red
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.706f, 0.145f, 0.000f, 1.000f)); //red
+			}
+
 			input_display_text << (config::ShowTrainingInputDisplay.get() ? "On" : "Off");
 			if (ImGui::Button(input_display_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 			{
 				config::ShowTrainingInputDisplay = (config::ShowTrainingInputDisplay.get() ? false : true);
 			}
 		}
+		ImGui::PopStyleColor();
+		ImGui::PopStyleColor();
 		displayed_button_count++;
 
 		ImGui::NextColumn();
@@ -812,10 +899,21 @@ static void gui_display_commands()
 		else
 			sprintf(lua_ico_txt, "%s  ", ICON_FA_CLOUD);
 
+		if (config::EnableTrainingLua.get())
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.054f, 0.196f, 0.054f, 1.000f)); //dark green
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.087f, 0.492f, 0.000f, 0.900f)); //green
+		}
+		else
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.492f, 0.101f, 0.000f, 1.000f)); //dark red
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.706f, 0.145f, 0.000f, 1.000f)); //red
+		}
+
 		std::ostringstream lua_display_text;
 		lua_display_text << std::string(lua_ico_txt) << "Training Lua ";
 		lua_display_text << (config::EnableTrainingLua.get() ? "On" : "Off");
-		if (ImGui::Button(lua_display_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+		if (ImGui::Button(lua_display_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 		{
 			config::EnableTrainingLua = (config::EnableTrainingLua.get() ? false : true);
 			if (config::EnableTrainingLua)
@@ -832,69 +930,45 @@ static void gui_display_commands()
 				lua::term();
 			}
 		}
+		ImGui::PopStyleColor();
+		ImGui::PopStyleColor();
 		displayed_button_count++;
 		ImGui::NextColumn();
 
 		if (config::EnableTrainingLua)
 		{
+			char overlay_ico_txt[64];
+			if (config::ShowTrainingGameOverlay.get())
+				sprintf(overlay_ico_txt, "%s  ", ICON_FA_WINDOW_RESTORE);
+			else
+				sprintf(overlay_ico_txt, "%s  ", ICON_FA_RECTANGLE_XMARK);
+
 			std::ostringstream lua_display_text;
-			lua_display_text << "Training Overlay ";
+			lua_display_text << std::string(overlay_ico_txt) << "Training Overlay ";
+
+			if (config::ShowTrainingGameOverlay.get())
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.054f, 0.196f, 0.054f, 1.000f)); //dark green
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.087f, 0.492f, 0.000f, 0.900f)); //green
+			}
+			else
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.492f, 0.101f, 0.000f, 1.000f)); //dark red
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.706f, 0.145f, 0.000f, 1.000f)); //red
+			}
 
 			lua_display_text << (config::ShowTrainingGameOverlay.get() ? "On" : "Off");
-			if (ImGui::Button(lua_display_text.str().data(), ImVec2(150 * settings.display.uiScale, 50 * settings.display.uiScale)))
+			if (ImGui::Button(lua_display_text.str().data(), ImVec2(200 * settings.display.uiScale, 40 * settings.display.uiScale)))
 			{
 				config::ShowTrainingGameOverlay = (config::ShowTrainingGameOverlay.get() ? false : true);
 			}
+			ImGui::PopStyleColor();
+			ImGui::PopStyleColor();
 			displayed_button_count++;
 			ImGui::NextColumn();
 		}
 	}
 #endif
-
-	if (!cfgLoadBool("dojo", "Training", false))
-	{
-	// Insert/Eject Disk
-	char disc_label_txt[64];\
-	if (libGDR_GetDiscType() == Open)
-		sprintf(disc_label_txt, "%s  Insert Disc", ICON_FA_COMPACT_DISC);
-	else
-		sprintf(disc_label_txt, "%s  Eject Disc", ICON_FA_EJECT);
-	if (ImGui::Button(disc_label_txt, ScaledVec2(200, 40)))
-	{
-		if (libGDR_GetDiscType() == Open)
-		{
-			gui_setState(GuiState::SelectDisk);
-		}
-		else
-		{
-			DiscOpenLid();
-			gui_setState(GuiState::Closed);
-		}
-	}
-
-	displayed_button_count++;
-	ImGui::NextColumn();
-
-	}
-
-	// Cheats
-	{
-		DisabledScope scope(settings.network.online);
-
-		char cheats_txt[64];
-		if (cheatManager.enabledCheatCount() == 0)
-			sprintf(cheats_txt, "%s  Cheats Disabled", ICON_FA_FLASK);
-		else if (cheatManager.enabledCheatCount() == 1)
-			sprintf(cheats_txt, "%s  %d Cheat Enabled", ICON_FA_FLASK_VIAL, cheatManager.enabledCheatCount());
-		else
-			sprintf(cheats_txt, "%s  %d Cheats Enabled", ICON_FA_FLASK_VIAL, cheatManager.enabledCheatCount());
-
-		if (ImGui::Button(cheats_txt, ScaledVec2(200, 40)) && !settings.network.online)
-			gui_setState(GuiState::Cheats);
-	}
-
-	displayed_button_count++;
-	ImGui::NextColumn();
 
 	char button_check_txt[64];
 	sprintf(button_check_txt, "%s  Button Check", ICON_FA_BULLSEYE);
@@ -931,23 +1005,39 @@ static void gui_display_commands()
 */
 
 	}
+
+	if (!cfgLoadBool("dojo", "Training", false))
+	{
+	// Insert/Eject Disk
+	char disc_label_txt[64];\
+	if (libGDR_GetDiscType() == Open)
+		sprintf(disc_label_txt, "%s  Insert Disc", ICON_FA_COMPACT_DISC);
+	else
+		sprintf(disc_label_txt, "%s  Eject Disc", ICON_FA_EJECT);
+	if (ImGui::Button(disc_label_txt, ScaledVec2(200, 40)))
+	{
+		if (libGDR_GetDiscType() == Open)
+		{
+			gui_setState(GuiState::SelectDisk);
+		}
+		else
+		{
+			DiscOpenLid();
+			gui_setState(GuiState::Closed);
+		}
+	}
+
+	displayed_button_count++;
+	ImGui::NextColumn();
+
+	}
+
 	// Settings
 	char settings_txt[64];
 	sprintf(settings_txt, "%s  Settings", ICON_FA_WRENCH);
 	if (ImGui::Button(settings_txt, ScaledVec2(200, 40)))
 	{
 		gui_setState(GuiState::Settings);
-	}
-
-	displayed_button_count++;
-	ImGui::NextColumn();
-
-	char resume_txt[64];
-	sprintf(resume_txt, "%s  Resume", ICON_FA_PLAY);
-	if (ImGui::Button(resume_txt, ScaledVec2(200, 40)))
-	{
-		GamepadDevice::load_system_mappings();
-		gui_setState(GuiState::Closed);
 	}
 
 	displayed_button_count++;
