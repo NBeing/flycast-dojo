@@ -3589,6 +3589,22 @@ static void gui_display_content()
 								break;
 							}
 						}
+
+						char quick_match_txt[64];
+						sprintf(quick_match_txt, "  %s   Quick Match", ICON_FA_HAND_FIST);
+						if (ImGui::MenuItem(quick_match_txt))
+						{
+							settings.content.path = game.path;
+							auto name_ext_loc = game.fileName.find_last_of('.');
+							dojo.game_name = game.fileName.substr(0, name_ext_loc);
+
+							quick_match.current_match_status_idx = 0;
+							quick_match.StartThread();
+
+							gui_setState(GuiState::QuickMatch);
+						}
+
+
 						char netplay_txt[64];
 						sprintf(netplay_txt, "  %s   Netplay Session", ICON_FA_BOLT);
 						if (ImGui::MenuItem(netplay_txt))
@@ -3859,8 +3875,61 @@ static void gui_display_loadscreen()
 		{
 			if (NetworkHandshake::instance != nullptr)
 			{
-				networkStatus = NetworkHandshake::instance->start();
-				gui_setState(GuiState::NetworkStart);
+				if (cfgLoadBool("dojo", "Relay", "no"))
+				{
+					try
+					{
+						dojo.relay_client.disconnect_toggle = false;
+						std::thread t2(&RelayClient::ClientThread, std::ref(dojo.relay_client));
+						t2.detach();
+					}
+					catch (std::exception &)
+					{
+					}
+
+					auto start = std::chrono::system_clock::now();
+					auto end = start + std::chrono::seconds(5);
+					auto current = std::chrono::system_clock::now();
+					bool relay_wait = std::chrono::system_clock::now() < end;
+					while (
+						relay_wait &&
+						((cfgLoadStr("dojo", "RelayKey", "").size() == 0) ||
+						 (!config::ActAsServer && !dojo.relay_client.disconnect_toggle)))
+					{
+						current = std::chrono::system_clock::now();
+						relay_wait = current < end;
+					}
+
+					if (cfgLoadStr("dojo", "RelayKey", "").rfind("NOKEY", 0) == 0)
+					{
+						cfgSetVirtual("dojo", "RelayKey", "");
+						std::cout << "No Key Found" << std::endl;
+						ImGui::OpenPopup("No Key Found");
+					}
+					else if (cfgLoadStr("dojo", "RelayKey", "").rfind("MAXCN", 0) == 0)
+					{
+						cfgSetVirtual("dojo", "RelayKey", "");
+						std::cout << "Maximum Connections Hit" << std::endl;
+						ImGui::OpenPopup("Max Connections Hit");
+					}
+					else if (cfgLoadStr("dojo", "RelayKey", "").size() == 0)
+					{
+						dojo.relay_client.disconnect_toggle = true;
+						config::NetworkServer.set("");
+						ImGui::OpenPopup("Timeout");
+					}
+					else if (config::ActAsServer && cfgLoadStr("dojo", "RelayKey", "").size() > 0 ||
+							 dojo.relay_client.start_game && cfgLoadStr("dojo", "RelayKey", "").size() > 0)
+					{
+						networkStatus = NetworkHandshake::instance->start();
+						gui_setState(GuiState::NetworkStart);
+					}
+				}
+				else
+				{
+					networkStatus = NetworkHandshake::instance->start();
+					gui_setState(GuiState::NetworkStart);
+				}
 			}
 			else
 			{
@@ -3907,6 +3976,17 @@ void gui_display_ui()
 		}
 		if (!settings.content.path.empty() || settings.naomi.slave)
 		{
+			if (cfgLoadBool("dojo", "QuickMatch", false))
+			{
+				auto game_filename = std::filesystem::path(settings.content.path).filename();
+				dojo.game_name = game_filename.stem().string();
+
+				quick_match.current_match_status_idx = 0;
+				quick_match.StartThread();
+
+				gui_setState(GuiState::QuickMatch);
+				return;
+			}
 #ifndef __ANDROID__
 			if (!dojo_gui.gui_start)
 				commandLineStart = true;
@@ -3981,6 +4061,9 @@ void gui_display_ui()
 		break;
 	case GuiState::QuickMap:
 		quick_map();
+		break;
+	case GuiState::QuickMatch:
+		dojo_gui.gui_display_quick_match();
 		break;
 	case GuiState::QuickPlayerSelect:
 		quick_player_select();

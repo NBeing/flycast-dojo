@@ -4,6 +4,7 @@
 #include "imgui/imgui.h"
 #include "rend/gui.h"
 #include "rend/gui_util.h"
+#include "rend/imgui_driver.h"
 
 #include "hw/maple/maple_devs.h"
 #include "hw/naomi/naomi_cart.h"
@@ -29,6 +30,8 @@ public:
 	void netplay_relay_body();
 	void netplay_lan_body();
 	void gui_display_netplay_connect();
+	void gui_display_quick_match();
+	void invoke_new_challenger_popup(QuickMatch::QuickMatchMsg msg);
 
 	void gui_display_disconnected();
 	void show_player_name_overlay(bool paused);
@@ -56,6 +59,11 @@ public:
 	void invoke_download_save_popup(std::string game_path, bool* net_save_download, bool launch_game);
 	void gui_display_savestate_dl();
 
+	bool get_avatar_image(std::string email_sha, ImTextureID& textureId, bool allowLoad);
+	bool get_flag_image(std::string country_code, ImTextureID& textureId, bool allowLoad);
+
+	static void AvatarImage(ImTextureID textureId, const std::string& tooltip, ImVec2 size);
+
 	bool net_save_download = false;
 	bool test_game_screen = false;
 
@@ -74,7 +82,6 @@ private:
 	std::string own_ip = "";
 	int hosting_opt = 1;
 	bool local_tab = true;
-	MatchClient client;
 
 	bool matched = false;
 

@@ -1008,6 +1008,15 @@ endif()
 
 target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/deps/base64.h
+		core/dojo/deps/date/date.h
+		core/dojo/deps/date/tz.h
+		core/dojo/deps/date/tz_private.h
+		core/dojo/deps/tz.cpp
+		core/dojo/deps/easywsclient/easywsclient.hpp
+		core/dojo/deps/easywsclient/easywsclient.cpp
+		core/dojo/deps/json.hpp
+		core/dojo/deps/picosha2.h
+		core/dojo/deps/UUID.hpp
 		core/dojo/dojo.cpp
 		core/dojo/dojo.h
 		core/dojo/dojo_file.cpp
@@ -1023,7 +1032,9 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/replay.cpp
 		core/dojo/replay.h
 		core/dojo/training.h
-		core/dojo/training.cpp)
+		core/dojo/training.cpp
+		core/dojo/quick_match.cpp
+		core/dojo/quick_match.h)
 
 target_sources(${PROJECT_NAME} PRIVATE
 		core/imgread/cdi.cpp

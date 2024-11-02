@@ -74,6 +74,7 @@ enum class GuiState {
 	ButtonCheck,
 	TestGame,
 	QuickMap,
+	QuickMatch,
 	QuickPlayerSelect,
 	QuickSelectPlatform,
 	Replays,

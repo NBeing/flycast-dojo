@@ -1,16 +1,16 @@
-#include "match_client.h"
+#include "dojo.h"
 
 // connects to matchmaking server
 void MatchClient::ConnectMMServer()
 {
 	struct hostent *mm_host;
-	mm_host = gethostbyname(config::MatchmakingServerAddress.get().data());
+	mm_host = gethostbyname(config::MatchCodeServer.get().data());
 
 	sockaddr_in mms_addr;
 	mms_addr.sin_family = AF_INET;
-	mms_addr.sin_port = htons((u16)std::stoul(config::MatchmakingServerPort));
+	mms_addr.sin_port = htons((u16)std::stoul(config::MatchCodePort));
 	memcpy(&mms_addr.sin_addr, mm_host->h_addr_list[0], mm_host->h_length);
-	// inet_pton(AF_INET, config::MatchmakingServerAddress.data(), &mms_addr.sin_addr);
+	// inet_pton(AF_INET, config::MatchCodeServer.data(), &mms_addr.sin_addr);
 
 	std::string mm_msg;
 	if (dojo.hosting)
@@ -107,6 +107,12 @@ void MatchClient::ClientLoop()
 			if (memcmp("CODE", buffer, 4) == 0)
 			{
 				dojo.match_code = std::string(buffer + 5, strlen(buffer + 5));
+				if (quick_match.start_game)
+				{
+					quick_match.SendKeyMsg("match_code", config::MatchCodeServer.get(), std::stoi(config::MatchCodePort.get()), dojo.match_code);
+					//std::this_thread::sleep_for(std::chrono::seconds(5));
+					//quick_match.StopThread();
+				}
 			}
 
 			if (memcmp("OPPADDR", buffer, 7) == 0)

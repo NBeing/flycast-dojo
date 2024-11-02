@@ -106,21 +106,18 @@ void RelayClient::ClientLoop()
 		{
 			if (memcmp("NOKEY", buffer, 5) == 0)
 			{
-				std::cout << "NOKEY" << std::endl;
 				std::string received = std::string(buffer, 6);
 				cfgSetVirtual("dojo", "RelayKey", received);
 				disconnect_toggle = true;
 			}
 			else if (memcmp("MAXCN", buffer, 5) == 0)
 			{
-				std::cout << "MAXCN" << std::endl;
 				std::string received = std::string(buffer, 6);
 				cfgSetVirtual("dojo", "RelayKey", received);
 				disconnect_toggle = true;
 			}
 			else if (memcmp("START", buffer, 5) == 0)
 			{
-				std::cout << "RELAY CLIENT START RECEIVED" << std::endl;
 				start_game = true;
 				disconnect_toggle = true;
 			}
@@ -128,7 +125,11 @@ void RelayClient::ClientLoop()
 			{
 				std::string received = std::string(buffer, 6);
 				cfgSetVirtual("dojo", "RelayKey", received);
-				std::cout << "RECEIVED RELAY KEY " << received << std::endl;
+				if (quick_match.start_game)
+				{
+					quick_match.SendKeyMsg("relay", config::NetworkServer.get(), config::GGPORemotePort.get(), received);
+					quick_match.StopThread();
+				}
 				start_game = true;
 				disconnect_toggle = true;
 			}

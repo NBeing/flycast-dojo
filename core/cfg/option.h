@@ -530,12 +530,15 @@ extern Option<int> GGPORemotePort;
 // Dojo
 extern OptionString PlayerName;
 extern Option<bool> PlayerNameOverlay;
+
 extern Option<bool> NetBeaconEnable;
 extern OptionString BeaconMulticastAddress;
 extern OptionString BeaconMulticastPort;
+
 extern Option<bool> MatchCodeEnable;
-extern OptionString MatchmakingServerAddress;
-extern OptionString MatchmakingServerPort;
+extern OptionString MatchCodeServer;
+extern OptionString MatchCodePort;
+
 extern Option<int> FirstTo;
 extern Option<bool> StreamTxtOutput;
 extern Option<bool> Training;
@@ -564,12 +567,21 @@ extern Option<bool> TestGame;
 
 extern Option<bool> Relay;
 extern OptionString RelayKey;
-extern Option<int> DefaultRelayPort;
 extern OptionString RelayAddressHistory;
+extern OptionString RelayServer;
+extern Option<int> RelayPort;
 
 extern Option<bool> HideKey;
 
 extern OptionString NetSaveBase;
+
+extern Option<bool> QuickMatch;
+
+extern OptionString QuickMatchServer;
+extern OptionString QuickMatchPort;
+
+extern OptionString QMCxnMethod;
+extern OptionString PlayerEmail;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

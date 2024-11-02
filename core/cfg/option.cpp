@@ -165,12 +165,15 @@ Option<int> GGPORemotePort("GGPORemotePort", 19713, "network");
 // Dojo
 OptionString PlayerName("PlayerName", "Player", "dojo");
 Option<bool> PlayerNameOverlay("PlayerNameOverlay", true, "dojo");
+
 Option<bool> NetBeaconEnable("NetBeacon", true, "dojo");
 OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "dojo");
 OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
+
 Option<bool> MatchCodeEnable("MatchCodeEnable", true, "dojo");
-OptionString MatchmakingServerAddress("MatchmakingServerAddress", "match.dojo.ooo", "dojo");
-OptionString MatchmakingServerPort("MatchmakingServerPort", "52001", "dojo");
+OptionString MatchCodeServer("MatchCodeServer", "match.dojo.ooo", "dojo");
+OptionString MatchCodePort("MatchCodePort", "52001", "dojo");
+
 OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
 OptionString DojoServerPort("ServerPort", "6000", "dojo");
 Option<int> FirstTo("FirstTo", 0, "dojo");
@@ -199,12 +202,21 @@ Option<bool> TestGame("TestGame", false, "dojo");
 
 Option<bool> Relay("Relay", false, "dojo");
 OptionString RelayKey("RelayKey", "", "dojo");
-Option<int> DefaultRelayPort("DefaultRelayPort", 8001, "dojo");
 OptionString RelayAddressHistory("RelayAddressHistory", "", "dojo");
+OptionString RelayServer("RelayServer", "fin-1.match.dojo.ooo", "dojo");
+Option<int> RelayPort("RelayPort", 8001, "dojo");
 
 Option<bool> HideKey("HideKey", false, "dojo");
 
 OptionString NetSaveBase("NetSaveBase", "https://github.com/blueminder/flycast-netplay-savestates/raw/main/", "dojo");
+
+Option<bool> QuickMatch("QuickMatch", false, "dojo");
+
+OptionString QuickMatchServer("QuickMatchServer", "match.dojo.ooo", "dojo");
+OptionString QuickMatchPort("QuickMatchPort", "8081", "dojo");
+
+OptionString QMCxnMethod("QMCxnMethod", "relay", "dojo");
+OptionString PlayerEmail("PlayerEmail", "", "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

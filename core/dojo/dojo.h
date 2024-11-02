@@ -27,7 +27,9 @@
 #include "replay.h"
 #include "training.h"
 #include "relay_client.h"
+#include "match_client.h"
 #include "dojo_file.h"
+#include "quick_match.h"
 
 #define MAPLE_FRAME_SIZE 28
 #define FRAME_BATCH 120
@@ -156,6 +158,7 @@ public:
 	void Replace(std::string &subject, const std::string &search, const std::string &replace);
 
 	RelayClient relay_client;
+	MatchClient match_client;
 };
 
 extern Dojo dojo;

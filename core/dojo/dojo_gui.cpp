@@ -161,7 +161,7 @@ void DojoGui::netplay_match_code_body()
 		matched = true;
 		try
 		{
-			std::thread t2(&MatchClient::ClientThread, std::ref(client));
+			std::thread t2(&MatchClient::ClientThread, std::ref(dojo.match_client));
 			t2.detach();
 		}
 		catch (std::exception &)
@@ -183,7 +183,7 @@ void DojoGui::netplay_match_code_body()
 		matched = true;
 		try
 		{
-			std::thread t2(&MatchClient::ClientThread, std::ref(client));
+			std::thread t2(&MatchClient::ClientThread, std::ref(dojo.match_client));
 			t2.detach();
 		}
 		catch (std::exception &)
@@ -297,7 +297,7 @@ void DojoGui::netplay_relay_body()
 
 		cfgSetVirtual("dojo", "Relay", "yes");
 
-		int port = config::DefaultRelayPort.get();
+		int port = config::RelayPort.get();
 		if (!dojo.commandLineStart)
 		{
 			std::string server_input = std::string(si, strlen(si));
@@ -333,54 +333,9 @@ void DojoGui::netplay_relay_body()
 		if (current_delay != config::GGPODelay.get())
 			config::GGPODelay.set(current_delay);
 
-		try
-		{
-			dojo.relay_client.disconnect_toggle = false;
-			std::thread t2(&RelayClient::ClientThread, std::ref(dojo.relay_client));
-			t2.detach();
-		}
-		catch (std::exception &)
-		{
-		}
-
-		auto start = std::chrono::system_clock::now();
-		auto end = start + std::chrono::seconds(5);
-		auto current = std::chrono::system_clock::now();
-		bool relay_wait = std::chrono::system_clock::now() < end;
-		while (
-			relay_wait &&
-			((cfgLoadStr("dojo", "RelayKey", "").size() == 0) ||
-			 (!config::ActAsServer && !dojo.relay_client.disconnect_toggle)))
-		{
-			current = std::chrono::system_clock::now();
-			relay_wait = current < end;
-		}
-
-		if (cfgLoadStr("dojo", "RelayKey", "").rfind("NOKEY", 0) == 0)
-		{
-			cfgSetVirtual("dojo", "RelayKey", "");
-			std::cout << "No Key Found" << std::endl;
-			ImGui::OpenPopup("No Key Found");
-		}
-		else if (cfgLoadStr("dojo", "RelayKey", "").rfind("MAXCN", 0) == 0)
-		{
-			cfgSetVirtual("dojo", "RelayKey", "");
-			std::cout << "Maximum Connections Hit" << std::endl;
-			ImGui::OpenPopup("Max Connections Hit");
-		}
-		else if (cfgLoadStr("dojo", "RelayKey", "").size() == 0)
-		{
-			dojo.relay_client.disconnect_toggle = true;
-			config::NetworkServer.set("");
-			ImGui::OpenPopup("Timeout");
-		}
-		else if (config::ActAsServer && cfgLoadStr("dojo", "RelayKey", "").size() > 0 ||
-				 dojo.relay_client.start_game && cfgLoadStr("dojo", "RelayKey", "").size() > 0)
-		{
-			ImGui::CloseCurrentPopup();
-			gui_setState(GuiState::Closed);
-			gui_start_game(settings.content.path);
-		}
+		ImGui::CloseCurrentPopup();
+		gui_setState(GuiState::Closed);
+		gui_start_game(settings.content.path);
 	}
 
 	if (ImGui::BeginPopupModal("Timeout", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar))
@@ -546,6 +501,552 @@ void DojoGui::netplay_lan_body()
 	}
 
 	ImGui::SameLine();
+}
+
+struct QuickMatchEntry
+{
+	int ID;
+	std::string Name;
+	std::string Location;
+};
+
+void DojoGui::gui_display_quick_match()
+{
+	char quick_match_txt[128];
+	sprintf(quick_match_txt, "%s Quick Match - %s ", ICON_FA_HAND_FIST, dojo.game_name.c_str());
+
+	std::vector<QuickMatchEntry> players;
+
+	ImGui::OpenPopup(quick_match_txt);
+	ImGui::SetNextWindowSize(ScaledVec2(480, 0));
+	if (ImGui::BeginPopupModal(quick_match_txt, NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		static char si[128] = "";
+
+		auto textureId = ImTextureID{};
+		std::string avatar_sha;
+		if (config::PlayerEmail.get().empty())
+			picosha2::hash256_hex_string(config::PlayerName.get(), avatar_sha);
+		else
+			picosha2::hash256_hex_string(config::PlayerEmail.get(), avatar_sha);
+
+		get_avatar_image(avatar_sha, textureId, true);
+
+		if (quick_match.current_match_status_idx == 0)
+		{
+			ImGui::TextColored(ImVec4(0, 128, 0, 1), ICON_FA_CIRCLE);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+				ImGui::TextUnformatted("Active");
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+			ImGui::SameLine();
+			if (textureId != ImTextureID())
+			{
+				AvatarImage(textureId, config::PlayerName.get().data(), ImVec2(20, 20));
+				ImGui::SameLine();
+			}
+			ImGui::Text("%s", config::PlayerName.get().data());
+		}
+		else
+		{
+			ImGui::TextColored(ImVec4(128, 0, 0, 1), ICON_FA_CIRCLE_DOT);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+				ImGui::TextUnformatted("Away");
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+			ImGui::SameLine();
+			if (textureId != ImTextureID())
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+				AvatarImage(textureId, avatar_sha.data(), ImVec2(20, 20));
+				ImGui::PopStyleVar();
+				ImGui::SameLine();
+			}
+			ImGui::TextDisabled("%s", config::PlayerName.get().data());
+		}
+		ImGui::SameLine();
+		ShowHelpMarker("Name visible to other players");
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - 90 - ImGui::CalcTextSize("Status").x - ImGui::GetStyle().FramePadding.x);
+		const char *items[] = {"Active", "Away"};
+		ImGui::PushItemWidth(90);
+		ImGui::Combo("Status", &quick_match.current_match_status_idx, items, IM_ARRAYSIZE(items));
+		ImGui::PopItemWidth();
+
+		char close_btn_txt[128];
+		sprintf(close_btn_txt, "%s Close", ICON_FA_CIRCLE_XMARK);
+
+		static ImGuiTableFlags flags1 = ImGuiTableFlags_RowBg;
+
+		double pending_requests_height = 0;
+		if (quick_match.pending.size() > 0)
+		{
+			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyle().Colors[ImGuiCol_FrameBgActive]);
+			pending_requests_height = 38.0 * quick_match.pending.size();
+			ImGui::BeginChild("Pending Requests", ImVec2(480, pending_requests_height));
+
+			if (ImGui::BeginTable("table3", 2, ImGuiTableFlags_None, ImVec2(480.0, pending_requests_height)))
+			{
+				ImGui::TableSetupColumn("###Pending", ImGuiTableColumnFlags_WidthFixed, 360.0f);
+				ImGui::TableSetupColumn("###PendingButtons", ImGuiTableColumnFlags_WidthStretch, 120.0f);
+				ImGui::TableSetupScrollFreeze(0, 1);
+
+				int row = 0;
+
+				for (auto req : quick_match.pending)
+				{
+					if (req.uuid.empty())
+						continue;
+
+					ImGui::TableNextRow();
+					ImGui::PushID(row);
+
+					std::string req_sha = "";
+					auto it = std::find_if(quick_match.players.begin(), quick_match.players.end(),
+										   [req](QuickMatch::QuickMatchMsg msg)
+										   {
+											   return req.uuid == msg.uuid;
+										   });
+					if (it != quick_match.players.end())
+					{
+						req_sha = it->email_sha;
+					}
+					else
+					{
+						std::string off_log = req.player_name + " has logged off";
+						quick_match.AppendToLog(off_log);
+						quick_match.pending_requests_to_remove.push_back(req.uuid);
+					}
+
+					for (int column = 0; column < 2; column++)
+					{
+						ImGui::TableSetColumnIndex(column);
+						if (column == 0)
+						{
+							if (row == 0)
+								ImGui::SetCursorPosY(ImGui::GetCursorPos().y + 5.0);
+							ImGui::SetCursorPosX(ImGui::GetCursorPos().x + 5.0);
+							if (req_sha.length() > 0)
+							{
+								auto textureId = ImTextureID{};
+								get_avatar_image(req_sha.data(), textureId, true);
+
+								if (textureId != ImTextureID())
+								{
+									AvatarImage(textureId, req.player_name.data(), ImVec2(20, 20));
+									ImGui::SameLine();
+								}
+							}
+							ImGui::Text(" You have challenged %s \n\n", req.player_name.data());
+						}
+						else if (column == 1)
+						{
+							if (row == 0)
+								ImGui::SetCursorPosY(ImGui::GetCursorPos().y + 2.5);
+
+							ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.492f, 0.101f, 0.000f, 1.000f));		   // dark red
+							ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.706f, 0.145f, 0.000f, 1.000f)); // red
+
+							std::string revoke_id = "Revoke##Revoke" + req.uuid;
+							if (ImGui::Button(revoke_id.data(), ImVec2(80, 0)))
+							{
+								std::string cancel_log_msg = "You have cancelled the challenge with " + req.player_name;
+								quick_match.AppendToLog(cancel_log_msg);
+
+								auto cancel_msg = nlohmann::json{
+									{"type", "revoke"},
+									{"uuid", req.uuid}};
+
+								quick_match.outgoing_msgs.push_back(cancel_msg.dump());
+								quick_match.pending_requests_to_remove.push_back(it->uuid);
+							}
+
+							ImGui::PopStyleColor();
+							ImGui::PopStyleColor();
+						}
+					}
+					ImGui::PopID();
+					row++;
+				}
+				ImGui::EndTable();
+			}
+			ImGui::EndChild();
+			ImGui::PopStyleColor();
+		}
+
+		for (auto rem_uuid : quick_match.pending_requests_to_remove)
+		{
+			quick_match.pending
+				.erase(std::remove_if(quick_match.pending.begin(),
+									  quick_match.pending.end(),
+									  [rem_uuid](QuickMatch::QuickMatchMsg request)
+									  {
+										  return request.uuid == rem_uuid;
+									  }),
+					   quick_match.pending.end());
+		}
+
+		quick_match.pending_requests_to_remove.clear();
+
+		double requests_height = 0;
+		if (quick_match.requests.size() > 0)
+		{
+			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyle().Colors[ImGuiCol_FrameBg]);
+			requests_height = 38.0 * quick_match.requests.size();
+			ImGui::BeginChild("Requests", ImVec2(480, requests_height));
+
+			if (ImGui::BeginTable("table2", 2, ImGuiTableFlags_None, ImVec2(480.0, requests_height)))
+			{
+				ImGui::TableSetupColumn("###Challenge", ImGuiTableColumnFlags_WidthFixed, 270.0f);
+				ImGui::TableSetupColumn("###ChallengeButtons", ImGuiTableColumnFlags_WidthStretch, 210.0f);
+				ImGui::TableSetupScrollFreeze(0, 1);
+
+				int row = 0;
+
+				for (auto req : quick_match.requests)
+				{
+					if (req.uuid.empty())
+						continue;
+
+					ImGui::TableNextRow();
+					ImGui::PushID(row);
+
+					std::string req_sha = "";
+					auto it = std::find_if(quick_match.players.begin(), quick_match.players.end(),
+										   [req](QuickMatch::QuickMatchMsg msg)
+										   {
+											   return req.uuid == msg.uuid;
+										   });
+					if (it != quick_match.players.end())
+					{
+						req_sha = it->email_sha;
+					}
+					else
+					{
+						std::string off_log = req.player_name + " cancelled their challenge";
+						quick_match.AppendToLog(off_log);
+						quick_match.requests_to_remove.push_back(req.uuid);
+					}
+
+					for (int column = 0; column < 2; column++)
+					{
+						ImGui::TableSetColumnIndex(column);
+						if (column == 0)
+						{
+							if (row == 0)
+								ImGui::SetCursorPosY(ImGui::GetCursorPos().y + 5.0);
+							ImGui::SetCursorPosX(ImGui::GetCursorPos().x + 5.0);
+							if (req_sha.length() > 0)
+							{
+								auto textureId = ImTextureID{};
+								get_avatar_image(req_sha.data(), textureId, true);
+
+								if (textureId != ImTextureID())
+								{
+									AvatarImage(textureId, req.player_name.data(), ImVec2(20, 20));
+									ImGui::SameLine();
+								}
+							}
+							ImGui::Text(" %s challenges you\n\n", req.player_name.data());
+						}
+						else if (column == 1)
+						{
+							if (row == 0)
+								ImGui::SetCursorPosY(ImGui::GetCursorPos().y + 2.5);
+
+							ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.054f, 0.196f, 0.054f, 1.000f));		   // dark green
+							ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.087f, 0.492f, 0.000f, 0.900f)); // green
+
+							std::string accept_id = "Accept##Accept" + req.uuid;
+							if (ImGui::Button(accept_id.data(), ImVec2(80, 0)))
+							{
+								std::string accept_log_msg = "You accepted " + req.player_name + "'s challenge";
+								quick_match.AppendToLog(accept_log_msg);
+
+								quick_match.target_player = req.uuid;
+
+								auto accept_msg = nlohmann::json{
+									{"type", "accept"},
+									{"target_uuid", req.uuid},
+									{"game_name", dojo.game_name},
+									{"player_name", config::PlayerName.get()},
+									{"cxn_method", config::QMCxnMethod.get()},
+									{"uuid", quick_match.client_uuid}};
+
+								if (req.cxn_method == "relay")
+								{
+									quick_match.target_player = req.uuid;
+									quick_match.start_game = true;
+									// waiting for key message from host
+								}
+
+								quick_match.outgoing_msgs.push_back(accept_msg.dump());
+
+								quick_match.requests_to_remove.push_back(it->uuid);
+							}
+
+							ImGui::PopStyleColor();
+							ImGui::PopStyleColor();
+
+							ImGui::SetItemDefaultFocus();
+							ImGui::SameLine();
+
+							ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.492f, 0.101f, 0.000f, 1.000f));		   // dark red
+							ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.706f, 0.145f, 0.000f, 1.000f)); // red
+
+							std::string reject_id = "Reject##Reject" + req.uuid;
+							if (ImGui::Button(reject_id.data(), ImVec2(80, 0)))
+							{
+								std::string reject_log_msg = "You rejected " + req.player_name + "'s challenge.";
+								quick_match.AppendToLog(reject_log_msg);
+
+								auto reject_msg = nlohmann::json{
+									{"type", "reject"},
+									{"game_name", dojo.game_name},
+									{"uuid", req.uuid}};
+
+								quick_match.outgoing_msgs.push_back(reject_msg.dump());
+								quick_match.requests_to_remove.push_back(it->uuid);
+							}
+
+							ImGui::PopStyleColor();
+							ImGui::PopStyleColor();
+						}
+					}
+					ImGui::PopID();
+					row++;
+				}
+
+				ImGui::EndTable();
+			}
+			ImGui::EndChild();
+			ImGui::PopStyleColor();
+		}
+
+		for (auto rem_uuid : quick_match.requests_to_remove)
+		{
+			quick_match.requests
+				.erase(std::remove_if(quick_match.requests.begin(),
+									  quick_match.requests.end(),
+									  [rem_uuid](QuickMatch::QuickMatchMsg request)
+									  {
+										  return request.uuid == rem_uuid;
+									  }),
+					   quick_match.requests.end());
+		}
+
+		quick_match.requests_to_remove.clear();
+
+		ImGui::BeginChild("Active Player Listing", ImVec2(480, 260 - pending_requests_height - requests_height));
+
+		ImGui::PushStyleColor(ImGuiCol_Header, 0);
+		if (ImGui::BeginTable("table1", 3, flags1, ImVec2(480.0, 140.0)))
+		{
+			ImGui::TableSetupColumn("###Avatar", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 300.0f);
+			ImGui::TableSetupColumn("Location", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+			ImGui::TableSetupScrollFreeze(0, 1);
+			ImGui::TableHeadersRow();
+
+			int row = 0;
+
+			for (auto p : quick_match.players)
+			{
+				if (p.game_name != dojo.game_name)
+					continue;
+
+				if (p.status == "away")
+					continue;
+
+				if (p.uuid == quick_match.client_uuid)
+					continue;
+
+				ImGui::TableNextRow();
+				ImGui::PushID(row);
+
+				bool selected = false;
+				auto it = std::find_if(quick_match.pending.begin(), quick_match.pending.end(),
+									   [p](QuickMatch::QuickMatchMsg &msg)
+									   {
+										   return p.uuid == msg.uuid;
+									   });
+				if (it != quick_match.pending.end())
+				{
+					selected = true;
+				}
+
+				auto textureId = ImTextureID{};
+
+				get_avatar_image(p.email_sha.data(), textureId, true);
+
+				std::string selectable_player_id = "###" + p.uuid;
+
+				for (int column = 0; column < 3; column++)
+				{
+					ImGui::TableSetColumnIndex(column);
+					if (column == 0)
+					{
+						if (ImGui::Selectable(selectable_player_id.data(), selected, ImGuiSelectableFlags_DontClosePopups | ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 42)))
+						{
+							auto it = std::find_if(quick_match.pending.begin(), quick_match.pending.end(),
+												   [p](QuickMatch::QuickMatchMsg &msg)
+												   {
+													   return msg.uuid == p.uuid;
+												   });
+							if (it == quick_match.pending.end())
+							{
+								std::string challenge_msg = "You challenged " + p.player_name;
+								quick_match.AppendToLog(challenge_msg);
+
+								auto request_msg = nlohmann::json{
+									{"uuid", quick_match.client_uuid},
+									{"type", "request"},
+									{"target_uuid", p.uuid},
+									{"game_name", dojo.game_name},
+									{"player_name", config::PlayerName.get()},
+									{"cxn_method", config::QMCxnMethod.get()},
+									{"server", config::NetworkServer.get()},
+									{"port", std::to_string(config::GGPOPort.get())}};
+
+								quick_match.pending.push_back(p);
+								quick_match.outgoing_msgs.push_back(request_msg.dump());
+							}
+						}
+
+						ImGui::SameLine();
+
+						if (textureId != ImTextureID())
+						{
+							AvatarImage(textureId, p.player_name.data(), ImVec2(40, 40));
+						}
+					}
+					else if (column == 1)
+					{
+						ImGui::Text(p.player_name.data());
+					}
+					else
+					{
+						if (!p.location.empty())
+						{
+							auto flagTextureId = ImTextureID{};
+							get_flag_image(p.country_code.data(), flagTextureId, true);
+							AvatarImage(flagTextureId, p.location.data(), ImVec2(30, 30));
+						}
+						else
+							ImGui::Text("");
+					}
+				}
+				ImGui::PopID();
+				row++;
+			}
+			for (auto p : quick_match.players)
+			{
+				if (p.game_name != dojo.game_name)
+					continue;
+
+				if (p.status == "active")
+					continue;
+
+				if (p.uuid == quick_match.client_uuid)
+					continue;
+
+				ImGui::TableNextRow();
+				ImGui::PushID(row);
+
+				bool selected = false;
+				auto it = std::find_if(quick_match.pending.begin(), quick_match.pending.end(),
+									   [p](QuickMatch::QuickMatchMsg &msg)
+									   {
+										   return p.uuid == msg.uuid;
+									   });
+				if (it != quick_match.pending.end())
+				{
+					selected = true;
+				}
+
+				auto textureId = ImTextureID{};
+				get_avatar_image(p.email_sha.data(), textureId, true);
+
+				std::string selectable_player_id = "###" + p.uuid;
+
+				for (int column = 0; column < 3; column++)
+				{
+					ImGui::TableSetColumnIndex(column);
+					if (column == 0)
+					{
+						ImGui::Text("  ");
+						if (textureId != ImTextureID())
+						{
+							ImGui::SameLine();
+							ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+							AvatarImage(textureId, p.player_name.data(), ImVec2(40, 40));
+							ImGui::PopStyleVar();
+						}
+					}
+					else if (column == 1)
+					{
+						ImGui::TextDisabled(p.player_name.data());
+					}
+					else
+					{
+						if (!p.location.empty())
+						{
+							auto flagTextureId = ImTextureID{};
+							get_flag_image(p.country_code.data(), flagTextureId, true);
+							ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+							AvatarImage(flagTextureId, p.location.data(), ImVec2(30, 30));
+							ImGui::PopStyleVar();
+						}
+						else
+							ImGui::Text("");
+					}
+				}
+				ImGui::PopID();
+				row++;
+			}
+
+			ImGui::EndTable();
+			ImGui::PopStyleColor();
+		}
+
+		ImGui::EndChild();
+
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyle().Colors[ImGuiCol_NavWindowingDimBg]);
+		ImGui::BeginChild("Session Log", ImVec2(470, 70));
+		for (auto log_entry : quick_match.log)
+		{
+			ImGui::TextDisabled(log_entry.timestamp.data());
+			ImGui::SameLine();
+			ImGui::Text("%s", log_entry.msg.data());
+			if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+				ImGui::SetScrollHereY(1.0f);
+		}
+		ImGui::EndChild();
+		ImGui::PopStyleColor();
+
+		float font_size = ImGui::GetFontSize() * (strlen(close_btn_txt)) / 2;
+		ImGui::Text(" ");
+		ImGui::SameLine(ImGui::GetWindowSize().x / 2 - (font_size / 2));
+
+		if (ImGui::Button(close_btn_txt))
+		{
+			quick_match.StopThread();
+			cfgSetVirtual("network", "GGPO", "no");
+
+			settings.content.path = "";
+			ImGui::CloseCurrentPopup();
+			gui_setState(GuiState::Main);
+		}
+
+		ImGui::EndPopup();
+	}
 }
 
 void DojoGui::gui_display_netplay_connect()
@@ -760,7 +1261,7 @@ void DojoGui::gui_display_match_code_host_wait()
 
 	ImGui::Text("Waiting for opponent to connect...");
 
-	if (!dojo.match_code.empty())
+	if (!dojo.match_code.empty() && !cfgLoadBool("dojo", "HideKey", "no"))
 	{
 		ImGui::Text("Match Code: %s", dojo.match_code.data());
 		ImGui::SameLine();
@@ -788,7 +1289,7 @@ void DojoGui::gui_display_match_code_host_wait()
 		gui_setState(GuiState::NetplayConnect);
 	}
 
-	if (!config::NetworkServer.get().empty())
+	if (!config::NetworkServer.get().empty() && !quick_match.start_game)
 	{
 		gui_setState(GuiState::NetplayConnect);
 	}
@@ -803,7 +1304,7 @@ void DojoGui::gui_display_match_code_guest_wait()
 
 	ImGui::Begin("##guest_wait", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
-	if (config::NetworkServer.get().empty())
+	if (cfgLoadStr("network", "server", "").empty())
 	{
 		ImGui::OpenPopup("Match Code");
 		if (ImGui::BeginPopupModal("Match Code", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiInputTextFlags_EnterReturnsTrue))
@@ -848,9 +1349,10 @@ void DojoGui::gui_display_match_code_guest_wait()
 			ImGui::EndPopup();
 		}
 	}
-
-	if (!config::NetworkServer.get().empty())
+	else
+	{
 		gui_setState(GuiState::NetplayConnect);
+	}
 
 	ImGui::End();
 }
@@ -882,7 +1384,7 @@ void DojoGui::settings_dojo_tab()
 			OptionRadioButton<int>("Horizontal", config::GGPOAnalogAxes, 1, "Use the left thumbstick horizontal axis only");
 			ImGui::SameLine();
 			OptionRadioButton<int>("Full", config::GGPOAnalogAxes, 2, "Use the left thumbstick horizontal and vertical axes");
-	
+
 			OptionCheckbox("Automatically Load Netplay Savestate", config::AutoLoadNetState);
 			ImGui::SameLine();
 			ShowHelpMarker("When available, loads netplay savestate on launch. Typically character or mode select screen");
@@ -974,6 +1476,48 @@ void DojoGui::settings_dojo_tab()
 			ShowHelpMarker("Delay dummy recording until the first input is registered");
 		}
 
+		if (ImGui::CollapsingHeader("Quick Match", ImGuiTreeNodeFlags_None))
+		{
+			char PlayerEmail[256];
+
+			strcpy(PlayerEmail, config::PlayerEmail.get().c_str());
+			ImGui::InputText("Gravatar Email", PlayerEmail, sizeof(PlayerEmail), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+			config::PlayerEmail = PlayerEmail;
+			ImGui::SameLine();
+			ShowHelpMarker("Email address used to retrieve profile picture from Gravatar. Not shared with any opponents.");
+
+			char RelayServerAddress[256];
+
+			strcpy(RelayServerAddress, config::RelayServer.get().c_str());
+			ImGui::InputText("Relay Server", RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+			config::RelayServer = RelayServerAddress;
+			ImGui::SameLine();
+			ShowHelpMarker("Preferred relay for hosted games when firewall hole punching is not available.");
+
+			int RelayPort = config::RelayPort.get();
+			ImGui::InputInt("Relay Port", &RelayPort);
+			ImGui::SameLine();
+			ShowHelpMarker("The Relay port to transmit to");
+			if (RelayPort != config::RelayPort.get())
+				config::RelayPort = RelayPort;
+
+			char QuickMatchServer[256];
+
+			strcpy(QuickMatchServer, config::QuickMatchServer.get().c_str());
+			ImGui::InputText("Server Address", QuickMatchServer, sizeof(QuickMatchServer), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+			config::QuickMatchServer = QuickMatchServer;
+			ImGui::SameLine();
+			ShowHelpMarker("Quick Match Service Hostname");
+
+			char QuickMatchPort[256];
+
+			strcpy(QuickMatchPort, config::QuickMatchPort.get().c_str());
+			ImGui::InputText("Server Port", QuickMatchPort, sizeof(QuickMatchPort), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+			config::QuickMatchPort = QuickMatchPort;
+			ImGui::SameLine();
+			ShowHelpMarker("Quick Match Service Port (Default: 8081)");
+		}
+
 		if (ImGui::CollapsingHeader("Match Codes##MCHeader", ImGuiTreeNodeFlags_None))
 		{
 			OptionCheckbox("Enable Match Codes", config::MatchCodeEnable,
@@ -981,17 +1525,17 @@ void DojoGui::settings_dojo_tab()
 
 			if (config::MatchCodeEnable)
 			{
-				char MatchmakingServerAddress[256];
+				char MatchCodeServer[256];
 
-				strcpy(MatchmakingServerAddress, config::MatchmakingServerAddress.get().c_str());
-				ImGui::InputText("Matchmaking Service Address", MatchmakingServerAddress, sizeof(MatchmakingServerAddress), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
-				config::MatchmakingServerAddress = MatchmakingServerAddress;
+				strcpy(MatchCodeServer, config::MatchCodeServer.get().c_str());
+				ImGui::InputText("Match Code Service Address", MatchCodeServer, sizeof(MatchCodeServer), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+				config::MatchCodeServer = MatchCodeServer;
 
-				char MatchmakingServerPort[256];
+				char MatchCodePort[256];
 
-				strcpy(MatchmakingServerPort, config::MatchmakingServerPort.get().c_str());
-				ImGui::InputText("Matchmaking Service Port", MatchmakingServerPort, sizeof(MatchmakingServerPort), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
-				config::MatchmakingServerPort = MatchmakingServerPort;
+				strcpy(MatchCodePort, config::MatchCodePort.get().c_str());
+				ImGui::InputText("Match Code Service Port", MatchCodePort, sizeof(MatchCodePort), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+				config::MatchCodePort = MatchCodePort;
 			}
 		}
 
@@ -2052,4 +2596,94 @@ void DojoGui::gui_display_savestate_dl()
 
 		ImGui::EndPopup();
 	}
+}
+
+bool DojoGui::get_avatar_image(std::string email_sha, ImTextureID &textureId, bool allowLoad)
+{
+	textureId = ImTextureID{};
+	if (email_sha.empty())
+		return false;
+
+	std::string avatar_path = get_writable_data_path("avatar") + "//" + email_sha;
+	// Get the boxart texture. Load it if needed.
+	textureId = imguiDriver->getTexture(avatar_path);
+	if (textureId == ImTextureID() && allowLoad)
+	{
+		int width, height;
+		u8 *imgData = loadImage(avatar_path, width, height);
+		if (imgData != nullptr)
+		{
+			try
+			{
+				textureId = imguiDriver->updateTextureAndAspectRatio(avatar_path, imgData, width, height);
+			}
+			catch (...)
+			{
+				// vulkan can throw during resizing
+			}
+			free(imgData);
+		}
+		return true;
+	}
+	return false;
+}
+
+void DojoGui::AvatarImage(ImTextureID textureId, const std::string &tooltip, ImVec2 size)
+{
+	float ar = imguiDriver->getAspectRatio(textureId);
+	ImVec2 uv0{0.f, 0.f};
+	ImVec2 uv1{1.f, 1.f};
+	if (ar > 1)
+	{
+		uv0.y = -(ar - 1) / 2;
+		uv1.y = 1 + (ar - 1) / 2;
+	}
+	else if (ar != 0)
+	{
+		ar = 1 / ar;
+		uv0.x = -(ar - 1) / 2;
+		uv1.x = 1 + (ar - 1) / 2;
+	}
+	ImGui::Image(textureId, size, uv0, uv1);
+	if (tooltip.size() > 0)
+	{
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::BeginTooltip();
+			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+			ImGui::TextUnformatted(tooltip.c_str());
+			ImGui::PopTextWrapPos();
+			ImGui::EndTooltip();
+		}
+	}
+}
+
+bool DojoGui::get_flag_image(std::string country_code, ImTextureID &textureId, bool allowLoad)
+{
+	textureId = ImTextureID{};
+	if (country_code.empty())
+		return false;
+
+	std::string avatar_path = get_writable_data_path("flag") + "//" + country_code + ".png";
+	// Get the boxart texture. Load it if needed.
+	textureId = imguiDriver->getTexture(avatar_path);
+	if (textureId == ImTextureID() && allowLoad)
+	{
+		int width, height;
+		u8 *imgData = loadImage(avatar_path, width, height);
+		if (imgData != nullptr)
+		{
+			try
+			{
+				textureId = imguiDriver->updateTextureAndAspectRatio(avatar_path, imgData, width, height);
+			}
+			catch (...)
+			{
+				// vulkan can throw during resizing
+			}
+			free(imgData);
+		}
+		return true;
+	}
+	return false;
 }

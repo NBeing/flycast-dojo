@@ -105,6 +105,14 @@ std::string DojoFile::DownloadFile(std::string download_url, std::string dest_fo
 	dojo.Split(download_url, '/', path_elements);
 	std::string filename = path_elements.back();
 
+	// remove GET parameters
+	if (filename.find("?") != std::string::npos )
+	{
+		path_elements.clear();
+		dojo.Split(filename, '?', path_elements);
+		filename = path_elements.front();
+	}
+
 	std::string path = filename;
 	if (dest_folder == "data")
 	{
@@ -115,6 +123,12 @@ std::string DojoFile::DownloadFile(std::string download_url, std::string dest_fo
 	{
 		path = get_writable_data_path("") + "//" + dest_folder + "//" + filename;
 		dojo_file.dest_path = get_writable_data_path("") + "//" + dest_folder;
+	}
+
+	if (dest_folder == "avatar")
+	{
+		if (std::filesystem::exists(path))
+			return path;
 	}
 
 	if (!append.empty())

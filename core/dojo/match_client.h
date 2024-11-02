@@ -31,5 +31,5 @@ private:
     bool isLoopStarted;
     bool request_repeat;
 
-    int packets_per_frame = 5;
+    int packets_per_frame = 1;
 };
