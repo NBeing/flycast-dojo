@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <deque>
 #include <iostream>
 #include <thread>
 
@@ -15,6 +16,7 @@ class RelayClient
 {
 public:
     void ClientThread();
+    bool Init();
     void ConnectRelayServer();
 
     void AddToRelayAddressHistory(std::string address);
@@ -25,6 +27,11 @@ public:
     bool start_game = false;
     bool key_shown;
 
+    std::deque<std::string> outgoing_msgs;
+
+    void SendHostMsg();
+    void SendGuestMsg();
+
 private:
     sock_t local_socket = INVALID_SOCKET;
     void CloseSocket(sock_t &socket) const
@@ -33,13 +40,30 @@ private:
         socket = INVALID_SOCKET;
     }
 
+    sockaddr_in mms_addr;
+
     sock_t CreateAndBind(int port);
     bool CreateLocalSocket(int port);
 
-    bool Init();
     void ClientLoop();
 
     bool isLoopStarted;
     bool request_repeat;
 
+    std::map<int, uint64_t> ping_send_ts;
+    std::vector<uint64_t> ping_rtt;
+    uint64_t avg_ping_ms;
+
+    std::string RandomHexString(int length, int seed);
+
+    std::deque<std::string> ping_msgs;
+    uint64_t ping_test_start = 0;
+    bool hole_punched = false;
+
+    sockaddr_in opponent_addr;
+    std::string opponent_server;
+    int opponent_port;
+
+    int PingOpponent(int add_to_seed);
+    uint64_t GetOpponentAvgPing(int num_requests);
 };

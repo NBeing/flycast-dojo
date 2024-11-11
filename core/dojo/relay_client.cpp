@@ -8,7 +8,6 @@ void RelayClient::ConnectRelayServer()
 	target_hostname = config::RelayServer.get();
 	mm_host = gethostbyname(target_hostname.data());
 
-	sockaddr_in mms_addr;
 	mms_addr.sin_family = AF_INET;
 	mms_addr.sin_port = htons((u16)config::RelayPort.get());
 	memcpy(&mms_addr.sin_addr, mm_host->h_addr_list[0], mm_host->h_length);
@@ -16,28 +15,30 @@ void RelayClient::ConnectRelayServer()
 	std::string ip_address = inet_ntoa(*((in_addr *)mm_host->h_addr));
 	config::NetworkServer.set(ip_address);
 
-	std::string b64_game_name = to_base64(dojo.game_name.data());
-
-	std::string mm_msg;
-	if (cfgLoadBool("network", "ActAsServer", "no"))
-		mm_msg = "host|" + b64_game_name;
-	else
-	{
-		std::string relay_key = cfgLoadStr("dojo", "RelayKey", "");
-
-		while (relay_key.empty() && !disconnect_toggle)
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
-
-		if (disconnect_toggle)
-			return;
-
-		mm_msg = "join|" + relay_key;
-	}
-
-	sendto(local_socket, (const char *)mm_msg.data(), strlen(mm_msg.data()), 0, (const struct sockaddr *)&mms_addr, sizeof(mms_addr));
-
-	std::cout << "To Relay: " << mm_msg << std::endl;
 	INFO_LOG(NETWORK, "Connecting to Relay");
+}
+
+void RelayClient::SendHostMsg()
+{
+	std::string b64_game_name = to_base64(dojo.game_name.data());
+	std::string mm_msg = "host|" + b64_game_name;
+	outgoing_msgs.push_back(mm_msg);
+	std::cout << "To Relay: " << mm_msg << std::endl;
+}
+
+void RelayClient::SendGuestMsg()
+{
+	std::string relay_key = cfgLoadStr("dojo", "RelayKey", "");
+
+	while (relay_key.empty() && !disconnect_toggle)
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+	if (disconnect_toggle)
+		return;
+
+	std::string mm_msg = "join|" + relay_key;
+	outgoing_msgs.push_back(mm_msg);
+	std::cout << "To Relay: " << mm_msg << std::endl;
 }
 
 sock_t RelayClient::CreateAndBind(int port)
@@ -80,6 +81,8 @@ bool RelayClient::Init()
 	start_game = false;
 	disconnect_toggle = false;
 	key_shown = false;
+	hole_punched = false;
+	ping_test_start = 0;
 #ifdef _WIN32
 	WSADATA wsaData;
 	if (WSAStartup(MAKEWORD(2, 0), &wsaData) != 0)
@@ -105,7 +108,78 @@ void RelayClient::ClientLoop()
 		int bytes_read = recvfrom(local_socket, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender, &senderlen);
 		if (bytes_read)
 		{
-			if (memcmp("NOKEY", buffer, 5) == 0)
+
+			if (memcmp("PING", buffer, 4) == 0)
+			{
+				opponent_addr.sin_family = AF_INET;
+				opponent_addr.sin_port = sender.sin_port;
+
+				char opponent_ip[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &(sender.sin_addr), opponent_ip, INET_ADDRSTRLEN);
+				inet_pton(AF_INET, opponent_ip, &opponent_addr.sin_addr);
+
+				opponent_server = std::string(opponent_ip, strlen(opponent_ip));
+				opponent_port = htons(sender.sin_port);
+
+				std::cout << "(PING) Opponent assigned to " << opponent_server << " " << opponent_port << std::endl;
+				std::cout << "Received " << std::string(buffer, strlen(buffer)) << " from opponent" << std::endl;
+				hole_punched = true;
+
+				char buffer_copy[256];
+				memcpy(buffer_copy, buffer, 256);
+				buffer_copy[1] = 'O';
+
+				std::string buffer_s = std::string(buffer_copy, strlen(buffer_copy));
+				// sendto(local_socket, (const char *)buffer_copy, strlen(buffer_copy), 0, (struct sockaddr *)&sender, senderlen);
+				memset(buffer, 0, 256);
+
+				ping_msgs.push_back(buffer_s);
+			}
+
+			if (memcmp("PONG", buffer, 4) == 0)
+			{
+				opponent_addr.sin_family = AF_INET;
+				opponent_addr.sin_port = sender.sin_port;
+
+				char opponent_ip[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &(sender.sin_addr), opponent_ip, INET_ADDRSTRLEN);
+				inet_pton(AF_INET, opponent_ip, &opponent_addr.sin_addr);
+
+				opponent_server = std::string(opponent_ip, strlen(opponent_ip));
+				opponent_port = htons(sender.sin_port);
+
+				std::cout << "(PING) Opponent assigned to " << opponent_server << " " << opponent_port << std::endl;
+
+				int rnd_num_cmp = atoi(buffer + 5);
+				std::cout << "Received PONG " << rnd_num_cmp << " from opponent" << std::endl;
+				hole_punched = true;
+				uint64_t ret_timestamp = dojo.UnixTimestamp();
+
+				if (ping_send_ts.count(rnd_num_cmp) == 1)
+				{
+					uint64_t rtt = ret_timestamp - ping_send_ts[rnd_num_cmp];
+					INFO_LOG(NETWORK, "Received PONG %d, RTT: %d ms", rnd_num_cmp, rtt);
+
+					ping_rtt.push_back(rtt);
+
+					if (ping_rtt.size() > 1)
+					{
+						avg_ping_ms = std::accumulate(ping_rtt.begin(), ping_rtt.end(), 0.0) / ping_rtt.size();
+					}
+					else
+					{
+						avg_ping_ms = rtt;
+					}
+
+					if (ping_rtt.size() > 5)
+						ping_rtt.clear();
+
+					ping_send_ts.erase(rnd_num_cmp);
+				}
+
+				std::cout << "AVG PING MS " << avg_ping_ms << std::endl;
+			}
+			else if (memcmp("NOKEY", buffer, 5) == 0)
 			{
 				std::string received = std::string(buffer, 6);
 				cfgSetVirtual("dojo", "RelayKey", received);
@@ -119,6 +193,9 @@ void RelayClient::ClientLoop()
 			}
 			else if (memcmp("START", buffer, 5) == 0)
 			{
+				if (!cfgLoadBool("network", "ActAsServer", "no"))
+					std::cout << "Hole punching failed. Using relay." << std::endl;
+
 				start_game = true;
 				disconnect_toggle = true;
 			}
@@ -131,17 +208,83 @@ void RelayClient::ClientLoop()
 				{
 					quick_match.SendKeyMsg("relay", config::RelayServer.get(), config::RelayPort.get(), received);
 				}
-				start_game = true;
-				disconnect_toggle = true;
 			}
+			else if (memcmp("OPPADDR", buffer, 7) == 0)
+			{
+				std::string data = std::string(buffer + 8, strlen(buffer + 5));
+				std::vector<std::string> opp;
+				dojo.Split(data, ':', opp);
+
+				std::cout << "OPPADDR " << data << std::endl;
+
+				opponent_addr.sin_family = AF_INET;
+				opponent_addr.sin_port = htons((u16)std::stol(opp[1]));
+				inet_pton(AF_INET, opp[0].data(), &opponent_addr.sin_addr);
+
+				std::cout << "(OPPADDR) Opponent assigned to " << opp[0] << " " << opp[1] << std::endl;
+
+				ping_test_start = dojo.UnixTimestamp();
+				std::cout << "PING TEST START " << ping_test_start << std::endl;
+				auto avg_ping = GetOpponentAvgPing(1);
+			}
+		}
+
+		if (opponent_addr.sin_port > 0)
+		{
+			while (ping_msgs.size() > 0)
+			{
+				std::string ping_msg = ping_msgs.front();
+				sendto(local_socket, (const char *)ping_msg.data(), strlen(ping_msg.data()), 0, (const struct sockaddr *)&opponent_addr, sizeof(opponent_addr));
+				std::cout << "Sent " << ping_msg << " to opponent" << std::endl;
+				ping_msgs.pop_front();
+			}
+		}
+
+		if (hole_punched &&
+			ping_msgs.empty())
+		{
+			config::NetworkServer = opponent_server;
+			config::GGPORemotePort = opponent_port;
+			std::cout << "Assigned " << opponent_server << " " << opponent_port << std::endl;
+			std::cout << "Hole punching succeeded." << std::endl;
+
+			start_game = true;
+			disconnect_toggle = true;
+		}
+
+		if (ping_test_start > 0 &&
+			(dojo.UnixTimestamp() > (ping_test_start + 2000)) &&
+			!hole_punched &&
+			ping_msgs.empty())
+		{
+			std::cout << "(PING TEST) ";
+
+			std::cout << std::endl;
+			std::cout << "Hole punching failed. Using relay." << std::endl;
+
+			std::cout << "PING TEST END " << dojo.UnixTimestamp() << std::endl;
+			ping_test_start = 0;
+
+			start_game = true;
+			disconnect_toggle = true;
+		}
+
+		while (outgoing_msgs.size() > 0)
+		{
+			std::string out_msg = outgoing_msgs.front();
+			sendto(local_socket, (const char *)out_msg.data(), strlen(out_msg.data()), 0, (const struct sockaddr *)&mms_addr, sizeof(mms_addr));
+			outgoing_msgs.pop_front();
 		}
 	}
 }
 
 void RelayClient::ClientThread()
 {
-	Init();
-	ConnectRelayServer();
+	if (!cfgLoadBool("network", "ActAsServer", "no"))
+	{
+		Init();
+		ConnectRelayServer();
+	}
 	ClientLoop();
 	CloseSocket(local_socket);
 }
@@ -161,4 +304,91 @@ std::vector<std::string> RelayClient::GetRelayAddressHistory()
 	std::vector<std::string> relay_addresses;
 	dojo.Split(history, ';', relay_addresses);
 	return relay_addresses;
+}
+
+// http://www.concentric.net/~Ttwang/tech/inthash.htm
+unsigned long mix(unsigned long a, unsigned long b, unsigned long c)
+{
+	a = a - b;
+	a = a - c;
+	a = a ^ (c >> 13);
+	b = b - c;
+	b = b - a;
+	b = b ^ (a << 8);
+	c = c - a;
+	c = c - b;
+	c = c ^ (b >> 13);
+	a = a - b;
+	a = a - c;
+	a = a ^ (c >> 12);
+	b = b - c;
+	b = b - a;
+	b = b ^ (a << 16);
+	c = c - a;
+	c = c - b;
+	c = c ^ (b >> 5);
+	a = a - b;
+	a = a - c;
+	a = a ^ (c >> 3);
+	b = b - c;
+	b = b - a;
+	b = b ^ (a << 10);
+	c = c - a;
+	c = c - b;
+	c = c ^ (b >> 15);
+	return c;
+}
+
+std::string RelayClient::RandomHexString(int length, int seed)
+{
+	srand(seed);
+
+	char hex_out[1024] = {0};
+	char hex_chars[] =
+		{'0', '1', '2', '3', '4', '5', '6', '7',
+		 '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+
+	for (int i = 0; i < length; i++)
+	{
+		hex_out[i] = hex_chars[rand() % 16];
+	}
+
+	std::string x_out(hex_out, strlen(hex_out));
+
+	return x_out;
+}
+
+// udp ping, seeds with random number
+int RelayClient::PingOpponent(int add_to_seed)
+{
+	unsigned long seed = mix(clock(), time(NULL), getpid());
+	srand(seed + add_to_seed);
+	int rnd_num_cmp = rand() * 1000 + 1;
+	std::cout << "PING " << rnd_num_cmp << std::endl;
+
+	if (ping_send_ts.count(rnd_num_cmp) == 0)
+	{
+		std::stringstream ping_ss("");
+		ping_ss << "PING " << rnd_num_cmp << " " << RandomHexString(32, seed);
+		std::string to_send_ping = ping_ss.str();
+
+		ping_msgs.push_back(to_send_ping);
+		INFO_LOG(NETWORK, "Sent %s to Opponent", to_send_ping.data());
+
+		uint64_t current_timestamp = dojo.UnixTimestamp();
+		ping_send_ts.emplace(rnd_num_cmp, current_timestamp);
+	}
+
+	// last ping key
+	return rnd_num_cmp;
+}
+
+uint64_t RelayClient::GetOpponentAvgPing(int num_requests)
+{
+	for (int i = 0; i < num_requests; i++)
+	{
+		PingOpponent(i);
+	}
+
+	return avg_ping_ms;
 }

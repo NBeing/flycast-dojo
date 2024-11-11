@@ -3886,14 +3886,17 @@ static void gui_display_loadscreen()
 			{
 				if (cfgLoadBool("dojo", "Relay", "no"))
 				{
-					try
+					if (!cfgLoadBool("network", "ActAsServer", "no"))
 					{
-						dojo.relay_client.disconnect_toggle = false;
-						std::thread t2(&RelayClient::ClientThread, std::ref(dojo.relay_client));
-						t2.detach();
-					}
-					catch (std::exception &)
-					{
+						try
+						{
+							dojo.relay_client.disconnect_toggle = false;
+							std::thread t2(&RelayClient::ClientThread, std::ref(dojo.relay_client));
+							t2.detach();
+						}
+						catch (std::exception &)
+						{
+						}
 					}
 
 					auto start = std::chrono::system_clock::now();

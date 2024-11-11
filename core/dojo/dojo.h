@@ -157,6 +157,8 @@ public:
 	void Split(std::string const &str, const char delim, std::vector<std::string> &out);
 	void Replace(std::string &subject, const std::string &search, const std::string &replace);
 
+	uint64_t UnixTimestamp();
+
 	RelayClient relay_client;
 	MatchClient match_client;
 };

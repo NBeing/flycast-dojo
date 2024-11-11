@@ -281,6 +281,21 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("network", "GGPO", "yes");
 			cfgSetVirtual("network", "Enable", "no");
 
+			dojo.relay_client.Init();
+			dojo.relay_client.ConnectRelayServer();
+
+			try
+			{
+				dojo.relay_client.disconnect_toggle = false;
+				std::thread t2(&RelayClient::ClientThread, std::ref(dojo.relay_client));
+				t2.detach();
+			}
+			catch (std::exception &)
+			{
+			}
+
+			dojo.relay_client.SendHostMsg();
+
 			start_game = true;
 
 			SendStatusMsg("hidden");
@@ -366,6 +381,8 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("network", "ActAsServer", "no");
 			cfgSetVirtual("network", "GGPO", "yes");
 			cfgSetVirtual("network", "Enable", "no");
+
+			dojo.relay_client.SendGuestMsg();
 
 			host_ready = true;
 		}
