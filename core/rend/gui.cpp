@@ -4077,6 +4077,12 @@ void gui_display_ui()
 	case GuiState::DownloadState:
 		dojo_gui.gui_display_savestate_dl();
 		break;
+	case GuiState::DelaySelect:
+		dojo_gui.gui_display_delay_select();
+		break;
+	case GuiState::QuickMatchGuestWait:
+		dojo_gui.gui_display_quick_match_guest_wait();
+		break;
 	default:
 		die("Unknown UI state");
 		break;

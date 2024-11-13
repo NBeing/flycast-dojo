@@ -31,7 +31,9 @@ public:
 	void netplay_lan_body();
 	void gui_display_netplay_connect();
 	void gui_display_quick_match();
-	void invoke_new_challenger_popup(QuickMatch::QuickMatchMsg msg);
+
+	void gui_display_delay_select();
+	void gui_display_quick_match_guest_wait();
 
 	void gui_display_disconnected();
 	void show_player_name_overlay(bool paused);

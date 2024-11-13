@@ -259,10 +259,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("network", "GGPO", "yes");
 			cfgSetVirtual("network", "Enable", "no");
 
-			quick_match.start_game = true;
-
-			gui_setState(GuiState::Closed);
-			gui_start_game(settings.content.path);
+			start_game = true;
 		}
 		else if (parsed_json["cxn_method"] == "match_code")
 		{
@@ -294,6 +291,8 @@ void QuickMatch::ProcessMsg(std::string msg)
 			gui_setState(GuiState::MatchCodeHostWait);
 			gui_start_game(settings.content.path);
 		}
+
+		gui_setState(GuiState::DelaySelect);
 	}
 	else if (parsed_json["type"] == "reject")
 	{
@@ -344,11 +343,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("network", "GGPO", "yes");
 			cfgSetVirtual("network", "Enable", "no");
 
-			start_game = true;
-
-			gui_setState(GuiState::Closed);
-			StopThread();
-			gui_start_game(settings.content.path);
+			host_ready = true;
 		}
 		else if (parsed_json["cxn_method"] == "match_code")
 		{

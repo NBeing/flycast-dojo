@@ -783,7 +783,7 @@ void DojoGui::gui_display_quick_match()
 								if (req.cxn_method == "relay")
 								{
 									quick_match.target_player = req.uuid;
-									quick_match.start_game = true;
+									gui_setState(GuiState::DelaySelect);
 									// waiting for key message from host
 								}
 
@@ -1150,6 +1150,106 @@ void DojoGui::gui_display_disconnected()
 	ImGui::End();
 
 	error_popup();
+}
+
+void DojoGui::gui_display_delay_select()
+{
+	char netplay_session_txt[128];
+	sprintf(netplay_session_txt, "%s Netplay Session - %s ", ICON_FA_BOLT, dojo.game_name.c_str());
+
+	ImGui::OpenPopup(netplay_session_txt);
+	ImGui::SetNextWindowSize(ScaledVec2(netplay_popup_width, 0));
+	if (ImGui::BeginPopupModal(netplay_session_txt, NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		char start_btn_txt[128];
+		char cancel_btn_txt[128];
+		sprintf(start_btn_txt, "%s Start", ICON_FA_CIRCLE_PLAY);
+		sprintf(cancel_btn_txt, "%s Cancel", ICON_FA_CIRCLE_XMARK);
+
+		ImGui::SetCursorPosX(20.f * settings.display.uiScale);
+		ImGui::TextDisabled("%s", ICON_FA_GAUGE);
+		ImGui::SameLine();
+
+		ImGui::SliderInt("###CurrentDelay", (int *)&current_delay, 0, 20);
+		ImGui::SameLine();
+		ImGui::Text("Delay");
+
+		float font_size = ImGui::GetFontSize() * (strlen(start_btn_txt) + strlen(cancel_btn_txt)) / 2;
+		ImGui::Text(" ");
+		ImGui::SameLine(ImGui::GetWindowSize().x / 2 - font_size + (font_size / 2));
+
+		if (ImGui::Button(start_btn_txt))
+		{
+			cfgSetVirtual("network", "GGPO", "yes");
+			cfgSetVirtual("network", "Enable", "no");
+
+			NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
+			if (current_delay != config::GGPODelay.get())
+				cfgSetVirtual("network", "GGPODelay", std::to_string(current_delay));
+
+			ImGui::CloseCurrentPopup();
+
+			if (cfgLoadBool("network", "ActAsServer", "no"))
+				quick_match.host_ready = true;
+			quick_match.start_game = true;
+			gui_setState(GuiState::QuickMatchGuestWait);
+		}
+
+		ImGui::SameLine();
+
+		if (ImGui::Button(cancel_btn_txt))
+		{
+			dojo.presence.Close();
+			cfgSetVirtual("network", "GGPO", "no");
+
+			settings.content.path = "";
+			ImGui::CloseCurrentPopup();
+			if (quick_match.start_game)
+			{
+				quick_match.Clear();
+				quick_match.StartThread();
+				gui_setState(GuiState::QuickMatch);
+			}
+			else
+				gui_setState(GuiState::Main);
+		}
+
+		ImGui::EndPopup();
+	}
+}
+
+void DojoGui::gui_display_quick_match_guest_wait()
+{
+	centerNextWindow();
+	ImGui::SetNextWindowSize(ScaledVec2(330, 210));
+
+	ImGui::Begin("##network", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize);
+
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ScaledVec2(20, 10));
+	ImGui::AlignTextToFramePadding();
+	ImGui::SetCursorPosX(20.f * settings.display.uiScale);
+
+	ImGui::Text("Waiting for opponent to start game...");
+
+	if (quick_match.start_game && quick_match.host_ready)
+	{
+		gui_setState(GuiState::Closed);
+		gui_start_game(settings.content.path);
+	}
+
+	float currentwidth = ImGui::GetContentRegionAvail().x;
+	ImGui::SetCursorPosX((currentwidth - 100.f * settings.display.uiScale) / 2.f + ImGui::GetStyle().WindowPadding.x);
+	ImGui::SetCursorPosY(148.f * settings.display.uiScale);
+
+	if (ImGui::Button("Cancel", ScaledVec2(100.f, 0)))
+	{
+		quick_match.Clear();
+		quick_match.StartThread();
+		gui_setState(GuiState::QuickMatch);
+	}
+	ImGui::PopStyleVar();
+
+	ImGui::End();
 }
 
 void DojoGui::gui_display_replay_end()

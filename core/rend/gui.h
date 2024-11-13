@@ -78,7 +78,9 @@ enum class GuiState {
 	QuickPlayerSelect,
 	QuickSelectPlatform,
 	Replays,
-	DownloadState
+	DownloadState,
+	DelaySelect,
+	QuickMatchGuestWait
 };
 extern GuiState gui_state;
 

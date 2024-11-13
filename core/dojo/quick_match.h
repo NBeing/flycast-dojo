@@ -74,6 +74,7 @@ public:
 
 	bool thread_stopped = false;
 	bool start_game = false;
+	bool host_ready = false;
 
 	std::string target_player;
 
