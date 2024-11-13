@@ -132,22 +132,12 @@ void QuickMatch::quick_match_thread()
 				}
 				else
 				{
-					auto status_msg = nlohmann::json{
-						{"type", "status"},
-						{"status", "active"}};
-
-					ws->send(status_msg.dump());
-					NOTICE_LOG(NETWORK, "%s", status_msg.dump().data());
+					SendStatusMsg("active");
 				}
 			}
 			else if (current_match_status_idx == 1)
 			{
-				auto status_msg = nlohmann::json{
-					{"type", "status"},
-					{"status", "away"}};
-
-				ws->send(status_msg.dump());
-				NOTICE_LOG(NETWORK, "%s", status_msg.dump().data());
+				SendStatusMsg("away");
 			}
 			last_match_status_idx = current_match_status_idx;
 		}
@@ -172,6 +162,16 @@ void QuickMatch::quick_match_thread()
 	}
 
 	return;
+}
+
+void QuickMatch::SendStatusMsg(std::string status)
+{
+	auto status_msg = nlohmann::json{
+		{"type", "status"},
+		{"status", status}};
+
+	outgoing_msgs.push_back(status_msg.dump());
+	NOTICE_LOG(NETWORK, "%s", status_msg.dump().data());
 }
 
 void QuickMatch::ProcessMsg(std::string msg)
@@ -260,6 +260,8 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("network", "Enable", "no");
 
 			start_game = true;
+
+			SendStatusMsg("hidden");
 		}
 		else if (parsed_json["cxn_method"] == "match_code")
 		{

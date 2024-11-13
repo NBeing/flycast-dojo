@@ -110,8 +110,6 @@ void MatchClient::ClientLoop()
 				if (quick_match.start_game)
 				{
 					quick_match.SendKeyMsg("match_code", config::MatchCodeServer.get(), std::stoi(config::MatchCodePort.get()), dojo.match_code);
-					//std::this_thread::sleep_for(std::chrono::seconds(5));
-					//quick_match.StopThread();
 				}
 			}
 

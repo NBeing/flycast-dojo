@@ -128,7 +128,6 @@ void RelayClient::ClientLoop()
 				if (quick_match.start_game)
 				{
 					quick_match.SendKeyMsg("relay", config::NetworkServer.get(), config::GGPORemotePort.get(), received);
-					quick_match.StopThread();
 				}
 				start_game = true;
 				disconnect_toggle = true;

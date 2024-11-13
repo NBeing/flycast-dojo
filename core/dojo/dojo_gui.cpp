@@ -788,6 +788,7 @@ void DojoGui::gui_display_quick_match()
 								}
 
 								quick_match.outgoing_msgs.push_back(accept_msg.dump());
+								quick_match.SendStatusMsg("hidden");
 
 								quick_match.requests_to_remove.push_back(it->uuid);
 							}
@@ -860,6 +861,9 @@ void DojoGui::gui_display_quick_match()
 			for (auto p : quick_match.players)
 			{
 				if (p.game_name != dojo.game_name)
+					continue;
+
+				if (p.status == "hidden")
 					continue;
 
 				if (p.status == "away")
@@ -951,6 +955,9 @@ void DojoGui::gui_display_quick_match()
 				if (p.game_name != dojo.game_name)
 					continue;
 
+				if (p.status == "hidden")
+					continue;
+
 				if (p.status == "active")
 					continue;
 
@@ -1038,6 +1045,7 @@ void DojoGui::gui_display_quick_match()
 		if (ImGui::Button(close_btn_txt))
 		{
 			quick_match.StopThread();
+			quick_match.Clear();
 			cfgSetVirtual("network", "GGPO", "no");
 
 			settings.content.path = "";
@@ -1204,14 +1212,9 @@ void DojoGui::gui_display_delay_select()
 
 			settings.content.path = "";
 			ImGui::CloseCurrentPopup();
-			if (quick_match.start_game)
-			{
-				quick_match.Clear();
-				quick_match.StartThread();
-				gui_setState(GuiState::QuickMatch);
-			}
-			else
-				gui_setState(GuiState::Main);
+
+			quick_match.SendStatusMsg("active");
+			gui_setState(GuiState::QuickMatch);
 		}
 
 		ImGui::EndPopup();
@@ -1243,8 +1246,7 @@ void DojoGui::gui_display_quick_match_guest_wait()
 
 	if (ImGui::Button("Cancel", ScaledVec2(100.f, 0)))
 	{
-		quick_match.Clear();
-		quick_match.StartThread();
+		quick_match.SendStatusMsg("active");
 		gui_setState(GuiState::QuickMatch);
 	}
 	ImGui::PopStyleVar();

@@ -30,6 +30,7 @@ public:
 	void Clear();
 
 	void SendKeyMsg(std::string cxn_method, std::string server, int port, std::string key);
+	void SendStatusMsg(std::string status);
 
 	std::string GetGravatarUrl(std::string email_sha);
 
