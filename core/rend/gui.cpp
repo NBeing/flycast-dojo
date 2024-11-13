@@ -3599,6 +3599,9 @@ static void gui_display_content()
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
 
 							quick_match.current_match_status_idx = 0;
+							if (quick_match.Active())
+								quick_match.SendStatusMsg("active");
+
 							quick_match.StartThread();
 
 							gui_setState(GuiState::QuickMatch);
@@ -3836,6 +3839,12 @@ static void gui_network_start()
 		catch (const FlycastException& e) {
 		}
 		gui_stop_game();
+
+		if (quick_match.Active())
+		{
+			quick_match.SendStatusMsg("active");
+			gui_setState(GuiState::QuickMatch);
+		}
 
 		if (cfgLoadBool("dojo", "Relay", false))
 		{

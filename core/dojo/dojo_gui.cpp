@@ -1210,11 +1210,16 @@ void DojoGui::gui_display_delay_select()
 			dojo.presence.Close();
 			cfgSetVirtual("network", "GGPO", "no");
 
-			settings.content.path = "";
 			ImGui::CloseCurrentPopup();
-
-			quick_match.SendStatusMsg("active");
-			gui_setState(GuiState::QuickMatch);
+			if (quick_match.Active())
+			{
+				quick_match.SendStatusMsg("active");
+				gui_setState(GuiState::QuickMatch);
+			}
+			else
+			{
+				gui_setState(GuiState::Main);
+			}
 		}
 
 		ImGui::EndPopup();

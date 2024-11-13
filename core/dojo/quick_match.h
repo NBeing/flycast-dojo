@@ -26,6 +26,7 @@ public:
 	void StartThread();
 	void ProcessMsg(std::string msg);
 
+	bool Active();
 	void StopThread();
 	void Clear();
 

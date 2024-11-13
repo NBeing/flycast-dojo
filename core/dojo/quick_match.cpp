@@ -22,6 +22,11 @@ void QuickMatch::StartThread()
 	thread_started = true;
 }
 
+bool QuickMatch::Active()
+{
+	return thread_started;
+}
+
 void QuickMatch::StopThread()
 {
 	thread_stopped = true;
@@ -244,6 +249,23 @@ void QuickMatch::ProcessMsg(std::string msg)
 
 		if (parsed_json["cxn_method"] == "relay")
 		{
+			// revoke pending requests
+			for (auto req : pending)
+			{
+				if (req.uuid == target_player)
+					continue;
+
+				auto cancel_msg = nlohmann::json{
+					{"type", "revoke"},
+					{"uuid", req.uuid}};
+
+				quick_match.outgoing_msgs.push_back(cancel_msg.dump());
+				quick_match.pending_requests_to_remove.push_back(req.uuid);
+			}
+
+			// delete remaining pending request
+			quick_match.pending_requests_to_remove.push_back(target_player);
+
 			std::string server = config::RelayServer.get();
 			std::string port = std::to_string(config::RelayPort.get());
 
