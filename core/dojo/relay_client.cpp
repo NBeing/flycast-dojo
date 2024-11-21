@@ -5,12 +5,12 @@
 void RelayClient::ConnectRelayServer()
 {
 	struct hostent *mm_host;
-	target_hostname = config::NetworkServer.get();
+	target_hostname = config::RelayServer.get();
 	mm_host = gethostbyname(target_hostname.data());
 
 	sockaddr_in mms_addr;
 	mms_addr.sin_family = AF_INET;
-	mms_addr.sin_port = htons((u16)config::GGPORemotePort.get());
+	mms_addr.sin_port = htons((u16)config::RelayPort.get());
 	memcpy(&mms_addr.sin_addr, mm_host->h_addr_list[0], mm_host->h_length);
 	// inet_pton(AF_INET, config::NetworkServer.data(), &mms_addr.sin_addr);
 	std::string ip_address = inet_ntoa(*((in_addr *)mm_host->h_addr));
@@ -36,6 +36,7 @@ void RelayClient::ConnectRelayServer()
 
 	sendto(local_socket, (const char *)mm_msg.data(), strlen(mm_msg.data()), 0, (const struct sockaddr *)&mms_addr, sizeof(mms_addr));
 
+	std::cout << "To Relay: " << mm_msg << std::endl;
 	INFO_LOG(NETWORK, "Connecting to Relay");
 }
 
@@ -125,9 +126,10 @@ void RelayClient::ClientLoop()
 			{
 				std::string received = std::string(buffer, 6);
 				cfgSetVirtual("dojo", "RelayKey", received);
+				std::cout << "Received Key: " << received << std::endl;
 				if (quick_match.start_game)
 				{
-					quick_match.SendKeyMsg("relay", config::NetworkServer.get(), config::GGPORemotePort.get(), received);
+					quick_match.SendKeyMsg("relay", config::RelayServer.get(), config::RelayPort.get(), received);
 				}
 				start_game = true;
 				disconnect_toggle = true;
