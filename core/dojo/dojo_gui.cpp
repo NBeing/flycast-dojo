@@ -294,7 +294,9 @@ void DojoGui::netplay_relay_body()
 		cfgSetVirtual("network", "GGPO", "yes");
 		cfgSetVirtual("network", "Enable", "no");
 		cfgSetVirtual("network", "server", detect_address);
+		cfgSetVirtual("dojo", "RelayServer", detect_address);
 
+		cfgSetVirtual("dojo", "QuickMatch", "no");
 		cfgSetVirtual("dojo", "Relay", "yes");
 
 		int port = config::RelayPort.get();
@@ -329,6 +331,11 @@ void DojoGui::netplay_relay_body()
 			std::string relay_key = std::string(rk);
 			cfgSetVirtual("dojo", "RelayKey", relay_key);
 		}
+
+		if (cfgLoadBool("network", "ActAsServer", "no"))
+			dojo.relay_client.SendHostMsg();
+		else
+			dojo.relay_client.SendGuestMsg();
 
 		if (current_delay != config::GGPODelay.get())
 			config::GGPODelay.set(current_delay);
@@ -1190,6 +1197,7 @@ void DojoGui::gui_display_delay_select()
 		{
 			cfgSetVirtual("network", "GGPO", "yes");
 			cfgSetVirtual("network", "Enable", "no");
+			cfgSetVirtual("dojo", "QuickMatch", "yes");
 
 			NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
 			if (current_delay != config::GGPODelay.get())

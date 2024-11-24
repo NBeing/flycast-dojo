@@ -280,7 +280,7 @@ void RelayClient::ClientLoop()
 
 void RelayClient::ClientThread()
 {
-	if (!cfgLoadBool("network", "ActAsServer", "no"))
+	if (!connect_started)
 	{
 		Init();
 		ConnectRelayServer();

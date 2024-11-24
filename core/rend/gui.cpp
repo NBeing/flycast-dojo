@@ -3886,7 +3886,8 @@ static void gui_display_loadscreen()
 			{
 				if (cfgLoadBool("dojo", "Relay", "no"))
 				{
-					if (!cfgLoadBool("network", "ActAsServer", "no"))
+					if (!cfgLoadBool("dojo", "QuickMatch", "no") ||
+						(cfgLoadBool("dojo", "QuickMatch", "no") && !cfgLoadBool("network", "ActAsServer", "no")))
 					{
 						try
 						{

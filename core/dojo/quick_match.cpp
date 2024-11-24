@@ -283,6 +283,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 
 			dojo.relay_client.Init();
 			dojo.relay_client.ConnectRelayServer();
+			dojo.relay_client.connect_started = true;
 
 			try
 			{

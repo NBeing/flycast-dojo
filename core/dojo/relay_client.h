@@ -22,6 +22,7 @@ public:
     void AddToRelayAddressHistory(std::string address);
     std::vector<std::string> GetRelayAddressHistory();
 
+    bool connect_started;
     bool disconnect_toggle;
     std::string target_hostname;
     bool start_game = false;
