@@ -80,7 +80,7 @@ void DojoGui::netplay_ip_entry_body()
 	ImGui::TextColored(ImVec4(0, 175, 255, 1), "%s", ICON_FA_GLOBE);
 	ImGui::SameLine();
 
-	ImGui::InputTextWithHint(" IP", "0.0.0.0", si, IM_ARRAYSIZE(si));
+	ImGui::InputTextWithHint(" IP", "0.0.0.0(:0)", si, IM_ARRAYSIZE(si));
 	detect_address = std::string(si);
 
 	ImGui::Text("");
@@ -116,6 +116,15 @@ void DojoGui::netplay_ip_entry_body()
 		if (detect_address == own_ip)
 			detect_address = "127.0.0.1";
 
+		std::vector<std::string> target;
+		dojo.Split(detect_address, ':', target);
+
+		std::string target_address = target[0];
+
+		std::string target_port = std::to_string(config::GGPORemotePort.get());
+		if (target.size() > 1)
+			target_port = target[1];
+
 		if (hosting_opt)
 		{
 			cfgSetVirtual("network", "ActAsServer", "yes");
@@ -126,9 +135,10 @@ void DojoGui::netplay_ip_entry_body()
 		}
 		cfgSetVirtual("network", "GGPO", "yes");
 		cfgSetVirtual("network", "Enable", "no");
-		cfgSetVirtual("network", "server", detect_address);
+		cfgSetVirtual("network", "server", target_address);
+		cfgSetVirtual("network", "GGPORemotePort", target_port);
 
-		NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
+		NOTICE_LOG(NETWORK, "CONNECT %s %s", target_address.data(), target_port.data());
 		if (current_delay != config::GGPODelay.get())
 			cfgSetVirtual("network", "GGPODelay", std::to_string(current_delay));
 
