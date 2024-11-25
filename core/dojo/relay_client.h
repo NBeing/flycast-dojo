@@ -19,6 +19,8 @@ public:
     bool Init();
     void ConnectRelayServer();
 
+    void PingThread();
+
     void AddToRelayAddressHistory(std::string address);
     std::vector<std::string> GetRelayAddressHistory();
 
@@ -33,6 +35,8 @@ public:
     void SendHostMsg();
     void SendGuestMsg();
 
+    uint64_t RepeatTargetPing(std::string target, int num_requests);
+    uint64_t GetTargetAvgPing(std::string target);
 private:
     sock_t local_socket = INVALID_SOCKET;
     void CloseSocket(sock_t &socket) const
@@ -67,4 +71,22 @@ private:
 
     int PingOpponent(int add_to_seed);
     uint64_t GetOpponentAvgPing(int num_requests);
+
+    std::map<std::string, std::deque<std::string>> target_ping_msgs;
+
+    struct U64DefaultToZero
+    {
+        uint64_t i = 0;
+    };
+    std::map<std::string, U64DefaultToZero> target_ping_test_start;
+
+    std::map<std::string, std::map<int, uint64_t>> target_ping_send_ts;
+    std::map<std::string, std::vector<uint64_t>> target_ping_rtt;
+    std::map<std::string, uint64_t> target_avg_ping_ms;
+
+    sockaddr_in target_addr;
+    std::string target_server;
+    int target_port;
+
+    int PingTarget(std::string target, int add_to_seed);
 };

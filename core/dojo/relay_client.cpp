@@ -179,6 +179,50 @@ void RelayClient::ClientLoop()
 
 				std::cout << "AVG PING MS " << avg_ping_ms << std::endl;
 			}
+
+			// relay ping response
+			else if (memcmp("RPONG", buffer, 5) == 0)
+			{
+				target_addr.sin_family = AF_INET;
+				target_addr.sin_port = sender.sin_port;
+
+				char target_ip[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &(sender.sin_addr), target_ip, INET_ADDRSTRLEN);
+				inet_pton(AF_INET, target_ip, &target_addr.sin_addr);
+
+				target_server = std::string(target_ip, strlen(target_ip));
+				target_port = htons(sender.sin_port);
+
+				std::string target_s = target_server + ":" + std::to_string(target_port);
+
+				int rnd_num_cmp = atoi(buffer + 5);
+				uint64_t ret_timestamp = dojo.UnixTimestamp();
+
+				if (target_ping_send_ts[target_s].count(rnd_num_cmp) == 1)
+				{
+					uint64_t rtt = ret_timestamp - target_ping_send_ts[target_s][rnd_num_cmp];
+					INFO_LOG(NETWORK, "Received PONG %d, RTT: %d ms", rnd_num_cmp, rtt);
+					std::cout << "Received RPONG " << rnd_num_cmp << " from " << target_server << " RTT: " << rtt << " ms" << std::endl;
+
+					target_ping_rtt[target_s].push_back(rtt);
+
+					if (target_ping_rtt[target_s].size() > 1)
+					{
+						target_avg_ping_ms[target_s] = std::accumulate(target_ping_rtt[target_s].begin(), target_ping_rtt[target_s].end(), 0.0) / target_ping_rtt[target_s].size();
+					}
+					else
+					{
+						target_avg_ping_ms[target_s] = rtt;
+					}
+
+					if (target_ping_rtt[target_s].size() > 5)
+						target_ping_rtt[target_s].clear();
+
+					target_ping_send_ts[target_s].erase(rnd_num_cmp);
+				}
+				// std::cout << "TARGET AVG PING MS " << target_s << " " << target_avg_ping_ms[target_s] << std::endl;
+			}
+
 			else if (memcmp("NOKEY", buffer, 5) == 0)
 			{
 				std::string received = std::string(buffer, 6);
@@ -226,6 +270,39 @@ void RelayClient::ClientLoop()
 				ping_test_start = dojo.UnixTimestamp();
 				std::cout << "PING TEST START " << ping_test_start << std::endl;
 				auto avg_ping = GetOpponentAvgPing(1);
+			}
+		}
+
+		std::vector<std::string> active_ping_targets;
+		for (auto it = target_ping_msgs.begin(); it != target_ping_msgs.end(); ++it)
+		{
+			if ((it->second).size() > 0)
+				active_ping_targets.push_back(it->first);
+		}
+
+		for (std::string ping_target : active_ping_targets)
+		{
+			std::vector<std::string> target_sock;
+			dojo.Split(ping_target, ':', target_sock);
+
+			std::string target_address = target_sock[0];
+			std::string target_port = std::to_string(config::RelayPort.get());
+			if (target_sock.size() > 1)
+				target_port = target_sock[1];
+
+			struct hostent *target_host;
+			target_host = gethostbyname(target_address.data());
+
+			target_addr.sin_family = AF_INET;
+			target_addr.sin_port = htons((u16)std::stol(target_port));
+			memcpy(&target_addr.sin_addr, target_host->h_addr_list[0], target_host->h_length);
+
+			while (target_ping_msgs[ping_target].size() > 0)
+			{
+				std::string ping_msg = target_ping_msgs[ping_target].front();
+				sendto(local_socket, (const char *)ping_msg.data(), strlen(ping_msg.data()), 0, (const struct sockaddr *)&target_addr, sizeof(target_addr));
+				std::cout << "Sent " << ping_msg << " to target " << ping_target << std::endl;
+				target_ping_msgs[ping_target].pop_front();
 			}
 		}
 
@@ -285,6 +362,13 @@ void RelayClient::ClientThread()
 		Init();
 		ConnectRelayServer();
 	}
+	ClientLoop();
+	CloseSocket(local_socket);
+}
+
+void RelayClient::PingThread()
+{
+	Init();
 	ClientLoop();
 	CloseSocket(local_socket);
 }
@@ -391,4 +475,73 @@ uint64_t RelayClient::GetOpponentAvgPing(int num_requests)
 	}
 
 	return avg_ping_ms;
+}
+
+// udp ping, seeds with random number
+int RelayClient::PingTarget(std::string target, int add_to_seed)
+{
+	std::vector<std::string> target_sock;
+	dojo.Split(target, ':', target_sock);
+
+	std::string target_address = target_sock[0];
+	std::string target_port = std::to_string(config::RelayPort.get());
+	if (target_sock.size() > 1)
+		target_port = target_sock[1];
+
+	struct hostent *target_host;
+	target_host = gethostbyname(target_address.data());
+	std::string target_ip = inet_ntoa(*((in_addr *)target_host->h_addr));
+
+	std::string target_s = target_ip + ":" + target_port;
+
+	unsigned long seed = mix(clock(), time(NULL), getpid());
+	srand(seed + add_to_seed);
+	int rnd_num_cmp = rand() * 1000 + 1;
+
+	// std::cout << "PING " << rnd_num_cmp << std::endl;
+
+	if (target_ping_send_ts[target_s].count(rnd_num_cmp) == 0)
+	{
+		std::stringstream ping_ss("");
+		ping_ss << "RPING " << rnd_num_cmp << " " << RandomHexString(32, seed);
+		std::string to_send_ping = ping_ss.str();
+
+		target_ping_msgs[target_s].push_back(to_send_ping);
+		INFO_LOG(NETWORK, "Sent %s to Target", to_send_ping.data());
+
+		uint64_t current_timestamp = dojo.UnixTimestamp();
+		target_ping_send_ts[target_s].emplace(rnd_num_cmp, current_timestamp);
+	}
+
+	// last ping key
+	return rnd_num_cmp;
+}
+
+uint64_t RelayClient::RepeatTargetPing(std::string target, int num_requests)
+{
+	for (int i = 0; i < num_requests; i++)
+	{
+		PingTarget(target, i);
+	}
+
+	return target_avg_ping_ms[target];
+}
+
+uint64_t RelayClient::GetTargetAvgPing(std::string target)
+{
+	std::vector<std::string> target_sock;
+	dojo.Split(target, ':', target_sock);
+
+	std::string target_address = target_sock[0];
+	std::string target_port = std::to_string(config::RelayPort.get());
+	if (target_sock.size() > 1)
+		target_port = target_sock[1];
+
+	struct hostent *target_host;
+	target_host = gethostbyname(target_address.data());
+	std::string target_ip = inet_ntoa(*((in_addr *)target_host->h_addr));
+
+	std::string target_s = target_ip + ":" + target_port;
+
+	return target_avg_ping_ms[target_s];
 }

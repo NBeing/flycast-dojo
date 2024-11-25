@@ -203,6 +203,68 @@ void DojoGui::netplay_relay_body()
 
 	detect_address = std::string(si);
 
+	if (ImGui::Button("Start Client"))
+	{
+		try
+		{
+			dojo.relay_client.disconnect_toggle = false;
+			std::thread t2(&RelayClient::ClientThread, std::ref(dojo.relay_client));
+			t2.detach();
+		}
+		catch (std::exception &)
+		{
+		}
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::Button("Ping Relay"))
+	{
+		std::vector<std::string> relay_servers;
+		relay_servers.push_back("fin-1.match.dojo.ooo");
+		relay_servers.push_back("esp-1.match.dojo.ooo");
+
+		for (auto server : relay_servers)
+		{
+			dojo.relay_client.RepeatTargetPing(server, 1);
+		}
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::Button("List RTTs"))
+	{
+		std::vector<std::string> relay_servers;
+		relay_servers.push_back("esp-1.match.dojo.ooo");
+		relay_servers.push_back("fin-1.match.dojo.ooo");
+
+		std::vector<std::pair<std::string, int>> relay_rtts;
+
+		for (auto server : relay_servers)
+		{
+			auto avg_ping = dojo.relay_client.GetTargetAvgPing(server);
+			relay_rtts.push_back(std::make_pair(server, avg_ping));
+		}
+
+		std::sort(relay_rtts.begin(), relay_rtts.end(), [=](std::pair<std::string, int> &a, std::pair<std::string, int> &b)
+				  { return a.second < b.second; });
+
+		for (auto rtt_entry : relay_rtts)
+		{
+			std::cout << rtt_entry.first << " " << rtt_entry.second << std::endl;
+		}
+
+		config::RelayServer = relay_rtts.at(0).first;
+		std::cout << "Relay server assigned to " << config::RelayServer.get() << std::endl;
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::Button("Stop Client"))
+	{
+		dojo.relay_client.disconnect_toggle = true;
+	}
+
 	ImGui::Text("");
 	ImGui::SameLine(local_spacer);
 

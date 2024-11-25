@@ -11,6 +11,9 @@
 #include <thread>
 #include <vector>
 
+#include <algorithm>
+#include <utility>
+
 #include <array>
 #include <bitset>
 
