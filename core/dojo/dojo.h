@@ -27,7 +27,6 @@
 #include "replay.h"
 #include "training.h"
 #include "relay_client.h"
-#include "match_client.h"
 #include "dojo_file.h"
 #include "quick_match.h"
 
@@ -95,8 +94,6 @@ public:
 
 	u32 last_applied_frame = 0;
 
-	std::string match_code = "";
-
 	bool play_match = false;
 	bool precise_triggers = true;
 
@@ -160,7 +157,6 @@ public:
 	uint64_t UnixTimestamp();
 
 	RelayClient relay_client;
-	MatchClient match_client;
 };
 
 extern Dojo dojo;

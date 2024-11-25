@@ -275,7 +275,6 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("dojo", "HideKey", "yes");
 			cfgSetVirtual("dojo", "Training", "no");
 			cfgSetVirtual("dojo", "Relay", "yes");
-			cfgSetVirtual("dojo", "MatchCodeEnable", "no");
 
 			cfgSetVirtual("network", "ActAsServer", "yes");
 			cfgSetVirtual("network", "GGPO", "yes");
@@ -300,36 +299,6 @@ void QuickMatch::ProcessMsg(std::string msg)
 			start_game = true;
 
 			SendStatusMsg("hidden");
-		}
-		else if (parsed_json["cxn_method"] == "match_code")
-		{
-			cfgSetVirtual("network", "server", "");
-
-			cfgSetVirtual("dojo", "HideKey", "yes");
-			cfgSetVirtual("dojo", "Training", "no");
-			cfgSetVirtual("dojo", "Relay", "no");
-			cfgSetVirtual("dojo", "MatchCodeEnable", "yes");
-
-			cfgSetVirtual("network", "ActAsServer", "yes");
-			cfgSetVirtual("network", "GGPO", "yes");
-			cfgSetVirtual("network", "Enable", "no");
-
-			dojo.disconnect_toggle = false;
-			dojo.hosting = true;
-			// hosting_opt = true;
-			// matched = true;
-			try
-			{
-				std::thread t2(&MatchClient::ClientThread, std::ref(dojo.match_client));
-				t2.detach();
-			}
-			catch (std::exception &)
-			{
-			}
-
-			quick_match.start_game = true;
-			gui_setState(GuiState::MatchCodeHostWait);
-			gui_start_game(settings.content.path);
 		}
 
 		gui_setState(GuiState::DelaySelect);
@@ -377,7 +346,6 @@ void QuickMatch::ProcessMsg(std::string msg)
 
 			cfgSetVirtual("dojo", "Training", "no");
 			cfgSetVirtual("dojo", "Relay", "yes");
-			cfgSetVirtual("dojo", "MatchCodeEnable", "no");
 
 			cfgSetVirtual("network", "ActAsServer", "no");
 			cfgSetVirtual("network", "GGPO", "yes");
@@ -386,40 +354,6 @@ void QuickMatch::ProcessMsg(std::string msg)
 			dojo.relay_client.SendGuestMsg();
 
 			host_ready = true;
-		}
-		else if (parsed_json["cxn_method"] == "match_code")
-		{
-			// config::MatchCode = parsed_json["key"].get<std::string>();
-			dojo.match_code = parsed_json["key"].get<std::string>();
-
-			std::cout << "MC KEY " << dojo.match_code << std::endl;
-
-			cfgSetVirtual("network", "server", "");
-
-			cfgSetVirtual("dojo", "Training", "no");
-			cfgSetVirtual("dojo", "Relay", "no");
-			cfgSetVirtual("dojo", "MatchCodeEnable", "yes");
-
-			cfgSetVirtual("network", "ActAsServer", "no");
-			cfgSetVirtual("network", "GGPO", "yes");
-			cfgSetVirtual("network", "Enable", "no");
-
-			dojo.disconnect_toggle = false;
-			dojo.hosting = false;
-			// hosting_opt = false;
-			// matched = true;
-			try
-			{
-				std::thread t2(&MatchClient::ClientThread, std::ref(dojo.match_client));
-				t2.detach();
-			}
-			catch (std::exception &)
-			{
-			}
-
-			start_game = true;
-			gui_setState(GuiState::MatchCodeGuestWait);
-			// gui_start_game(settings.content.path);
 		}
 	}
 }

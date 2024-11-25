@@ -535,10 +535,6 @@ extern Option<bool> NetBeaconEnable;
 extern OptionString BeaconMulticastAddress;
 extern OptionString BeaconMulticastPort;
 
-extern Option<bool> MatchCodeEnable;
-extern OptionString MatchCodeServer;
-extern OptionString MatchCodePort;
-
 extern Option<int> FirstTo;
 extern Option<bool> StreamTxtOutput;
 extern Option<bool> Training;

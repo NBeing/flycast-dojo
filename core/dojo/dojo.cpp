@@ -884,7 +884,7 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		std::string PlayerName = MessageReader::ReadString((const char *)buffer, offset);
 		std::string OpponentName = MessageReader::ReadString((const char *)buffer, offset);
 		// std::string Quark = MessageReader::ReadString((const char*)buffer, offset);
-		// std::string MatchCode = MessageReader::ReadString((const char*)buffer, offset);
+		// std::string RelayKey = MessageReader::ReadString((const char*)buffer, offset);
 		unsigned int analog = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int precise_triggers = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int ggpo = MessageReader::ReadInt((const char *)buffer, offset);
@@ -893,7 +893,7 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		game_name = GameName;
 		settings.content.path = dojo.GetEntryPath(dojo.game_name);
 		// config::Quark = Quark;
-		// config::MatchCode = MatchCode;
+		// config::RelayKey = RelayKey;
 		precise_triggers = (bool)precise_triggers;
 		if (ggpo)
 			replay.ggpo_session = true;
@@ -936,7 +936,7 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		// }
 
 		// std::cout << "Quark: " << Quark << std::endl;
-		// std::cout << "Match Code: " << MatchCode << std::endl;
+		// std::cout << "Relay Key: " << RelayKey << std::endl;
 
 		// if (version == 3)
 		//{

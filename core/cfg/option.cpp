@@ -170,10 +170,6 @@ Option<bool> NetBeaconEnable("NetBeacon", true, "dojo");
 OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "dojo");
 OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
 
-Option<bool> MatchCodeEnable("MatchCodeEnable", true, "dojo");
-OptionString MatchCodeServer("MatchCodeServer", "match.dojo.ooo", "dojo");
-OptionString MatchCodePort("MatchCodePort", "52001", "dojo");
-
 OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
 OptionString DojoServerPort("ServerPort", "6000", "dojo");
 Option<int> FirstTo("FirstTo", 0, "dojo");

@@ -14,7 +14,6 @@
 #endif
 
 #include "dojo.h"
-#include "match_client.h"
 #include "net_beacon.h"
 
 class DojoGui
@@ -26,7 +25,6 @@ public:
 
 	void netplay_body_head(bool local, bool presence = false);
 	void netplay_ip_entry_body();
-	void netplay_match_code_body();
 	void netplay_relay_body();
 	void netplay_lan_body();
 	void gui_display_netplay_connect();
@@ -37,9 +35,6 @@ public:
 
 	void gui_display_disconnected();
 	void show_player_name_overlay(bool paused);
-
-	void gui_display_match_code_host_wait();
-	void gui_display_match_code_guest_wait();
 
 	void settings_dojo_tab();
 
@@ -87,7 +82,7 @@ private:
 
 	bool matched = false;
 
-	float netplay_popup_width = 430;
+	float netplay_popup_width = 410;
 	float local_spacer = 40;
 };
 

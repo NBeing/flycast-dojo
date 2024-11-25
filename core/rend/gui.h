@@ -69,8 +69,6 @@ enum class GuiState {
 	NetplayConnect,
 	Disconnected,
 	ReplayEnd,
-	MatchCodeHostWait,
-	MatchCodeGuestWait,
 	ButtonCheck,
 	TestGame,
 	QuickMap,

@@ -4060,12 +4060,6 @@ void gui_display_ui()
 	case GuiState::ReplayEnd:
 		dojo_gui.gui_display_replay_end();
 		break;
-	case GuiState::MatchCodeHostWait:
-		dojo_gui.gui_display_match_code_host_wait();
-		break;
-	case GuiState::MatchCodeGuestWait:
-		dojo_gui.gui_display_match_code_guest_wait();
-		break;
 	case GuiState::ButtonCheck:
 		dojo_gui.show_button_check();
 		break;

@@ -1023,8 +1023,6 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/dojo_file.h
 		core/dojo/dojo_gui.cpp
 		core/dojo/dojo_gui.h
-		core/dojo/match_client.cpp
-		core/dojo/match_client.h
 		core/dojo/net_beacon.cpp
 		core/dojo/net_beacon.h
 		core/dojo/relay_client.cpp
