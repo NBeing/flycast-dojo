@@ -527,7 +527,7 @@ uint64_t RelayClient::RepeatTargetPing(std::string target, int num_requests)
 	return target_avg_ping_ms[target];
 }
 
-uint64_t RelayClient::GetTargetAvgPing(std::string target)
+std::string RelayClient::GetTargetStr(std::string target)
 {
 	std::vector<std::string> target_sock;
 	dojo.Split(target, ':', target_sock);
@@ -543,5 +543,86 @@ uint64_t RelayClient::GetTargetAvgPing(std::string target)
 
 	std::string target_s = target_ip + ":" + target_port;
 
+	return target_s;
+}
+
+uint64_t RelayClient::GetTargetAvgPing(std::string target)
+{
+	std::string target_s = GetTargetStr(target);
+
 	return target_avg_ping_ms[target_s];
+}
+
+std::string RelayClient::AssignClosestRelay()
+{
+	bool existing_client = true;
+
+	if (!isLoopStarted)
+	{
+		existing_client = false;
+		try
+		{
+			dojo.relay_client.disconnect_toggle = false;
+			std::thread t2(&RelayClient::PingThread, std::ref(dojo.relay_client));
+			t2.detach();
+		}
+		catch (std::exception &)
+		{
+		}
+	}
+
+	while (!isLoopStarted)
+		;
+
+	auto test_start = dojo.UnixTimestamp();
+
+	std::vector<std::string> relay_servers;
+	relay_servers.push_back("fin-1.match.dojo.ooo");
+	relay_servers.push_back("esp-1.match.dojo.ooo");
+
+	int ping_iterations = 5;
+
+	for (auto server : relay_servers)
+	{
+		dojo.relay_client.RepeatTargetPing(server, ping_iterations);
+	}
+
+	while ((test_start + 1000) > dojo.UnixTimestamp())
+		;
+
+	std::vector<std::pair<std::string, int>> relay_rtts;
+
+	for (auto server : relay_servers)
+	{
+		auto avg_ping = dojo.relay_client.GetTargetAvgPing(server);
+		relay_rtts.push_back(std::make_pair(server, avg_ping));
+	}
+
+	std::sort(relay_rtts.begin(), relay_rtts.end(), [=](std::pair<std::string, int> &a, std::pair<std::string, int> &b)
+			  { return a.second < b.second; });
+
+	for (auto rtt_entry : relay_rtts)
+	{
+		std::cout << rtt_entry.first << " " << rtt_entry.second << std::endl;
+	}
+
+	if (!existing_client)
+	{
+		disconnect_toggle = true;
+		isLoopStarted = false;
+	}
+
+	std::string closest = relay_rtts.at(0).first;
+	std::cout << "Closest Relay: " << closest << std::endl;
+
+	for (auto server : relay_servers)
+	{
+		target_ping_msgs.clear();
+		target_ping_send_ts.clear();
+		target_ping_rtt.clear();
+		target_avg_ping_ms.clear();
+	}
+
+	config::RelayServer = closest;
+	return closest;
 }
