@@ -576,9 +576,7 @@ std::string RelayClient::AssignClosestRelay()
 
 	auto test_start = dojo.UnixTimestamp();
 
-	std::vector<std::string> relay_servers;
-	relay_servers.push_back("fin-1.match.dojo.ooo");
-	relay_servers.push_back("esp-1.match.dojo.ooo");
+	std::vector<std::string> relay_servers = ReadRelayJson();
 
 	int ping_iterations = 5;
 
@@ -625,4 +623,23 @@ std::string RelayClient::AssignClosestRelay()
 
 	config::RelayServer = closest;
 	return closest;
+}
+
+std::vector<std::string> RelayClient::ReadRelayJson()
+{
+	std::vector<std::string> servers;
+
+	if (!std::filesystem::exists(get_writable_data_path("relays.json")))
+		return servers;
+
+	std::ifstream f(get_writable_data_path("relays.json"));
+	auto data = nlohmann::json::parse(f);
+
+	for (auto relay_entry : data["relays"])
+	{
+		servers.push_back(relay_entry["url"]);
+		std::cout << relay_entry["url"] << std::endl;
+	}
+
+	return servers;
 }

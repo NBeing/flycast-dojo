@@ -40,6 +40,8 @@ public:
     uint64_t GetTargetAvgPing(std::string target);
 
     std::string AssignClosestRelay();
+    std::vector<std::string> ReadRelayJson();
+
 private:
     sock_t local_socket = INVALID_SOCKET;
     void CloseSocket(sock_t &socket) const
