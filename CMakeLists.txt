@@ -1029,8 +1029,10 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/relay_client.h
 		core/dojo/replay.cpp
 		core/dojo/replay.h
-		core/dojo/training.h
+		core/dojo/tcp_client.cpp
+		core/dojo/tcp_client.h
 		core/dojo/training.cpp
+		core/dojo/training.h
 		core/dojo/quick_match.cpp
 		core/dojo/quick_match.h)
 

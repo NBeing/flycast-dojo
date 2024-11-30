@@ -24,17 +24,20 @@ void Replay::StartRecording()
 {
 	dojo.play_match = false;
 	analog = 2;
-	CreateReplayFile();
+
+	if (config::RecordMatches)
+		CreateReplayFile();
+	else if (config::Transmitting)
+	{
+		std::string rom_name = GetRomNamePrefix();
+		AppendHeaderToReplay(rom_name);
+	}
 }
 
-void Replay::AppendToFile(std::string frame, int version)
+void Replay::AppendToReplay(std::string frame, int version)
 {
 	if (frame.size() == MAPLE_FRAME_SIZE)
 	{
-		// append frame data to replay file
-		std::ofstream fout(filename,
-						   std::ios::out | std::ios::binary | std::ios_base::app);
-
 		if (version >= 2)
 		{
 			if (replay_frame_count == 0)
@@ -50,7 +53,18 @@ void Replay::AppendToFile(std::string frame, int version)
 			if (replay_frame_count % FRAME_BATCH == 0)
 			{
 				std::vector<unsigned char> message = replay_msg.Msg();
-				fout.write((const char *)&message[0], message.size());
+				std::string msg((const char *)&message[0], message.size());
+
+				if (config::RecordMatches)
+				{
+					std::ofstream fout(filename,
+									   std::ios::out | std::ios::binary | std::ios_base::app);
+					fout.write(msg.c_str(), msg.size());
+					fout.close();
+				}
+
+				if (config::Transmitting)
+					dojo.tcp_client.outgoing_msgs.push(msg);
 
 				replay_msg = MessageWriter();
 				replay_msg.AppendHeader(0, MAPLE_BUFFER);
@@ -63,12 +77,21 @@ void Replay::AppendToFile(std::string frame, int version)
 				if (replay_frame_count % FRAME_BATCH > 0)
 				{
 					std::vector<unsigned char> message = replay_msg.Msg();
-					fout.write((const char *)&message[0], message.size());
+					std::string msg((const char *)message.data(), message.size());
+
+					if (config::RecordMatches)
+					{
+						std::ofstream fout(filename,
+										   std::ios::out | std::ios::binary | std::ios_base::app);
+						fout.write(msg.data(), msg.size());
+						fout.close();
+					}
+
+					if (config::Transmitting)
+						dojo.tcp_client.outgoing_msgs.push(msg);
 				}
 			}
 		}
-
-		fout.close();
 	}
 }
 
@@ -152,16 +175,13 @@ std::string Replay::CreateReplayFile(std::string rom_name, int version)
 	cfgSaveStr("dojo", "ReplayFilename", replay_path.string());
 
 	if (version > 0)
-		AppendHeaderToFile(rom_name);
+		AppendHeaderToReplay(rom_name);
 
 	return replay_path.string();
 }
 
-void Replay::AppendHeaderToFile(std::string rom_name)
+std::vector<u8> Replay::GenHeader(std::string rom_name)
 {
-	std::ofstream fout(filename,
-					   std::ios::out | std::ios::binary | std::ios_base::app);
-
 	MessageWriter spectate_start;
 
 	spectate_start.AppendHeader(1, SPECTATE_START);
@@ -201,10 +221,27 @@ void Replay::AppendHeaderToFile(std::string rom_name)
 	// spectate_start.AppendString(settings.dojo.state_commit);
 	//}
 
-	std::vector<unsigned char> message = spectate_start.Msg();
+	std::vector<u8> message = spectate_start.Msg();
 
-	fout.write((const char *)spectate_start.Msg().data(), (std::streamsize)(spectate_start.GetSize() + (unsigned int)HEADER_LEN));
-	fout.close();
+	return message;
+}
+
+void Replay::AppendHeaderToReplay(std::string rom_name)
+{
+	std::vector<u8> message = GenHeader(rom_name);
+	std::string msg((const char *)message.data(), message.size());
+
+	if (config::RecordMatches)
+	{
+		std::ofstream fout(filename,
+						   std::ios::out | std::ios::binary | std::ios_base::app);
+
+		fout.write(msg.data(), msg.size());
+		fout.close();
+	}
+
+	if (config::Transmitting)
+		dojo.tcp_client.outgoing_msgs.push(msg);
 }
 
 bool Replay::LoadReplayFile(std::string path)

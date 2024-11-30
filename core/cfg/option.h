@@ -545,6 +545,14 @@ extern Option<bool> AutoLoadNetState;
 extern OptionString DojoServerIP;
 extern OptionString DojoServerPort;
 
+extern Option<bool> Transmitting;
+extern Option<bool> TransmitScore;
+
+extern Option<bool> Receiving;
+
+extern OptionString SpectatorIP;
+extern OptionString SpectatorPort;
+
 extern Option<bool> RecordMatches;
 extern Option<bool> Replay;
 extern OptionString ReplayFilename;

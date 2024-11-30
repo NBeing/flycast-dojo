@@ -10,8 +10,10 @@ public:
     std::string filename = "";
     void Init();
     void StartRecording();
-    void AppendToFile(std::string frame, int version);
-    void AppendHeaderToFile(std::string rom_name);
+    void AppendToReplay(std::string frame, int version);
+
+    std::vector<u8> GenHeader(std::string rom_name);
+    void AppendHeaderToReplay(std::string rom_name);
 
     std::string GetRomNamePrefix();
     std::string GetRomNamePrefix(std::string state_file);

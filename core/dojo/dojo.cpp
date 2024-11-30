@@ -54,6 +54,18 @@ void Dojo::RegisterPlayerWin(int player)
 	}
 
 	last_score_frame = (u32)frame_number;
+
+	if (config::TransmitScore || config::SpectatorIP.get() == "match.dojo.ooo")
+	{
+		MessageWriter player_win;
+		player_win.AppendHeader(1, PLAYER_WIN);
+		player_win.AppendInt(player);
+
+		std::vector<unsigned char> message = player_win.Msg();
+		std::string msg((const char *)message.data(), message.size());
+
+		tcp_client.outgoing_msgs.push(msg);
+	}
 }
 
 bool Dojo::ScoreAvailable()
@@ -385,7 +397,8 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 
 	session_inputs[frame_num] = m_inputs;
 
-	if (config::GGPOEnable && config::RecordMatches && !play_match)
+	if (config::GGPOEnable && !play_match &&
+		(config::RecordMatches || config::Transmitting))
 	{
 		// create frame container for export
 		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
@@ -393,13 +406,10 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 		memcpy(new_frame + 4, (unsigned char *)m_inputs.data(), m_inputs.size());
 		std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
 
-		replay.AppendToFile(frame_, 4);
+		replay.AppendToReplay(frame_, 4);
 	}
 
 	// NOTICE_LOG(NETWORK, "FRAME %u SIZE %u", frame, m_inputs.size());
-
-	// if (transmitter_started)
-	// transmission_frames.push_back(frame_);
 }
 
 void Dojo::RecRecordAction(int frame, int size, unsigned char *bits)
@@ -560,7 +570,8 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		}
 	}
 
-	if (!config::GGPOEnable && config::RecordMatches && !dojo.play_match)
+	if (!config::GGPOEnable && !dojo.play_match &&
+		(config::RecordMatches || config::Transmitting))
 	{
 		// create frame container for export
 		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
@@ -568,7 +579,7 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		memcpy(new_frame + 4, (unsigned char *)current_inputs.data(), current_inputs.size());
 		std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
 
-		dojo.replay.AppendToFile(frame_, 4);
+		dojo.replay.AppendToReplay(frame_, 4);
 	}
 
 	FrameInputs *player_inputs;

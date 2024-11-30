@@ -170,8 +170,6 @@ Option<bool> NetBeaconEnable("NetBeacon", true, "dojo");
 OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "dojo");
 OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
 
-OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
-OptionString DojoServerPort("ServerPort", "6000", "dojo");
 Option<int> FirstTo("FirstTo", 0, "dojo");
 Option<bool> StreamTxtOutput("StreamTxtOutput", false, "dojo");
 Option<bool> Training("Training", false, "dojo");
@@ -179,6 +177,16 @@ Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
 Option<bool> EnableTrainingLua("EnableTrainingLua", true, "dojo");
 Option<bool> AutoLoadTrainingNetState("AutoLoadTrainingNetState", true, "dojo");
 Option<bool> AutoLoadNetState("AutoLoadNetState", true, "dojo");
+OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
+OptionString DojoServerPort("ServerPort", "6000", "dojo");
+
+Option<bool> Transmitting("Transmitting", false, "dojo");
+Option<bool> TransmitScore("TransmitScore", false, "dojo");
+
+Option<bool> Receiving("Receiving", false, "dojo");
+
+OptionString SpectatorIP("SpectatorIP", "match.dojo.ooo", "dojo");
+OptionString SpectatorPort("SpectatorPort", "7000", "dojo");
 
 Option<bool> RecordMatches("RecordMatches", false, "dojo");
 Option<bool> Replay("Replay", false, "dojo");

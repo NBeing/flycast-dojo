@@ -584,7 +584,8 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 			else if (config::AutoLoadState && !NaomiNetworkSupported() && !settings.naomi.multiboard)
 				dc_loadstate(config::SavestateSlot);
 
-			if (!dojo.play_match && config::RecordMatches)
+			if (!dojo.play_match &&
+				(config::RecordMatches || config::Transmitting))
 				dojo.replay.StartRecording();
 		}
 		EventManager::event(Event::Start);
@@ -687,6 +688,8 @@ void Emulator::stop()
 {
 	if (state != Running)
 		return;
+	if (config::Transmitting)
+		dojo.tcp_client.Stop();
 	// Avoid race condition with GGPO restarting the sh4 for a new frame
 	if (config::GGPOEnable)
 		NetworkHandshake::term();

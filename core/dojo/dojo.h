@@ -32,6 +32,7 @@
 #include "relay_client.h"
 #include "dojo_file.h"
 #include "quick_match.h"
+#include "tcp_client.h"
 
 #define MAPLE_FRAME_SIZE 28
 #define FRAME_BATCH 120
@@ -160,6 +161,7 @@ public:
 	uint64_t UnixTimestamp();
 
 	RelayClient relay_client;
+	TcpClient tcp_client;
 };
 
 extern Dojo dojo;

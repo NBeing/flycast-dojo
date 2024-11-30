@@ -566,6 +566,32 @@ void gui_start_game(const std::string& path)
 	dojo.training.Reset();
 	dojo.ResetInputDisplay();
 
+	if (config::Receiving)
+	{
+		config::Transmitting = false;
+		dojo.play_match = true;
+		try
+		{
+			std::thread t2(&TcpClient::ReceivingThread, std::ref(dojo.tcp_client));
+			t2.detach();
+		}
+		catch (std::exception &)
+		{
+		}
+	}
+
+	if (config::Transmitting)
+	{
+		try
+		{
+			std::thread t2(&TcpClient::TransmissionThread, std::ref(dojo.tcp_client));
+			t2.detach();
+		}
+		catch (std::exception &)
+		{
+		}
+	}
+
 	if (config::Replay)
 		dojo.replay.Init();
 
@@ -579,6 +605,9 @@ void gui_stop_game(const std::string& message)
 	const LockGuard lock(guiMutex);
 	if (!commandLineStart)
 	{
+		if (config::Transmitting)
+			dojo.tcp_client.Stop();
+
 		if (dojo.play_match)
 		{
 			dojo.session_inputs.clear();
