@@ -566,9 +566,9 @@ void gui_start_game(const std::string& path)
 	dojo.training.Reset();
 	dojo.ResetInputDisplay();
 
-	if (config::Receiving)
+	if (cfgLoadBool("dojo", "Receiving", false))
 	{
-		config::Transmitting = false;
+		cfgSetVirtual("dojo", "Transmitting", "no");
 		dojo.play_match = true;
 		try
 		{
@@ -580,7 +580,7 @@ void gui_start_game(const std::string& path)
 		}
 	}
 
-	if (config::Transmitting)
+	if (cfgLoadBool("dojo", "Transmitting", false))
 	{
 		try
 		{
@@ -605,7 +605,7 @@ void gui_stop_game(const std::string& message)
 	const LockGuard lock(guiMutex);
 	if (!commandLineStart)
 	{
-		if (config::Transmitting)
+		if (cfgLoadBool("dojo", "Transmitting", false) || cfgLoadBool("dojo", "Receiving", false))
 			dojo.tcp_client.Stop();
 
 		if (dojo.play_match)

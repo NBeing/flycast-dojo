@@ -37,7 +37,7 @@ int rtc_schid = -1;
 u32 GetRTC_now()
 {
 	// rtc kept static for netplay when savestate is not loaded
-	if (config::GGPOEnable || config::RecordMatches || config::Replay)
+	if (config::GGPOEnable || config::RecordMatches || config::Replay || config::Receiving || config::Transmitting)
 		// 1/1/70 00:00:00
 		return (20 * 365 + 5) * 24 * 60 * 60;
 

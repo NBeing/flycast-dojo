@@ -2330,7 +2330,7 @@ void DojoGui::gui_display_replays()
 	{
 		if (ImGui::BeginTabBar("GGPOTabBar", ImGuiTabBarFlags_None))
 		{
-			bool is_selected;
+			bool is_selected = false;
 
 			char local_txt[128];
 			sprintf(local_txt, " %s Local ", ICON_FA_HARD_DRIVE);
@@ -2349,11 +2349,34 @@ void DojoGui::gui_display_replays()
 						std::string filename = entry.path().filename().string();
 						if (ImGui::Selectable(filename.data(), &is_selected))
 						{
+							config::Receiving = false;
 							config::Replay = true;
 							config::ReplayFilename = entry.path().string();
 							ImGui::CloseCurrentPopup();
 							gui_setState(GuiState::Main);
 						}
+					}
+					ImGui::EndChild();
+				}
+
+				ImGui::EndTabItem();
+			}
+
+			char spectate_txt[128];
+			sprintf(spectate_txt, " %s Spectate ", ICON_FA_BINOCULARS);
+			if (ImGui::BeginTabItem(spectate_txt))
+			{
+				if (ImGui::BeginChild("Replays##RemoteReplays", ImVec2(0, 200.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
+				{
+					if (ImGui::Selectable("Remote Match", &is_selected))
+					{
+						dojo.play_match = true;
+						cfgSetVirtual("dojo", "SpectatorIP", "127.0.0.1");
+						cfgSetVirtual("dojo", "SpectatorPort", "7000");
+						cfgSetVirtual("dojo", "Receiving", "yes");
+						cfgSetVirtual("dojo", "Transmitting", "no");
+						ImGui::CloseCurrentPopup();
+						gui_setState(GuiState::Main);
 					}
 					ImGui::EndChild();
 				}

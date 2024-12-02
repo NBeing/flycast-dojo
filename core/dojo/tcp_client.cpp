@@ -146,8 +146,8 @@ void TcpClient::ReceivingLoop()
 
 void TcpClient::ReceivingThread()
 {
-	host = config::SpectatorIP;
-	port = stoi(config::SpectatorPort);
+	host = cfgLoadStr("dojo", "SpectatorIP", "");
+	port = stoi(cfgLoadStr("dojo", "SpectatorPort", ""));
 
 	Init();
 	Connect();
