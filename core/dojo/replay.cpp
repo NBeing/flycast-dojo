@@ -196,8 +196,8 @@ std::vector<u8> Replay::GenHeader(std::string rom_name)
 	spectate_start.AppendString(config::PlayerName.get());
 	spectate_start.AppendString(settings.dojo.OpponentName);
 
-	// spectate_start.AppendString(config::Quark.get());
-	// spectate_start.AppendString(config::RelayKey.get());
+	spectate_start.AppendString(config::Quark.get());
+	spectate_start.AppendString(config::RelayKey.get());
 
 	u32 analogAxes = analog;
 	if (settings.platform.system == DC_PLATFORM_DREAMCAST && config::GGPOEnable)

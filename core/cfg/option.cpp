@@ -222,6 +222,8 @@ OptionString QuickMatchPort("QuickMatchPort", "8081", "dojo");
 OptionString QMCxnMethod("QMCxnMethod", "relay", "dojo");
 OptionString PlayerEmail("PlayerEmail", "", "dojo");
 
+OptionString Quark("Quark", "", "dojo");
+
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");
 #endif

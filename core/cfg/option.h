@@ -587,6 +587,8 @@ extern OptionString QuickMatchPort;
 extern OptionString QMCxnMethod;
 extern OptionString PlayerEmail;
 
+extern OptionString Quark;
+
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;
 #endif

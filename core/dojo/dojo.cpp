@@ -894,8 +894,8 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		std::string GameName = MessageReader::ReadString((const char *)buffer, offset);
 		std::string PlayerName = MessageReader::ReadString((const char *)buffer, offset);
 		std::string OpponentName = MessageReader::ReadString((const char *)buffer, offset);
-		// std::string Quark = MessageReader::ReadString((const char*)buffer, offset);
-		// std::string RelayKey = MessageReader::ReadString((const char*)buffer, offset);
+		std::string Quark = MessageReader::ReadString((const char*)buffer, offset);
+		std::string RelayKey = MessageReader::ReadString((const char*)buffer, offset);
 		unsigned int analog = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int precise_triggers = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int ggpo = MessageReader::ReadInt((const char *)buffer, offset);
@@ -903,8 +903,8 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		replay.version = v;
 		game_name = GameName;
 		settings.content.path = dojo.GetEntryPath(dojo.game_name);
-		// config::Quark = Quark;
-		// config::RelayKey = RelayKey;
+		config::Quark = Quark;
+		config::RelayKey = RelayKey;
 		precise_triggers = (bool)precise_triggers;
 		if (ggpo)
 			replay.ggpo_session = true;
