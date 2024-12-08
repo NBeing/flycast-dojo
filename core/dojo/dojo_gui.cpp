@@ -2378,8 +2378,33 @@ void DojoGui::gui_display_replays()
 						ImGui::CloseCurrentPopup();
 						gui_setState(GuiState::Main);
 					}
+
+					auto data = nlohmann::json::parse(dojo.replay.remote_replay_json);
+					for (auto replay_entry : data.items())
+					{
+						auto entry = replay_entry.value();
+						std::string title = std::string(entry["created_at"]) + ": " + std::string(entry["player1"]) + " vs " + std::string(entry["player2"]);
+						std::string match_code = entry["match_code"];
+						if (ImGui::Selectable(title.data(), &is_selected))
+						{
+							dojo.play_match = true;
+							cfgSetVirtual("dojo", "SpectatorIP", "127.0.0.1");
+							cfgSetVirtual("dojo", "SpectatorPort", "7000");
+							cfgSetVirtual("dojo", "Receiving", "yes");
+							cfgSetVirtual("dojo", "Transmitting", "no");
+							ImGui::CloseCurrentPopup();
+							gui_setState(GuiState::Main);
+						}
+					}
 					ImGui::EndChild();
 				}
+
+				if (ImGui::Button("Download Replay Json"))
+				{
+					std::string out = dojo.replay.DownloadReplayJson(dojo.game_name);
+					std::cout << out << std::endl;
+				}
+				ImGui::SameLine();
 
 				ImGui::EndTabItem();
 			}

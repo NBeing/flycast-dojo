@@ -32,6 +32,9 @@ public:
     u32 replay_frame_count;
 
     bool ggpo_session = false;
+
+    std::string DownloadReplayJson(std::string game_name);
+    std::string remote_replay_json = "[]";
 };
 
 extern Replay replay;

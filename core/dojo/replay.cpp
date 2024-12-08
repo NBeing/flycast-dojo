@@ -306,3 +306,47 @@ void Replay::LoadReplayFileV1(std::string path)
 	//	std::cout << "Final P2 Score: " << final_p2_wins << std::endl;
 	// }
 }
+
+size_t CurlWrite_CallbackFunc_StdString(void *contents, size_t size, size_t nmemb, std::string *s)
+{
+	size_t newLength = size * nmemb;
+	try
+	{
+		s->append((char *)contents, newLength);
+	}
+	catch (std::bad_alloc &e)
+	{
+		// handle memory problem
+		return 0;
+	}
+	return newLength;
+}
+
+std::string Replay::DownloadReplayJson(std::string game_name)
+{
+	std::string json_url = "https://skunkworks.match.dojo.ooo/api/v1/replays?player=&game=" + game_name + "&match_code=";
+	auto curl = curl_easy_init();
+
+	std::string s;
+	if (curl)
+	{
+		curl_easy_setopt(curl, CURLOPT_URL, json_url.data());
+
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 2L);
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlWrite_CallbackFunc_StdString);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+
+		CURLcode res = curl_easy_perform(curl);
+		if (res != CURLE_OK)
+		{
+			fprintf(stderr, "curl_easy_perform() failed: %s\n",
+					curl_easy_strerror(res));
+		}
+
+		curl_easy_cleanup(curl);
+	}
+
+	remote_replay_json = s;
+	return s;
+}
