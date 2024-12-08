@@ -552,6 +552,7 @@ extern Option<bool> Receiving;
 
 extern OptionString SpectatorIP;
 extern OptionString SpectatorPort;
+extern OptionString SpectateKey;
 
 extern Option<bool> RecordMatches;
 extern Option<bool> Replay;

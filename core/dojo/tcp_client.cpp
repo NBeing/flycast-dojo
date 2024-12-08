@@ -105,8 +105,8 @@ void TcpClient::ReceivingInit()
 
 	spectate_request.AppendHeader(1, SPECTATE_REQUEST);
 
-	// spectate_request.AppendString(config::Quark.get());
-	// spectate_request.AppendString(config::SpectateKey.get());
+	spectate_request.AppendString(config::Quark.get());
+	spectate_request.AppendString(config::SpectateKey.get());
 	spectate_request.AppendString(dojo.game_name);
 
 	std::vector<unsigned char> message = spectate_request.Msg();

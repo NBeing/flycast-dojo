@@ -187,6 +187,7 @@ Option<bool> Receiving("Receiving", false, "dojo");
 
 OptionString SpectatorIP("SpectatorIP", "match.dojo.ooo", "dojo");
 OptionString SpectatorPort("SpectatorPort", "7000", "dojo");
+OptionString SpectateKey("SpectateKey", "", "dojo");
 
 Option<bool> RecordMatches("RecordMatches", false, "dojo");
 Option<bool> Replay("Replay", false, "dojo");
