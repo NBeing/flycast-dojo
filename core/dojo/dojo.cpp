@@ -885,6 +885,7 @@ void Dojo::ResetInputDisplay()
 void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buffer, int *offset)
 {
 	// NOTICE_LOG(NETWORK, "CMD %u", cmd);
+	std::cout << "CMD " << cmd << " BODY SIZE " << body_size << std::endl;
 	if (cmd == 0)
 		return;
 
@@ -906,8 +907,8 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		config::Quark = Quark;
 		config::RelayKey = RelayKey;
 		precise_triggers = (bool)precise_triggers;
-		if (ggpo)
-			replay.ggpo_session = true;
+		//if (ggpo)
+			//replay.ggpo_session = true;
 
 		NOTICE_LOG(NETWORK, "v %u GameName %s PlayerName %s OpponentName %s analog %d", v, GameName.data(), PlayerName.data(), OpponentName.data(), analog);
 
@@ -946,8 +947,8 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		//	std::cout << "Opponent: " << OpponentName << std::endl;
 		// }
 
-		// std::cout << "Quark: " << Quark << std::endl;
-		// std::cout << "Relay Key: " << RelayKey << std::endl;
+		std::cout << "Quark: " << Quark << std::endl;
+		std::cout << "Relay Key: " << RelayKey << std::endl;
 
 		// if (version == 3)
 		//{

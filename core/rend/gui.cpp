@@ -595,6 +595,12 @@ void gui_start_game(const std::string& path)
 	if (config::Replay)
 		dojo.replay.Init();
 
+/*
+	if (!dojo.play_match &&
+		(config::RecordMatches || config::Transmitting))
+		dojo.replay.StartRecording();
+		*/
+
 	scanner.stop();
 	gui_setState(GuiState::Loading);
 	gameLoader.load(path);

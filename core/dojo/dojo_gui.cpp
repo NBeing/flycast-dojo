@@ -2385,10 +2385,11 @@ void DojoGui::gui_display_replays()
 						auto entry = replay_entry.value();
 						std::string title = std::string(entry["created_at"]) + ": " + std::string(entry["player1"]) + " vs " + std::string(entry["player2"]);
 						std::string match_code = entry["match_code"];
-						if (ImGui::Selectable(title.data(), &is_selected))
+						if (ImGui::Selectable(match_code.data(), &is_selected))
 						{
 							dojo.play_match = true;
-							cfgSetVirtual("dojo", "SpectatorIP", "127.0.0.1");
+							cfgSetVirtual("dojo", "SpectateKey", match_code);
+							cfgSetVirtual("dojo", "SpectatorIP", "178.156.142.51");
 							cfgSetVirtual("dojo", "SpectatorPort", "7000");
 							cfgSetVirtual("dojo", "Receiving", "yes");
 							cfgSetVirtual("dojo", "Transmitting", "no");

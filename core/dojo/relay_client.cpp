@@ -267,9 +267,19 @@ void RelayClient::ClientLoop()
 
 				std::cout << "(OPPADDR) Opponent assigned to " << opp[0] << " " << opp[1] << std::endl;
 
+				std::string quark = opp[2];
+				config::Quark = opp[2];
+				cfgSetVirtual("dojo", "Quark", quark);
+
+				std::cout << "(OPPADDR) Quark assigned to " << opp[2] << std::endl;
+
 				ping_test_start = dojo.UnixTimestamp();
 				std::cout << "PING TEST START " << ping_test_start << std::endl;
 				auto avg_ping = GetOpponentAvgPing(1);
+
+				if (!dojo.play_match &&
+					(config::RecordMatches || config::Transmitting))
+					dojo.replay.StartRecording();
 			}
 		}
 

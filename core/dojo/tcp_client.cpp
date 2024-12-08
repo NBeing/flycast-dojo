@@ -124,6 +124,7 @@ void TcpClient::ReceivingLoop()
 	isLoopStarted = true;
 	char buf[4096];
 	memset(buf, 0, 4096);
+	int offset = 0;
 
 	while (!endSession)
 	{
@@ -134,12 +135,19 @@ void TcpClient::ReceivingLoop()
 			u32 seq = HeaderReader::GetSeq((u8 *)buf);
 			u32 cmd = HeaderReader::GetCmd((u8 *)buf);
 
-			memset(buf, 0, 4096);
-			int bodyBytesReceived = recv(sock, buf, body_size, 0);
+			int bodyBytesReceived = 0;
+			do
+			{
+				bodyBytesReceived = recv(sock, buf, body_size, MSG_PEEK);
+			} while (bodyBytesReceived < body_size);
 
-			int offset = 0;
-			dojo.ProcessBody(cmd, body_size, (const char *)buf, &offset);
-			memset(buf, 0, 4096);
+			if (bodyBytesReceived == body_size)
+			{
+				bodyBytesReceived = recv(sock, buf, body_size, 0);
+				offset = 0;
+				dojo.ProcessBody(cmd, body_size, (const char *)buf, &offset);
+				memset(buf, 0, 4096);
+			}
 		}
 	}
 }
