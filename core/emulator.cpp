@@ -981,11 +981,8 @@ void Emulator::vblank()
 	if (sh4_sched_now64() - startTime <= 10000000)
 		return;
 	renderTimeout = true;
-	if (!dojo.play_match)
-	{
 	if (ggpo::active())
 		ggpo::endOfFrame();
-	}
 	else if (!config::ThreadedRendering)
 		sh4_cpu.Stop();
 }

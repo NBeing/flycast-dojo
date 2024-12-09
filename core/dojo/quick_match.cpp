@@ -243,9 +243,12 @@ void QuickMatch::ProcessMsg(std::string msg)
 	}
 	else if (parsed_json["type"] == "accept")
 	{
-		std::string accept_msg = parsed_json["player_name"].get<std::string>() + " accepted your challenge";
+		std::string opponent_name = parsed_json["player_name"].get<std::string>();
+		std::string accept_msg = opponent_name + " accepted your challenge";
 		AppendToLog(accept_msg);
 		target_player = parsed_json["uuid"];
+
+		settings.dojo.OpponentName = opponent_name;
 
 		if (parsed_json["cxn_method"] == "relay")
 		{

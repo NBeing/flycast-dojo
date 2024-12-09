@@ -907,8 +907,8 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		config::Quark = Quark;
 		config::RelayKey = RelayKey;
 		precise_triggers = (bool)precise_triggers;
-		//if (ggpo)
-			//replay.ggpo_session = true;
+		if (ggpo)
+			replay.ggpo_session = true;
 
 		NOTICE_LOG(NETWORK, "v %u GameName %s PlayerName %s OpponentName %s analog %d", v, GameName.data(), PlayerName.data(), OpponentName.data(), analog);
 
