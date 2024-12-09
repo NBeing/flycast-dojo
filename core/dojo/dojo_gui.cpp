@@ -2348,8 +2348,8 @@ void DojoGui::gui_display_replays()
 				static ImGuiTableFlags flags1 = ImGuiTableFlags_RowBg;
 				if (ImGui::BeginTable("table1", 6, flags1, ImVec2(510.0, 280.0)))
 				{
-					ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthStretch, 100.0f);
-					ImGui::TableSetupColumn("Player 1", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+					ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+					ImGui::TableSetupColumn("Player 1", ImGuiTableColumnFlags_WidthStretch, 100.0f);
 					ImGui::TableSetupColumn("Player 2", ImGuiTableColumnFlags_WidthStretch, 100.0f);
 					ImGui::TableSetupScrollFreeze(0, 1);
 					ImGui::TableHeadersRow();
@@ -2364,7 +2364,9 @@ void DojoGui::gui_display_replays()
 						bool selected = false;
 
 						std::string filename = entry.path().filename().string();
-						std::string date = "";
+
+						auto ftime = std::filesystem::last_write_time(entry.path());
+						std::string date = std::format("{:%F\n%T}", std::chrono::floor<std::chrono::seconds>(ftime));
 
 						for (int column = 0; column < 3; column++)
 						{
@@ -2408,9 +2410,9 @@ void DojoGui::gui_display_replays()
 				static ImGuiTableFlags flags1 = ImGuiTableFlags_RowBg;
 				if (ImGui::BeginTable("table1", 6, flags1, ImVec2(510.0, 280.0)))
 				{
-					ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthFixed, 100.0f);
 					ImGui::TableSetupColumn("###P1Location", ImGuiTableColumnFlags_WidthFixed, 20.0f);
-					ImGui::TableSetupColumn("Player 1", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+					ImGui::TableSetupColumn("Player 1", ImGuiTableColumnFlags_WidthStretch, 100.0f);
 					ImGui::TableSetupColumn("###P2Location", ImGuiTableColumnFlags_WidthFixed, 20.0f);
 					ImGui::TableSetupColumn("Player 2", ImGuiTableColumnFlags_WidthStretch, 100.0f);
 					ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_WidthStretch, 100.0f);
