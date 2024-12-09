@@ -364,8 +364,9 @@ void QuickMatch::ProcessMsg(std::string msg)
 void QuickMatch::AppendToLog(std::string msg)
 {
 	LogEntry entry;
-	auto local_time = date::make_zoned(date::current_zone(), std::chrono::system_clock::now());
-	entry.timestamp = date::format("%T", std::chrono::floor<std::chrono::seconds>(local_time.get_local_time()));
+	auto now = std::chrono::system_clock::now();
+	auto local_time = std::chrono::zoned_time{std::chrono::current_zone(), std::chrono::floor<std::chrono::seconds>(now)};
+	entry.timestamp = std::format("{:%T}", local_time);
 
 	entry.msg = msg;
 	log.push_back(entry);

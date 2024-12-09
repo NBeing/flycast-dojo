@@ -10,8 +10,6 @@
 #include "deps/UUID.hpp"
 #include "deps/json.hpp"
 #include "deps/picosha2.h"
-#include "deps/date/date.h"
-#include "deps/date/tz.h"
 
 #include "dojo.h"
 

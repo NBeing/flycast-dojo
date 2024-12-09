@@ -1008,10 +1008,6 @@ endif()
 
 target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/deps/base64.h
-		core/dojo/deps/date/date.h
-		core/dojo/deps/date/tz.h
-		core/dojo/deps/date/tz_private.h
-		core/dojo/deps/tz.cpp
 		core/dojo/deps/easywsclient/easywsclient.hpp
 		core/dojo/deps/easywsclient/easywsclient.cpp
 		core/dojo/deps/json.hpp
