@@ -2328,7 +2328,7 @@ void DojoGui::gui_display_replays()
 	ImGui::SetNextWindowSize(ImVec2(520, 380));
 	if (ImGui::BeginPopupModal(replays_txt, NULL, ImGuiInputTextFlags_EnterReturnsTrue))
 	{
-		if (ImGui::BeginTabBar("GGPOTabBar", ImGuiTabBarFlags_None))
+		if (ImGui::BeginTabBar("ReplayTabBar", ImGuiTabBarFlags_None))
 		{
 			bool is_selected = false;
 
@@ -2342,22 +2342,58 @@ void DojoGui::gui_display_replays()
 				if (!std::filesystem::exists(game_replays_dir))
 					std::filesystem::create_directories(game_replays_dir);
 
-				if (ImGui::BeginChild("Replays##LocalReplays", ImVec2(510, 200.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
+				ImGui::BeginChild("Replays##LocalReplays", ImVec2(510, 280));
+
+				ImGui::PushStyleColor(ImGuiCol_Header, 0);
+				static ImGuiTableFlags flags1 = ImGuiTableFlags_RowBg;
+				if (ImGui::BeginTable("table1", 6, flags1, ImVec2(510.0, 280.0)))
 				{
+					ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupColumn("Player 1", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+					ImGui::TableSetupColumn("Player 2", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupScrollFreeze(0, 1);
+					ImGui::TableHeadersRow();
+
+					int row = 0;
+
 					for (const auto &entry : std::filesystem::directory_iterator(game_replays_dir))
 					{
+						ImGui::TableNextRow();
+						ImGui::PushID(row);
+
+						bool selected = false;
+
 						std::string filename = entry.path().filename().string();
-						if (ImGui::Selectable(filename.data(), &is_selected))
+						std::string date = "";
+
+						for (int column = 0; column < 3; column++)
 						{
-							config::Receiving = false;
-							config::Replay = true;
-							config::ReplayFilename = entry.path().string();
-							ImGui::CloseCurrentPopup();
-							gui_setState(GuiState::Main);
+							ImGui::TableSetColumnIndex(column);
+							if (column == 0)
+							{
+								if (ImGui::Selectable(date.data(), selected, ImGuiSelectableFlags_DontClosePopups | ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 42)))
+								{
+									config::Receiving = false;
+									config::Replay = true;
+									config::ReplayFilename = entry.path().string();
+									ImGui::CloseCurrentPopup();
+									gui_setState(GuiState::Main);
+								}
+							}
+							else if (column == 1)
+							{
+								ImGui::Text("%s", filename.data());
+							}
 						}
+
+						ImGui::PopID();
+						row++;
 					}
-					ImGui::EndChild();
+
+					ImGui::EndTable();
 				}
+
+				ImGui::EndChild();
 
 				ImGui::EndTabItem();
 			}
