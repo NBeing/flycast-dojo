@@ -2364,6 +2364,17 @@ void DojoGui::gui_display_replays()
 						bool selected = false;
 
 						std::string filename = entry.path().filename().string();
+						std::vector<std::string> fn_elements;
+						std::string fn_copy = filename;
+						dojo.Replace(fn_copy, "__", "#");
+						dojo.Split(fn_copy, '#', fn_elements);
+
+						auto player1 = fn_elements[2];
+						auto player2 = fn_elements[3];
+						if (player2.find(".flyr") != std::string::npos)
+						{
+							player2 = "";
+						}
 
 						auto ftime = std::filesystem::last_write_time(entry.path());
 						std::string date = std::format("{:%F\n%T}", std::chrono::floor<std::chrono::seconds>(ftime));
@@ -2384,7 +2395,11 @@ void DojoGui::gui_display_replays()
 							}
 							else if (column == 1)
 							{
-								ImGui::Text("%s", filename.data());
+								ImGui::Text("%s", player1.data());
+							}
+							else if (column == 2)
+							{
+								ImGui::Text("%s", player2.data());
 							}
 						}
 
@@ -2400,9 +2415,9 @@ void DojoGui::gui_display_replays()
 				ImGui::EndTabItem();
 			}
 
-			char spectate_txt[128];
-			sprintf(spectate_txt, " %s Spectate ", ICON_FA_BINOCULARS);
-			if (ImGui::BeginTabItem(spectate_txt))
+			char remote_txt[128];
+			sprintf(remote_txt, " %s Remote ", ICON_FA_GLOBE);
+			if (ImGui::BeginTabItem(remote_txt))
 			{
 				ImGui::BeginChild("Replays##RemoteReplays", ImVec2(510, 280));
 
@@ -2421,6 +2436,11 @@ void DojoGui::gui_display_replays()
 
 					int row = 0;
 
+					if (dojo.replay.remote_replay_json == "")
+					{
+						dojo.replay.DownloadReplayJson(dojo.game_name);
+					}
+
 					auto data = nlohmann::json::parse(dojo.replay.remote_replay_json);
 					for (auto replay_entry : data.items())
 					{
@@ -2436,6 +2456,132 @@ void DojoGui::gui_display_replays()
 						dojo.Replace(created_at, " ", "\n");
 						std::string p1_country = entry["p1_country"];
 						std::string p2_country = entry["p2_country"];
+
+						auto live = entry["live"];
+
+						if (live == 1)
+							continue;
+
+						for (int column = 0; column < 6; column++)
+						{
+							ImGui::TableSetColumnIndex(column);
+							if (column == 0)
+							{
+								if (ImGui::Selectable(created_at.data(), selected, ImGuiSelectableFlags_DontClosePopups | ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 42)))
+								{
+									dojo.play_match = true;
+									cfgSetVirtual("dojo", "SpectateKey", match_code);
+									cfgSetVirtual("dojo", "SpectatorIP", "178.156.142.51");
+									cfgSetVirtual("dojo", "SpectatorPort", "7001");
+									cfgSetVirtual("dojo", "Receiving", "yes");
+									cfgSetVirtual("dojo", "Transmitting", "no");
+									ImGui::CloseCurrentPopup();
+									gui_setState(GuiState::Main);
+								}
+							}
+							else if (column == 1)
+							{
+								if (!p1_country.empty())
+								{
+									auto flagTextureId = ImTextureID{};
+									get_flag_image(p1_country.data(), flagTextureId, true);
+									AvatarImage(flagTextureId, p1_country.data(), ImVec2(20, 20));
+								}
+								else
+									ImGui::Text("");
+							}
+							else if (column == 2)
+							{
+								ImGui::Text("%s", entry["player1"].get<std::string>().data());
+							}
+							else if (column == 3)
+							{
+								if (!p2_country.empty())
+								{
+									auto flagTextureId = ImTextureID{};
+									get_flag_image(p2_country.data(), flagTextureId, true);
+									AvatarImage(flagTextureId, p2_country.data(), ImVec2(20, 20));
+								}
+								else
+									ImGui::Text("");
+							}
+							else if (column == 4)
+							{
+								ImGui::Text("%s", entry["player2"].get<std::string>().data());
+							}
+							else if (column == 5)
+							{
+								ImGui::Text("%s", entry["duration_time"].get<std::string>().data());
+							}
+						}
+						ImGui::PopID();
+						row++;
+					}
+
+					ImGui::EndTable();
+				}
+
+				ImGui::EndChild();
+				ImGui::PopStyleColor();
+
+				char reload_btn_txt[128];
+				sprintf(reload_btn_txt, "%s Reload", ICON_FA_ROTATE_RIGHT);
+
+				if (ImGui::Button(reload_btn_txt))
+				{
+					std::string out = dojo.replay.DownloadReplayJson(dojo.game_name);
+				}
+				ImGui::SameLine();
+
+				ImGui::EndTabItem();
+			}
+
+			char spectate_txt[128];
+			sprintf(spectate_txt, " %s Spectate ", ICON_FA_BINOCULARS);
+			if (ImGui::BeginTabItem(spectate_txt))
+			{
+				ImGui::BeginChild("Replays##LiveReplays", ImVec2(510, 280));
+
+				ImGui::PushStyleColor(ImGuiCol_Header, 0);
+				static ImGuiTableFlags flags1 = ImGuiTableFlags_None;
+				if (ImGui::BeginTable("table1", 6, flags1, ImVec2(510.0, 280.0)))
+				{
+					ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+					ImGui::TableSetupColumn("###P1Location", ImGuiTableColumnFlags_WidthFixed, 20.0f);
+					ImGui::TableSetupColumn("Player 1", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupColumn("###P2Location", ImGuiTableColumnFlags_WidthFixed, 20.0f);
+					ImGui::TableSetupColumn("Player 2", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupScrollFreeze(0, 1);
+					ImGui::TableHeadersRow();
+
+					int row = 0;
+
+					if (dojo.replay.remote_replay_json == "")
+					{
+						dojo.replay.DownloadReplayJson(dojo.game_name);
+					}
+
+					auto data = nlohmann::json::parse(dojo.replay.remote_replay_json);
+					for (auto replay_entry : data.items())
+					{
+						ImGui::TableNextRow();
+						ImGui::PushID(row);
+
+						bool selected = false;
+						auto entry = replay_entry.value();
+
+						std::string match_code = entry["match_code"];
+						std::string created_at = entry["created_at"];
+						dojo.Replace(created_at, " +0000", "");
+						dojo.Replace(created_at, " ", "\n");
+						std::string p1_country = entry["p1_country"];
+						std::string p2_country = entry["p2_country"];
+
+						auto live = entry["live"];
+
+						if (live == 0)
+							continue;
 
 						for (int column = 0; column < 6; column++)
 						{
@@ -2516,6 +2662,7 @@ void DojoGui::gui_display_replays()
 
 			if (ImGui::Button(close_btn_txt))
 			{
+				dojo.replay.remote_replay_json == "";
 				settings.content.path = "";
 				dojo.game_name = "";
 				ImGui::CloseCurrentPopup();

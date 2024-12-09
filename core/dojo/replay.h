@@ -34,7 +34,7 @@ public:
     bool ggpo_session = false;
 
     std::string DownloadReplayJson(std::string game_name);
-    std::string remote_replay_json = "[]";
+    std::string remote_replay_json = "";
 };
 
 extern Replay replay;
