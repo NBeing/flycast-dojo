@@ -2499,10 +2499,12 @@ void DojoGui::gui_display_replays()
 				ImGui::EndChild();
 				ImGui::PopStyleColor();
 
-				if (ImGui::Button("Download Replay Json"))
+				char reload_btn_txt[128];
+				sprintf(reload_btn_txt, "%s Reload", ICON_FA_ROTATE_RIGHT);
+
+				if (ImGui::Button(reload_btn_txt))
 				{
 					std::string out = dojo.replay.DownloadReplayJson(dojo.game_name);
-					std::cout << out << std::endl;
 				}
 				ImGui::SameLine();
 
