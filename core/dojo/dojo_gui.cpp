@@ -2325,7 +2325,7 @@ void DojoGui::gui_display_replays()
 	char replays_txt[128];
 	sprintf(replays_txt, "%s Replays - %s ", ICON_FA_FILM, dojo.game_name.c_str());
 	ImGui::OpenPopup(replays_txt);
-	ImGui::SetNextWindowSize(ImVec2(400, 300));
+	ImGui::SetNextWindowSize(ImVec2(520, 380));
 	if (ImGui::BeginPopupModal(replays_txt, NULL, ImGuiInputTextFlags_EnterReturnsTrue))
 	{
 		if (ImGui::BeginTabBar("GGPOTabBar", ImGuiTabBarFlags_None))
@@ -2342,7 +2342,7 @@ void DojoGui::gui_display_replays()
 				if (!std::filesystem::exists(game_replays_dir))
 					std::filesystem::create_directories(game_replays_dir);
 
-				if (ImGui::BeginChild("Replays##LocalReplays", ImVec2(0, 200.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
+				if (ImGui::BeginChild("Replays##LocalReplays", ImVec2(510, 200.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
 				{
 					for (const auto &entry : std::filesystem::directory_iterator(game_replays_dir))
 					{
@@ -2366,39 +2366,100 @@ void DojoGui::gui_display_replays()
 			sprintf(spectate_txt, " %s Spectate ", ICON_FA_BINOCULARS);
 			if (ImGui::BeginTabItem(spectate_txt))
 			{
-				if (ImGui::BeginChild("Replays##RemoteReplays", ImVec2(0, 200.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling | ImGuiWindowFlags_NavFlattened))
+				ImGui::BeginChild("Replays##RemoteReplays", ImVec2(510, 280));
+
+				ImGui::PushStyleColor(ImGuiCol_Header, 0);
+				static ImGuiTableFlags flags1 = ImGuiTableFlags_RowBg;
+				if (ImGui::BeginTable("table1", 6, flags1, ImVec2(510.0, 280.0)))
 				{
-					if (ImGui::Selectable("Remote Match", &is_selected))
-					{
-						dojo.play_match = true;
-						cfgSetVirtual("dojo", "SpectatorIP", "127.0.0.1");
-						cfgSetVirtual("dojo", "SpectatorPort", "7000");
-						cfgSetVirtual("dojo", "Receiving", "yes");
-						cfgSetVirtual("dojo", "Transmitting", "no");
-						ImGui::CloseCurrentPopup();
-						gui_setState(GuiState::Main);
-					}
+					ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupColumn("###P1Location", ImGuiTableColumnFlags_WidthFixed, 20.0f);
+					ImGui::TableSetupColumn("Player 1", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+					ImGui::TableSetupColumn("###P2Location", ImGuiTableColumnFlags_WidthFixed, 20.0f);
+					ImGui::TableSetupColumn("Player 2", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_WidthStretch, 100.0f);
+					ImGui::TableSetupScrollFreeze(0, 1);
+					ImGui::TableHeadersRow();
+
+					int row = 0;
 
 					auto data = nlohmann::json::parse(dojo.replay.remote_replay_json);
 					for (auto replay_entry : data.items())
 					{
+						ImGui::TableNextRow();
+						ImGui::PushID(row);
+
+						bool selected = false;
 						auto entry = replay_entry.value();
-						std::string title = std::string(entry["created_at"]) + ": " + std::string(entry["player1"]) + " vs " + std::string(entry["player2"]);
+
 						std::string match_code = entry["match_code"];
-						if (ImGui::Selectable(match_code.data(), &is_selected))
+						std::string created_at = entry["created_at"];
+						dojo.Replace(created_at, " +0000", "");
+						dojo.Replace(created_at, " ", "\n");
+						std::string p1_country = entry["p1_country"];
+						std::string p2_country = entry["p2_country"];
+
+						for (int column = 0; column < 6; column++)
 						{
-							dojo.play_match = true;
-							cfgSetVirtual("dojo", "SpectateKey", match_code);
-							cfgSetVirtual("dojo", "SpectatorIP", "178.156.142.51");
-							cfgSetVirtual("dojo", "SpectatorPort", "7000");
-							cfgSetVirtual("dojo", "Receiving", "yes");
-							cfgSetVirtual("dojo", "Transmitting", "no");
-							ImGui::CloseCurrentPopup();
-							gui_setState(GuiState::Main);
+							ImGui::TableSetColumnIndex(column);
+							if (column == 0)
+							{
+								if (ImGui::Selectable(created_at.data(), selected, ImGuiSelectableFlags_DontClosePopups | ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 42)))
+								{
+									dojo.play_match = true;
+									cfgSetVirtual("dojo", "SpectateKey", match_code);
+									cfgSetVirtual("dojo", "SpectatorIP", "178.156.142.51");
+									cfgSetVirtual("dojo", "SpectatorPort", "7001");
+									cfgSetVirtual("dojo", "Receiving", "yes");
+									cfgSetVirtual("dojo", "Transmitting", "no");
+									ImGui::CloseCurrentPopup();
+									gui_setState(GuiState::Main);
+								}
+							}
+							else if (column == 1)
+							{
+								if (!p1_country.empty())
+								{
+									auto flagTextureId = ImTextureID{};
+									get_flag_image(p1_country.data(), flagTextureId, true);
+									AvatarImage(flagTextureId, p1_country.data(), ImVec2(20, 20));
+								}
+								else
+									ImGui::Text("");
+							}
+							else if (column == 2)
+							{
+								ImGui::Text("%s", entry["player1"].get<std::string>().data());
+							}
+							else if (column == 3)
+							{
+								if (!p2_country.empty())
+								{
+									auto flagTextureId = ImTextureID{};
+									get_flag_image(p2_country.data(), flagTextureId, true);
+									AvatarImage(flagTextureId, p2_country.data(), ImVec2(20, 20));
+								}
+								else
+									ImGui::Text("");
+							}
+							else if (column == 4)
+							{
+								ImGui::Text("%s", entry["player2"].get<std::string>().data());
+							}
+							else if (column == 5)
+							{
+								ImGui::Text("%s", entry["duration_time"].get<std::string>().data());
+							}
 						}
+						ImGui::PopID();
+						row++;
 					}
-					ImGui::EndChild();
+
+					ImGui::EndTable();
 				}
+
+				ImGui::EndChild();
+				ImGui::PopStyleColor();
 
 				if (ImGui::Button("Download Replay Json"))
 				{
