@@ -3995,14 +3995,21 @@ static void gui_display_loadscreen()
 		}
 		else
 		{
-			ImGui::Text("%s", label);
-			ImGui::ProgressBar(gameLoader.getProgress().progress, ImVec2(-1, 20.f * settings.display.uiScale), "");
+			if (cfgLoadBool("dojo", "Receiving", false) && !dojo_gui.buffer_captured)
+			{
+				gui_setState(GuiState::StreamWait);
+			}
+			else
+			{
+				ImGui::Text("%s", label);
+				ImGui::ProgressBar(gameLoader.getProgress().progress, ImVec2(-1, 20.f * settings.display.uiScale), "");
 
-			float currentwidth = ImGui::GetContentRegionAvail().x;
-			ImGui::SetCursorPosX((currentwidth - 100.f * settings.display.uiScale) / 2.f + ImGui::GetStyle().WindowPadding.x);
-			ImGui::SetCursorPosY(126.f * settings.display.uiScale);
-			if (ImGui::Button("Cancel", ScaledVec2(100.f, 0)))
-				gameLoader.cancel();
+				float currentwidth = ImGui::GetContentRegionAvail().x;
+				ImGui::SetCursorPosX((currentwidth - 100.f * settings.display.uiScale) / 2.f + ImGui::GetStyle().WindowPadding.x);
+				ImGui::SetCursorPosY(126.f * settings.display.uiScale);
+				if (ImGui::Button("Cancel", ScaledVec2(100.f, 0)))
+					gameLoader.cancel();
+			}
 		}
 	} catch (const FlycastException& ex) {
 		ERROR_LOG(BOOT, "%s", ex.what());
@@ -4135,6 +4142,9 @@ void gui_display_ui()
 		break;
 	case GuiState::Paused:
 		dojo_gui.show_pause();
+		break;
+	case GuiState::StreamWait:
+		dojo_gui.gui_display_stream_wait();
 		break;
 	default:
 		die("Unknown UI state");

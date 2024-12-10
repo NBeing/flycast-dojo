@@ -73,6 +73,8 @@ public:
 
 	void show_pause();
 
+	void gui_display_stream_wait();
+	bool buffer_captured = false;
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;

@@ -3007,3 +3007,40 @@ void DojoGui::show_pause()
 	ImGui::PopStyleColor();
 	ImGui::PopStyleVar(3);
 }
+
+void DojoGui::gui_display_stream_wait()
+{
+	if (buffer_captured)
+		gui_state = GuiState::Loading;
+
+	const float scaling = settings.display.uiScale;
+
+	ImGui::SetNextWindowPos(ImVec2(settings.display.width / 2.f, settings.display.height / 2.f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(330 * scaling, 0));
+
+	ImGui::Begin("##stream_wait", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
+
+	if (cfgLoadBool("dojo", "Receiving", false))
+	{
+		if (dojo.session_inputs.size() == 0)
+			ImGui::Text("WAITING FOR MATCH STREAM TO BEGIN...");
+		else
+		{
+			float progress = (float)dojo.session_inputs.size() / (float)config::RxFrameBuffer.get();
+
+			ImGui::Text("Buffering Match Stream...");
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.557f, 0.268f, 0.965f, 1.f));
+			ImGui::ProgressBar(progress, ImVec2(-1, 20.f * scaling), "");
+			ImGui::PopStyleColor();
+
+			ImGui::Text("%d / %d Frames", dojo.session_inputs.size(), config::RxFrameBuffer.get());
+		}
+	}
+
+	ImGui::End();
+
+	if (dojo.session_inputs.size() > config::RxFrameBuffer.get())
+	{
+		buffer_captured = true;
+	}
+}

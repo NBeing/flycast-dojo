@@ -549,6 +549,7 @@ extern Option<bool> Transmitting;
 extern Option<bool> TransmitScore;
 
 extern Option<bool> Receiving;
+extern Option<int> RxFrameBuffer;
 
 extern OptionString SpectatorIP;
 extern OptionString SpectatorPort;
