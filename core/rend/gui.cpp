@@ -497,7 +497,7 @@ void gui_plot_render_time(int width, int height)
 void gui_open_settings()
 {
 	const LockGuard lock(guiMutex);
-	if (gui_state == GuiState::Closed && !settings.naomi.slave)
+	if ((gui_state == GuiState::Closed || gui_state == GuiState::Paused) && !settings.naomi.slave)
 	{
 		if (dojo.play_match || !ggpo::active())
 		{
@@ -524,7 +524,11 @@ void gui_open_settings()
 	}
 	else if (gui_state == GuiState::Commands || gui_state == GuiState::ButtonCheck)
 	{
-		if (gui_state == GuiState::ButtonCheck && dojo_gui.test_game_screen)
+		if (dojo.manual_pause || dojo.buffering || dojo.stepping)
+		{
+			gui_state = GuiState::Paused;
+		}
+		else if (gui_state == GuiState::ButtonCheck && dojo_gui.test_game_screen)
 		{
 			gui_stop_game();
 		}
@@ -4605,6 +4609,9 @@ void quick_player_select()
 void gui_open_step()
 {
 	const LockGuard lock(guiMutex);
+	if (gui_state == GuiState::Paused && dojo.buffering)
+		return;
+
 	if (!dojo.stepping)
 		dojo.stepping = true;
 
@@ -4628,6 +4635,7 @@ void gui_open_pause()
 	{
 		if (gui_state == GuiState::Closed)
 		{
+			dojo.manual_pause = true;
 			try {
 				emu.stop();
 				gui_setState(GuiState::Paused);
@@ -4637,6 +4645,9 @@ void gui_open_pause()
 		}
 		else if (gui_state == GuiState::Paused)
 		{
+			if (dojo.buffering)
+				return;
+			dojo.manual_pause = false;
 			gui_setState(GuiState::Closed);
 			GamepadDevice::load_system_mappings();
 			emu.start();

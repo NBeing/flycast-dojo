@@ -165,6 +165,7 @@ public:
 
 	bool stepping = false;
 	bool buffering = false;
+	bool manual_pause = false;
 };
 
 extern Dojo dojo;
