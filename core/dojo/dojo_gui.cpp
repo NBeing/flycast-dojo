@@ -2938,3 +2938,56 @@ bool DojoGui::get_flag_image(std::string country_code, ImTextureID &textureId, b
 	}
 	return false;
 }
+
+void DojoGui::show_pause()
+{
+	settings.input.fastForwardMode = false;
+
+	if (config::Training && config::ShowTrainingInputDisplay ||
+		dojo.play_match && config::ShowReplayInputDisplay)
+		dojo_gui.show_last_inputs_overlay();
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+	// ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.475f, 0.825f, 1.000f, 1.f));
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.335f, 0.155f, 0.770f, 1.000f));
+
+	std::string pause_text;
+
+	if (dojo.stepping)
+		pause_text = "Stepping";
+	else
+	{
+		if (dojo.buffering)
+			pause_text = "Buffering";
+		else
+			pause_text = "Paused";
+	}
+
+	float font_size = ImGui::CalcTextSize(pause_text.c_str()).x;
+
+	ImGui::SetNextWindowPos(ImVec2((settings.display.width / 2) - ((font_size + 40) / 2), settings.display.height - 40));
+	ImGui::SetNextWindowSize(ImVec2(font_size + 40, 40));
+	ImGui::SetNextWindowBgAlpha(0.65f);
+	ImGui::Begin("#pause", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
+
+	ImGui::SameLine(
+		(ImGui::GetContentRegionAvail().x / 2) -
+		font_size + (font_size / 2) + 10);
+
+	ImGui::TextUnformatted(pause_text.c_str());
+
+	ImGui::End();
+
+	if (dojo.play_match)
+	{
+		if (config::ReplayPositionOverlay)
+			dojo_gui.show_replay_position_overlay(dojo.frame_number);
+
+		if (config::PlayerNameOverlay)
+			dojo_gui.show_player_name_overlay(false);
+	}
+
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar(2);
+}

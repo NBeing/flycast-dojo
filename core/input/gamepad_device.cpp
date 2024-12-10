@@ -105,6 +105,15 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 				gui_saveState();
 			break;
 
+		case EMU_BTN_PAUSE:
+			if (pressed)
+				gui_open_pause();
+			break;
+		case EMU_BTN_STEP:
+			if (pressed)
+				gui_open_step();
+			break;
+
 		// training
 		case EMU_BTN_SWITCH_PLAYER:
 			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))

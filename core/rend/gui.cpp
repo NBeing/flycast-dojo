@@ -1312,6 +1312,10 @@ const Mapping dcButtons[] = {
 	{ EMU_BTN_SAVESTATE, "Save State" },
 	{ EMU_BTN_BYPASS_KB, "Bypass Emulated Keyboard" },
 
+	{ EMU_BTN_NONE, "Replays" },
+	{ EMU_BTN_STEP, "Step Frame" },
+	{ EMU_BTN_PAUSE, "Pause" },
+
 	{ EMU_BTN_NONE, "Training Mode" },
 	{ EMU_BTN_SWITCH_PLAYER, "Switch Player" },
 	{ EMU_BTN_SELECT_SLOT, "Select Input Slot" },
@@ -1406,6 +1410,10 @@ const Mapping arcadeButtons[] = {
 	{ EMU_BTN_LOADSTATE, "Load State" },
 	{ EMU_BTN_SAVESTATE, "Save State" },
 	{ EMU_BTN_BYPASS_KB, "Bypass Emulated Keyboard" },
+
+	{ EMU_BTN_NONE, "Replays" },
+	{ EMU_BTN_STEP, "Step Frame" },
+	{ EMU_BTN_PAUSE, "Pause" },
 
 	{ EMU_BTN_NONE, "Training Mode" },
 	{ EMU_BTN_SWITCH_PLAYER, "Switch Player" },
@@ -4125,6 +4133,9 @@ void gui_display_ui()
 	case GuiState::QuickMatchGuestWait:
 		dojo_gui.gui_display_quick_match_guest_wait();
 		break;
+	case GuiState::Paused:
+		dojo_gui.show_pause();
+		break;
 	default:
 		die("Unknown UI state");
 		break;
@@ -4556,4 +4567,46 @@ void quick_player_select()
 
 	ImGui::PopStyleVar();
 	ImGui::End();
+}
+
+void gui_open_step()
+{
+	const LockGuard lock(guiMutex);
+	if (!dojo.stepping)
+		dojo.stepping = true;
+
+	if (!config::ThreadedRendering && (cfgLoadBool("dojo", "Training", false) || dojo.play_match))
+	{
+		if (gui_state == GuiState::Paused)
+		{
+			gui_state = GuiState::Closed;
+			GamepadDevice::load_system_mappings();
+			emu.start();
+		}
+	}
+}
+
+void gui_open_pause()
+{
+	const LockGuard lock(guiMutex);
+	if (dojo.stepping)
+		dojo.stepping = false;
+	if (dojo.play_match || cfgLoadBool("dojo", "Training", false))
+	{
+		if (gui_state == GuiState::Closed)
+		{
+			try {
+				emu.stop();
+				gui_setState(GuiState::Paused);
+			} catch (const FlycastException& e) {
+				gui_stop_game(e.what());
+			}
+		}
+		else if (gui_state == GuiState::Paused)
+		{
+			gui_setState(GuiState::Closed);
+			GamepadDevice::load_system_mappings();
+			emu.start();
+		}
+	}
 }

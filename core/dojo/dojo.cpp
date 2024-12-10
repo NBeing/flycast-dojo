@@ -628,7 +628,16 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	PrintMapleInputState(inputState);
 
 	if (!settings.network.online && !replay.ggpo_session)
-		dojo.frame_number++;
+	{
+		frame_number++;
+	}
+
+	if (!config::ThreadedRendering && stepping)
+	{
+		emu.stop();
+		gui_setState(GuiState::Paused);
+	}
+
 	UpdateScore();
 }
 

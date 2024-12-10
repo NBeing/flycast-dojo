@@ -162,6 +162,9 @@ public:
 
 	RelayClient relay_client;
 	TcpClient tcp_client;
+
+	bool stepping = false;
+	bool buffering = false;
 };
 
 extern Dojo dojo;

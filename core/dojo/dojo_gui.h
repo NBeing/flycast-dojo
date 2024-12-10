@@ -71,6 +71,8 @@ public:
 
 	bool gui_start = false;
 
+	void show_pause();
+
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;

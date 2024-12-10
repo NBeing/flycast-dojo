@@ -54,6 +54,9 @@ void gui_save();
 void gui_loadState();
 void gui_saveState();
 
+void gui_open_pause();
+void gui_open_step();
+
 enum class GuiState {
 	Closed,
 	Commands,
@@ -78,7 +81,8 @@ enum class GuiState {
 	Replays,
 	DownloadState,
 	DelaySelect,
-	QuickMatchGuestWait
+	QuickMatchGuestWait,
+	Paused
 };
 extern GuiState gui_state;
 

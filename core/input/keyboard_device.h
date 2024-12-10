@@ -62,6 +62,9 @@ public:
 		set_button(DC_AXIS_RIGHT, 15);			// L
 		set_button(DC_BTN_D, 4);				// Q (Coin)
 
+		set_button(EMU_BTN_PAUSE, 54);			// ,
+		set_button(EMU_BTN_STEP, 55);			// .
+
 		dirty = false;
 	}
 };
