@@ -4236,6 +4236,29 @@ void gui_display_osd()
 
 		lua::overlay();
 
+		if (dojo.play_match)
+		{
+			if (cfgLoadBool("dojo", "Receiving", false))
+			{
+				if (dojo.frame_number >= dojo.session_inputs.size() - 5)
+				{
+					settings.input.fastForwardMode = false;
+					dojo.buffering = true;
+				}
+			}
+			else
+			{
+				if (dojo.frame_number == dojo.session_inputs.size())
+				{
+					settings.input.fastForwardMode = false;
+					gui_state = GuiState::ReplayEnd;
+				}
+			}
+
+			if (dojo.buffering)
+				gui_state = GuiState::Paused;
+		}
+
 		gui_endFrame(gui_is_open());
 	}
 }

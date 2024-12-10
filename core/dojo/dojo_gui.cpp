@@ -2964,6 +2964,8 @@ void DojoGui::show_pause()
 	// ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.335f, 0.155f, 0.770f, 1.000f));
 	if (dojo.stepping)
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.848f, 0.424f, 0.000f, 1.000f));
+	else if (dojo.buffering)
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.335f, 0.155f, 0.770f, 1.000f));
 	else
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.662f, 0.000f, 0.000f, 1.000f));
 
