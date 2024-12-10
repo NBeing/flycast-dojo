@@ -1613,9 +1613,17 @@ void DojoGui::set_imgui_style()
 
 void DojoGui::show_replay_position_overlay(int frame_num)
 {
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5.f, 5.f));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.557f, 0.268f, 0.965f, 1.f));
+
+	if (dojo.stepping)
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.848f, 0.424f, 0.000f, 1.000f));
+	else if (gui_state == GuiState::Paused)
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.662f, 0.000f, 0.000f, 1.000f));
+	else
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.000f, 0.186f, 0.022f, 1.000f));
+	// ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.557f, 0.268f, 0.965f, 1.f));
 
 	if (dojo.frame_number < dojo.session_inputs.size() ||
 		cfgLoadBool("dojo", "Training", false))
@@ -1623,14 +1631,15 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 		char text_pos[30] = {0};
 
 		if (dojo.play_match)
-			sprintf(text_pos, "%u / %u     ", frame_num, dojo.session_inputs.size());
+			sprintf(text_pos, "%u / %u  ", frame_num, dojo.session_inputs.size());
 		else if (cfgLoadBool("dojo", "Training", false))
-			sprintf(text_pos, "%u     ", frame_num);
+			sprintf(text_pos, "%u  ", frame_num);
 
-		float font_size = ImGui::CalcTextSize(text_pos).x;
+		float font_size_x = ImGui::CalcTextSize(text_pos).x;
+		float font_size_y = ImGui::CalcTextSize(text_pos).y;
 
-		ImGui::SetNextWindowPos(ImVec2(settings.display.width - font_size, settings.display.height - 40));
-		ImGui::SetNextWindowSize(ImVec2(font_size, 40));
+		ImGui::SetNextWindowPos(ImVec2(settings.display.width - (font_size_x + 5), settings.display.height - (font_size_y + 10)));
+		ImGui::SetNextWindowSize(ImVec2(font_size_x + 5, font_size_y + 10));
 		ImGui::SetNextWindowBgAlpha(0.5f);
 		ImGui::Begin("#pos", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
 
@@ -1643,7 +1652,7 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 	}
 
 	ImGui::PopStyleColor();
-	ImGui::PopStyleVar(2);
+	ImGui::PopStyleVar(3);
 }
 
 void DojoGui::display_btn(std::string btn_str, bool *any_found)
@@ -2947,10 +2956,16 @@ void DojoGui::show_pause()
 		dojo.play_match && config::ShowReplayInputDisplay)
 		dojo_gui.show_last_inputs_overlay();
 
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.f, 5.f));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
 	// ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.475f, 0.825f, 1.000f, 1.f));
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.335f, 0.155f, 0.770f, 1.000f));
+
+	// ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.335f, 0.155f, 0.770f, 1.000f));
+	if (dojo.stepping)
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.848f, 0.424f, 0.000f, 1.000f));
+	else
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.662f, 0.000f, 0.000f, 1.000f));
 
 	std::string pause_text;
 
@@ -2964,16 +2979,17 @@ void DojoGui::show_pause()
 			pause_text = "Paused";
 	}
 
-	float font_size = ImGui::CalcTextSize(pause_text.c_str()).x;
+	float font_size_x = ImGui::CalcTextSize(pause_text.c_str()).x;
+	float font_size_y = ImGui::CalcTextSize(pause_text.c_str()).y;
 
-	ImGui::SetNextWindowPos(ImVec2((settings.display.width / 2) - ((font_size + 40) / 2), settings.display.height - 40));
-	ImGui::SetNextWindowSize(ImVec2(font_size + 40, 40));
+	ImGui::SetNextWindowPos(ImVec2((settings.display.width / 2) - ((font_size_x + 40) / 2), settings.display.height - (font_size_y + 10)));
+	ImGui::SetNextWindowSize(ImVec2(font_size_x + 20, font_size_y + 10));
 	ImGui::SetNextWindowBgAlpha(0.65f);
 	ImGui::Begin("#pause", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
 
 	ImGui::SameLine(
 		(ImGui::GetContentRegionAvail().x / 2) -
-		font_size + (font_size / 2) + 10);
+		font_size_x + (font_size_x / 2) + 10);
 
 	ImGui::TextUnformatted(pause_text.c_str());
 
@@ -2989,5 +3005,5 @@ void DojoGui::show_pause()
 	}
 
 	ImGui::PopStyleColor();
-	ImGui::PopStyleVar(2);
+	ImGui::PopStyleVar(3);
 }
