@@ -568,6 +568,7 @@ void gui_start_game(const std::string& path)
 	dojo.commandLineStart = commandLineStart;
 	dojo.InitScore();
 	dojo.training.Reset();
+	dojo.ResetPause();
 	dojo.ResetInputDisplay();
 
 	if (cfgLoadBool("dojo", "Receiving", false))
@@ -4263,6 +4264,13 @@ void gui_display_osd()
 				gui_state = GuiState::Paused;
 		}
 
+		if (dojo.stepping && dojo.frame_number == dojo.target_step_frame)
+		{
+			dojo.target_step_frame++;
+			emu.stop();
+			gui_setState(GuiState::Paused);
+		}
+
 		gui_endFrame(gui_is_open());
 	}
 }
@@ -4615,7 +4623,9 @@ void gui_open_step()
 	if (!dojo.stepping)
 		dojo.stepping = true;
 
-	if (!config::ThreadedRendering && (cfgLoadBool("dojo", "Training", false) || dojo.play_match))
+	dojo.target_step_frame = dojo.frame_number + 1;
+
+	if (cfgLoadBool("dojo", "Training", false) || dojo.play_match)
 	{
 		if (gui_state == GuiState::Paused)
 		{

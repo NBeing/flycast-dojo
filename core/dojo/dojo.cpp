@@ -632,12 +632,6 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		frame_number++;
 	}
 
-	if (!config::ThreadedRendering && stepping)
-	{
-		emu.stop();
-		gui_setState(GuiState::Paused);
-	}
-
 	UpdateScore();
 }
 
@@ -904,8 +898,8 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		std::string GameName = MessageReader::ReadString((const char *)buffer, offset);
 		std::string PlayerName = MessageReader::ReadString((const char *)buffer, offset);
 		std::string OpponentName = MessageReader::ReadString((const char *)buffer, offset);
-		std::string Quark = MessageReader::ReadString((const char*)buffer, offset);
-		std::string RelayKey = MessageReader::ReadString((const char*)buffer, offset);
+		std::string Quark = MessageReader::ReadString((const char *)buffer, offset);
+		std::string RelayKey = MessageReader::ReadString((const char *)buffer, offset);
 		unsigned int analog = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int precise_triggers = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int ggpo = MessageReader::ReadInt((const char *)buffer, offset);
@@ -1150,4 +1144,12 @@ uint64_t Dojo::UnixTimestamp()
 {
 	using namespace std::chrono;
 	return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+void Dojo::ResetPause()
+{
+	stepping = false;
+	buffering = false;
+	manual_pause = false;
+	target_step_frame = 0;
 }
