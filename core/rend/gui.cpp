@@ -601,12 +601,6 @@ void gui_start_game(const std::string& path)
 	if (config::Replay)
 		dojo.replay.Init();
 
-/*
-	if (!dojo.play_match &&
-		(config::RecordMatches || config::Transmitting))
-		dojo.replay.StartRecording();
-		*/
-
 	scanner.stop();
 	gui_setState(GuiState::Loading);
 	gameLoader.load(path);
@@ -615,19 +609,20 @@ void gui_start_game(const std::string& path)
 void gui_stop_game(const std::string& message)
 {
 	const LockGuard lock(guiMutex);
+
+	if (dojo.play_match)
+	{
+		dojo.tcp_client.Stop();
+		dojo.session_inputs.clear();
+		dojo.play_match = false;
+	}
+
+	dojo.ResetPause();
+	dojo.training.Reset();
+	dojo.ResetInputDisplay();
+
 	if (!commandLineStart)
 	{
-		if (cfgLoadBool("dojo", "Transmitting", false) || cfgLoadBool("dojo", "Receiving", false))
-			dojo.tcp_client.Stop();
-
-		if (dojo.play_match)
-		{
-			dojo.session_inputs.clear();
-			dojo.play_match = false;
-		}
-
-		dojo.training.Reset();
-		dojo.ResetInputDisplay();
 		lua::term();
 
 		// Exit to main menu

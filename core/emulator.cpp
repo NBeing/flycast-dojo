@@ -688,8 +688,6 @@ void Emulator::stop()
 {
 	if (state != Running)
 		return;
-	if (cfgLoadBool("dojo", "Transmitting", false) || cfgLoadBool("dojo", "Receiving", false))
-		dojo.tcp_client.Stop();
 	// Avoid race condition with GGPO restarting the sh4 for a new frame
 	if (config::GGPOEnable)
 		NetworkHandshake::term();

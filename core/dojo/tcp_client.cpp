@@ -157,10 +157,11 @@ void TcpClient::ReceivingLoop()
 	while (!endSession)
 	{
 		int headerBytesReceived = 0;
-		do
-		{
+		while (headerBytesReceived < HEADER_LEN && !endSession)
 			headerBytesReceived = recv(sock, buf, HEADER_LEN, MSG_PEEK);
-		} while (headerBytesReceived < HEADER_LEN);
+
+		if (endSession)
+			return;
 
 		if (headerBytesReceived == HEADER_LEN)
 		{
@@ -172,10 +173,11 @@ void TcpClient::ReceivingLoop()
 			memset(buf, 0, 4096);
 
 			int bodyBytesReceived = 0;
-			do
-			{
+			while (bodyBytesReceived < body_size && !endSession)
 				bodyBytesReceived = recv(sock, buf, body_size, MSG_PEEK);
-			} while (bodyBytesReceived < body_size);
+
+			if (endSession)
+				return;
 
 			if (bodyBytesReceived == body_size)
 			{
