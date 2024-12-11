@@ -556,7 +556,8 @@ void gui_start_game(const std::string& path)
 		return;
 	}
 
-	dojo_file.Reset();
+	dojo.commandLineStart = commandLineStart;
+	dojo.Reset();
 
 	const LockGuard lock(guiMutex);
 	if (gui_state != GuiState::Main && gui_state != GuiState::Closed && gui_state != GuiState::Commands)
@@ -564,13 +565,6 @@ void gui_start_game(const std::string& path)
 	emu.unloadGame();
 	reset_vmus();
     chat.reset();
-
-	dojo.commandLineStart = commandLineStart;
-	dojo.InitScore();
-	dojo.training.Reset();
-	dojo.ResetPause();
-	dojo.ResetInputDisplay();
-	dojo.recording_started = false;
 
 	if (cfgLoadBool("dojo", "Receiving", false))
 	{
@@ -609,17 +603,7 @@ void gui_start_game(const std::string& path)
 void gui_stop_game(const std::string& message)
 {
 	const LockGuard lock(guiMutex);
-
-	if (dojo.play_match)
-	{
-		dojo.tcp_client.Stop();
-		dojo.session_inputs.clear();
-		dojo.play_match = false;
-	}
-
-	dojo.ResetPause();
-	dojo.training.Reset();
-	dojo.ResetInputDisplay();
+	dojo.Reset();
 
 	if (!commandLineStart)
 	{

@@ -171,6 +171,7 @@ public:
 	u32 target_step_frame = 0;
 
 	void ResetPause();
+	void Reset();
 };
 
 extern Dojo dojo;

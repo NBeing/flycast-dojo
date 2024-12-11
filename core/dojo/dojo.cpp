@@ -1152,10 +1152,24 @@ uint64_t Dojo::UnixTimestamp()
 	return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-void Dojo::ResetPause()
+void Dojo::Reset()
 {
+	if (play_match)
+	{
+		tcp_client.Stop();
+		session_inputs.clear();
+		play_match = false;
+	}
+
+	InitScore();
+
 	stepping = false;
 	buffering = false;
 	manual_pause = false;
 	target_step_frame = 0;
+	recording_started = false;
+
+	dojo_file.Reset();
+	training.Reset();
+	ResetInputDisplay();
 }
