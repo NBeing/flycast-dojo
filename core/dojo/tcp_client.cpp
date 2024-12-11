@@ -156,12 +156,20 @@ void TcpClient::ReceivingLoop()
 
 	while (!endSession)
 	{
-		int headerBytesReceived = recv(sock, buf, HEADER_LEN, 0);
-		if (headerBytesReceived > 0)
+		int headerBytesReceived = 0;
+		do
 		{
+			headerBytesReceived = recv(sock, buf, HEADER_LEN, MSG_PEEK);
+		} while (headerBytesReceived < HEADER_LEN);
+
+		if (headerBytesReceived == HEADER_LEN)
+		{
+			headerBytesReceived = recv(sock, buf, HEADER_LEN, 0);
 			u32 body_size = HeaderReader::GetSize((u8 *)buf);
 			u32 seq = HeaderReader::GetSeq((u8 *)buf);
 			u32 cmd = HeaderReader::GetCmd((u8 *)buf);
+
+			memset(buf, 0, 4096);
 
 			int bodyBytesReceived = 0;
 			do
