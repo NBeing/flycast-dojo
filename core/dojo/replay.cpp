@@ -32,6 +32,8 @@ void Replay::StartRecording()
 		std::string rom_name = GetRomNamePrefix();
 		AppendHeaderToReplay(rom_name);
 	}
+
+	dojo.recording_started = true;
 }
 
 void Replay::AppendToReplay(std::string frame, int version)

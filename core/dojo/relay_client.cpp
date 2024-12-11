@@ -276,10 +276,6 @@ void RelayClient::ClientLoop()
 				ping_test_start = dojo.UnixTimestamp();
 				std::cout << "PING TEST START " << ping_test_start << std::endl;
 				auto avg_ping = GetOpponentAvgPing(1);
-
-				if (!dojo.play_match &&
-					(config::RecordMatches || config::Transmitting))
-					dojo.replay.StartRecording();
 			}
 		}
 

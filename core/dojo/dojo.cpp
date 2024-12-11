@@ -400,6 +400,9 @@ void Dojo::PollRecordAction(int frame, int size, unsigned char *bits)
 	if (config::GGPOEnable && !play_match &&
 		(config::RecordMatches || config::Transmitting))
 	{
+		if (!recording_started)
+			replay.StartRecording();
+
 		// create frame container for export
 		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
 		memcpy(new_frame, (unsigned char *)&frame_num, sizeof(unsigned int));
@@ -573,13 +576,16 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	if (!config::GGPOEnable && !dojo.play_match &&
 		(config::RecordMatches || config::Transmitting))
 	{
+		if (!recording_started)
+			replay.StartRecording();
+
 		// create frame container for export
 		unsigned char new_frame[MAPLE_FRAME_SIZE] = {0};
 		memcpy(new_frame, (unsigned char *)&dojo.frame_number, sizeof(unsigned int));
 		memcpy(new_frame + 4, (unsigned char *)current_inputs.data(), current_inputs.size());
 		std::string frame_((const char *)new_frame, MAPLE_FRAME_SIZE);
 
-		dojo.replay.AppendToReplay(frame_, 4);
+		replay.AppendToReplay(frame_, 4);
 	}
 
 	FrameInputs *player_inputs;

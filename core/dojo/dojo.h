@@ -128,6 +128,8 @@ public:
 	void RecRecordAction(int frame, int size, unsigned char *bits);
 	void GGPORecordAction(int frame, int size, unsigned char *bits);
 
+	bool recording_started = false;
+
 	void FillDelayFrames();
 	void MapleRecordAction(MapleInputState inputState[4]);
 	void MapleApplyAction(MapleInputState inputState[4]);

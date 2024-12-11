@@ -570,6 +570,7 @@ void gui_start_game(const std::string& path)
 	dojo.training.Reset();
 	dojo.ResetPause();
 	dojo.ResetInputDisplay();
+	dojo.recording_started = false;
 
 	if (cfgLoadBool("dojo", "Receiving", false))
 	{
