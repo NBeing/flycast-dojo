@@ -325,9 +325,58 @@ size_t CurlWrite_CallbackFunc_StdString(void *contents, size_t size, size_t nmem
 	return newLength;
 }
 
+std::string encodeURIComponent(std::string const &value)
+{
+	std::ostringstream oss;
+	oss << std::hex;
+	for (auto c : value)
+	{
+		int uc = static_cast<unsigned char>(c);
+		if (((0x30 <= uc) && (uc <= 0x39)) || ((0x41 <= uc) && (uc <= 0x5A)) || ((0x61 <= uc) && (uc <= 0x7A)))
+		{
+			oss << c;
+			continue;
+		}
+		switch (c)
+		{
+		case '-':
+			oss << c;
+			break;
+		case '_':
+			oss << c;
+			break;
+		case '.':
+			oss << c;
+			break;
+		case '!':
+			oss << c;
+			break;
+		case '~':
+			oss << c;
+			break;
+		case '*':
+			oss << c;
+			break;
+		case '\'':
+			oss << c;
+			break;
+		case '(':
+			oss << c;
+			break;
+		case ')':
+			oss << c;
+			break;
+		default:
+			oss << std::uppercase << '%' << std::setw(2) << uc << std::nouppercase;
+			break;
+		}
+	}
+	return oss.str();
+}
+
 std::string Replay::DownloadReplayJson(std::string game_name)
 {
-	std::string json_url = "https://skunkworks.match.dojo.ooo/api/v1/replays?player=&game=" + game_name + "&match_code=";
+	std::string json_url = "https://skunkworks.match.dojo.ooo/api/v1/replays?player=&game=" + encodeURIComponent(game_name) + "&match_code=";
 	auto curl = curl_easy_init();
 
 	std::string s;
