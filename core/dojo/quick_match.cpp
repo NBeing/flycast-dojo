@@ -283,6 +283,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("network", "GGPO", "yes");
 			cfgSetVirtual("network", "Enable", "no");
 
+			dojo.relay_client.target_hostname = cfgLoadStr("dojo", "RelayServer", "");
 			dojo.relay_client.Init();
 			dojo.relay_client.ConnectRelayServer();
 			dojo.relay_client.connect_started = true;
@@ -344,6 +345,10 @@ void QuickMatch::ProcessMsg(std::string msg)
 			std::string port = parsed_json["port"].get<std::string>();
 
 			cfgSetVirtual("dojo", "RelayKey", rk);
+
+			cfgSetVirtual("network", "RelayServer", server);
+			cfgSetVirtual("network", "RelayPort", port);
+
 			cfgSetVirtual("network", "server", server);
 			cfgSetVirtual("network", "GGPORemotePort", port);
 
@@ -354,6 +359,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("network", "GGPO", "yes");
 			cfgSetVirtual("network", "Enable", "no");
 
+			dojo.relay_client.target_hostname = server;
 			dojo.relay_client.SendGuestMsg();
 
 			host_ready = true;

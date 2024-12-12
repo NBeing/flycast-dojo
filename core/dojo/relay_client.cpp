@@ -5,13 +5,11 @@
 void RelayClient::ConnectRelayServer()
 {
 	struct hostent *mm_host;
-	target_hostname = config::RelayServer.get();
 	mm_host = gethostbyname(target_hostname.data());
 
 	mms_addr.sin_family = AF_INET;
-	mms_addr.sin_port = htons((u16)config::RelayPort.get());
+	mms_addr.sin_port = htons((u16)cfgLoadInt("dojo", "RelayPort", 8001));
 	memcpy(&mms_addr.sin_addr, mm_host->h_addr_list[0], mm_host->h_length);
-	// inet_pton(AF_INET, config::NetworkServer.data(), &mms_addr.sin_addr);
 	std::string ip_address = inet_ntoa(*((in_addr *)mm_host->h_addr));
 	config::NetworkServer.set(ip_address);
 

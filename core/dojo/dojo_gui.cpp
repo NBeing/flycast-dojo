@@ -886,8 +886,8 @@ void DojoGui::gui_display_quick_match()
 									{"game_name", dojo.game_name},
 									{"player_name", config::PlayerName.get()},
 									{"cxn_method", config::QMCxnMethod.get()},
-									{"server", config::NetworkServer.get()},
-									{"port", std::to_string(config::GGPOPort.get())}};
+									{"server", config::RelayServer.get()},
+									{"port", std::to_string(config::RelayPort.get())}};
 
 								quick_match.pending.push_back(p);
 								quick_match.outgoing_msgs.push_back(request_msg.dump());
