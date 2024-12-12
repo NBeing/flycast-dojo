@@ -186,7 +186,7 @@ Option<bool> TransmitScore("TransmitScore", false, "dojo");
 Option<bool> Receiving("Receiving", false, "dojo");
 Option<int> RxFrameBuffer("RxFrameBuffer", 1800, "dojo");
 
-OptionString SpectatorIP("SpectatorIP", "match.dojo.ooo", "dojo");
+OptionString SpectatorIP("SpectatorIP", "skunkworks.match.dojo.ooo", "dojo");
 OptionString SpectatorPort("SpectatorPort", "7000", "dojo");
 OptionString SpectateKey("SpectateKey", "", "dojo");
 
