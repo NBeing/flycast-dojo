@@ -4,7 +4,7 @@ void Dojo::AssignPlayerNames()
 {
 	hosting = config::ActAsServer;
 
-	if (hosting)
+	if (hosting || play_match)
 	{
 		player_1 = settings.dojo.PlayerName;
 		player_2 = settings.dojo.OpponentName;
@@ -947,11 +947,13 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 
 		std::cout << "Game: " << GameName << std::endl;
 
+		std::cout << "Player: " << PlayerName << std::endl;
+		std::cout << "Opponent: " << OpponentName << std::endl;
 		// if (!received_player_info)
 		//{
-		//	settings.dojo.PlayerName = PlayerName;
-		//	settings.dojo.OpponentName = OpponentName;
-		//	AssignPlayerNames();
+		settings.dojo.PlayerName = PlayerName;
+		settings.dojo.OpponentName = OpponentName;
+		AssignPlayerNames();
 		//	std::cout << "Player: " << PlayerName << std::endl;
 		//	std::cout << "Opponent: " << OpponentName << std::endl;
 		// }

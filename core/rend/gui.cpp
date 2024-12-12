@@ -4597,13 +4597,16 @@ void quick_player_select()
 void gui_open_step()
 {
 	const LockGuard lock(guiMutex);
-	if (gui_state == GuiState::Paused && dojo.buffering)
+	if (gui_state == GuiState::Paused && dojo.buffering && dojo.frame_number == dojo.session_inputs.size())
 		return;
 
 	if (!dojo.stepping)
 		dojo.stepping = true;
 
 	dojo.target_step_frame = dojo.frame_number + 1;
+
+	if (dojo.manual_pause)
+		dojo.manual_pause = false;
 
 	if (cfgLoadBool("dojo", "Training", false) || dojo.play_match)
 	{
@@ -4635,8 +4638,9 @@ void gui_open_pause()
 		}
 		else if (gui_state == GuiState::Paused)
 		{
-			if (dojo.buffering)
+			if (dojo.buffering && dojo.frame_number == dojo.session_inputs.size())
 				return;
+			dojo.buffering = false;
 			dojo.manual_pause = false;
 			gui_setState(GuiState::Closed);
 			GamepadDevice::load_system_mappings();

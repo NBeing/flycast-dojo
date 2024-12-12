@@ -1619,6 +1619,8 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 
 	if (dojo.stepping)
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.848f, 0.424f, 0.000f, 1.000f));
+	else if (dojo.buffering)
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.335f, 0.155f, 0.770f, 1.000f));
 	else if (gui_state == GuiState::Paused)
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.662f, 0.000f, 0.000f, 1.000f));
 	else
@@ -2948,6 +2950,19 @@ bool DojoGui::get_flag_image(std::string country_code, ImTextureID &textureId, b
 
 void DojoGui::show_pause()
 {
+	if (dojo.buffering && (dojo.session_inputs.size() - dojo.frame_number) >= config::RxFrameBuffer.get())
+	{
+		dojo.buffering = false;
+		gui_setState(GuiState::Closed);
+		emu.start();
+	}
+
+	if (dojo.play_match)
+	{
+		if (config::PlayerNameOverlay)
+			dojo_gui.show_player_name_overlay(false);
+	}
+
 	settings.input.fastForwardMode = false;
 
 	if (config::Training && config::ShowTrainingInputDisplay ||
@@ -2999,9 +3014,6 @@ void DojoGui::show_pause()
 	{
 		if (config::ReplayPositionOverlay)
 			dojo_gui.show_replay_position_overlay(dojo.frame_number);
-
-		if (config::PlayerNameOverlay)
-			dojo_gui.show_player_name_overlay(false);
 	}
 
 	ImGui::PopStyleColor();
