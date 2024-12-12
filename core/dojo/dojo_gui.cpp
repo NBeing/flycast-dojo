@@ -1343,6 +1343,14 @@ void DojoGui::settings_dojo_tab()
 		ShowHelpMarker("Name visible to other players");
 		config::PlayerName = std::string(PlayerName, strlen(PlayerName));
 
+		char PlayerEmail[256];
+
+		strcpy(PlayerEmail, config::PlayerEmail.get().c_str());
+		ImGui::InputText("Gravatar Email", PlayerEmail, sizeof(PlayerEmail), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+		config::PlayerEmail = PlayerEmail;
+		ImGui::SameLine();
+		ShowHelpMarker("Email address used to retrieve profile picture from Gravatar. Not shared with any opponents.");
+
 		OptionCheckbox("Enable Player Name Overlay", config::PlayerNameOverlay,
 					   "Enable overlay showing player names during netplay sessions & replays");
 
@@ -1482,14 +1490,6 @@ void DojoGui::settings_dojo_tab()
 
 		if (ImGui::CollapsingHeader("Quick Match", ImGuiTreeNodeFlags_None))
 		{
-			char PlayerEmail[256];
-
-			strcpy(PlayerEmail, config::PlayerEmail.get().c_str());
-			ImGui::InputText("Gravatar Email", PlayerEmail, sizeof(PlayerEmail), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
-			config::PlayerEmail = PlayerEmail;
-			ImGui::SameLine();
-			ShowHelpMarker("Email address used to retrieve profile picture from Gravatar. Not shared with any opponents.");
-
 			char RelayServerAddress[256];
 
 			strcpy(RelayServerAddress, config::RelayServer.get().c_str());

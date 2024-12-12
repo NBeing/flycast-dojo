@@ -36,7 +36,7 @@ void RelayClient::SendGuestMsg()
 	if (disconnect_toggle)
 		return;
 
-	std::string mm_msg = "join|" + relay_key;
+	std::string mm_msg = "rjoin|" + relay_key;
 	outgoing_msgs.push_back(mm_msg);
 	std::cout << "To Relay: " << mm_msg << std::endl;
 }
