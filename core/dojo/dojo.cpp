@@ -637,8 +637,6 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	{
 		frame_number++;
 	}
-
-	UpdateScore();
 }
 
 void Dojo::PrintInputs(int player, FrameInputs inputs)

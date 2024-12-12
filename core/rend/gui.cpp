@@ -4251,6 +4251,8 @@ void gui_display_osd()
 			gui_setState(GuiState::Paused);
 		}
 
+		dojo.UpdateScore();
+
 		gui_endFrame(gui_is_open());
 	}
 }
