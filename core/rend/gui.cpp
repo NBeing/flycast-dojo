@@ -3635,17 +3635,17 @@ static void gui_display_content()
 							gui_setState(GuiState::QuickMatch);
 						}
 
-
-						char netplay_txt[64];
-						sprintf(netplay_txt, "  %s   Netplay Session", ICON_FA_BOLT);
-						if (ImGui::MenuItem(netplay_txt))
+						char replay_txt[64];
+						sprintf(replay_txt, " %s   Watch Replays", ICON_FA_EYE);
+						if (ImGui::MenuItem(replay_txt))
 						{
-							cfgSetVirtual("dojo", "Training", "no");
+							dojo_gui.gui_start = true;
 							settings.content.path = game.path;
 							auto name_ext_loc = game.fileName.find_last_of('.');
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
-							gui_setState(GuiState::NetplayConnect);
+							gui_setState(GuiState::Replays);
 						}
+
 						char train_txt[64];
 						sprintf(train_txt, " %s   Training Mode", ICON_FA_DUMBBELL);
 						if (ImGui::MenuItem(train_txt))
@@ -3674,15 +3674,16 @@ static void gui_display_content()
 								break;
 							}
 						}
-						char replay_txt[64];
-						sprintf(replay_txt, " %s   Watch Replays", ICON_FA_EYE);
-						if (ImGui::MenuItem(replay_txt))
+
+						char netplay_txt[64];
+						sprintf(netplay_txt, "  %s   Netplay Session", ICON_FA_BOLT);
+						if (ImGui::MenuItem(netplay_txt))
 						{
-							dojo_gui.gui_start = true;
+							cfgSetVirtual("dojo", "Training", "no");
 							settings.content.path = game.path;
 							auto name_ext_loc = game.fileName.find_last_of('.');
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
-							gui_setState(GuiState::Replays);
+							gui_setState(GuiState::NetplayConnect);
 						}
 
 						char dl_txt[128];

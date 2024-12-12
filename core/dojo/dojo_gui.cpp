@@ -2522,6 +2522,7 @@ void DojoGui::gui_display_replays()
 							{
 								if (ImGui::Selectable(created_at.data(), selected, ImGuiSelectableFlags_DontClosePopups | ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 42)))
 								{
+									dojo.replay.remote_replay_json = "";
 									cfgSetVirtual("dojo", "SpectateKey", match_code);
 									cfgSetVirtual("dojo", "SpectatorIP", "skunkworks.match.dojo.ooo");
 									cfgSetVirtual("dojo", "SpectatorPort", "7000");
@@ -2642,6 +2643,7 @@ void DojoGui::gui_display_replays()
 							{
 								if (ImGui::Selectable(created_at.data(), selected, ImGuiSelectableFlags_DontClosePopups | ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 42)))
 								{
+									dojo.replay.remote_replay_json = "";
 									cfgSetVirtual("dojo", "SpectateKey", match_code);
 									cfgSetVirtual("dojo", "SpectatorIP", "skunkworks.match.dojo.ooo");
 									cfgSetVirtual("dojo", "SpectatorPort", "7000");
@@ -2713,7 +2715,7 @@ void DojoGui::gui_display_replays()
 
 			if (ImGui::Button(close_btn_txt))
 			{
-				dojo.replay.remote_replay_json == "";
+				dojo.replay.remote_replay_json = "";
 				settings.content.path = "";
 				dojo.game_name = "";
 				ImGui::CloseCurrentPopup();
