@@ -1786,7 +1786,7 @@ void DojoGui::display_input_str(std::string input_str, std::string prev_str)
 
 void DojoGui::show_last_inputs_overlay()
 {
-	if (config::Training && config::Delay > 0)
+	if (cfgLoadBool("dojo", "Training", false) && config::Delay > 0)
 		return;
 
 	for (int di = 0; di < 2; di++)
@@ -3005,7 +3005,7 @@ void DojoGui::show_pause()
 
 	settings.input.fastForwardMode = false;
 
-	if (config::Training && config::ShowTrainingInputDisplay ||
+	if (cfgLoadBool("dojo", "Training", false) && config::ShowTrainingInputDisplay ||
 		dojo.play_match && config::ShowReplayInputDisplay)
 		dojo_gui.show_last_inputs_overlay();
 

@@ -627,7 +627,7 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		last_applied_frame = dojo.frame_number;
 	}
 
-	if (config::Training && config::ShowTrainingInputDisplay ||
+	if (cfgLoadBool("dojo", "Training", false) && config::ShowTrainingInputDisplay ||
 		dojo.play_match && config::ShowReplayInputDisplay)
 		AddToInputDisplay(inputState);
 

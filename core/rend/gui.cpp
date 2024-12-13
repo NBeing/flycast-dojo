@@ -870,11 +870,11 @@ static void gui_display_commands()
 
 	}
 
-	if (config::Training && config::Delay == 0 || dojo.play_match)
+	if (cfgLoadBool("dojo", "Training", false) && config::Delay == 0 || dojo.play_match)
 	{
 		char disp_ico_txt[64];
 		if ((dojo.play_match && config::ShowReplayInputDisplay.get()) ||
-			(config::Training && config::ShowTrainingInputDisplay.get()))
+			(cfgLoadBool("dojo", "Training", false) && config::ShowTrainingInputDisplay.get()))
 			sprintf(disp_ico_txt, "%s  ", ICON_FA_EYE);
 		else
 			sprintf(disp_ico_txt, "%s  ", ICON_FA_EYE_SLASH);
@@ -4224,7 +4224,7 @@ void gui_display_osd()
 			}
 		}
 
-		if (config::Training && config::ShowTrainingInputDisplay ||
+		if (cfgLoadBool("dojo", "Training", false) && config::ShowTrainingInputDisplay ||
 			dojo.play_match && config::ShowReplayInputDisplay)
 			dojo_gui.show_last_inputs_overlay();
 
