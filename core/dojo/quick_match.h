@@ -81,6 +81,8 @@ public:
 
 	std::vector<std::string> requests_to_remove;
 	std::vector<std::string> pending_requests_to_remove;
+
+	void GuiLaunch();
 };
 
 extern QuickMatch quick_match;

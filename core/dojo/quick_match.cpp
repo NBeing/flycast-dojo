@@ -395,3 +395,20 @@ void QuickMatch::AppendToLog(std::string msg)
 	entry.msg = msg;
 	log.push_back(entry);
 }
+
+void QuickMatch::GuiLaunch()
+{
+	if (config::RelayServer.get().length() == 0)
+		dojo.relay_client.AssignClosestRelay();
+
+	while (config::RelayServer.get().length() == 0)
+		;
+
+	current_match_status_idx = 0;
+	if (Active())
+		SendStatusMsg("active");
+
+	StartThread();
+
+	gui_setState(GuiState::QuickMatch);
+}

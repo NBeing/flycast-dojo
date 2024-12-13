@@ -2853,6 +2853,8 @@ void DojoGui::gui_display_savestate_dl()
 			char launch_btn_txt[128];
 			if (dojo_file.post_save_launch)
 				sprintf(launch_btn_txt, "%s Launch Game", ICON_FA_BOLT);
+			else if (dojo_gui.quick_match_dl_call)
+				sprintf(launch_btn_txt, "%s Launch Quick Match", ICON_FA_HAND_FIST);
 			else
 				sprintf(launch_btn_txt, "%s Launch Training", ICON_FA_DUMBBELL);
 
@@ -2883,6 +2885,13 @@ void DojoGui::gui_display_savestate_dl()
 						ImGui::CloseCurrentPopup();
 						gui_setState(GuiState::Closed);
 						gui_start_game(dojo_file.game_path);
+					}
+				}
+				else if (dojo_gui.quick_match_dl_call)
+				{
+					if (ImGui::Button(launch_btn_txt))
+					{
+						quick_match.GuiLaunch();
 					}
 				}
 				else

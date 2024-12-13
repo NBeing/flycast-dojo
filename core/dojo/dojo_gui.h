@@ -69,6 +69,7 @@ public:
 	bool pending_map = false;
 
 	bool quick_map_settings_call = false;
+	bool quick_match_dl_call = false;
 	bool delay_select = false;
 	bool netplay_session = false;
 
