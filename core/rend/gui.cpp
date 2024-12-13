@@ -1339,6 +1339,7 @@ const Mapping dcButtons[] = {
 	{ EMU_CMB_X_Y_LT, "X+Y+LT" },
 	{ EMU_CMB_A_B_RT, "A+B+RT" },
 	{ EMU_CMB_1_2_4, "X+A+B" },
+	{ EMU_CMB_1_2_5, "Y+A+B" },
 	{ EMU_CMB_X_A, "X+A" },
 	{ EMU_CMB_Y_B, "Y+B" },
 	{ EMU_CMB_LT_RT, "LT+RT" },
@@ -1354,6 +1355,7 @@ const Mapping dcButtons[] = {
 	{ EMU_CMB_3_4, "X+C" },
 	{ EMU_CMB_2_3, "B+C" },
 	{ EMU_CMB_3_6, "C+Z" },
+	{ EMU_CMB_A_START, "A+Start" },
 
 	{ EMU_BTN_NONE, nullptr }
 };
@@ -1435,6 +1437,7 @@ const Mapping arcadeButtons[] = {
 	{ EMU_BTN_NONE, "Macros" },
 	{ EMU_CMB_X_Y_A_B, "1+2+4+5" },
 	{ EMU_CMB_X_Y_A, "1+2+4" },
+	{ EMU_CMB_1_2_5, "1+2+5" },
 	{ EMU_CMB_1_2_3_4, "1+2+3+4" },
 	{ EMU_CMB_1_2_3, "1+2+3" },
 	{ EMU_CMB_4_5_6, "4+5+6" },

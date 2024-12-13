@@ -93,9 +93,11 @@ enum DreamcastKey
 	EMU_CMB_1_3,
 	EMU_CMB_2_3,
 	EMU_CMB_1_2_4,
+	EMU_CMB_1_2_5,
 	EMU_CMB_1_2_3_4,
 	EMU_CMB_1_5,
 	EMU_CMB_2_4,
+	EMU_CMB_A_START,
 
 	// Real axes
 	DC_AXIS_TRIGGERS	= 0x1000000,
