@@ -566,7 +566,7 @@ void gui_start_game(const std::string& path)
 	if ((cfgLoadBool("network", "GGPO", false) ||
 		 cfgLoadBool("dojo", "Receiving", false) ||
 		 cfgLoadBool("dojo", "Replay", false)) &&
-		cfgLoadBool("dojo", "AutoLoadNetState", false) &&
+		cfgLoadBool("dojo", "AutoLoadNetState", true) &&
 		!dojo_file.NetSaveExists(path) &&
 		!dojo_file.no_save_launch)
 	{
@@ -3647,7 +3647,7 @@ static void gui_display_content()
 							auto name_ext_loc = game.fileName.find_last_of('.');
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
 
-							if (cfgLoadBool("dojo", "AutoLoadNetState", false) &&
+							if (cfgLoadBool("dojo", "AutoLoadNetState", true) &&
 								!dojo_file.NetSaveExists(game.path) &&
 								!dojo_file.no_save_launch)
 							{
