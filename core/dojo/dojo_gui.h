@@ -67,8 +67,10 @@ public:
 	int current_map_button = 0;
 	bool mapping_shown = false;
 	bool pending_map = false;
+
 	bool quick_map_settings_call = false;
 	bool delay_select = false;
+	bool netplay_session = false;
 
 	bool gui_start = false;
 

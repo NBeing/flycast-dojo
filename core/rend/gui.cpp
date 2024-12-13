@@ -544,7 +544,13 @@ void gui_open_settings()
 		}
 		else if (gui_state == GuiState::ButtonCheck && dojo_gui.delay_select)
 		{
+			dojo_gui.delay_select = false;
 			gui_setState(GuiState::DelaySelect);
+		}
+		else if (gui_state == GuiState::ButtonCheck && dojo_gui.netplay_session)
+		{
+			dojo_gui.netplay_session = false;
+			gui_setState(GuiState::NetplayConnect);
 		}
 		else
 		{
