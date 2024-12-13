@@ -3647,6 +3647,11 @@ static void gui_display_content()
 							auto name_ext_loc = game.fileName.find_last_of('.');
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
 
+							if (config::RelayServer.get().length() == 0)
+								dojo.relay_client.AssignClosestRelay();
+
+							while (config::RelayServer.get().length() == 0);
+
 							quick_match.current_match_status_idx = 0;
 							if (quick_match.Active())
 								quick_match.SendStatusMsg("active");

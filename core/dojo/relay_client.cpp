@@ -625,6 +625,7 @@ std::string RelayClient::AssignClosestRelay()
 		target_avg_ping_ms.clear();
 	}
 
+	cfgSaveStr("dojo", "RelayServer", closest);
 	config::RelayServer = closest;
 	return closest;
 }

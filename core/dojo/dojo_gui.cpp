@@ -478,11 +478,6 @@ struct QuickMatchEntry
 
 void DojoGui::gui_display_quick_match()
 {
-	if (config::RelayServer.get().length() == 0)
-	{
-		dojo.relay_client.AssignClosestRelay();
-	}
-
 	char quick_match_txt[128];
 	sprintf(quick_match_txt, "%s Quick Match - %s ", ICON_FA_HAND_FIST, dojo.game_name.c_str());
 
