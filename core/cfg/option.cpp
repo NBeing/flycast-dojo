@@ -209,7 +209,7 @@ Option<bool> TestGame("TestGame", false, "dojo");
 Option<bool> Relay("Relay", false, "dojo");
 OptionString RelayKey("RelayKey", "", "dojo");
 OptionString RelayAddressHistory("RelayAddressHistory", "", "dojo");
-OptionString RelayServer("RelayServer", "fin-1.match.dojo.ooo", "dojo");
+OptionString RelayServer("RelayServer", "", "dojo");
 Option<int> RelayPort("RelayPort", 8001, "dojo");
 
 Option<bool> HideKey("HideKey", false, "dojo");
@@ -218,7 +218,7 @@ OptionString NetSaveBase("NetSaveBase", "https://github.com/blueminder/flycast-n
 
 Option<bool> QuickMatch("QuickMatch", false, "dojo");
 
-OptionString QuickMatchServer("QuickMatchServer", "match.dojo.ooo", "dojo");
+OptionString QuickMatchServer("QuickMatchServer", "skunkworks.match.dojo.ooo", "dojo");
 OptionString QuickMatchPort("QuickMatchPort", "8081", "dojo");
 
 OptionString QMCxnMethod("QMCxnMethod", "relay", "dojo");
