@@ -250,6 +250,24 @@ void QuickMatch::ProcessMsg(std::string msg)
 
 		settings.dojo.OpponentName = opponent_name;
 
+		std::string p1_country = "";
+		std::string p2_country = "";
+
+		for (auto player : players)
+		{
+			if (p1_country.size() > 0 && p2_country.size() > 0)
+				continue;
+
+			if (player.uuid == quick_match.client_uuid)
+				p1_country = player.country_code;
+
+			if (player.uuid == target_player)
+				p2_country = player.country_code;
+		}
+
+		settings.dojo.P1CountryCode = p1_country;
+		settings.dojo.P2CountryCode = p2_country;
+
 		if (parsed_json["cxn_method"] == "relay")
 		{
 			// revoke pending requests

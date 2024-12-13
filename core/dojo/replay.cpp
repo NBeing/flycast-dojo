@@ -200,7 +200,8 @@ std::vector<u8> Replay::GenHeader(std::string rom_name)
 
 	spectate_start.AppendString(config::Quark.get());
 	std::cout << "QUARK ASSIGNED " << config::Quark.get() << std::endl;
-	spectate_start.AppendString(cfgLoadStr("dojo", "RelayKey", ""));
+	std::string server_key = cfgLoadStr("dojo", "RelayServer", "") + "#" + cfgLoadStr("dojo", "RelayKey", "");
+	spectate_start.AppendString(server_key);
 
 	u32 analogAxes = analog;
 	if (settings.platform.system == DC_PLATFORM_DREAMCAST && config::GGPOEnable)
@@ -217,6 +218,9 @@ std::vector<u8> Replay::GenHeader(std::string rom_name)
 		std::cout << "GGPO SESSION DETECTED" << std::endl;
 	}
 	spectate_start.AppendInt(ggpo);
+
+	spectate_start.AppendString(settings.dojo.P1CountryCode);
+	spectate_start.AppendString(settings.dojo.P2CountryCode);
 
 	// if (version == 3)
 	//{

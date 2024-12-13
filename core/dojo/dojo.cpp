@@ -907,6 +907,8 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		unsigned int analog = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int precise_triggers = MessageReader::ReadInt((const char *)buffer, offset);
 		unsigned int ggpo = MessageReader::ReadInt((const char *)buffer, offset);
+		std::string P1CountryCode = MessageReader::ReadString((const char *)buffer, offset);
+		std::string P2CountryCode = MessageReader::ReadString((const char *)buffer, offset);
 
 		replay.version = v;
 		game_name = GameName;
@@ -916,6 +918,9 @@ void Dojo::ProcessBody(unsigned int cmd, unsigned int body_size, const char *buf
 		precise_triggers = (bool)precise_triggers;
 		if (ggpo)
 			replay.ggpo_session = true;
+
+		settings.dojo.P1CountryCode = P1CountryCode;
+		settings.dojo.P2CountryCode = P2CountryCode;
 
 		NOTICE_LOG(NETWORK, "v %u GameName %s PlayerName %s OpponentName %s analog %d", v, GameName.data(), PlayerName.data(), OpponentName.data(), analog);
 
