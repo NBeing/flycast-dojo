@@ -156,6 +156,7 @@ public:
 
 	void SaveRecordSlotsFile();
 	void LoadRecordSlotsFile();
+	void LoadRecordSlotsFile(std::string filename);
 
 	void Split(std::string const &str, const char delim, std::vector<std::string> &out);
 	void Replace(std::string &subject, const std::string &search, const std::string &replace);

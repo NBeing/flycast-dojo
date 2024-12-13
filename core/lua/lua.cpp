@@ -31,6 +31,7 @@
 #include "hw/maple/maple_if.h"
 #include "stdclass.h"
 #include "imgui.h"
+#include "dojo/dojo.h"
 
 namespace lua
 {
@@ -40,6 +41,28 @@ using namespace luabridge;
 
 static std::recursive_mutex mutex;
 using lock_guard = std::lock_guard<std::recursive_mutex>;
+
+u32 pressed_buttons[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
+
+void releasePressedButtons()
+{
+	for (int i = 0; i < 2; i++)
+	{
+		pressed_buttons[i] = kcode[i];
+		kcode[i] = ~0;
+	}
+}
+
+void restorePressedButtons()
+{
+	for (int i = 0; i < 2; i++)
+	{
+		if (dojo.training.control_player == i)
+			continue;
+		kcode[i] = pressed_buttons[i];
+		pressed_buttons[i] = ~0;
+	}
+}
 
 static void emuEventCallback(Event event, void *)
 {
@@ -441,6 +464,15 @@ static void uiBargraph(float v)
 	ImGui::ProgressBar(v, ImVec2(-1, 10.f * settings.display.uiScale), "");
 }
 
+static void uiBargraphColor(float v, u32 color)
+{
+	if (!config::ShowTrainingGameOverlay)
+		return;
+	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, color);
+	ImGui::ProgressBar(v, ImVec2(-1, 10.f * settings.display.uiScale), "");
+	ImGui::PopStyleColor();
+}
+
 static int uiButton(lua_State *L)
 {
 	if (!config::ShowTrainingGameOverlay)
@@ -453,6 +485,64 @@ static int uiButton(lua_State *L)
 			callback();
 	}
 	return 0;
+}
+
+static int uiRect(float x, float y, float w, float h, u32 fill, u32 border)
+{
+	if (!config::ShowTrainingGameOverlay)
+		return 0;
+	ImDrawList *draw_list = ImGui::GetForegroundDrawList();
+	draw_list->AddRectFilled(ImVec2(x, y), ImVec2(x + w, y + h), fill);
+	draw_list->AddRect(ImVec2(x, y), ImVec2(x + w, y + h), border, 0, 0, 4.0);
+	return 0;
+}
+
+static int uiLine(float x1, float y1, float x2, float y2, u32 color)
+{
+	if (!config::ShowTrainingGameOverlay)
+		return 0;
+	ImDrawList *draw_list = ImGui::GetForegroundDrawList();
+	draw_list->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, 4.0f);
+	return 0;
+}
+
+static int read8s(u32 addr)
+{
+	u8 data = ReadMem8_nommu(addr);
+	return (s8)data;
+}
+
+static int read16s(u32 addr)
+{
+	u16 data = ReadMem16_nommu(addr);
+	return (s16)data;
+}
+
+static int read32s(u32 addr)
+{
+	u32 data = ReadMem32_nommu(addr);
+	return (s32)data;
+}
+
+static f32 read32f(u32 addr)
+{
+	u32 data = ReadMem32_nommu(addr);
+	return *(f32 *)&data;
+}
+
+static int getFrameNumber()
+{
+	return (int)dojo.frame_number.load();
+}
+
+static void loadRecordSlotsFile(std::string filename)
+{
+	dojo.LoadRecordSlotsFile(filename);
+}
+
+static void playRecordSlot(int slot)
+{
+	dojo.training.PlayRecording(slot);
 }
 
 static void luaRegister(lua_State *L)
@@ -594,6 +684,10 @@ static void luaRegister(lua_State *L)
 				.addFunction("write16", addrspace::writet<u16>)
 				.addFunction("write32", addrspace::writet<u32>)
 				.addFunction("write64", addrspace::writet<u64>)
+				.addFunction("read8s", read8s)
+				.addFunction("read16s", read16s)
+				.addFunction("read32s", read32s)
+				.addFunction("read32f", read32f)
 			.endNamespace()
 
 			.beginNamespace("input")
@@ -606,6 +700,8 @@ static void luaRegister(lua_State *L)
 				.addFunction("setAbsCoordinates", setAbsCoordinates)
 				.addFunction("getRelCoordinates", getRelCoordinates)
 				.addFunction("setRelCoordinates", setRelCoordinates)
+				.addFunction("loadRecordSlotsFile", loadRecordSlotsFile)
+				.addFunction("playRecordSlot", playRecordSlot)
 			.endNamespace()
 
 			.beginNamespace("state")
@@ -616,6 +712,7 @@ static void luaRegister(lua_State *L)
 					.addProperty("width", &settings.display.width, false)
 					.addProperty("height", &settings.display.height, false)
 				.endNamespace()
+				.addFunction("getFrameNumber", getFrameNumber)
 			.endNamespace()
 
 			.beginNamespace("ui")
@@ -629,7 +726,10 @@ static void luaRegister(lua_State *L)
 				.addFunction("sameLinePlaceholder", uiSameLinePlaceholder)
 				.addFunction("sameLinePlaceholderRight", uiSameLinePlaceholderRightAligned)
 				.addFunction("bargraph", uiBargraph)
+				.addFunction("bargraphColor", uiBargraphColor)
 				.addFunction("button", uiButton)
+				.addFunction("rect", uiRect)
+				.addFunction("line", uiLine)
 			.endNamespace()
 		.endNamespace();
 }

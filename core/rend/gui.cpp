@@ -499,6 +499,9 @@ void gui_open_settings()
 	const LockGuard lock(guiMutex);
 	if ((gui_state == GuiState::Closed || gui_state == GuiState::Paused) && !settings.naomi.slave)
 	{
+		if (cfgLoadBool("dojo", "Training", false) && config::EnableTrainingLua)
+			lua::releasePressedButtons();
+
 		if (dojo.play_match || !ggpo::active())
 		{
 			HideOSD();
@@ -524,6 +527,9 @@ void gui_open_settings()
 	}
 	else if (gui_state == GuiState::Commands || gui_state == GuiState::ButtonCheck)
 	{
+		if (cfgLoadBool("dojo", "Training", false) && config::EnableTrainingLua)
+			lua::releasePressedButtons();
+
 		if (dojo.manual_pause || dojo.buffering || dojo.stepping)
 		{
 			gui_state = GuiState::Paused;

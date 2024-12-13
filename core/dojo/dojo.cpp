@@ -1098,6 +1098,11 @@ void Dojo::LoadRecordSlotsFile()
 	std::string game_rec_dir = rec_dir + "/" + get_game_name();
 	std::string filename = game_rec_dir + "/" + get_game_name() + "_" + std::to_string(config::RecSlotFile.get()) + ".rec";
 
+	LoadRecordSlotsFile(filename);
+}
+
+void Dojo::LoadRecordSlotsFile(std::string filename)
+{
 	if (!std::filesystem::exists(filename))
 		return;
 
