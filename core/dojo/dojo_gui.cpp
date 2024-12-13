@@ -2524,8 +2524,6 @@ void DojoGui::gui_display_replays()
 								{
 									dojo.replay.remote_replay_json = "";
 									cfgSetVirtual("dojo", "SpectateKey", match_code);
-									cfgSetVirtual("dojo", "SpectatorIP", "skunkworks.match.dojo.ooo");
-									cfgSetVirtual("dojo", "SpectatorPort", "7000");
 									cfgSetVirtual("dojo", "Receiving", "yes");
 									cfgSetVirtual("dojo", "Transmitting", "no");
 									ImGui::CloseCurrentPopup();
@@ -2645,8 +2643,6 @@ void DojoGui::gui_display_replays()
 								{
 									dojo.replay.remote_replay_json = "";
 									cfgSetVirtual("dojo", "SpectateKey", match_code);
-									cfgSetVirtual("dojo", "SpectatorIP", "skunkworks.match.dojo.ooo");
-									cfgSetVirtual("dojo", "SpectatorPort", "7000");
 									cfgSetVirtual("dojo", "Receiving", "yes");
 									cfgSetVirtual("dojo", "Transmitting", "no");
 									ImGui::CloseCurrentPopup();
