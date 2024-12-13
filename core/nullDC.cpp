@@ -63,7 +63,7 @@ int flycast_init(int argc, char* argv[])
 	if(config::ProfilerEnabled)
 		LogManager::GetInstance()->SetEnable(LogTypes::PROFILER, true);
 
-	if (config::Replay)
+	if (cfgLoadBool("dojo", "Replay", false))
 		dojo.replay.Init();
 
 	return 0;

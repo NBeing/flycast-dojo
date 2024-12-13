@@ -2439,9 +2439,9 @@ void DojoGui::gui_display_replays()
 							{
 								if (ImGui::Selectable(date.data(), selected, ImGuiSelectableFlags_DontClosePopups | ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 42)))
 								{
-									config::Receiving = false;
-									config::Replay = true;
-									config::ReplayFilename = entry.path().string();
+									cfgSetVirtual("dojo", "Receiving", "no");
+									cfgSetVirtual("dojo", "Replay", "yes");
+									cfgSetVirtual("dojo", "ReplayFilename", entry.path().string());
 									ImGui::CloseCurrentPopup();
 									gui_setState(GuiState::Main);
 								}

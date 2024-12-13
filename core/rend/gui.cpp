@@ -553,7 +553,9 @@ void gui_open_settings()
 
 void gui_start_game(const std::string& path)
 {
-	if (cfgLoadBool("network", "GGPO", false) &&
+	if ((cfgLoadBool("network", "GGPO", false) ||
+		 cfgLoadBool("dojo", "Receiving", false) ||
+		 cfgLoadBool("dojo", "Replay", false)) &&
 		cfgLoadBool("dojo", "AutoLoadNetState", false) &&
 		!dojo_file.NetSaveExists(path) &&
 		!dojo_file.no_save_launch)
@@ -598,7 +600,7 @@ void gui_start_game(const std::string& path)
 		}
 	}
 
-	if (config::Replay)
+	if (cfgLoadBool("dojo", "Replay", false))
 		dojo.replay.Init();
 
 	scanner.stop();
