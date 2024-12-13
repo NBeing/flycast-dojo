@@ -635,7 +635,10 @@ std::vector<std::string> RelayClient::ReadRelayJson()
 	std::vector<std::string> servers;
 
 	if (!std::filesystem::exists(get_writable_data_path("relays.json")))
-		return servers;
+	{
+		dojo_file.DownloadFile("https://flycast.dojo.ooo/relays.json", "data", "");
+		while (!std::filesystem::exists(get_writable_data_path("relays.json")));
+	}
 
 	std::ifstream f(get_writable_data_path("relays.json"));
 	auto data = nlohmann::json::parse(f);
