@@ -68,6 +68,7 @@ public:
 	bool mapping_shown = false;
 	bool pending_map = false;
 	bool quick_map_settings_call = false;
+	bool delay_select = false;
 
 	bool gui_start = false;
 

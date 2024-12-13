@@ -542,6 +542,10 @@ void gui_open_settings()
 		{
 			gui_setState(GuiState::Settings);
 		}
+		else if (gui_state == GuiState::ButtonCheck && dojo_gui.delay_select)
+		{
+			gui_setState(GuiState::DelaySelect);
+		}
 		else
 		{
 			gui_setState(GuiState::Closed);
@@ -4129,6 +4133,7 @@ void gui_display_ui()
 		dojo_gui.gui_display_savestate_dl();
 		break;
 	case GuiState::DelaySelect:
+		dojo_gui.delay_select = true;
 		dojo_gui.gui_display_delay_select();
 		break;
 	case GuiState::QuickMatchGuestWait:

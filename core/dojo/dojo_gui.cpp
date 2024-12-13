@@ -1142,8 +1142,8 @@ void DojoGui::gui_display_delay_select()
 		ImGui::Text("Delay");
 
 		float font_size = ImGui::GetFontSize() * (strlen(start_btn_txt) + strlen(cancel_btn_txt)) / 2;
-		ImGui::Text(" ");
-		ImGui::SameLine(ImGui::GetWindowSize().x / 2 - font_size + (font_size / 2));
+		ImGui::Text("       ");
+		ImGui::SameLine();
 
 		if (ImGui::Button(start_btn_txt))
 		{
@@ -1157,6 +1157,7 @@ void DojoGui::gui_display_delay_select()
 
 			ImGui::CloseCurrentPopup();
 
+			delay_select = false;
 			if (cfgLoadBool("network", "ActAsServer", "no"))
 				quick_match.host_ready = true;
 			quick_match.start_game = true;
@@ -1167,6 +1168,7 @@ void DojoGui::gui_display_delay_select()
 
 		if (ImGui::Button(cancel_btn_txt))
 		{
+			delay_select = false;
 			dojo.presence.Close();
 			cfgSetVirtual("network", "GGPO", "no");
 
@@ -1180,6 +1182,17 @@ void DojoGui::gui_display_delay_select()
 			{
 				gui_setState(GuiState::Main);
 			}
+		}
+
+		char check_btn_txt[128];
+		sprintf(check_btn_txt, "%s Button Check", ICON_FA_GAMEPAD);
+
+		float comboWidth = ImGui::CalcTextSize("   Button Check").x + ImGui::GetStyle().ItemSpacing.x + ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 4;
+		ImGui::SameLine();
+
+		if (ImGui::Button(check_btn_txt))
+		{
+			gui_state = GuiState::ButtonCheck;
 		}
 
 		ImGui::EndPopup();
