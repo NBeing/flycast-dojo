@@ -6,9 +6,10 @@
 #include <string>
 #include <vector>
 
+#include "json.hpp"
+
 #include "deps/easywsclient/easywsclient.hpp"
 #include "deps/UUID.hpp"
-#include "deps/json.hpp"
 #include "deps/picosha2.h"
 
 #include "dojo.h"

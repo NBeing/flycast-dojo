@@ -1010,7 +1010,6 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/deps/base64.h
 		core/dojo/deps/easywsclient/easywsclient.hpp
 		core/dojo/deps/easywsclient/easywsclient.cpp
-		core/dojo/deps/json.hpp
 		core/dojo/deps/picosha2.h
 		core/dojo/deps/UUID.hpp
 		core/dojo/dojo.cpp
