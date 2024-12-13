@@ -39,6 +39,9 @@ public:
 	void ReceivingThread();
 	void Stop();
 
+	bool transmitter_started;
+	bool receiver_started;
+
 	std::queue<std::string> outgoing_msgs;
 	std::queue<std::string> incoming_msgs;
 };

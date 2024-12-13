@@ -4,6 +4,8 @@ TcpClient::TcpClient()
 {
 	isLoopStarted = false;
 	endSession = false;
+	transmitter_started = false;
+	receiver_started = false;
 }
 
 bool TcpClient::Init()
@@ -121,10 +123,14 @@ void TcpClient::TransmissionThread()
 	host = config::SpectatorIP;
 	port = stoi(config::SpectatorPort);
 
+	transmitter_started = true;
+
 	Init();
 	Connect();
 	TransmissionLoop();
 	Disconnect();
+
+	transmitter_started = false;
 }
 
 void TcpClient::ReceivingInit()
@@ -195,9 +201,13 @@ void TcpClient::ReceivingThread()
 	host = cfgLoadStr("dojo", "SpectatorIP", "");
 	port = stoi(cfgLoadStr("dojo", "SpectatorPort", ""));
 
+	receiver_started = true;
+
 	Init();
 	Connect();
 	ReceivingInit();
 	ReceivingLoop();
 	Disconnect();
+
+	receiver_started = false;
 }

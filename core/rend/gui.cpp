@@ -578,7 +578,7 @@ void gui_start_game(const std::string& path)
 	reset_vmus();
     chat.reset();
 
-	if (cfgLoadBool("dojo", "Receiving", false))
+	if (cfgLoadBool("dojo", "Receiving", false) && !dojo.tcp_client.receiver_started)
 	{
 		cfgSetVirtual("dojo", "Transmitting", "no");
 		dojo.play_match = true;
@@ -592,7 +592,7 @@ void gui_start_game(const std::string& path)
 		}
 	}
 
-	if (cfgLoadBool("dojo", "Transmitting", false))
+	if (settings.network.online && cfgLoadBool("dojo", "Transmitting", false) && !dojo.tcp_client.transmitter_started)
 	{
 		try
 		{
