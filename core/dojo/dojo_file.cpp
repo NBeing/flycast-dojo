@@ -106,7 +106,7 @@ std::string DojoFile::DownloadFile(std::string download_url, std::string dest_fo
 	std::string filename = path_elements.back();
 
 	// remove GET parameters
-	if (filename.find("?") != std::string::npos )
+	if (filename.find("?") != std::string::npos)
 	{
 		path_elements.clear();
 		dojo.Split(filename, '?', path_elements);
@@ -129,6 +129,9 @@ std::string DojoFile::DownloadFile(std::string download_url, std::string dest_fo
 	{
 		if (std::filesystem::exists(path))
 			return path;
+
+		if (!std::filesystem::exists(get_writable_data_path("avatar")))
+			std::filesystem::create_directory(get_writable_data_path("avatar"));
 	}
 
 	if (!append.empty())
