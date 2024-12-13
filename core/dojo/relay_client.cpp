@@ -643,7 +643,6 @@ std::vector<std::string> RelayClient::ReadRelayJson()
 	for (auto relay_entry : data["relays"])
 	{
 		servers.push_back(relay_entry["url"]);
-		std::cout << relay_entry["url"] << std::endl;
 	}
 
 	return servers;

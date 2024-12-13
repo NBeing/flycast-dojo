@@ -111,7 +111,6 @@ void DojoGui::netplay_ip_entry_body()
 	ImGui::Text("       ");
 	ImGui::SameLine();
 
-
 	if (ImGui::Button(start_btn_txt))
 	{
 		if (detect_address == own_ip)
@@ -176,7 +175,7 @@ void DojoGui::netplay_relay_body()
 	const bool is_input_text_active = ImGui::IsItemActive();
 	const bool is_input_text_activated = ImGui::IsItemActivated();
 
-	auto address_history = dojo.relay_client.GetRelayAddressHistory();
+	auto address_history = dojo.relay_client.ReadRelayJson();
 	if (address_history.size() > 0 && is_input_text_activated)
 		ImGui::OpenPopup("##popup");
 	{
@@ -1371,6 +1370,60 @@ void DojoGui::settings_dojo_tab()
 		ImGui::SameLine();
 		ShowHelpMarker("Email address used to retrieve profile picture from Gravatar. Not shared with any opponents.");
 
+		char RelayServerAddress[256];
+
+		strcpy(RelayServerAddress, config::RelayServer.get().c_str());
+		// ImGui::InputText("Relay Server", RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+
+		std::string addr_lbl_txt = "Relay Server";
+
+		const bool is_input_text_enter_pressed = ImGui::InputText(addr_lbl_txt.data(), RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_EnterReturnsTrue);
+		const bool is_input_text_active = ImGui::IsItemActive();
+		const bool is_input_text_activated = ImGui::IsItemActivated();
+
+		auto available_relays = dojo.relay_client.ReadRelayJson();
+		if (available_relays.size() > 0 && is_input_text_activated)
+			ImGui::OpenPopup("##popup");
+		{
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y));
+			ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
+			if (ImGui::BeginPopup("##popup", ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_ChildWindow))
+			{
+				for (int i = 0; i < available_relays.size(); i++)
+				{
+					if (strstr(available_relays.at(i).data(), RelayServerAddress) == NULL)
+						continue;
+					if (ImGui::Selectable(available_relays.at(i).data()))
+					{
+						ImGui::ClearActiveID();
+						strcpy(RelayServerAddress, available_relays.at(i).data());
+					}
+				}
+
+				if (is_input_text_enter_pressed || (!is_input_text_active && !ImGui::IsWindowFocused()))
+					ImGui::CloseCurrentPopup();
+
+				ImGui::EndPopup();
+			}
+		}
+
+		config::RelayServer = RelayServerAddress;
+		ImGui::SameLine();
+		ShowHelpMarker("Preferred relay for hosted games when firewall hole punching is not available.");
+		ImGui::SameLine();
+		if (ImGui::Button("Detect"))
+		{
+			dojo.relay_client.AssignClosestRelay();
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::BeginTooltip();
+			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+			ImGui::TextUnformatted("Automatically assign the Relay Server closest to you.");
+			ImGui::PopTextWrapPos();
+			ImGui::EndTooltip();
+		}
+
 		OptionCheckbox("Enable Player Name Overlay", config::PlayerNameOverlay,
 					   "Enable overlay showing player names during netplay sessions & replays");
 
@@ -1510,27 +1563,6 @@ void DojoGui::settings_dojo_tab()
 
 		if (ImGui::CollapsingHeader("Quick Match", ImGuiTreeNodeFlags_None))
 		{
-			char RelayServerAddress[256];
-
-			strcpy(RelayServerAddress, config::RelayServer.get().c_str());
-			ImGui::InputText("Relay Server", RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
-			config::RelayServer = RelayServerAddress;
-			ImGui::SameLine();
-			ShowHelpMarker("Preferred relay for hosted games when firewall hole punching is not available.");
-			ImGui::SameLine();
-			if (ImGui::Button("Assign"))
-			{
-				dojo.relay_client.AssignClosestRelay();
-			}
-			if (ImGui::IsItemHovered())
-			{
-				ImGui::BeginTooltip();
-				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
-				ImGui::TextUnformatted("Automatically assign the Relay Server closest to you.");
-				ImGui::PopTextWrapPos();
-				ImGui::EndTooltip();
-			}
-
 			int RelayPort = config::RelayPort.get();
 			ImGui::InputInt("Relay Port", &RelayPort);
 			ImGui::SameLine();
