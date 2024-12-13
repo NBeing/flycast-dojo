@@ -199,7 +199,6 @@ std::vector<u8> Replay::GenHeader(std::string rom_name)
 	spectate_start.AppendString(settings.dojo.OpponentName);
 
 	spectate_start.AppendString(config::Quark.get());
-	std::cout << "QUARK ASSIGNED " << config::Quark.get() << std::endl;
 	std::string server_key = cfgLoadStr("dojo", "RelayServer", "") + "#" + cfgLoadStr("dojo", "RelayKey", "");
 	spectate_start.AppendString(server_key);
 
@@ -213,10 +212,7 @@ std::vector<u8> Replay::GenHeader(std::string rom_name)
 
 	u32 ggpo = 0;
 	if (config::GGPOEnable)
-	{
 		ggpo = 1;
-		std::cout << "GGPO SESSION DETECTED" << std::endl;
-	}
 	spectate_start.AppendInt(ggpo);
 
 	spectate_start.AppendString(settings.dojo.P1CountryCode);

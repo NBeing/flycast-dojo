@@ -4,7 +4,7 @@ void Dojo::AssignPlayerNames()
 {
 	hosting = config::ActAsServer;
 
-	if (hosting || play_match)
+	if (hosting || play_match || cfgLoadBool("dojo", "Replay", false))
 	{
 		player_1 = settings.dojo.PlayerName;
 		player_2 = settings.dojo.OpponentName;
@@ -438,10 +438,7 @@ void Dojo::FillDelayFrames()
 		for (int j = 0; j < MAX_PLAYERS; j++)
 		{
 			std::vector<u8> blank_inputs;
-			if (settings.network.online)
-				blank_inputs.resize(sizeof(u32) + replay.analog);
-			else
-				blank_inputs.resize(sizeof(FrameInputs));
+			blank_inputs.resize(sizeof(FrameInputs));
 			std::fill(blank_inputs.begin(), blank_inputs.end(), 0);
 			PollRecordAction(i, blank_inputs.size(), blank_inputs.data());
 		}
@@ -450,6 +447,11 @@ void Dojo::FillDelayFrames()
 
 void Dojo::MapleRecordAction(MapleInputState inputState[4])
 {
+	if (frame_number == 0 && config::Delay.get() > 0)
+	{
+		FillDelayFrames();
+	}
+
 	PrintMapleInputState(inputState);
 	std::vector<FrameInputs> maple_in;
 
@@ -499,7 +501,10 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		return;
 
 	if (!settings.network.online && dojo.frame_number < config::Delay)
+	{
+		frame_number++;
 		return;
+	}
 
 	if (dojo.play_match && (dojo.frame_number == dojo.session_inputs.size() - 1))
 		gui_setState(GuiState::ReplayEnd);
