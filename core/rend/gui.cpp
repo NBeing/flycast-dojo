@@ -3626,8 +3626,11 @@ static void gui_display_content()
 							}
 							else
 							{
+								cfgSetVirtual("dojo", "Replay", "no");
+								cfgSetVirtual("dojo", "Receiving", "no");
 								cfgSetVirtual("dojo", "Training", "no");
 								cfgSetVirtual("network", "GGPO", "no");
+								dojo.play_match = false;
 
 								settings.content.path = game.path;
 								std::string gamePath(game.path);
