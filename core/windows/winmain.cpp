@@ -52,7 +52,7 @@
 #include <windowsx.h>
 
 #include <shlobj.h>
-#include <filesystem>
+#include "dojo/deps/filesystem.hpp"
 
 void os_SetupInput()
 {
@@ -432,7 +432,7 @@ int main(int argc, char* argv[])
 	if (config::ContentPath.get().empty())
 		config::ContentPath.get().push_back(get_writable_config_path(""));
 #else
-	std::filesystem::path path;
+	ghc::filesystem::path path;
 	PWSTR path_tmp;
 
 	auto get_folder_path_ret = SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &path_tmp);
@@ -446,7 +446,7 @@ int main(int argc, char* argv[])
 	CoTaskMemFree(path_tmp);
 
 	auto fightcade_rom_path = path.string() + "\\Fightcade\\emulator\\flycast\\ROMs";
-	if (config::ContentPath.get().empty() && std::filesystem::exists(fightcade_rom_path))
+	if (config::ContentPath.get().empty() && ghc::filesystem::exists(fightcade_rom_path))
 		config::ContentPath.get().push_back(fightcade_rom_path);
 #endif
 	os_InstallFaultHandler();

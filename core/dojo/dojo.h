@@ -17,6 +17,8 @@
 #include <array>
 #include <bitset>
 
+#include "deps/filesystem.hpp"
+
 #include "cfg/option.h"
 #include "emulator.h"
 #include "hw/sh4/sh4_mem.h"

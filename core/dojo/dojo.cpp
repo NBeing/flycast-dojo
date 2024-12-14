@@ -274,8 +274,8 @@ void Dojo::WriteStringToOut(std::string name, std::string contents)
 {
 #ifndef __ANDROID__
 	auto dir_name = get_writable_config_path("out/");
-	if (!std::filesystem::exists(dir_name))
-		std::filesystem::create_directory(dir_name);
+	if (!ghc::filesystem::exists(dir_name))
+		ghc::filesystem::create_directory(dir_name);
 
 	std::string path = dir_name + name + ".txt";
 	std::ofstream fout(path);
@@ -311,7 +311,7 @@ std::string Dojo::GetTrainingLua()
 		lua_file = lua_file + ".lua";
 		auto lua_path = get_readonly_data_path("training/" + lua_file);
 
-		if (std::filesystem::exists(lua_path))
+		if (ghc::filesystem::exists(lua_path))
 			return lua_path;
 	}
 
@@ -363,13 +363,13 @@ std::string Dojo::GetEntryPath(std::string entry)
 				cdi_target = rom_paths[i] + "/" + nested_dir + "/" + cdi_filename;
 		}
 
-		if (!target.empty() && std::filesystem::exists(target))
+		if (!target.empty() && ghc::filesystem::exists(target))
 			return target;
-		if (!chd_target.empty() && std::filesystem::exists(chd_target))
+		if (!chd_target.empty() && ghc::filesystem::exists(chd_target))
 			return chd_target;
-		if (!gdi_target.empty() && std::filesystem::exists(gdi_target))
+		if (!gdi_target.empty() && ghc::filesystem::exists(gdi_target))
 			return gdi_target;
-		if (!cdi_target.empty() && std::filesystem::exists(cdi_target))
+		if (!cdi_target.empty() && ghc::filesystem::exists(cdi_target))
 			return cdi_target;
 	}
 
@@ -1070,8 +1070,8 @@ void Dojo::SaveRecordSlotsFile()
 	std::string rec_dir = get_writable_data_path("recordings");
 	std::string game_rec_dir = rec_dir + "/" + get_game_name();
 
-	if (!std::filesystem::exists(game_rec_dir))
-		std::filesystem::create_directories(game_rec_dir);
+	if (!ghc::filesystem::exists(game_rec_dir))
+		ghc::filesystem::create_directories(game_rec_dir);
 
 	std::string filename = game_rec_dir + "/" + get_game_name() + "_" + std::to_string(config::RecSlotFile.get()) + ".rec";
 
@@ -1108,7 +1108,7 @@ void Dojo::LoadRecordSlotsFile()
 
 void Dojo::LoadRecordSlotsFile(std::string filename)
 {
-	if (!std::filesystem::exists(filename))
+	if (!ghc::filesystem::exists(filename))
 		return;
 
 	std::ifstream fin(filename,

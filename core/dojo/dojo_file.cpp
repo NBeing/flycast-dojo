@@ -88,9 +88,9 @@ std::string DojoFile::DownloadNetSave(std::string rom_name, std::string commit)
 		std::string commit_net_state_path = filename + "." + commit;
 
 		// keep local copy named with commit string as backup and for replays
-		if (!std::filesystem::exists(commit_net_state_path))
+		if (!ghc::filesystem::exists(commit_net_state_path))
 		{
-			std::filesystem::copy(filename, commit_net_state_path);
+			ghc::filesystem::copy(filename, commit_net_state_path);
 		}
 	}
 
@@ -127,11 +127,11 @@ std::string DojoFile::DownloadFile(std::string download_url, std::string dest_fo
 
 	if (dest_folder == "avatar")
 	{
-		if (std::filesystem::exists(path))
+		if (ghc::filesystem::exists(path))
 			return path;
 
-		if (!std::filesystem::exists(get_writable_data_path("avatar")))
-			std::filesystem::create_directory(get_writable_data_path("avatar"));
+		if (!ghc::filesystem::exists(get_writable_data_path("avatar")))
+			ghc::filesystem::create_directory(get_writable_data_path("avatar"));
 	}
 
 	if (!append.empty())
@@ -196,7 +196,7 @@ std::string DojoFile::DownloadFile(std::string download_url, std::string dest_fo
 		{
 			not_found = true;
 			status_text = filename + " not found. ";
-			if (std::filesystem::path(filename).extension().string() == ".net")
+			if (ghc::filesystem::path(filename).extension().string() == ".net")
 				status_text += "\n\nIt is recommended that you create a savestate\nto share with your opponent.";
 		}
 		else
@@ -211,18 +211,18 @@ std::string DojoFile::DownloadFile(std::string download_url, std::string dest_fo
 	{
 		std::string old_path = path;
 		dojo.Replace(final_path, "%20", " ");
-		bool copied = std::filesystem::copy_file(
-			std::filesystem::path(old_path),
-			std::filesystem::path(final_path),
-			std::filesystem::copy_options::overwrite_existing);
+		bool copied = ghc::filesystem::copy_file(
+			ghc::filesystem::path(old_path),
+			ghc::filesystem::path(final_path),
+			ghc::filesystem::copy_options::overwrite_existing);
 		if (copied)
 		{
-			std::filesystem::remove(
-				std::filesystem::path(old_path));
+			ghc::filesystem::remove(
+				ghc::filesystem::path(old_path));
 		}
 	}
 
-	if (response_code == 404 || (file_exists(final_path.c_str()) && std::filesystem::file_size(final_path) == 0) || !file_exists(final_path.c_str()))
+	if (response_code == 404 || (file_exists(final_path.c_str()) && ghc::filesystem::file_size(final_path) == 0) || !file_exists(final_path.c_str()))
 	{
 		remove(final_path.c_str());
 		final_path = "";
@@ -246,8 +246,8 @@ void DojoFile::DownloadCurrentNetSave()
 
 bool DojoFile::NetSaveExists(std::string path)
 {
-	auto game_path = std::filesystem::path(path);
+	auto game_path = ghc::filesystem::path(path);
 	auto game_name = game_path.filename().stem().string();
 	std::string net_state_path = get_writable_data_path(game_name + ".state.net");
-	return std::filesystem::exists(net_state_path);
+	return ghc::filesystem::exists(net_state_path);
 }

@@ -906,7 +906,7 @@ void DojoGui::gui_display_quick_match()
 						{
 #ifdef _WIN32
 							std::string flag_path = "flag\\" + p.country_code + ".png";
-							if (std::filesystem::exists(get_writable_data_path(flag_path)))
+							if (ghc::filesystem::exists(get_writable_data_path(flag_path)))
 							{
 								auto flagTextureId = ImTextureID{};
 								get_flag_image(p.country_code.data(), flagTextureId, true);
@@ -2397,7 +2397,7 @@ void DojoGui::gui_display_test_game()
 	std::string net_state_path = get_writable_data_path(game_name + ".state.net");
 
 	bool save_exists = false;
-	if(std::filesystem::exists(net_state_path))
+	if(ghc::filesystem::exists(net_state_path))
 		save_exists = true;
 
 	if(!save_exists)
@@ -2408,8 +2408,8 @@ void DojoGui::gui_display_test_game()
 
 	if (ImGui::Button("Delete Savestate", ImVec2(150 * scaling, 50 * scaling)))
 	{
-		if(std::filesystem::exists(net_state_path))
-			std::filesystem::remove(net_state_path);
+		if(ghc::filesystem::exists(net_state_path))
+			ghc::filesystem::remove(net_state_path);
 	}
 
 	if(!save_exists)
@@ -2478,11 +2478,11 @@ void DojoGui::gui_display_replays()
 			sprintf(local_txt, " %s Local ", ICON_FA_HARD_DRIVE);
 			if (ImGui::BeginTabItem(local_txt))
 			{
-				auto replays_dir = std::filesystem::path(get_writable_data_path("replays"));
+				auto replays_dir = ghc::filesystem::path(get_writable_data_path("replays"));
 				auto game_replays_dir = replays_dir / get_game_name();
 
-				if (!std::filesystem::exists(game_replays_dir))
-					std::filesystem::create_directories(game_replays_dir);
+				if (!ghc::filesystem::exists(game_replays_dir))
+					ghc::filesystem::create_directories(game_replays_dir);
 
 				ImGui::BeginChild("Replays##LocalReplays", ImVec2(510, 280));
 
@@ -2498,7 +2498,7 @@ void DojoGui::gui_display_replays()
 
 					int row = 0;
 
-					for (const auto &entry : std::filesystem::directory_iterator(game_replays_dir))
+					for (const auto &entry : ghc::filesystem::directory_iterator(game_replays_dir))
 					{
 						ImGui::TableNextRow();
 						ImGui::PushID(row);
@@ -2511,14 +2511,19 @@ void DojoGui::gui_display_replays()
 						dojo.Replace(fn_copy, "__", "#");
 						dojo.Split(fn_copy, '#', fn_elements);
 
-						auto player1 = fn_elements[2];
-						auto player2 = fn_elements[3];
+						std::string player1 = fn_elements[2];
+						std::string player2 = "";
+						if (fn_elements.size() > 3)
+						{
+							player2 = fn_elements[3];
+						}
+
 						if (player2.find(".flyr") != std::string::npos)
 						{
 							player2 = "";
 						}
 
-						auto ftime = std::filesystem::last_write_time(entry.path());
+						auto ftime = ghc::filesystem::last_write_time(entry.path());
 						std::string date = std::format("{:%F\n%T}", std::chrono::floor<std::chrono::seconds>(ftime));
 
 						for (int column = 0; column < 3; column++)
@@ -2817,7 +2822,7 @@ void DojoGui::invoke_download_save_popup(std::string game_path, bool *net_save_d
 	dojo_file.Reset();
 
 	std::string filename = game_path.substr(game_path.find_last_of("/\\") + 1);
-	std::string short_game_name = std::filesystem::path(filename).stem().string();
+	std::string short_game_name = ghc::filesystem::path(filename).stem().string();
 	dojo.game_name = short_game_name;
 	dojo_file.entry_name = short_game_name;
 	dojo_file.post_save_launch = launch_game;

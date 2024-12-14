@@ -754,7 +754,7 @@ static void gui_display_commands()
 		std::string net_state_path = get_net_savestate_file_path(false);
 
 		bool save_exists = false;
-		if(std::filesystem::exists(net_state_path))
+		if(file_exists(net_state_path))
 			save_exists = true;
 
 		if(!save_exists)
@@ -4062,7 +4062,7 @@ void gui_display_ui()
 		{
 			if (cfgLoadBool("dojo", "QuickMatch", false))
 			{
-				auto game_filename = std::filesystem::path(settings.content.path).filename();
+				auto game_filename = ghc::filesystem::path(settings.content.path).filename();
 				dojo.game_name = game_filename.stem().string();
 
 				quick_match.current_match_status_idx = 0;
