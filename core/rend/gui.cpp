@@ -598,7 +598,8 @@ void gui_start_game(const std::string& path)
 		}
 	}
 
-	if (settings.network.online && cfgLoadBool("dojo", "Transmitting", false) && !dojo.tcp_client.transmitter_started)
+	if (cfgLoadBool("network", "GGPO", false) && cfgLoadBool("network", "ActAsServer", false) &&
+		cfgLoadBool("dojo", "Transmitting", false) && !dojo.tcp_client.transmitter_started)
 	{
 		try
 		{

@@ -180,7 +180,7 @@ Option<bool> AutoLoadNetState("AutoLoadNetState", true, "dojo");
 OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
 OptionString DojoServerPort("ServerPort", "6000", "dojo");
 
-Option<bool> Transmitting("Transmitting", false, "dojo");
+Option<bool> Transmitting("Transmitting", true, "dojo");
 Option<bool> TransmitScore("TransmitScore", false, "dojo");
 
 Option<bool> Receiving("Receiving", false, "dojo");
