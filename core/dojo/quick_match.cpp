@@ -201,7 +201,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 
 		std::string gravatar_id = player_entry.email_sha;
 		std::string profile_fn = dojo_file.DownloadFile(GetGravatarUrl(gravatar_id), "avatar", 0, "");
-		std::cout << "Profile: " << profile_fn << std::endl;
+		//std::cout << "Profile: " << profile_fn << std::endl;
 	}
 	else if (parsed_json["type"] == "status")
 	{
@@ -217,7 +217,8 @@ void QuickMatch::ProcessMsg(std::string msg)
 	else if (parsed_json["type"] == "remove")
 	{
 		std::string target_id = parsed_json["uuid"];
-		std::cout << "Removing " << target_id << std::endl;
+		//std::cout << "Removing " << target_id << std::endl;
+		NOTICE_LOG(NETWORK, "Removing %s", target_id.data());
 		players.erase(
 			std::remove_if(
 				players.begin(), players.end(),

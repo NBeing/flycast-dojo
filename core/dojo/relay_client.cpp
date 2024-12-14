@@ -21,7 +21,8 @@ void RelayClient::SendHostMsg()
 	std::string b64_game_name = to_base64(dojo.game_name.data());
 	std::string mm_msg = "host|" + b64_game_name;
 	outgoing_msgs.push_back(mm_msg);
-	std::cout << "To Relay: " << mm_msg << std::endl;
+	//std::cout << "To Relay: " << mm_msg << std::endl;
+	NOTICE_LOG(NETWORK, "To Relay: %s", mm_msg.data());
 }
 
 void RelayClient::SendGuestMsg()
@@ -36,7 +37,8 @@ void RelayClient::SendGuestMsg()
 
 	std::string mm_msg = "rjoin|" + relay_key;
 	outgoing_msgs.push_back(mm_msg);
-	std::cout << "To Relay: " << mm_msg << std::endl;
+	//std::cout << "To Relay: " << mm_msg << std::endl;
+	NOTICE_LOG(NETWORK, "To Relay: %s", mm_msg.data());
 }
 
 sock_t RelayClient::CreateAndBind(int port)
@@ -106,7 +108,6 @@ void RelayClient::ClientLoop()
 		int bytes_read = recvfrom(local_socket, buffer, sizeof(buffer), 0, (struct sockaddr *)&sender, &senderlen);
 		if (bytes_read)
 		{
-
 			if (memcmp("PING", buffer, 4) == 0)
 			{
 				opponent_addr.sin_family = AF_INET;
@@ -200,7 +201,7 @@ void RelayClient::ClientLoop()
 				{
 					uint64_t rtt = ret_timestamp - target_ping_send_ts[target_s][rnd_num_cmp];
 					INFO_LOG(NETWORK, "Received PONG %d, RTT: %d ms", rnd_num_cmp, rtt);
-					std::cout << "Received RPONG " << rnd_num_cmp << " from " << target_server << " RTT: " << rtt << " ms" << std::endl;
+					//std::cout << "Received RPONG " << rnd_num_cmp << " from " << target_server << " RTT: " << rtt << " ms" << std::endl;
 
 					target_ping_rtt[target_s].push_back(rtt);
 
@@ -236,7 +237,10 @@ void RelayClient::ClientLoop()
 			else if (memcmp("START", buffer, 5) == 0)
 			{
 				if (!cfgLoadBool("network", "ActAsServer", "no"))
+				{
 					std::cout << "Hole punching failed. Using relay." << std::endl;
+					NOTICE_LOG(NETWORK, "Hole punching failed. Using relay.");
+				}
 
 				start_game = true;
 				disconnect_toggle = true;
@@ -245,7 +249,8 @@ void RelayClient::ClientLoop()
 			{
 				std::string received = std::string(buffer, 6);
 				cfgSetVirtual("dojo", "RelayKey", received);
-				std::cout << "Received Key: " << received << std::endl;
+				//std::cout << "Received Key: " << received << std::endl;
+				NOTICE_LOG(NETWORK, "Received Key: %s", received.data());
 				if (quick_match.start_game)
 				{
 					quick_match.SendKeyMsg("relay", config::RelayServer.get(), config::RelayPort.get(), received);
@@ -257,22 +262,22 @@ void RelayClient::ClientLoop()
 				std::vector<std::string> opp;
 				dojo.Split(data, ':', opp);
 
-				std::cout << "OPPADDR " << data << std::endl;
-
 				opponent_addr.sin_family = AF_INET;
 				opponent_addr.sin_port = htons((u16)std::stol(opp[1]));
 				inet_pton(AF_INET, opp[0].data(), &opponent_addr.sin_addr);
 
-				std::cout << "(OPPADDR) Opponent assigned to " << opp[0] << " " << opp[1] << std::endl;
+				//std::cout << "(OPPADDR) Opponent assigned to " << opp[0] << " " << opp[1] << std::endl;
 
 				std::string quark = opp[2];
 				config::Quark = opp[2];
 				cfgSetVirtual("dojo", "Quark", quark);
 
-				std::cout << "(OPPADDR) Quark assigned to " << opp[2] << std::endl;
+				//std::cout << "(OPPADDR) Quark assigned to " << opp[2] << std::endl;
 
 				ping_test_start = dojo.UnixTimestamp();
-				std::cout << "PING TEST START " << ping_test_start << std::endl;
+				//std::cout << "PING TEST START " << ping_test_start << std::endl;
+				NOTICE_LOG(NETWORK, "PING TEST START %u", ping_test_start);
+
 				auto avg_ping = GetOpponentAvgPing(1);
 			}
 		}
@@ -305,7 +310,7 @@ void RelayClient::ClientLoop()
 			{
 				std::string ping_msg = target_ping_msgs[ping_target].front();
 				sendto(local_socket, (const char *)ping_msg.data(), strlen(ping_msg.data()), 0, (const struct sockaddr *)&target_addr, sizeof(target_addr));
-				std::cout << "Sent " << ping_msg << " to target " << ping_target << std::endl;
+				//std::cout << "Sent " << ping_msg << " to target " << ping_target << std::endl;
 				target_ping_msgs[ping_target].pop_front();
 			}
 		}
@@ -316,7 +321,7 @@ void RelayClient::ClientLoop()
 			{
 				std::string ping_msg = ping_msgs.front();
 				sendto(local_socket, (const char *)ping_msg.data(), strlen(ping_msg.data()), 0, (const struct sockaddr *)&opponent_addr, sizeof(opponent_addr));
-				std::cout << "Sent " << ping_msg << " to opponent" << std::endl;
+				//std::cout << "Sent " << ping_msg << " to opponent" << std::endl;
 				ping_msgs.pop_front();
 			}
 		}
@@ -326,8 +331,8 @@ void RelayClient::ClientLoop()
 		{
 			config::NetworkServer = opponent_server;
 			config::GGPORemotePort = opponent_port;
-			std::cout << "Assigned " << opponent_server << " " << opponent_port << std::endl;
 			std::cout << "Hole punching succeeded." << std::endl;
+			NOTICE_LOG(NETWORK, "Hole punching succeeded.");
 
 			start_game = true;
 			disconnect_toggle = true;
@@ -338,12 +343,11 @@ void RelayClient::ClientLoop()
 			!hole_punched &&
 			ping_msgs.empty())
 		{
-			std::cout << "(PING TEST) ";
-
-			std::cout << std::endl;
 			std::cout << "Hole punching failed. Using relay." << std::endl;
+			NOTICE_LOG(NETWORK, "Hole punching failed. Using relay.");
 
-			std::cout << "PING TEST END " << dojo.UnixTimestamp() << std::endl;
+			//std::cout << "PING TEST END " << dojo.UnixTimestamp() << std::endl;
+			NOTICE_LOG(NETWORK, "PING TEST END %u", dojo.UnixTimestamp());
 			ping_test_start = 0;
 
 			start_game = true;
@@ -452,7 +456,7 @@ int RelayClient::PingOpponent(int add_to_seed)
 	unsigned long seed = mix(clock(), time(NULL), getpid());
 	srand(seed + add_to_seed);
 	int rnd_num_cmp = rand() * 1000 + 1;
-	std::cout << "PING " << rnd_num_cmp << std::endl;
+	//std::cout << "PING " << rnd_num_cmp << std::endl;
 
 	if (ping_send_ts.count(rnd_num_cmp) == 0)
 	{
