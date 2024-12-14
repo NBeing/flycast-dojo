@@ -905,9 +905,29 @@ void DojoGui::gui_display_quick_match()
 						if (!p.location.empty())
 						{
 #ifdef _WIN32
-							auto flagTextureId = ImTextureID{};
-							get_flag_image(p.country_code.data(), flagTextureId, true);
-							AvatarImage(flagTextureId, p.location.data(), ImVec2(30, 30));
+							std::string flag_path = "flag\\" + p.country_code + ".png";
+							if (std::filesystem::exists(get_writable_data_path(flag_path)))
+							{
+								auto flagTextureId = ImTextureID{};
+								get_flag_image(p.country_code.data(), flagTextureId, true);
+								AvatarImage(flagTextureId, p.location.data(), ImVec2(30, 30));
+							}
+							else
+							{
+								std::string cc = p.country_code;
+								for (auto &c : cc)
+									c = toupper(c);
+
+								ImGui::Text("%s", cc.data());
+								if (ImGui::IsItemHovered())
+								{
+									ImGui::BeginTooltip();
+									ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+									ImGui::TextUnformatted(p.location.data());
+									ImGui::PopTextWrapPos();
+									ImGui::EndTooltip();
+								}
+							}
 #else
 							std::string cc = p.country_code;
 							for (auto &c : cc)
