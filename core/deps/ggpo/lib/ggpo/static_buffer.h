@@ -13,7 +13,7 @@
 template<class T, int N> class StaticBuffer
 {
 public:
-   StaticBuffer() :
+   StaticBuffer<T, N>() :
       _size(0) {
    } 
 
