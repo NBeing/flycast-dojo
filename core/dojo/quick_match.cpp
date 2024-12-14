@@ -201,7 +201,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 
 		std::string gravatar_id = player_entry.email_sha;
 		std::string profile_fn = dojo_file.DownloadFile(GetGravatarUrl(gravatar_id), "avatar", 0, "");
-		//std::cout << "Profile: " << profile_fn << std::endl;
+		// std::cout << "Profile: " << profile_fn << std::endl;
 	}
 	else if (parsed_json["type"] == "status")
 	{
@@ -217,7 +217,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 	else if (parsed_json["type"] == "remove")
 	{
 		std::string target_id = parsed_json["uuid"];
-		//std::cout << "Removing " << target_id << std::endl;
+		// std::cout << "Removing " << target_id << std::endl;
 		NOTICE_LOG(NETWORK, "Removing %s", target_id.data());
 		players.erase(
 			std::remove_if(
@@ -389,9 +389,11 @@ void QuickMatch::ProcessMsg(std::string msg)
 void QuickMatch::AppendToLog(std::string msg)
 {
 	LogEntry entry;
-	auto now = std::chrono::system_clock::now();
-	auto local_time = std::chrono::zoned_time{std::chrono::current_zone(), std::chrono::floor<std::chrono::seconds>(now)};
-	entry.timestamp = std::format("{:%T}", local_time);
+	std::time_t now = std::time(NULL);
+	std::tm *ptm = std::localtime(&now);
+	char buffer[32];
+	std::strftime(buffer, 32, "%H:%M:%S", ptm);
+	entry.timestamp = std::string(buffer);
 
 	entry.msg = msg;
 	log.push_back(entry);

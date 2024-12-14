@@ -2524,7 +2524,11 @@ void DojoGui::gui_display_replays()
 						}
 
 						auto ftime = ghc::filesystem::last_write_time(entry.path());
-						std::string date = std::format("{:%F\n%T}", std::chrono::floor<std::chrono::seconds>(ftime));
+						std::time_t t = std::chrono::system_clock::to_time_t(ftime);
+						std::tm *ptm = std::localtime(&t);
+						char buffer[32];
+						std::strftime(buffer, 32, "%Y-%m-%d\n%H:%M:%S", ptm);
+						std::string date = std::string(buffer);
 
 						for (int column = 0; column < 3; column++)
 						{
