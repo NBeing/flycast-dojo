@@ -1370,60 +1370,6 @@ void DojoGui::settings_dojo_tab()
 		ImGui::SameLine();
 		ShowHelpMarker("Email address used to retrieve profile picture from Gravatar. Not shared with any opponents.");
 
-		char RelayServerAddress[256];
-
-		strcpy(RelayServerAddress, config::RelayServer.get().c_str());
-		// ImGui::InputText("Relay Server", RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
-
-		std::string addr_lbl_txt = "Relay Server";
-
-		const bool is_input_text_enter_pressed = ImGui::InputText(addr_lbl_txt.data(), RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_EnterReturnsTrue);
-		const bool is_input_text_active = ImGui::IsItemActive();
-		const bool is_input_text_activated = ImGui::IsItemActivated();
-
-		auto available_relays = dojo.relay_client.ReadRelayJson();
-		if (available_relays.size() > 0 && is_input_text_activated)
-			ImGui::OpenPopup("##popup");
-		{
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y));
-			ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
-			if (ImGui::BeginPopup("##popup", ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_ChildWindow))
-			{
-				for (int i = 0; i < available_relays.size(); i++)
-				{
-					if (strstr(available_relays.at(i).data(), RelayServerAddress) == NULL)
-						continue;
-					if (ImGui::Selectable(available_relays.at(i).data()))
-					{
-						ImGui::ClearActiveID();
-						strcpy(RelayServerAddress, available_relays.at(i).data());
-					}
-				}
-
-				if (is_input_text_enter_pressed || (!is_input_text_active && !ImGui::IsWindowFocused()))
-					ImGui::CloseCurrentPopup();
-
-				ImGui::EndPopup();
-			}
-		}
-
-		config::RelayServer = RelayServerAddress;
-		ImGui::SameLine();
-		ShowHelpMarker("Preferred relay for hosted games when firewall hole punching is not available.");
-		ImGui::SameLine();
-		if (ImGui::Button("Detect"))
-		{
-			dojo.relay_client.AssignClosestRelay();
-		}
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::BeginTooltip();
-			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
-			ImGui::TextUnformatted("Automatically assign the Relay Server closest to you.");
-			ImGui::PopTextWrapPos();
-			ImGui::EndTooltip();
-		}
-
 		OptionCheckbox("Enable Player Name Overlay", config::PlayerNameOverlay,
 					   "Enable overlay showing player names during netplay sessions & replays");
 
@@ -1563,6 +1509,59 @@ void DojoGui::settings_dojo_tab()
 
 		if (ImGui::CollapsingHeader("Quick Match", ImGuiTreeNodeFlags_None))
 		{
+			char RelayServerAddress[256];
+
+			strcpy(RelayServerAddress, config::RelayServer.get().c_str());
+
+			std::string addr_lbl_txt = "Relay Server";
+
+			const bool is_input_text_enter_pressed = ImGui::InputText(addr_lbl_txt.data(), RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_EnterReturnsTrue);
+			const bool is_input_text_active = ImGui::IsItemActive();
+			const bool is_input_text_activated = ImGui::IsItemActivated();
+
+			auto available_relays = dojo.relay_client.ReadRelayJson();
+			if (available_relays.size() > 0 && is_input_text_activated)
+				ImGui::OpenPopup("##popup");
+			{
+				ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y));
+				ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
+				if (ImGui::BeginPopup("##popup", ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_ChildWindow))
+				{
+					for (int i = 0; i < available_relays.size(); i++)
+					{
+						if (strstr(available_relays.at(i).data(), RelayServerAddress) == NULL)
+							continue;
+						if (ImGui::Selectable(available_relays.at(i).data()))
+						{
+							ImGui::ClearActiveID();
+							strcpy(RelayServerAddress, available_relays.at(i).data());
+						}
+					}
+
+					if (is_input_text_enter_pressed || (!is_input_text_active && !ImGui::IsWindowFocused()))
+						ImGui::CloseCurrentPopup();
+
+					ImGui::EndPopup();
+				}
+			}
+
+			config::RelayServer = RelayServerAddress;
+			ImGui::SameLine();
+			ShowHelpMarker("Preferred relay for hosted games when firewall hole punching is not available.");
+			ImGui::SameLine();
+			if (ImGui::Button("Detect"))
+			{
+				dojo.relay_client.AssignClosestRelay();
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+				ImGui::TextUnformatted("Automatically assign the Relay Server closest to you.");
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+
 			int RelayPort = config::RelayPort.get();
 			ImGui::InputInt("Relay Port", &RelayPort);
 			ImGui::SameLine();
@@ -2923,7 +2922,14 @@ void DojoGui::gui_display_savestate_dl()
 				{
 					if (ImGui::Button(launch_btn_txt))
 					{
-						quick_match.GuiLaunch();
+						if (config::RelayServer.get().length() == 0)
+						{
+							gui_setState(GuiState::QuickMatchOnboarding);
+						}
+						else
+						{
+							quick_match.GuiLaunch();
+						}
 					}
 				}
 				else
@@ -3155,5 +3161,109 @@ void DojoGui::gui_display_stream_wait()
 	if (dojo.session_inputs.size() > config::RxFrameBuffer.get())
 	{
 		buffer_captured = true;
+	}
+}
+
+void DojoGui::gui_display_quick_match_onboarding()
+{
+	char quick_match_onboarding_txt[128];
+	sprintf(quick_match_onboarding_txt, "%s Quick Match Onboarding", ICON_FA_HAND_FIST);
+
+	ImGui::OpenPopup(quick_match_onboarding_txt);
+	if (ImGui::BeginPopupModal(quick_match_onboarding_txt, NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImGui::GetStyle().FramePadding);
+
+		char PlayerName[256] = {0};
+		strcpy(PlayerName, config::PlayerName.get().c_str());
+		ImGui::InputText("Player Name", PlayerName, sizeof(PlayerName), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+		ImGui::SameLine();
+		ShowHelpMarker("Name visible to other players");
+		config::PlayerName = std::string(PlayerName, strlen(PlayerName));
+
+		char PlayerEmail[256];
+
+		strcpy(PlayerEmail, config::PlayerEmail.get().c_str());
+		ImGui::InputText("Gravatar Email", PlayerEmail, sizeof(PlayerEmail), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+		config::PlayerEmail = PlayerEmail;
+		ImGui::SameLine();
+		ShowHelpMarker("Email address used to retrieve profile picture from Gravatar. Not shared with any opponents.");
+
+		char RelayServerAddress[256];
+
+		strcpy(RelayServerAddress, config::RelayServer.get().c_str());
+		// ImGui::InputText("Relay Server", RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+
+		std::string addr_lbl_txt = "Relay Server";
+
+		const bool is_input_text_enter_pressed = ImGui::InputText(addr_lbl_txt.data(), RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_EnterReturnsTrue);
+		const bool is_input_text_active = ImGui::IsItemActive();
+		const bool is_input_text_activated = ImGui::IsItemActivated();
+
+		auto available_relays = dojo.relay_client.ReadRelayJson();
+		if (available_relays.size() > 0 && is_input_text_activated)
+			ImGui::OpenPopup("##popup");
+		{
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y));
+			ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
+			if (ImGui::BeginPopup("##popup", ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_ChildWindow))
+			{
+				for (int i = 0; i < available_relays.size(); i++)
+				{
+					if (strstr(available_relays.at(i).data(), RelayServerAddress) == NULL)
+						continue;
+					if (ImGui::Selectable(available_relays.at(i).data()))
+					{
+						ImGui::ClearActiveID();
+						strcpy(RelayServerAddress, available_relays.at(i).data());
+					}
+				}
+
+				if (is_input_text_enter_pressed || (!is_input_text_active && !ImGui::IsWindowFocused()))
+					ImGui::CloseCurrentPopup();
+
+				ImGui::EndPopup();
+			}
+		}
+
+		config::RelayServer = RelayServerAddress;
+		ImGui::SameLine();
+		ShowHelpMarker("Preferred relay for hosted games when firewall hole punching is not available.");
+
+		char start_btn_txt[128];
+		char cancel_btn_txt[128];
+
+		sprintf(start_btn_txt, "%s Start", ICON_FA_CIRCLE_PLAY);
+		sprintf(cancel_btn_txt, "%s Cancel", ICON_FA_CIRCLE_XMARK);
+
+		if (strlen(RelayServerAddress) == 0)
+		{
+			ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+		}
+
+		if (ImGui::Button(start_btn_txt, ImVec2(120, 0)))
+		{
+			config::Settings::instance().save();
+			ImGui::CloseCurrentPopup();
+			quick_match.GuiLaunch();
+		}
+
+		if (strlen(RelayServerAddress) == 0)
+		{
+			ImGui::PopItemFlag();
+			ImGui::PopStyleVar();
+		}
+
+		ImGui::SetItemDefaultFocus();
+		ImGui::SameLine();
+
+		if (ImGui::Button(cancel_btn_txt, ImVec2(120, 0)))
+		{
+			settings.content.path = "";
+			ImGui::CloseCurrentPopup();
+			gui_setState(GuiState::Main);
+		}
+		ImGui::EndPopup();
 	}
 }

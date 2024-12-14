@@ -3656,7 +3656,14 @@ static void gui_display_content()
 							}
 							else
 							{
-								quick_match.GuiLaunch();
+								if (config::RelayServer.get().length() == 0)
+								{
+									gui_setState(GuiState::QuickMatchOnboarding);
+								}
+								else
+								{
+									quick_match.GuiLaunch();
+								}
 							}
 						}
 
@@ -4157,6 +4164,9 @@ void gui_display_ui()
 		break;
 	case GuiState::StreamWait:
 		dojo_gui.gui_display_stream_wait();
+		break;
+	case GuiState::QuickMatchOnboarding:
+		dojo_gui.gui_display_quick_match_onboarding();
 		break;
 	default:
 		die("Unknown UI state");

@@ -83,7 +83,8 @@ enum class GuiState {
 	DelaySelect,
 	QuickMatchGuestWait,
 	Paused,
-	StreamWait
+	StreamWait,
+	QuickMatchOnboarding
 };
 extern GuiState gui_state;
 

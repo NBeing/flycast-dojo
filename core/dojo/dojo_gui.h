@@ -79,6 +79,8 @@ public:
 
 	void gui_display_stream_wait();
 	bool buffer_captured = false;
+
+	void gui_display_quick_match_onboarding();
 private:
 	// GGPO Connect Screen
 	int current_delay = 0;
