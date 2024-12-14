@@ -576,6 +576,7 @@ extern OptionString RelayKey;
 extern OptionString RelayAddressHistory;
 extern OptionString RelayServer;
 extern Option<int> RelayPort;
+extern OptionString RelayJsonUrl;
 
 extern Option<bool> HideKey;
 

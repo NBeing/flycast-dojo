@@ -211,6 +211,7 @@ OptionString RelayKey("RelayKey", "", "dojo");
 OptionString RelayAddressHistory("RelayAddressHistory", "", "dojo");
 OptionString RelayServer("RelayServer", "", "dojo");
 Option<int> RelayPort("RelayPort", 8001, "dojo");
+OptionString RelayJsonUrl("RelayJsonUrl", "https://flycast.dojo.ooo/relays.json", "dojo");
 
 Option<bool> HideKey("HideKey", false, "dojo");
 

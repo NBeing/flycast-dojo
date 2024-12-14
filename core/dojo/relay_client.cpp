@@ -640,7 +640,7 @@ std::vector<std::string> RelayClient::ReadRelayJson()
 
 	if (!ghc::filesystem::exists(get_writable_data_path("relays.json")))
 	{
-		dojo_file.DownloadFile("https://flycast.dojo.ooo/relays.json", "data", "");
+		dojo_file.DownloadFile(config::RelayJsonUrl.get(), "data", "");
 		while (!ghc::filesystem::exists(get_writable_data_path("relays.json")));
 	}
 
