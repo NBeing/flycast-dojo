@@ -904,9 +904,25 @@ void DojoGui::gui_display_quick_match()
 					{
 						if (!p.location.empty())
 						{
+#ifdef _WIN32
 							auto flagTextureId = ImTextureID{};
 							get_flag_image(p.country_code.data(), flagTextureId, true);
 							AvatarImage(flagTextureId, p.location.data(), ImVec2(30, 30));
+#else
+							std::string cc = p.country_code;
+							for (auto &c : cc)
+								c = toupper(c);
+
+							ImGui::Text("%s", cc.data());
+							if (ImGui::IsItemHovered())
+							{
+								ImGui::BeginTooltip();
+								ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+								ImGui::TextUnformatted(p.location.data());
+								ImGui::PopTextWrapPos();
+								ImGui::EndTooltip();
+							}
+#endif
 						}
 						else
 							ImGui::Text("");
@@ -1548,11 +1564,13 @@ void DojoGui::settings_dojo_tab()
 			config::RelayServer = RelayServerAddress;
 			ImGui::SameLine();
 			ShowHelpMarker("Preferred relay for hosted games when firewall hole punching is not available.");
+#ifdef _WIN32
 			ImGui::SameLine();
 			if (ImGui::Button("Detect"))
 			{
 				dojo.relay_client.AssignClosestRelay();
 			}
+#endif
 			if (ImGui::IsItemHovered())
 			{
 				ImGui::BeginTooltip();
