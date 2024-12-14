@@ -62,6 +62,17 @@ public:
 		set_button(DC_AXIS_RIGHT, 15);			// L
 		set_button(DC_BTN_D, 4);				// Q (Coin)
 
+		set_button(EMU_BTN_RECORD, 58);			// F1
+		set_button(EMU_BTN_RECORD_1, 59);		// F2
+		set_button(EMU_BTN_RECORD_2, 60);		// F3
+		set_button(EMU_BTN_PLAY, 61);			// F4
+		set_button(EMU_BTN_PLAY_1, 62);			// F5
+		set_button(EMU_BTN_PLAY_2, 63);			// F6
+		set_button(EMU_BTN_SWITCH_PLAYER, 64);	// F7
+		set_button(EMU_BTN_SAVESTATE, 65);		// F8
+		set_button(EMU_BTN_LOADSTATE, 66);		// F9
+		set_button(EMU_BTN_PLAY_RND, 67);		// F10
+
 		set_button(EMU_BTN_PAUSE, 54);			// ,
 		set_button(EMU_BTN_STEP, 55);			// .
 
