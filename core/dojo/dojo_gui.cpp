@@ -2632,9 +2632,29 @@ void DojoGui::gui_display_replays()
 							{
 								if (!p1_country.empty())
 								{
-									auto flagTextureId = ImTextureID{};
-									get_flag_image(p1_country.data(), flagTextureId, true);
-									AvatarImage(flagTextureId, p1_country.data(), ImVec2(20, 20));
+#ifdef _WIN32
+									std::string flag_path = "flag\\" + p1_country + ".png";
+									if (ghc::filesystem::exists(get_writable_data_path(flag_path)))
+									{
+										auto flagTextureId = ImTextureID{};
+										get_flag_image(p1_country.data(), flagTextureId, true);
+										AvatarImage(flagTextureId, p1_country.data(), ImVec2(20, 20));
+									}
+									else
+									{
+										std::string cc = p1_country;
+										for (auto &c : cc)
+											c = toupper(c);
+
+										ImGui::Text("%s", cc.data());
+									}
+#else
+									std::string cc = p1_country;
+									for (auto &c : cc)
+										c = toupper(c);
+
+									ImGui::Text("%s", cc.data());
+#endif
 								}
 								else
 									ImGui::Text("");
@@ -2647,9 +2667,29 @@ void DojoGui::gui_display_replays()
 							{
 								if (!p2_country.empty())
 								{
-									auto flagTextureId = ImTextureID{};
-									get_flag_image(p2_country.data(), flagTextureId, true);
-									AvatarImage(flagTextureId, p2_country.data(), ImVec2(20, 20));
+#ifdef _WIN32
+									std::string flag_path = "flag\\" + p2_country + ".png";
+									if (ghc::filesystem::exists(get_writable_data_path(flag_path)))
+									{
+										auto flagTextureId = ImTextureID{};
+										get_flag_image(p2_country.data(), flagTextureId, true);
+										AvatarImage(flagTextureId, p2_country.data(), ImVec2(20, 20));
+									}
+									else
+									{
+										std::string cc = p2_country;
+										for (auto &c : cc)
+											c = toupper(c);
+
+										ImGui::Text("%s", cc.data());
+									}
+#else
+									std::string cc = p2_country;
+									for (auto &c : cc)
+										c = toupper(c);
+
+									ImGui::Text("%s", cc.data());
+#endif
 								}
 								else
 									ImGui::Text("");
