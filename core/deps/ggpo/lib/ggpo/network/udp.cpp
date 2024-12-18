@@ -106,7 +106,13 @@ Udp::OnLoopPoll(void *cookie)
          char src_ip[1024];
          Log("recvfrom returned (len:%d  from:%s:%d).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port) );
          UdpMsg *msg = (UdpMsg *)recv_buf;
-         _callbacks->OnMsg(recv_addr, msg, len);
+         // relays: ignore PING messages after GGPO connection is established
+         if (strncmp((const char *)msg, "RPONG", 5) != 0 &&
+             strncmp((const char *)msg, "PONG", 4) != 0 &&
+             strncmp((const char *)msg, "PING", 4) != 0)
+         {
+            _callbacks->OnMsg(recv_addr, msg, len);
+         }
       } 
    }
    return true;
