@@ -1621,11 +1621,13 @@ void DojoGui::settings_dojo_tab()
 			ImGui::SameLine();
 			ShowHelpMarker("Preferred relay for hosted games when firewall hole punching is not available.");
 #ifdef _WIN32
+			/*
 			ImGui::SameLine();
 			if (ImGui::Button("Detect"))
 			{
 				dojo.relay_client.AssignClosestRelay();
 			}
+			*/
 #endif
 			if (ImGui::IsItemHovered())
 			{
