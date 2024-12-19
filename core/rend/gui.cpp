@@ -782,6 +782,8 @@ static void gui_display_commands()
 		ImGui::NextColumn();
 	}
 
+	}
+
 	char resume_txt[64];
 	sprintf(resume_txt, "%s  Resume", ICON_FA_PLAY);
 	if (ImGui::Button(resume_txt, ScaledVec2(200, 40)))
@@ -792,6 +794,9 @@ static void gui_display_commands()
 
 	displayed_button_count++;
 	ImGui::NextColumn();
+
+	if (!dojo.play_match)
+	{
 
 	// Cheats
 	{
