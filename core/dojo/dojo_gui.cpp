@@ -2625,10 +2625,8 @@ void DojoGui::gui_display_replays()
 
 					int row = 0;
 
-					if (dojo.replay.remote_replay_json == "")
-					{
+					if (dojo.replay.remote_replay_json.empty())
 						dojo.replay.DownloadReplayJson(dojo.game_name);
-					}
 
 					auto data = nlohmann::json::parse(dojo.replay.remote_replay_json);
 					for (auto replay_entry : data.items())
@@ -2756,7 +2754,7 @@ void DojoGui::gui_display_replays()
 
 				if (ImGui::Button(reload_btn_txt))
 				{
-					std::string out = dojo.replay.DownloadReplayJson(dojo.game_name);
+					dojo.replay.DownloadReplayJson(dojo.game_name);
 				}
 				ImGui::SameLine();
 
@@ -2784,10 +2782,8 @@ void DojoGui::gui_display_replays()
 
 					int row = 0;
 
-					if (dojo.replay.remote_replay_json == "")
-					{
+					if (dojo.replay.remote_replay_json.empty())
 						dojo.replay.DownloadReplayJson(dojo.game_name);
-					}
 
 					auto data = nlohmann::json::parse(dojo.replay.remote_replay_json);
 					for (auto replay_entry : data.items())
@@ -2915,7 +2911,7 @@ void DojoGui::gui_display_replays()
 
 				if (ImGui::Button(reload_btn_txt))
 				{
-					std::string out = dojo.replay.DownloadReplayJson(dojo.game_name);
+					dojo.replay.DownloadReplayJson(dojo.game_name);
 				}
 				ImGui::SameLine();
 

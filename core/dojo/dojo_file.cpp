@@ -14,9 +14,9 @@ void DojoFile::Reset()
 	no_save_launch = false;
 }
 
-std::string DojoFile::DownloadFile(std::string download_url, std::string dest_folder, std::string append)
+std::string DojoFile::DownloadFile(std::string download_url, std::string dest_folder, std::string target_filename, std::string append)
 {
-	return DownloadFile(download_url, dest_folder, 0, append);
+	return DownloadFile(download_url, dest_folder, 0, target_filename, append);
 }
 
 #ifndef ANDROID
@@ -77,7 +77,7 @@ std::string DojoFile::DownloadNetSave(std::string rom_name, std::string commit)
 
 	status_text = "Downloading netplay savestate for " + rom_name + ".";
 
-	auto filename = DownloadFile(net_state_url, "data", commit);
+	auto filename = DownloadFile(net_state_url, "data", "", commit);
 	if (filename.empty())
 		return filename;
 
@@ -97,13 +97,15 @@ std::string DojoFile::DownloadNetSave(std::string rom_name, std::string commit)
 	return filename;
 }
 
-std::string DojoFile::DownloadFile(std::string download_url, std::string dest_folder, size_t download_size, std::string append)
+std::string DojoFile::DownloadFile(std::string download_url, std::string dest_folder, size_t download_size, std::string target_filename, std::string append)
 {
 	dojo_file.source_url = download_url;
 
 	std::vector<std::string> path_elements;
 	dojo.Split(download_url, '/', path_elements);
-	std::string filename = path_elements.back();
+	std::string filename = target_filename;
+	if (target_filename.empty())
+	 filename = path_elements.back();
 
 	// remove GET parameters
 	if (filename.find("?") != std::string::npos)
@@ -121,8 +123,11 @@ std::string DojoFile::DownloadFile(std::string download_url, std::string dest_fo
 	}
 	else if (!dest_folder.empty())
 	{
-		path = get_writable_data_path("") + "//" + dest_folder + "//" + filename;
-		dojo_file.dest_path = get_writable_data_path("") + "//" + dest_folder;
+		std::string dest_folder_path = get_writable_data_path(dest_folder);
+		if (!ghc::filesystem::exists(dest_folder_path))
+			ghc::filesystem::create_directory(dest_folder_path);
+		path = dest_folder_path + "//" + filename;
+		dojo_file.dest_path = dest_folder_path;
 	}
 
 	if (dest_folder == "avatar")

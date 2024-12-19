@@ -376,28 +376,19 @@ std::string encodeURIComponent(std::string const &value)
 
 std::string Replay::DownloadReplayJson(std::string game_name)
 {
+	if (dojo.replay.remote_replay_json.empty())
+		dojo.replay.remote_replay_json = "{}";
+
 	std::string json_url = "https://skunkworks.match.dojo.ooo/api/v1/replays?player=&game=" + encodeURIComponent(game_name) + "&match_code=";
-	auto curl = curl_easy_init();
+	std::string json_filename = game_name + "_replays.json";
+	dojo_file.DownloadFile(json_url, "cache", json_filename, "");
 
-	std::string s;
-	if (curl)
-	{
-		curl_easy_setopt(curl, CURLOPT_URL, json_url.data());
+	std::string replay_json_path = get_writable_data_path("cache") + "\\" + json_filename;
+	std::ifstream file(replay_json_path, std::ios::in | std::ios::binary);
+    if (!file.is_open())
+        return "{}";
 
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 2L);
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlWrite_CallbackFunc_StdString);
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-
-		CURLcode res = curl_easy_perform(curl);
-		if (res != CURLE_OK)
-		{
-			fprintf(stderr, "curl_easy_perform() failed: %s\n",
-					curl_easy_strerror(res));
-		}
-
-		curl_easy_cleanup(curl);
-	}
+    std::string s{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 
 	remote_replay_json = s;
 	return s;

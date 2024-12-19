@@ -200,7 +200,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 		players.push_back(player_entry);
 
 		std::string gravatar_id = player_entry.email_sha;
-		std::string profile_fn = dojo_file.DownloadFile(GetGravatarUrl(gravatar_id), "avatar", 0, "");
+		std::string profile_fn = dojo_file.DownloadFile(GetGravatarUrl(gravatar_id), "avatar", "", "");
 		// std::cout << "Profile: " << profile_fn << std::endl;
 	}
 	else if (parsed_json["type"] == "status")
