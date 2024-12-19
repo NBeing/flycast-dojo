@@ -212,6 +212,7 @@ OptionString RelayAddressHistory("RelayAddressHistory", "", "dojo");
 OptionString RelayServer("RelayServer", "", "dojo");
 Option<int> RelayPort("RelayPort", 8001, "dojo");
 OptionString RelayJsonUrl("RelayJsonUrl", "https://flycast.dojo.ooo/relays.json", "dojo");
+Option<bool> RelayForceTunnel("RelayForceTunnel", true, "dojo");
 
 Option<bool> HideKey("HideKey", false, "dojo");
 
@@ -222,7 +223,6 @@ Option<bool> QuickMatch("QuickMatch", false, "dojo");
 OptionString QuickMatchServer("QuickMatchServer", "skunkworks.match.dojo.ooo", "dojo");
 OptionString QuickMatchPort("QuickMatchPort", "8081", "dojo");
 
-OptionString QMCxnMethod("QMCxnMethod", "relay", "dojo");
 OptionString PlayerEmail("PlayerEmail", "", "dojo");
 
 OptionString Quark("Quark", "", "dojo");

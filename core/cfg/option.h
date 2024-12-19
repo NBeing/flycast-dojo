@@ -577,6 +577,7 @@ extern OptionString RelayAddressHistory;
 extern OptionString RelayServer;
 extern Option<int> RelayPort;
 extern OptionString RelayJsonUrl;
+extern Option<bool> RelayForceTunnel;
 
 extern Option<bool> HideKey;
 
@@ -587,7 +588,6 @@ extern Option<bool> QuickMatch;
 extern OptionString QuickMatchServer;
 extern OptionString QuickMatchPort;
 
-extern OptionString QMCxnMethod;
 extern OptionString PlayerEmail;
 
 extern OptionString Quark;

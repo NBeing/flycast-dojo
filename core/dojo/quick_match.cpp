@@ -121,11 +121,15 @@ void QuickMatch::quick_match_thread()
 					else
 						picosha2::hash256_hex_string(config::PlayerEmail.get(), avatar_sha);
 
+					std::string cxn_method = "relay";
+					if (cfgLoadBool("dojo", "RelayForceTunnel", false))
+						cxn_method = "relay_tunnel";
+
 					auto player_msg = nlohmann::json{
 						{"type", "player"},
 						{"game_name", dojo.game_name},
 						{"player_name", config::PlayerName.get()},
-						{"cxn_method", config::QMCxnMethod.get()},
+						{"cxn_method", cxn_method},
 						{"server", config::RelayServer.get()},
 						{"port", std::to_string(config::RelayPort.get())},
 						{"uuid", quick_match.client_uuid},
@@ -269,7 +273,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 		settings.dojo.P1CountryCode = p1_country;
 		settings.dojo.P2CountryCode = p2_country;
 
-		if (parsed_json["cxn_method"] == "relay")
+		if (parsed_json["cxn_method"] == "relay" || parsed_json["cxn_method"] == "relay_tunnel")
 		{
 			// revoke pending requests
 			for (auto req : pending)
@@ -297,6 +301,9 @@ void QuickMatch::ProcessMsg(std::string msg)
 			cfgSetVirtual("dojo", "HideKey", "yes");
 			cfgSetVirtual("dojo", "Training", "no");
 			cfgSetVirtual("dojo", "Relay", "yes");
+
+			if (parsed_json["cxn_method"] == "relay_tunnel")
+				cfgSetVirtual("dojo", "RelayForceTunnel", "yes");
 
 			cfgSetVirtual("network", "ActAsServer", "yes");
 			cfgSetVirtual("network", "GGPO", "yes");
@@ -357,7 +364,7 @@ void QuickMatch::ProcessMsg(std::string msg)
 	}
 	else if (parsed_json["type"] == "key")
 	{
-		if (parsed_json["cxn_method"] == "relay")
+		if (parsed_json["cxn_method"] == "relay" || parsed_json["cxn_method"] == "relay_tunnel")
 		{
 			std::string rk = parsed_json["key"].get<std::string>();
 			std::string server = parsed_json["server"].get<std::string>();
@@ -373,6 +380,9 @@ void QuickMatch::ProcessMsg(std::string msg)
 
 			cfgSetVirtual("dojo", "Training", "no");
 			cfgSetVirtual("dojo", "Relay", "yes");
+
+			if (parsed_json["cxn_method"] == "relay_tunnel")
+				cfgSetVirtual("dojo", "RelayForceTunnel", "yes");
 
 			cfgSetVirtual("network", "ActAsServer", "no");
 			cfgSetVirtual("network", "GGPO", "yes");

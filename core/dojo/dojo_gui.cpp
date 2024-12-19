@@ -737,15 +737,19 @@ void DojoGui::gui_display_quick_match()
 
 								quick_match.target_player = req.uuid;
 
+								std::string cxn_method = "relay";
+								if (cfgLoadBool("dojo", "RelayForceTunnel", true))
+									cxn_method = "relay_tunnel";
+
 								auto accept_msg = nlohmann::json{
 									{"type", "accept"},
 									{"target_uuid", req.uuid},
 									{"game_name", dojo.game_name},
 									{"player_name", config::PlayerName.get()},
-									{"cxn_method", config::QMCxnMethod.get()},
+									{"cxn_method", cxn_method},
 									{"uuid", quick_match.client_uuid}};
 
-								if (req.cxn_method == "relay")
+								if (req.cxn_method == "relay" || req.cxn_method == "relay_tunnel")
 								{
 									quick_match.target_player = req.uuid;
 									gui_setState(GuiState::DelaySelect);
@@ -874,13 +878,17 @@ void DojoGui::gui_display_quick_match()
 								std::string challenge_msg = "You challenged " + p.player_name;
 								quick_match.AppendToLog(challenge_msg);
 
+								std::string cxn_method = "relay";
+								if (cfgLoadBool("dojo", "RelayForceTunnel", true))
+									cxn_method = "relay_tunnel";
+
 								auto request_msg = nlohmann::json{
 									{"uuid", quick_match.client_uuid},
 									{"type", "request"},
 									{"target_uuid", p.uuid},
 									{"game_name", dojo.game_name},
 									{"player_name", config::PlayerName.get()},
-									{"cxn_method", config::QMCxnMethod.get()},
+									{"cxn_method", cxn_method},
 									{"server", config::RelayServer.get()},
 									{"port", std::to_string(config::RelayPort.get())}};
 
@@ -1581,11 +1589,30 @@ void DojoGui::settings_dojo_tab()
 
 		if (ImGui::CollapsingHeader("Quick Match", ImGuiTreeNodeFlags_None))
 		{
+			char QuickMatchServer[256];
+
+			strcpy(QuickMatchServer, config::QuickMatchServer.get().c_str());
+			ImGui::InputText("Server Address", QuickMatchServer, sizeof(QuickMatchServer), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+			config::QuickMatchServer = QuickMatchServer;
+			ImGui::SameLine();
+			ShowHelpMarker("Quick Match Service Hostname");
+
+			char QuickMatchPort[256];
+
+			strcpy(QuickMatchPort, config::QuickMatchPort.get().c_str());
+			ImGui::InputText("Server Port", QuickMatchPort, sizeof(QuickMatchPort), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
+			config::QuickMatchPort = QuickMatchPort;
+			ImGui::SameLine();
+			ShowHelpMarker("Quick Match Service Port (Default: 8081)");
+		}
+
+		if (ImGui::CollapsingHeader("Relays", ImGuiTreeNodeFlags_None))
+		{
 			char RelayServerAddress[256];
 
 			strcpy(RelayServerAddress, config::RelayServer.get().c_str());
 
-			std::string addr_lbl_txt = "Relay Server";
+			std::string addr_lbl_txt = "Quick Match Relay Server";
 
 			const bool is_input_text_enter_pressed = ImGui::InputText(addr_lbl_txt.data(), RelayServerAddress, sizeof(RelayServerAddress), ImGuiInputTextFlags_EnterReturnsTrue);
 			const bool is_input_text_active = ImGui::IsItemActive();
@@ -1627,8 +1654,6 @@ void DojoGui::settings_dojo_tab()
 			{
 				dojo.relay_client.AssignClosestRelay();
 			}
-			*/
-#endif
 			if (ImGui::IsItemHovered())
 			{
 				ImGui::BeginTooltip();
@@ -1637,6 +1662,8 @@ void DojoGui::settings_dojo_tab()
 				ImGui::PopTextWrapPos();
 				ImGui::EndTooltip();
 			}
+			*/
+#endif
 
 			int RelayPort = config::RelayPort.get();
 			ImGui::InputInt("Relay Port", &RelayPort);
@@ -1645,21 +1672,9 @@ void DojoGui::settings_dojo_tab()
 			if (RelayPort != config::RelayPort.get())
 				config::RelayPort = RelayPort;
 
-			char QuickMatchServer[256];
-
-			strcpy(QuickMatchServer, config::QuickMatchServer.get().c_str());
-			ImGui::InputText("Server Address", QuickMatchServer, sizeof(QuickMatchServer), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
-			config::QuickMatchServer = QuickMatchServer;
+			OptionCheckbox("Force Relay Tunneling", config::RelayForceTunnel);
 			ImGui::SameLine();
-			ShowHelpMarker("Quick Match Service Hostname");
-
-			char QuickMatchPort[256];
-
-			strcpy(QuickMatchPort, config::QuickMatchPort.get().c_str());
-			ImGui::InputText("Server Port", QuickMatchPort, sizeof(QuickMatchPort), ImGuiInputTextFlags_CharsNoBlank, nullptr, nullptr);
-			config::QuickMatchPort = QuickMatchPort;
-			ImGui::SameLine();
-			ShowHelpMarker("Quick Match Service Port (Default: 8081)");
+			ShowHelpMarker("Disables attempted hole punching on opponent connection. Tunnels all traffic through relay server.");
 		}
 
 		if (ImGui::CollapsingHeader("Local Network Lobby", ImGuiTreeNodeFlags_None))
