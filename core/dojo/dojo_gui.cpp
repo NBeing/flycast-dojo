@@ -1093,6 +1093,11 @@ void DojoGui::gui_display_quick_match()
 			quick_match.Clear();
 			cfgSetVirtual("network", "GGPO", "no");
 
+			if (settings.dojo.CardStart)
+				cfgSetVirtual("dojo", "AutoLoadNetState", config::AutoLoadNetState.get() ? "yes" : "no");
+
+			dojo.Reset();
+
 			settings.content.path = "";
 			ImGui::CloseCurrentPopup();
 			gui_setState(GuiState::Main);

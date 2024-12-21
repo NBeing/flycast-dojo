@@ -212,6 +212,7 @@ struct settings_t
 		bool Training;
 		std::string P1CountryCode;
 		std::string P2CountryCode;
+		bool CardStart;
 	} dojo;
 
 	struct

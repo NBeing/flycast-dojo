@@ -3676,6 +3676,35 @@ static void gui_display_content()
 							}
 						}
 
+						auto name_ext_loc = game.fileName.find_last_of('.');
+						std::string game_name = game.fileName.substr(0, name_ext_loc);
+
+						if (game_name == "vf4tuned")
+						{
+							char card_match_txt[64];
+							sprintf(card_match_txt, "  %s  Card Match", ICON_FA_ID_CARD);
+							if (ImGui::MenuItem(card_match_txt))
+							{
+								settings.content.path = game.path;
+								auto name_ext_loc = game.fileName.find_last_of('.');
+								dojo.game_name = game.fileName.substr(0, name_ext_loc);
+
+								settings.dojo.CardStart = true;
+								cfgSetVirtual("dojo", "AutoLoadNetState", "no");
+
+								quick_match.AppendToLog("Auto Savestate Loading Disabled");								
+
+								if (config::RelayServer.get().length() == 0)
+								{
+									gui_setState(GuiState::QuickMatchOnboarding);
+								}
+								else
+								{
+									quick_match.GuiLaunch();
+								}
+							}
+						}
+
 						char replay_txt[64];
 						sprintf(replay_txt, " %s   Watch Replays", ICON_FA_EYE);
 						if (ImGui::MenuItem(replay_txt))

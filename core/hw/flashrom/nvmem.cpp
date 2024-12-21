@@ -213,6 +213,8 @@ static void loadDefaultAWBiosFlash()
 
 static bool loadFlash()
 {
+	if (settings.dojo.CardStart)
+		return true;
 	bool rc = true;
 	if (settings.platform.isConsole())
 		rc = sys_nvmem->Load(getRomPrefix(), "%nvmem.bin", "nvram");
