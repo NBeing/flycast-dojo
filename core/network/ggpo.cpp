@@ -359,7 +359,7 @@ static bool save_game_state(unsigned char **buffer, int *len, int *checksum, int
 	verify(ser.size() < allocSize);
 	*len = ser.size();
 #ifdef SYNC_TEST
-	*checksum = XXH32(*buffer, usedSize, 7);
+	*checksum = XXH3_64bits(*buffer, usedSize, 7);
 #endif
 	memwatch::protect();
 	if (frame > 0)
