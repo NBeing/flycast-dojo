@@ -1239,20 +1239,13 @@ void DojoGui::gui_display_delay_select()
 
 		if (ImGui::Button(start_btn_txt))
 		{
-			cfgSetVirtual("network", "GGPO", "yes");
-			cfgSetVirtual("network", "Enable", "no");
-			cfgSetVirtual("dojo", "QuickMatch", "yes");
-
-			NOTICE_LOG(NETWORK, "CONNECT %s", detect_address.data());
 			if (current_delay != config::GGPODelay.get())
 				cfgSetVirtual("network", "GGPODelay", std::to_string(current_delay));
 
 			ImGui::CloseCurrentPopup();
+			gui_setState(GuiState::Closed);
 
-			if (cfgLoadBool("network", "ActAsServer", "no"))
-				quick_match.host_ready = true;
-			quick_match.start_game = true;
-			gui_setState(GuiState::QuickMatchGuestWait);
+			gui_start_game(settings.content.path);
 		}
 
 		ImGui::SameLine();
@@ -1263,15 +1256,7 @@ void DojoGui::gui_display_delay_select()
 			cfgSetVirtual("network", "GGPO", "no");
 
 			ImGui::CloseCurrentPopup();
-			if (quick_match.Active())
-			{
-				quick_match.SendStatusMsg("active");
-				gui_setState(GuiState::QuickMatch);
-			}
-			else
-			{
-				gui_setState(GuiState::Main);
-			}
+			gui_setState(GuiState::Main);
 		}
 
 		char check_btn_txt[128];

@@ -4095,15 +4095,12 @@ void gui_display_ui()
 		}
 		if (!settings.content.path.empty() || settings.naomi.slave)
 		{
-			if (cfgLoadBool("dojo", "QuickMatch", false))
+			if (cfgLoadBool("dojo", "DelaySelect", false))
 			{
 				auto game_filename = ghc::filesystem::path(settings.content.path).filename();
 				dojo.game_name = game_filename.stem().string();
 
-				quick_match.current_match_status_idx = 0;
-				quick_match.StartThread();
-
-				gui_setState(GuiState::QuickMatch);
+				gui_setState(GuiState::DelaySelect);
 				return;
 			}
 #ifndef __ANDROID__
