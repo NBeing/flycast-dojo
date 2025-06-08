@@ -1741,7 +1741,6 @@ if(NOT LIBRETRO)
 	elseif(WIN32)
 		if(NOT BUILD_TESTING)
 			target_sources(${PROJECT_NAME} PRIVATE
-				core/windows/clock.c
 				core/windows/rawinput.cpp
 				core/windows/rawinput.h
 				core/windows/winmain.cpp)

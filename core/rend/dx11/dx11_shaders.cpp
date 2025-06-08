@@ -813,7 +813,7 @@ u64 CachedDX11Shaders::hashShader(const char* source, const char* function, cons
 		return 0;
 
 	XXH3_state_t *xxh = XXH3_createState();
-	XXH3_64bits_reset(xxh, 777);
+	XXH3_64bits_reset(xxh);
 	XXH3_64bits_update(xxh, source, strlen(source));
 	XXH3_64bits_update(xxh, function, strlen(function));
 	if (pDefines != nullptr)
