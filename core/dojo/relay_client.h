@@ -3,6 +3,7 @@
 #include <chrono>
 #include <deque>
 #include <iostream>
+#include <numeric>
 #include <thread>
 
 #include "cfg/cfg.h"
@@ -11,6 +12,7 @@
 #include "network/net_platform.h"
 
 #include "dojo.h"
+#include "json.hpp"
 
 class RelayClient
 {

@@ -218,13 +218,6 @@ Option<bool> HideKey("HideKey", false, "dojo");
 
 OptionString NetSaveBase("NetSaveBase", "https://github.com/blueminder/flycast-netplay-savestates/raw/main/", "dojo");
 
-Option<bool> QuickMatch("QuickMatch", false, "dojo");
-
-OptionString QuickMatchServer("QuickMatchServer", "skunkworks.match.dojo.ooo", "dojo");
-OptionString QuickMatchPort("QuickMatchPort", "8081", "dojo");
-
-OptionString PlayerEmail("PlayerEmail", "", "dojo");
-
 OptionString Quark("Quark", "", "dojo");
 
 #ifdef SUPPORT_DISPMANX

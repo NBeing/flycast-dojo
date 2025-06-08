@@ -583,13 +583,6 @@ extern Option<bool> HideKey;
 
 extern OptionString NetSaveBase;
 
-extern Option<bool> QuickMatch;
-
-extern OptionString QuickMatchServer;
-extern OptionString QuickMatchPort;
-
-extern OptionString PlayerEmail;
-
 extern OptionString Quark;
 
 #ifdef SUPPORT_DISPMANX

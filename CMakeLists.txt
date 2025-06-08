@@ -1008,8 +1008,6 @@ endif()
 
 target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/deps/base64.h
-		core/dojo/deps/easywsclient/easywsclient.hpp
-		core/dojo/deps/easywsclient/easywsclient.cpp
 		core/dojo/deps/filesystem.hpp
 		core/dojo/deps/picosha2.h
 		core/dojo/deps/UUID.hpp
@@ -1028,9 +1026,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/tcp_client.cpp
 		core/dojo/tcp_client.h
 		core/dojo/training.cpp
-		core/dojo/training.h
-		core/dojo/quick_match.cpp
-		core/dojo/quick_match.h)
+		core/dojo/training.h)
 
 target_sources(${PROJECT_NAME} PRIVATE
 		core/imgread/cdi.cpp

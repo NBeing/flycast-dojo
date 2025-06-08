@@ -3648,63 +3648,16 @@ static void gui_display_content()
 							}
 						}
 
-						char quick_match_txt[64];
-						sprintf(quick_match_txt, "  %s   Quick Match", ICON_FA_HAND_FIST);
-						if (ImGui::MenuItem(quick_match_txt))
+						char netplay_txt[64];
+						sprintf(netplay_txt, "  %s   Netplay Session", ICON_FA_BOLT);
+						if (ImGui::MenuItem(netplay_txt))
 						{
+							cfgSetVirtual("dojo", "Training", "no");
 							settings.content.path = game.path;
 							auto name_ext_loc = game.fileName.find_last_of('.');
 							dojo.game_name = game.fileName.substr(0, name_ext_loc);
-
-							if (cfgLoadBool("dojo", "AutoLoadNetState", true) &&
-								!dojo_file.NetSaveExists(game.path) &&
-								!dojo_file.no_save_launch)
-							{
-								dojo_gui.quick_match_dl_call = true;
-								dojo_gui.invoke_download_save_popup(game.path, &dojo_gui.net_save_download, false);
-							}
-							else
-							{
-								if (config::RelayServer.get().length() == 0)
-								{
-									gui_setState(GuiState::QuickMatchOnboarding);
-								}
-								else
-								{
-									quick_match.GuiLaunch();
-								}
-							}
+							gui_setState(GuiState::NetplayConnect);
 						}
-
-						auto name_ext_loc = game.fileName.find_last_of('.');
-						std::string game_name = game.fileName.substr(0, name_ext_loc);
-
-						if (game_name == "vf4tuned")
-						{
-							char card_match_txt[64];
-							sprintf(card_match_txt, "  %s  Card Match", ICON_FA_ID_CARD);
-							if (ImGui::MenuItem(card_match_txt))
-							{
-								settings.content.path = game.path;
-								auto name_ext_loc = game.fileName.find_last_of('.');
-								dojo.game_name = game.fileName.substr(0, name_ext_loc);
-
-								settings.dojo.CardStart = true;
-								cfgSetVirtual("dojo", "AutoLoadNetState", "no");
-
-								quick_match.AppendToLog("Auto Savestate Loading Disabled");								
-
-								if (config::RelayServer.get().length() == 0)
-								{
-									gui_setState(GuiState::QuickMatchOnboarding);
-								}
-								else
-								{
-									quick_match.GuiLaunch();
-								}
-							}
-						}
-
 						char replay_txt[64];
 						sprintf(replay_txt, " %s   Watch Replays", ICON_FA_EYE);
 						if (ImGui::MenuItem(replay_txt))
@@ -3743,17 +3696,6 @@ static void gui_display_content()
 								ImGui::PopID();
 								break;
 							}
-						}
-
-						char netplay_txt[64];
-						sprintf(netplay_txt, "  %s   Netplay Session", ICON_FA_BOLT);
-						if (ImGui::MenuItem(netplay_txt))
-						{
-							cfgSetVirtual("dojo", "Training", "no");
-							settings.content.path = game.path;
-							auto name_ext_loc = game.fileName.find_last_of('.');
-							dojo.game_name = game.fileName.substr(0, name_ext_loc);
-							gui_setState(GuiState::NetplayConnect);
 						}
 
 						char dl_txt[128];
@@ -3939,12 +3881,6 @@ static void gui_network_start()
 		}
 		gui_stop_game();
 
-		if (quick_match.Active())
-		{
-			quick_match.SendStatusMsg("active");
-			gui_setState(GuiState::QuickMatch);
-		}
-
 		if (cfgLoadBool("dojo", "Relay", false))
 		{
 			dojo.relay_client.disconnect_toggle = true;
@@ -3985,8 +3921,7 @@ static void gui_display_loadscreen()
 			{
 				if (cfgLoadBool("dojo", "Relay", "no"))
 				{
-					if (!cfgLoadBool("dojo", "QuickMatch", "no") ||
-						(cfgLoadBool("dojo", "QuickMatch", "no") && !cfgLoadBool("network", "ActAsServer", "no")))
+					if (!cfgLoadBool("network", "ActAsServer", "no"))
 					{
 						try
 						{
@@ -4172,9 +4107,6 @@ void gui_display_ui()
 	case GuiState::QuickMap:
 		quick_map();
 		break;
-	case GuiState::QuickMatch:
-		dojo_gui.gui_display_quick_match();
-		break;
 	case GuiState::QuickPlayerSelect:
 		quick_player_select();
 		break;
@@ -4191,17 +4123,11 @@ void gui_display_ui()
 		dojo_gui.delay_select = true;
 		dojo_gui.gui_display_delay_select();
 		break;
-	case GuiState::QuickMatchGuestWait:
-		dojo_gui.gui_display_quick_match_guest_wait();
-		break;
 	case GuiState::Paused:
 		dojo_gui.show_pause();
 		break;
 	case GuiState::StreamWait:
 		dojo_gui.gui_display_stream_wait();
-		break;
-	case GuiState::QuickMatchOnboarding:
-		dojo_gui.gui_display_quick_match_onboarding();
 		break;
 	default:
 		die("Unknown UI state");

@@ -75,16 +75,13 @@ enum class GuiState {
 	ButtonCheck,
 	TestGame,
 	QuickMap,
-	QuickMatch,
 	QuickPlayerSelect,
 	QuickSelectPlatform,
 	Replays,
 	DownloadState,
 	DelaySelect,
-	QuickMatchGuestWait,
 	Paused,
 	StreamWait,
-	QuickMatchOnboarding
 };
 extern GuiState gui_state;
 

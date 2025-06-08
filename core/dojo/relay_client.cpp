@@ -251,14 +251,6 @@ void RelayClient::ClientLoop()
 				cfgSetVirtual("dojo", "RelayKey", received);
 				// std::cout << "Received Key: " << received << std::endl;
 				NOTICE_LOG(NETWORK, "Received Key: %s", received.data());
-				if (quick_match.start_game)
-				{
-					std::string cxn_method = "relay";
-					if (cfgLoadBool("dojo", "RelayForceTunnel", false))
-						cxn_method = "relay_tunnel";
-
-					quick_match.SendKeyMsg(cxn_method, config::RelayServer.get(), config::RelayPort.get(), received);
-				}
 			}
 			else if (memcmp("OPPADDR", buffer, 7) == 0)
 			{

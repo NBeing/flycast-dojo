@@ -16,6 +16,7 @@
 
 #include <array>
 #include <bitset>
+#include <queue>
 
 #include "deps/filesystem.hpp"
 
@@ -33,7 +34,6 @@
 #include "training.h"
 #include "relay_client.h"
 #include "dojo_file.h"
-#include "quick_match.h"
 #include "tcp_client.h"
 
 #define MAPLE_FRAME_SIZE 28
