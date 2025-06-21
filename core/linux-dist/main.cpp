@@ -114,8 +114,8 @@ void common_linux_setup();
 std::string find_user_config_dir()
 {
 #ifdef __SWITCH__
-	flycast::mkdir("/flycast", 0755);
-	return "/flycast/";
+	flycast::mkdir("/flycast-dojo", 0755);
+	return "/flycast-dojo/";
 #else
 	std::string xdg_home;
 	if (nowide::getenv("XDG_CONFIG_HOME") != nullptr)
@@ -130,10 +130,10 @@ std::string find_user_config_dir()
 
 	if (!xdg_home.empty())
 	{
-		std::string fullpath = xdg_home + "/flycast/";
+		std::string fullpath = xdg_home + "/flycast-dojo/";
 		struct stat info;
 		if (flycast::stat(fullpath.c_str(), &info) != 0 || (info.st_mode & S_IFDIR) == 0)
-			// Create .config/flycast
+			// Create .config/flycast-dojo
 			flycast::mkdir(fullpath.c_str(), 0755);
 
 		return fullpath;
@@ -144,12 +144,12 @@ std::string find_user_config_dir()
 }
 
 // Find the user data directory.
-// $HOME/.local/share/flycast on linux
+// $HOME/.local/share/flycast-dojo on linux
 std::string find_user_data_dir()
 {
 #ifdef __SWITCH__
-	flycast::mkdir("/flycast/data", 0755);
-	return "/flycast/data/";
+	flycast::mkdir("/flycast-dojo/data", 0755);
+	return "/flycast-dojo/data/";
 #else
 	std::string xdg_home;
 	if (nowide::getenv("XDG_DATA_HOME") != nullptr)
@@ -164,10 +164,10 @@ std::string find_user_data_dir()
 
 	if (!xdg_home.empty())
 	{
-		std::string fullpath = xdg_home + "/flycast/";
+		std::string fullpath = xdg_home + "/flycast-dojo/";
 		struct stat info;
 		if (flycast::stat(fullpath.c_str(), &info) != 0 || (info.st_mode & S_IFDIR) == 0)
-			// Create .local/share/flycast
+			// Create .local/share/flycast-dojo
 			flycast::mkdir(fullpath.c_str(), 0755);
 
 		return fullpath;
@@ -197,19 +197,19 @@ static void addDirectoriesFromPath(std::vector<std::string>& dirs, const std::st
 
 // Find a file in the user and system config directories.
 // The following folders are checked in this order:
-// $HOME/.config/flycast
+// $HOME/.config/flycast-dojo
 // if XDG_CONFIG_DIRS is defined:
-//   <$XDG_CONFIG_DIRS>/flycast
+//   <$XDG_CONFIG_DIRS>/flycast-dojo
 // else
-//   /etc/flycast/
-//   /etc/xdg/flycast/
+//   /etc/flycast-dojo/
+//   /etc/xdg/flycast-dojo/
 // .
 std::vector<std::string> find_system_config_dirs()
 {
 	std::vector<std::string> dirs;
 
 #ifdef __SWITCH__
-	dirs.push_back("/flycast/");
+	dirs.push_back("/flycast-dojo/");
 #else
 	std::string xdg_home;
 	if (nowide::getenv("XDG_CONFIG_HOME") != nullptr)
@@ -219,12 +219,12 @@ std::vector<std::string> find_system_config_dirs()
 		xdg_home = (std::string)nowide::getenv("HOME") + "/.config";
 	if (!xdg_home.empty())
 		// XDG config locations
-		dirs.push_back(xdg_home + "/flycast/");
+		dirs.push_back(xdg_home + "/flycast-dojo/");
 
 	if (nowide::getenv("XDG_CONFIG_DIRS") != nullptr)
 	{
 		std::string path = (std::string)nowide::getenv("XDG_CONFIG_DIRS");
-		addDirectoriesFromPath(dirs, path, "/flycast/");
+		addDirectoriesFromPath(dirs, path, "/flycast-dojo/");
 	}
 	else
 	{
@@ -232,8 +232,8 @@ std::vector<std::string> find_system_config_dirs()
 		const std::string config_dir(FLYCAST_SYSCONFDIR);
 		dirs.push_back(config_dir);
 #endif
-		dirs.push_back("/etc/flycast/"); // This isn't part of the XDG spec, but much more common than /etc/xdg/
-		dirs.push_back("/etc/xdg/flycast/");
+		dirs.push_back("/etc/flycast-dojo/"); // This isn't part of the XDG spec, but much more common than /etc/xdg/
+		dirs.push_back("/etc/xdg/flycast-dojo/");
 	}
 #endif
 	dirs.push_back("./");
@@ -243,12 +243,12 @@ std::vector<std::string> find_system_config_dirs()
 
 // Find a file in the user data directories.
 // The following folders are checked in this order:
-// $HOME/.local/share/flycast
+// $HOME/.local/share/flycast-dojo
 // if XDG_DATA_DIRS is defined:
-//   <$XDG_DATA_DIRS>/flycast
+//   <$XDG_DATA_DIRS>/flycast-dojo
 // else
-//   /usr/local/share/flycast
-//   /usr/share/flycast
+//   /usr/local/share/flycast-dojo
+//   /usr/share/flycast-dojo
 // <$FLYCAST_BIOS_PATH>
 // ./
 // ./data
@@ -257,7 +257,7 @@ std::vector<std::string> find_system_data_dirs()
 	std::vector<std::string> dirs;
 
 #ifdef __SWITCH__
-	dirs.push_back("/flycast/data/");
+	dirs.push_back("/flycast-dojo/data/");
 #else
 	std::string xdg_home;
 	if (nowide::getenv("XDG_DATA_HOME") != nullptr)
@@ -267,12 +267,12 @@ std::vector<std::string> find_system_data_dirs()
 		xdg_home = (std::string)nowide::getenv("HOME") + "/.local/share";
 	if (!xdg_home.empty())
 		// XDG data locations
-		dirs.push_back(xdg_home + "/flycast/");
+		dirs.push_back(xdg_home + "/flycast-dojo/");
 
 	if (nowide::getenv("XDG_DATA_DIRS") != nullptr)
 	{
 		std::string path = (std::string)nowide::getenv("XDG_DATA_DIRS");
-		addDirectoriesFromPath(dirs, path, "/flycast/");
+		addDirectoriesFromPath(dirs, path, "/flycast-dojo/");
 	}
 	else
 	{
@@ -280,8 +280,8 @@ std::vector<std::string> find_system_data_dirs()
 		const std::string data_dir(FLYCAST_DATADIR);
 		dirs.push_back(data_dir);
 #endif
-		dirs.push_back("/usr/local/share/flycast/");
-		dirs.push_back("/usr/share/flycast/");
+		dirs.push_back("/usr/local/share/flycast-dojo/");
+		dirs.push_back("/usr/share/flycast-dojo/");
 	}
 	if (nowide::getenv("FLYCAST_BIOS_PATH") != nullptr)
 	{
