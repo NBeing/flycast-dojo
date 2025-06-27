@@ -219,6 +219,7 @@ Option<bool> HideKey("HideKey", false, "dojo");
 OptionString NetSaveBase("NetSaveBase", "https://github.com/blueminder/flycast-netplay-savestates/raw/main/", "dojo");
 
 OptionString Quark("Quark", "", "dojo");
+Option<bool> CardStart("CardStart", false, "dojo");
 
 #ifdef SUPPORT_DISPMANX
 Option<bool> DispmanxMaintainAspect("maintain_aspect", true, "dispmanx");

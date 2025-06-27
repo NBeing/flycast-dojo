@@ -584,6 +584,7 @@ extern Option<bool> HideKey;
 extern OptionString NetSaveBase;
 
 extern OptionString Quark;
+extern Option<bool> CardStart;
 
 #ifdef SUPPORT_DISPMANX
 extern Option<bool> DispmanxMaintainAspect;

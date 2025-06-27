@@ -1184,7 +1184,6 @@ void Dojo::Reset()
 	target_step_frame = 0;
 	recording_started = false;
 
-	settings.dojo.CardStart = false;
 	settings.dojo.Training = false;
 
 	settings.dojo.PlayerName = "";

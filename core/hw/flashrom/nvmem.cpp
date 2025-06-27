@@ -213,7 +213,7 @@ static void loadDefaultAWBiosFlash()
 
 static bool loadFlash()
 {
-	if (settings.dojo.CardStart)
+	if (config::CardStart)
 		return true;
 	bool rc = true;
 	if (settings.platform.isConsole())
