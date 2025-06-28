@@ -469,10 +469,6 @@ if(NOT WITH_SYSTEM_ZLIB)
 	# help libzip find the package
 	set(ZLIB_FOUND TRUE)
 	set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${ZLIB_RELATIVE_PATH}" "${CMAKE_CURRENT_BINARY_DIR}/${ZLIB_RELATIVE_PATH}")
-	
-	cmake_policy(SET CMP0026 OLD)
-	get_target_property(ZLIB_LIBRARY_RELEASE zlibstatic LOCATION)
-	get_target_property(ZLIB_LIBRARY_DEBUG zlibstatic LOCATION_Debug)
 endif()
 
 find_package(PkgConfig)
