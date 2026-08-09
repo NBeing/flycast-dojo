@@ -150,6 +150,7 @@ bool XGLGraphicsContext::ChooseVisual(Display* x11Display, XVisualInfo** visual,
 void XGLGraphicsContext::swap()
 {
 	do_swap_automation();
+	do_swap_capture();
 	if (swapOnVSync == (settings.input.fastForwardMode || !config::VSync))
 	{
 		swapOnVSync = (!settings.input.fastForwardMode && config::VSync);

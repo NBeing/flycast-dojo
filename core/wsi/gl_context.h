@@ -28,6 +28,15 @@ void do_swap_automation();
 static inline void do_swap_automation() {}
 #endif
 
+// Video capture of the frame about to be presented. Must be called before the
+// buffer swap so that the ImGui overlay - including anything Lua draws - is
+// still in the default framebuffer. Implemented in rend/gles/gles.cpp.
+#ifndef LIBRETRO
+void do_swap_capture();
+#else
+static inline void do_swap_capture() {}
+#endif
+
 class GLGraphicsContext : public GraphicsContext
 {
 public:

@@ -26,6 +26,7 @@
 #include "emulator.h"
 #include "imgui_driver.h"
 #include "profiler/fc_profiler.h"
+#include "video_recorder.h"
 
 #include <atomic>
 #include <chrono>
@@ -131,6 +132,9 @@ void mainui_init()
 
 void mainui_term()
 {
+	// Close the encoder before the GL context goes away, so quitting mid-capture
+	// still leaves a playable file rather than a truncated one.
+	videorec::stop();
 	rend_term_renderer();
 }
 

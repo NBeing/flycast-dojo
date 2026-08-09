@@ -124,6 +124,7 @@ bool WGLGraphicsContext::init()
 void WGLGraphicsContext::swap()
 {
 	do_swap_automation();
+	do_swap_capture();
 	wglSwapLayerBuffers((HDC)display, WGL_SWAP_MAIN_PLANE);
 }
 

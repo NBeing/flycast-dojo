@@ -206,6 +206,7 @@ void EGLGraphicsContext::term()
 void EGLGraphicsContext::swap()
 {
 	do_swap_automation();
+	do_swap_capture();
 	if (swapOnVSync == (settings.input.fastForwardMode || !config::VSync))
 		setSwapInterval();
 	eglSwapBuffers(display, surface);

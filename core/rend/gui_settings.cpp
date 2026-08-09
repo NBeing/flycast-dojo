@@ -1136,6 +1136,23 @@ void GuiSettings::settings_body_video(ImVec2 normal_padding)
 			OptionRadioButton("Maximum", config::AutoSkipFrame, 2, "Skip a frame when the GPU is running slow");
 			ImGui::Columns(1, nullptr, false);
 		}
+
+		ImGui::Spacing();
+		if (ImGui::CollapsingHeader("Video Recording", ImGuiTreeNodeFlags_None))
+		{
+			const bool rec = videorec::isRecording();
+			if (ImGui::Button(rec ? "Stop Recording" : "Start Recording"))
+				videorec::toggle();
+			ImGui::SameLine();
+			ImGui::TextUnformatted(videorec::status().c_str());
+
+			if (rec)
+				ImGui::TextWrapped("Writing to %s", videorec::outputPath().c_str());
+			else
+				ImGui::TextWrapped("Captures the presented frame, including the OSD and anything "
+						"drawn by Lua. Requires ffmpeg on PATH. Output goes to the data folder; "
+						"encoder settings live under [record] in emu.cfg.");
+		}
 	}
 
 	ImGui::PopStyleVar();

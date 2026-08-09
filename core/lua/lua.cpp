@@ -22,6 +22,9 @@
 #include <lua.hpp>
 #include <LuaBridge/LuaBridge.h>
 #include "rend/gui.h"
+#ifndef LIBRETRO
+#include "rend/video_recorder.h"
+#endif
 #include "hw/mem/_vmem.h"
 #include "cfg/option.h"
 #include "emulator.h"
@@ -586,6 +589,28 @@ static void luaRegister(lua_State *L)
 				.addFunction("exit", dc_exit)
 				.addFunction("displayNotification", gui_display_notification)
 			.endNamespace()
+
+#ifndef LIBRETRO
+			// Capture of the presented frame, overlays included. Pass an empty
+			// path to startRecording() for a timestamped file in the data folder.
+	  		.beginNamespace("video")
+				.addFunction("startRecording", std::function<void(std::string)>([](std::string path) {
+					videorec::requestStart(path);
+				}))
+				.addFunction("stopRecording", std::function<void()>([]() {
+					videorec::requestStop();
+				}))
+				.addFunction("toggleRecording", std::function<void()>([]() {
+					videorec::toggle();
+				}))
+				.addFunction("isRecording", std::function<bool()>([]() {
+					return videorec::isRecording();
+				}))
+				.addFunction("recordingPath", std::function<std::string()>([]() {
+					return videorec::outputPath();
+				}))
+			.endNamespace()
+#endif
 
 	  		.beginNamespace("config")
 #define CONFIG_PROPERTY(Config, type) .addProperty<type>(#Config, get ## Config, set ## Config)

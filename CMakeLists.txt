@@ -1191,6 +1191,8 @@ if(NOT LIBRETRO)
 			core/rend/gui_settings.h
 			core/rend/gui_util.cpp
 			core/rend/gui_util.h
+			core/rend/video_recorder.cpp
+			core/rend/video_recorder.h
 			core/rend/mainui.cpp
 			core/rend/mainui.h
 			core/rend/boxart/boxart.cpp

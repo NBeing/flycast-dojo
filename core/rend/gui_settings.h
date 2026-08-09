@@ -7,6 +7,7 @@
 #include "rend/gles/imgui_impl_opengl3.h"
 #include "rend/gles/gles.h"
 #include "rend/gui_util.h"
+#include "rend/video_recorder.h"
 #include "version.h"
 #include "oslib/oslib.h"
 #include "oslib/audiostream.h"

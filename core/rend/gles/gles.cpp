@@ -13,6 +13,10 @@
 #include "emulator.h"
 #include "naomi2.h"
 #include "rend/gles/postprocess.h"
+#ifndef LIBRETRO
+#include "rend/video_recorder.h"
+#include <vector>
+#endif
 
 #ifdef TEST_AUTOMATION
 #include "cfg/cfg.h"
@@ -407,6 +411,132 @@ void do_swap_automation()
 }
 
 #endif
+
+#ifndef LIBRETRO
+
+/*
+ * Video capture hook.
+ *
+ * Called at the top of GraphicsContext::swap(), which is after ImGui has
+ * rendered its draw data into the default framebuffer (see
+ * OpenGLDriver::renderDrawData) and before the buffers are swapped. Reading
+ * framebuffer 0 here therefore captures exactly what the user is about to
+ * see, including the OSD and anything drawn from Lua's "overlay" callback.
+ *
+ * Readback goes through a small ring of pixel buffer objects so the DMA
+ * overlaps with rendering instead of stalling the pipeline: frame N's
+ * glReadPixels is issued into one PBO while frame N-(RING-1) is mapped and
+ * copied out. A synchronous fallback is used where PBOs aren't available
+ * (GLES2), which is slower but keeps the feature working.
+ */
+constexpr int CaptureRingSize = 3;
+static GLuint capturePbo[CaptureRingSize];
+static int captureIndex;
+static int capturePrimed;
+static bool capturePboUsable;
+
+static void captureReleasePbos()
+{
+	if (capturePbo[0] != 0)
+	{
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+		glDeleteBuffers(CaptureRingSize, capturePbo);
+		memset(capturePbo, 0, sizeof(capturePbo));
+	}
+	captureIndex = 0;
+	capturePrimed = 0;
+}
+
+static void captureCreatePbos(size_t bytes)
+{
+	captureReleasePbos();
+	// glMapBufferRange is core in GL 3.0 / GLES 3.0.
+	capturePboUsable = gl.gl_major >= 3;
+	if (!capturePboUsable)
+		return;
+	glGenBuffers(CaptureRingSize, capturePbo);
+	for (int i = 0; i < CaptureRingSize; i++)
+	{
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, capturePbo[i]);
+		glBufferData(GL_PIXEL_PACK_BUFFER, bytes, nullptr, GL_STREAM_READ);
+	}
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+}
+
+void do_swap_capture()
+{
+	if (videorec::stopPending())
+	{
+		videorec::stop();
+		captureReleasePbos();
+	}
+	if (videorec::startPending())
+	{
+		if (videorec::start(settings.display.width, settings.display.height))
+			captureCreatePbos(videorec::frameBytes());
+	}
+	if (!videorec::isRecording())
+		return;
+
+	const int w = videorec::width();
+	const int h = videorec::height();
+	// The encoder was opened for a fixed frame size. A resized window would
+	// desynchronise every subsequent frame, so stop rather than emit garbage.
+	if (w != settings.display.width || h != settings.display.height)
+	{
+		WARN_LOG(RENDERER, "[rec] framebuffer resized to %dx%d (recording %dx%d), stopping",
+				settings.display.width, settings.display.height, w, h);
+		videorec::requestStop();
+		return;
+	}
+	const size_t bytes = videorec::frameBytes();
+
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+#if !defined(GLES2)
+	if (gl.gl_major >= 3)
+		glReadBuffer(GL_BACK);
+#endif
+	// RGB24 rows are not 4-byte aligned unless the width happens to be a
+	// multiple of 4; without this every frame shears diagonally.
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+	if (!capturePboUsable)
+	{
+		std::vector<u8> frame(bytes);
+		glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, frame.data());
+		videorec::submitFrame(std::move(frame));
+		return;
+	}
+
+	// Issue this frame's readback into the current PBO (returns immediately).
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, capturePbo[captureIndex]);
+	glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+
+	// Collect the oldest in-flight readback, which the GPU has had a full
+	// ring's worth of frames to finish.
+	if (capturePrimed >= CaptureRingSize - 1)
+	{
+		const int readIndex = (captureIndex + 1) % CaptureRingSize;
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, capturePbo[readIndex]);
+		const void *mapped = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, bytes, GL_MAP_READ_BIT);
+		if (mapped != nullptr)
+		{
+			std::vector<u8> frame(bytes);
+			memcpy(frame.data(), mapped, bytes);
+			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+			videorec::submitFrame(std::move(frame));
+		}
+	}
+	else
+		capturePrimed++;
+
+	// Advance the ring, so the next frame writes the buffer we just drained.
+	captureIndex = (captureIndex + 1) % CaptureRingSize;
+
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+}
+
+#endif // !LIBRETRO
 
 static void gl_delete_shaders()
 {
