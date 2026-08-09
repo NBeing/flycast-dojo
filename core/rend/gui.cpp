@@ -18,6 +18,7 @@
  */
 #include "gui.h"
 #include "osd.h"
+#include "video_recorder.h"
 #include "cfg/cfg.h"
 #include "hw/maple/maple_if.h"
 #include "hw/maple/maple_devs.h"
@@ -3260,20 +3261,29 @@ static void gui_display_content()
 	sprintf(help_txt, "%s", ICON_FA_BOOK);
 	sprintf(lan_txt, "%s", ICON_FA_NETWORK_WIRED);
 
+	// Video capture toggle. The icon doubles as the state readout: a camera
+	// when idle, a stop button while a capture is running.
+	char record_txt[64];
+	const bool recording = videorec::isRecording();
+	sprintf(record_txt, "%s", recording ? ICON_FA_CIRCLE_STOP : ICON_FA_VIDEO);
+	// Space the button needs, folded into the offsets below so the toolbar
+	// stays right-aligned and the filter box does not push it off the edge.
+	const float record_extra = ImGui::CalcTextSize(record_txt).x + ImGui::GetStyle().ItemSpacing.x * 2;
+
 	char question_txt[64];
     sprintf(question_txt, " %s  ", ICON_FA_CIRCLE_QUESTION);
 
 #if !defined(__ANDROID__)
 #if defined(_WIN32) || defined(__APPLE__) || defined(__linux__)
     if (config::EnableLobby && !config::Receiving && !settings.dojo.training)
-        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(question_txt).x - ImGui::CalcTextSize(lan_txt).x - ImGui::CalcTextSize(lan_txt).x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - ImGui::GetStyle().FramePadding.x * 27);
+        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(question_txt).x - ImGui::CalcTextSize(lan_txt).x - ImGui::CalcTextSize(lan_txt).x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - record_extra - ImGui::GetStyle().FramePadding.x * 27);
     else
-        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(question_txt).x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - ImGui::GetStyle().FramePadding.x * 24);
+        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(question_txt).x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - record_extra - ImGui::GetStyle().FramePadding.x * 24);
 #else
 if (config::EnableLobby && !config::Receiving && !settings.dojo.training)
-        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(question_txt).x - ImGui::CalcTextSize(lan_txt).x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - ImGui::GetStyle().FramePadding.x * 24);
+        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(question_txt).x - ImGui::CalcTextSize(lan_txt).x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - record_extra - ImGui::GetStyle().FramePadding.x * 24);
     else
-        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(question_txt).x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - ImGui::GetStyle().FramePadding.x * 22);
+        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(question_txt).x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - record_extra - ImGui::GetStyle().FramePadding.x * 22);
 #endif
 #endif
 
@@ -3287,7 +3297,7 @@ if (config::EnableLobby && !config::Receiving && !settings.dojo.training)
     {
 		if (config::EnableLobby && !config::Receiving && !settings.dojo.training)
 		{
-			ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(lan_txt).x - ImGui::GetStyle().ItemSpacing.x * 12 - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - ImGui::GetStyle().FramePadding.x * 2.0f);
+			ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(replays_txt).x - ImGui::CalcTextSize(lan_txt).x - record_extra - ImGui::GetStyle().ItemSpacing.x * 12 - ImGui::CalcTextSize(settings_txt).x - ImGui::CalcTextSize(help_txt).x - ImGui::GetStyle().FramePadding.x * 2.0f);
 			if (ImGui::Button(lan_txt))
 				gui_state = GuiState::Lobby;
 			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
@@ -3295,16 +3305,28 @@ if (config::EnableLobby && !config::Receiving && !settings.dojo.training)
 		}
 
 #if defined(__ANDROID__)
-		ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(replays_txt).x - ImGui::GetStyle().FramePadding.x * 1.0f);
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(replays_txt).x - record_extra - ImGui::GetStyle().FramePadding.x * 1.0f);
 #elif defined(_WIN32) || defined(__APPLE__) || defined(__linux__)
-		ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(replays_txt).x - ImGui::GetStyle().ItemSpacing.x * 10 - ImGui::CalcTextSize(settings_txt).x - ImGui::GetStyle().FramePadding.x * 2.0f);
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(replays_txt).x - record_extra - ImGui::GetStyle().ItemSpacing.x * 10 - ImGui::CalcTextSize(settings_txt).x - ImGui::GetStyle().FramePadding.x * 2.0f);
 #else
-		ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(replays_txt).x - ImGui::GetStyle().ItemSpacing.x * 10 - ImGui::CalcTextSize(settings_txt).x - ImGui::GetStyle().FramePadding.x * 2.0f);
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(replays_txt).x - record_extra - ImGui::GetStyle().ItemSpacing.x * 10 - ImGui::CalcTextSize(settings_txt).x - ImGui::GetStyle().FramePadding.x * 2.0f);
 #endif
 		if (ImGui::Button(replays_txt))
 			gui_state = GuiState::Replays;
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("Replays");
+
+		// Video capture toggle, tinted red while running so the state is
+		// readable at a glance without opening Settings.
+		ImGui::SameLine();
+		if (recording)
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.32f, 0.32f, 1.f));
+		if (ImGui::Button(record_txt))
+			videorec::toggle();
+		if (recording)
+			ImGui::PopStyleColor();
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip(recording ? videorec::status().c_str() : "Start Video Recording");
 
 
 #ifdef TARGET_UWP
