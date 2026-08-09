@@ -89,16 +89,22 @@ Pre-existing, unrelated to capture. Worth reporting upstream separately.
 
 ## Capture — follow-on work
 
-### [F] Audio
-The recording is **silent**. The encoder is fed raw video frames only. Adding
-audio means tapping the audio backend, buffering it alongside video, and
-feeding ffmpeg a second input — plus solving A/V sync against a variable
-frame rate.
+### [V] Confirm audio with a real game
+Audio is implemented: teed off the AICA mixer in `WriteSample()`, written as
+raw PCM alongside the video, muxed at stop. Verified so far: the no-audio
+fallback, temp cleanup, and the exact mux command against a synthetic
+44100 Hz stereo PCM.
 
-### [?] Constant frame rate assumption
-Fast-forward, pausing and rollback all break the fixed-fps assumption, so long
-recordings can drift out of sync. Options: timestamp frames and let ffmpeg use
-VFR, or duplicate/drop to hold CFR. Needs a decision.
+**Not verified with real game audio** — no AICA samples are produced at the
+menu, so this needs a ROM. Check: audio present, in sync at the start, still
+in sync after 5+ minutes, and no clicks where silence padding was inserted.
+
+### [V] Induce encoder backlog and confirm frame slots hold
+Output is constant frame rate by construction: a dropped frame keeps its slot
+via a repeat, so frame N of the file is emulated frame N. The logic is in
+place but backlog was never actually induced during testing. Force it (slow
+codec, or a tiny queue bound) and confirm the frame count still equals the
+number of presents, and that audio stays aligned.
 
 ### [F] Make DX9 capture asynchronous, or accept it
 D3D9 has no async readback: `GetRenderTargetData` is synchronous and
@@ -191,3 +197,6 @@ PC context — document the gap rather than calling it an fbneo-equivalent hook.
   fails without it.
 - [ ] Consider adding `mingw-w64-x86_64-ffmpeg` to the documented Windows
   package list, since capture needs it at runtime.
+- [?] The mux runs at stop, so stopping a long capture is not instant (stream
+  copy, not re-encode). If that becomes annoying, it could move to a
+  background thread with a "finalising" indicator.

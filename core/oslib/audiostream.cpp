@@ -1,5 +1,8 @@
 #include "audiostream.h"
 #include "cfg/option.h"
+#ifndef LIBRETRO
+#include "rend/video_recorder.h"
+#endif
 
 struct SoundFrame { s16 l; s16 r; };
 
@@ -54,6 +57,13 @@ void WriteSample(s16 r, s16 l)
 	{
 		if (currentBackend != nullptr)
 			currentBackend->push(Buffer, SAMPLE_COUNT, config::LimitFPS);
+#ifndef LIBRETRO
+		// Tee the mixed output to the video recorder. This is the same buffer
+		// the backend gets, so what is recorded is what is heard. No samples
+		// reach here during rollback - the mixer short-circuits on muteAudio -
+		// so re-simulated frames cannot duplicate audio.
+		videorec::submitAudio(Buffer, SAMPLE_COUNT);
+#endif
 		writePtr = 0;
 	}
 }

@@ -73,9 +73,26 @@ int height();
 size_t frameBytes();
 
 // Hands a finished frame to the writer thread, in the format passed to
-// start(). Takes ownership. Frames are dropped (and counted) if the encoder
-// cannot keep up.
+// start(). Takes ownership.
+//
+// The output is constant frame rate: one submitted frame is always one frame
+// in the file, so frame N of the recording is emulated frame N. If the
+// encoder falls behind, the frame's *contents* are dropped but its slot is
+// preserved by repeating the previous frame, because losing a slot would
+// shorten the video against the audio and desync everything after it. Set
+// [record] blockonfull=yes to stall the caller instead and keep every frame's
+// real contents, at the cost of frame pacing.
 void submitFrame(std::vector<u8>&& frame);
+
+// --- Audio ------------------------------------------------------------------
+// Interleaved stereo s16 at AudioSampleRate, as produced by the AICA mixer.
+// Called from the emulation thread via WriteSample(); a no-op when not
+// recording. Audio is not emitted during rollback (muteAudio short-circuits
+// the mixer), so no de-duplication is needed here.
+constexpr int AudioSampleRate = 44100;
+constexpr int AudioChannels = 2;
+
+void submitAudio(const void *interleavedStereoS16, int frameCount);
 
 u64 framesWritten();
 u64 framesDropped();

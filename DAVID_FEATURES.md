@@ -60,6 +60,8 @@ notification instead of crashing.
 | `codec` | `mjpeg` | `libx264` gives far smaller files for more CPU |
 | `quality` | `3` | Passed as `-q:v`; lower is better |
 | `fps` | `60` | Encoder frame rate |
+| `acodec` | `pcm_s16le` | Audio codec. Lossless and always valid in AVI |
+| `blockonfull` | `no` | `yes` = never lose frame contents; see below |
 
 ### Why it hooks where it does
 
@@ -97,9 +99,38 @@ frame:
   `LockRect` blocks on it, so DX9 costs a stall per frame. Prefer DX11 on
   Windows while recording.
 
-**Frames are dropped, never blocked on.** A bounded queue (6 frames) feeds a
-writer thread. If the encoder falls behind, the newest frame is dropped and
-counted rather than stalling the render thread.
+**A bounded queue (6 frames) feeds a writer thread**, so encoder I/O never
+happens on the render thread. What occurs when that queue fills is described
+under constant frame rate below.
+
+**Audio is teed off the AICA mixer.** `WriteSample()` in
+`core/oslib/audiostream.cpp` hands the recorder the same 512-frame buffer the
+audio backend receives, so what is recorded is what is heard: interleaved
+stereo s16 at 44100 Hz. No de-duplication is needed under rollback, because
+`muteAudio` short-circuits the mixer *before* `WriteSample` is reached
+(`core/hw/aica/sgc_if.cpp:1468`), so re-simulated frames emit no samples at
+all.
+
+ffmpeg cannot take two raw streams on one stdin, so video is encoded to a temp
+file while audio accumulates as raw PCM, and the two are muxed when the
+capture stops. The mux is a stream copy for video (`-c:v copy`), not a
+re-encode. With no audio captured — recording from the menu, say — the temp
+video simply becomes the output.
+
+**Silence is padded for large audio gaps.** Audio only exists while the
+emulator runs, so menu time, pausing and fast-forward leave holes; without
+filling them everything after plays early. Only gaps beyond 250 ms are
+padded — audio and video legitimately lead and lag each other by a few
+milliseconds, and padding that jitter would insert clicks and accumulate
+drift.
+
+**Output is constant frame rate, always.** One submitted frame is one frame in
+the file, so frame N of the recording is emulated frame N. When the encoder
+falls behind, the frame's *contents* are dropped but its slot is preserved by
+repeating the previous frame — losing the slot would shorten the video against
+the audio and desync everything after it. For rerecording, where every frame's
+real contents matter, set `[record] blockonfull=yes` to stall the caller
+instead; that guarantees exact contents at the cost of frame pacing.
 
 **Each backend submits its native pixel layout** and ffmpeg converts —
 `rgb24` for GL, `rgba`/`bgra` for Vulkan and D3D depending on the swapchain
@@ -124,6 +155,7 @@ start produced a recording that died after one frame.
 | `core/rend/vulkan/vulkan_context.{h,cpp}` | Vulkan capture |
 | `core/rend/dx11/dx11context.{h,cpp}` | DX11 capture |
 | `core/rend/dx9/dxcontext.{h,cpp}` | DX9 capture |
+| `core/oslib/audiostream.cpp` | Audio tap in `WriteSample()` |
 | `core/rend/gui.cpp` | Toolbar toggle |
 | `core/rend/gui_settings.cpp` | Settings panel |
 | `core/lua/lua.cpp` | `flycast.video.*` bindings |
@@ -140,6 +172,10 @@ start produced a recording that died after one frame.
 | Toolbar button, both states | **Verified** | Screenshot, idle and recording |
 | Shutdown flush | **Verified** | SIGTERM mid-capture leaves a playable file |
 | Lua bindings start capture | **Verified** | Driven from `flycast.lua` |
+| Audio: no-audio fallback + temp cleanup | **Verified** | Menu recording yields video-only AVI, temps removed |
+| Audio: mux command | **Verified** | Exact command run with a synthetic 44100 Hz stereo PCM; output carries mjpeg video + pcm_s16le audio, durations aligned (432 frames / 60fps = 7.2s = audio length) |
+| **Audio from a real game** | **NOT verified** | Needs a ROM; no AICA samples are produced at the menu |
+| **Frame-slot preservation under encoder backlog** | **NOT verified** | Logic is in place but backlog was never induced |
 | **Lua `overlay` content in a recording** | **NOT verified** | `lua::overlay()` only fires in-game and no ROM was available. Proven only for ImGui content on the identical draw path into the identical buffer — one inference short of a direct test. |
 
 For the D3D backends, "type-checked" means the code was confirmed to be
@@ -149,15 +185,15 @@ is validated. Runtime behaviour is not.
 
 ### Limitations
 
-- **No audio.** Video only — the encoder is fed raw video frames and nothing
-  else. The AVI is silent.
 - **Lua overlays do not draw during online netplay** at all, so they cannot be
   recorded there. `core/rend/gui.cpp` gates `lua::overlay()` on
   `!settings.network.online`. This is a pre-existing behaviour, not something
   capture introduced.
 - Window resize stops the recording.
-- Constant frame rate is assumed. Fast-forward, pausing and rollback all break
-  that assumption, so long recordings can drift.
+- Fast-forward emits no audio at all (the mixer short-circuits), so a
+  fast-forwarded stretch becomes padded silence.
+- The mux runs at stop, so stopping a long capture is not instant. It is a
+  stream copy, not a re-encode.
 - DX9 stalls once per frame while recording.
 
 ---

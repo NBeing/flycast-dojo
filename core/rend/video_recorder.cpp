@@ -50,10 +50,25 @@ static constexpr size_t MaxQueuedFrames = 6;
 
 static std::mutex mutex;
 static std::condition_variable cond;
+static std::condition_variable spaceCond;
 static std::deque<std::vector<u8>> queue;
+static std::deque<std::vector<s16>> audioQueue;
 static std::thread writerThread;
 
 static FILE *pipeFile;
+static FILE *pcmFile;
+// Paths: video is encoded to a temp file and muxed with the captured PCM into
+// recPath when the capture stops.
+static std::string videoTmpPath;
+static std::string pcmTmpPath;
+static bool blockOnFull;
+static int recFps = 60;
+
+// Written by the writer thread only.
+static u64 videoFramesWritten;
+static u64 audioFramesWritten;
+static u64 pendingDuplicates;
+static std::vector<u8> lastFrame;
 static std::atomic<bool> recording{false};
 static std::atomic<bool> writerRunning{false};
 static std::atomic<u64> written{0};
@@ -101,6 +116,18 @@ static const char *ffmpegPixFmt(PixelFormat format)
 	}
 }
 
+// Inserts a suffix before the extension, so the temp video keeps the final
+// file's container ("out.avi" -> "out.video.avi") and ffmpeg can stream-copy
+// it during the mux instead of re-encoding.
+static std::string insertSuffix(const std::string& path, const char *suffix)
+{
+	const size_t slash = path.find_last_of("/\\");
+	const size_t dot = path.find_last_of('.');
+	if (dot == std::string::npos || (slash != std::string::npos && dot < slash))
+		return path + suffix;
+	return path.substr(0, dot) + suffix + path.substr(dot);
+}
+
 static std::string buildCommand(const std::string& path, int width, int height,
 		PixelFormat format, bool flipVertically)
 {
@@ -125,30 +152,103 @@ static std::string buildCommand(const std::string& path, int width, int height,
 	return std::string(cmd);
 }
 
+static bool writeFrameToPipe(const std::vector<u8>& frame)
+{
+	if (pipeFile == nullptr || frame.empty())
+		return false;
+	if (std::fwrite(frame.data(), 1, frame.size(), pipeFile) != frame.size())
+	{
+		ERROR_LOG(COMMON, "[rec] write to encoder failed, stopping capture");
+		// Let the render thread observe this and shut down cleanly.
+		recording = false;
+		requestStop();
+		return false;
+	}
+	videoFramesWritten++;
+	written++;
+	return true;
+}
+
+// Keeps the audio track anchored to the video timeline.
+//
+// Audio is only produced while the emulator is running, so any stretch with no
+// emulation - sitting in the menu, paused, fast-forwarding - leaves a hole. If
+// those holes are not filled, everything after them plays early.
+//
+// Only large gaps are filled. Audio and video legitimately lead and lag each
+// other by a few milliseconds, and padding that jitter would insert clicks and
+// accumulate drift.
+static void padAudioToVideo()
+{
+	if (pcmFile == nullptr || audioFramesWritten == 0)
+		return;
+	const u64 expected = videoFramesWritten * (u64)AudioSampleRate / (u64)std::max(1, recFps);
+	const u64 tolerance = AudioSampleRate / 4;	// 250 ms
+	if (audioFramesWritten + tolerance >= expected)
+		return;
+
+	u64 missing = expected - audioFramesWritten;
+	static const std::vector<s16> silence(2048 * AudioChannels, 0);
+	while (missing > 0)
+	{
+		const u64 chunk = std::min<u64>(missing, 2048);
+		std::fwrite(silence.data(), sizeof(s16) * AudioChannels, chunk, pcmFile);
+		audioFramesWritten += chunk;
+		missing -= chunk;
+	}
+}
+
+static void drainAudioLocked(std::deque<std::vector<s16>>& pending)
+{
+	for (const auto& chunk : pending)
+	{
+		if (pcmFile == nullptr)
+			break;
+		const size_t frames = chunk.size() / AudioChannels;
+		std::fwrite(chunk.data(), sizeof(s16) * AudioChannels, frames, pcmFile);
+		audioFramesWritten += frames;
+	}
+	pending.clear();
+}
+
 static void writerMain()
 {
 	while (true)
 	{
 		std::vector<u8> frame;
+		std::deque<std::vector<s16>> audioBatch;
+		u64 duplicates = 0;
+		bool haveFrame = false;
 		{
 			std::unique_lock<std::mutex> lock(mutex);
-			cond.wait(lock, [] { return !queue.empty() || !writerRunning; });
-			if (queue.empty() && !writerRunning)
+			cond.wait(lock, [] {
+				return !queue.empty() || !audioQueue.empty() || !writerRunning;
+			});
+			if (queue.empty() && audioQueue.empty() && !writerRunning)
 				break;
-			frame = std::move(queue.front());
-			queue.pop_front();
-		}
-		if (pipeFile != nullptr && !frame.empty())
-		{
-			if (std::fwrite(frame.data(), 1, frame.size(), pipeFile) != frame.size())
+			audioBatch.swap(audioQueue);
+			if (!queue.empty())
 			{
-				ERROR_LOG(COMMON, "[rec] write to encoder failed, stopping capture");
-				// Let the render thread observe this and shut down cleanly.
-				recording = false;
-				requestStop();
+				frame = std::move(queue.front());
+				queue.pop_front();
+				haveFrame = true;
+				duplicates = pendingDuplicates;
+				pendingDuplicates = 0;
 			}
-			else
-				written++;
+		}
+		spaceCond.notify_all();
+
+		drainAudioLocked(audioBatch);
+
+		if (haveFrame)
+		{
+			// Repeat the previous frame for every slot whose contents were
+			// dropped, so the file keeps one frame per emulated frame.
+			for (u64 i = 0; i < duplicates && !lastFrame.empty(); i++)
+				writeFrameToPipe(lastFrame);
+			if (writeFrameToPipe(frame))
+				lastFrame = std::move(frame);
+			padAudioToVideo();
 		}
 	}
 }
@@ -209,7 +309,14 @@ bool start(int width, int height, PixelFormat format, bool flipVertically)
 	if (path.empty())
 		path = defaultOutputPath();
 
-	const std::string cmd = buildCommand(path, width, height, format, flipVertically);
+	// Video is encoded to a temp file and muxed with the captured audio when
+	// the capture stops; ffmpeg cannot take two raw streams on one stdin.
+	videoTmpPath = insertSuffix(path, ".video");
+	pcmTmpPath = insertSuffix(path, ".audio") + ".pcm";
+	blockOnFull = cfgLoadBool("record", "blockonfull", false);
+	recFps = cfgLoadInt("record", "fps", 60);
+
+	const std::string cmd = buildCommand(videoTmpPath, width, height, format, flipVertically);
 	INFO_LOG(COMMON, "[rec] %s", cmd.c_str());
 
 	pipeFile = REC_POPEN(cmd.c_str(), REC_MODE);
@@ -220,12 +327,20 @@ bool start(int width, int height, PixelFormat format, bool flipVertically)
 		return false;
 	}
 
+	pcmFile = std::fopen(pcmTmpPath.c_str(), "wb");
+	if (pcmFile == nullptr)
+		WARN_LOG(COMMON, "[rec] could not open %s - recording will be silent", pcmTmpPath.c_str());
+
 	recWidth = width;
 	recHeight = height;
 	recFormat = format;
 	recPath = path;
 	written = 0;
 	dropped = 0;
+	videoFramesWritten = 0;
+	audioFramesWritten = 0;
+	pendingDuplicates = 0;
+	lastFrame.clear();
 	recording = true;
 	writerRunning = true;
 	writerThread = std::thread(writerMain);
@@ -233,6 +348,57 @@ bool start(int width, int height, PixelFormat format, bool flipVertically)
 	INFO_LOG(COMMON, "[rec] recording %dx%d to %s", width, height, path.c_str());
 	gui_display_notification("Recording started", 2000);
 	return true;
+}
+
+// Combines the encoded video with the captured PCM into the final file. With
+// no audio, the temp video simply becomes the output.
+static void muxOutput(u64 audioFrames)
+{
+	if (videoTmpPath.empty())
+		return;
+
+	auto promoteVideoOnly = [] {
+		std::remove(recPath.c_str());
+		if (std::rename(videoTmpPath.c_str(), recPath.c_str()) != 0)
+		{
+			ERROR_LOG(COMMON, "[rec] could not move %s to %s", videoTmpPath.c_str(), recPath.c_str());
+			recPath = videoTmpPath;	// report where the data actually is
+		}
+		std::remove(pcmTmpPath.c_str());
+	};
+
+	if (audioFrames == 0)
+	{
+		INFO_LOG(COMMON, "[rec] no audio captured, writing video only");
+		promoteVideoOnly();
+		return;
+	}
+
+	const std::string exe = cfgLoadStr("record", "ffmpeg", "ffmpeg");
+	// pcm_s16le is lossless and always valid in AVI; AAC in AVI is not.
+	const std::string acodec = cfgLoadStr("record", "acodec", "pcm_s16le");
+
+	char cmd[1536];
+	// -c:v copy: the video is already encoded, so this is a remux, not a
+	// re-encode. -shortest trims whichever track overran.
+	snprintf(cmd, sizeof(cmd),
+			"\"%s\" -hide_banner -loglevel error -y -i \"%s\" "
+			"-f s16le -ar %d -ac %d -i \"%s\" "
+			"-c:v copy -c:a %s -shortest \"%s\"",
+			exe.c_str(), videoTmpPath.c_str(),
+			AudioSampleRate, AudioChannels, pcmTmpPath.c_str(),
+			acodec.c_str(), recPath.c_str());
+	INFO_LOG(COMMON, "[rec] mux: %s", cmd);
+
+	const int rc = std::system(cmd);
+	if (rc != 0)
+	{
+		WARN_LOG(COMMON, "[rec] mux failed (%d), keeping video without audio", rc);
+		promoteVideoOnly();
+		return;
+	}
+	std::remove(videoTmpPath.c_str());
+	std::remove(pcmTmpPath.c_str());
 }
 
 void stop()
@@ -250,6 +416,7 @@ void stop()
 		writerRunning = false;
 	}
 	cond.notify_all();
+	spaceCond.notify_all();
 	if (writerThread.joinable())
 		writerThread.join();
 
@@ -258,19 +425,30 @@ void stop()
 		REC_PCLOSE(pipeFile);
 		pipeFile = nullptr;
 	}
+	const u64 audioFrames = audioFramesWritten;
+	if (pcmFile != nullptr)
+	{
+		std::fclose(pcmFile);
+		pcmFile = nullptr;
+	}
 	{
 		std::lock_guard<std::mutex> lock(mutex);
 		queue.clear();
+		audioQueue.clear();
 	}
+	lastFrame.clear();
 
-	INFO_LOG(COMMON, "[rec] stopped: %llu frames written, %llu dropped -> %s",
+	muxOutput(audioFrames);
+
+	INFO_LOG(COMMON, "[rec] stopped: %llu frames written, %llu dropped, %llu audio frames -> %s",
 			(unsigned long long)written.load(), (unsigned long long)dropped.load(),
-			recPath.c_str());
+			(unsigned long long)audioFrames, recPath.c_str());
 
 	char msg[256];
-	snprintf(msg, sizeof(msg), "Recording saved (%llu frames%s)",
+	snprintf(msg, sizeof(msg), "Recording saved (%llu frames%s%s)",
 			(unsigned long long)written.load(),
-			dropped > 0 ? ", frames dropped" : "");
+			audioFrames > 0 ? ", with audio" : ", silent",
+			dropped > 0 ? ", frames repeated" : "");
 	gui_display_notification(msg, 4000);
 }
 
@@ -284,16 +462,50 @@ void submitFrame(std::vector<u8>&& rgb)
 	if (!recording)
 		return;
 	{
-		std::lock_guard<std::mutex> lock(mutex);
+		std::unique_lock<std::mutex> lock(mutex);
 		if (queue.size() >= MaxQueuedFrames)
 		{
-			// Encoder is behind. Drop the newest frame rather than stalling the
-			// render thread - frame pacing matters more than a complete capture,
-			// especially during a rollback session.
-			dropped++;
-			return;
+			if (blockOnFull)
+			{
+				// Rerecording mode: keep every frame's real contents, even if
+				// that means stalling the render thread.
+				spaceCond.wait(lock, [] {
+					return queue.size() < MaxQueuedFrames || !recording;
+				});
+				if (!recording)
+					return;
+			}
+			else
+			{
+				// Encoder is behind. Drop this frame's contents but keep its
+				// slot: the writer repeats the previous frame in its place, so
+				// the file stays one frame per emulated frame and the audio
+				// track stays aligned. Stalling the render thread here would
+				// perturb rollback frame pacing.
+				dropped++;
+				pendingDuplicates++;
+				return;
+			}
 		}
 		queue.push_back(std::move(rgb));
+	}
+	cond.notify_one();
+}
+
+void submitAudio(const void *interleavedStereoS16, int frameCount)
+{
+	if (!recording || interleavedStereoS16 == nullptr || frameCount <= 0)
+		return;
+	const s16 *src = (const s16 *)interleavedStereoS16;
+	std::vector<s16> chunk(src, src + (size_t)frameCount * AudioChannels);
+	{
+		std::lock_guard<std::mutex> lock(mutex);
+		// Audio is tiny next to video (~172 KB/s). A bound this generous only
+		// trips if the writer thread has genuinely stalled, in which case
+		// dropping audio is preferable to unbounded growth.
+		if (audioQueue.size() >= 256)
+			return;
+		audioQueue.push_back(std::move(chunk));
 	}
 	cond.notify_one();
 }
