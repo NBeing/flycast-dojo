@@ -75,6 +75,9 @@ public:
 private:
 	void handleDeviceLost();
 	bool checkTextureSupport();
+	void DoSwapCapture();
+	bool CreateCaptureResources();
+	void TermCapture();
 
 	ComPtr<ID3D11Device> pDevice;
 	ComPtr<ID3D11DeviceContext> pDeviceContext;
@@ -95,6 +98,13 @@ private:
 	bool supportedTexFormats[5] {}; // indexed by TextureType enum
 	HMODULE d3dcompilerHandle = NULL;
 	pD3DCompile d3dcompiler = nullptr;
+
+	// Video capture staging. Two textures alternate so the copy issued for
+	// frame N is mapped on frame N+1, by which point the GPU has finished it.
+	static constexpr int CaptureRingSize = 2;
+	ComPtr<ID3D11Texture2D> captureStaging[CaptureRingSize];
+	int captureIndex = 0;
+	int capturePrimed = 0;
 
 	static constexpr UINT VENDOR_INTEL = 0x8086;
 };

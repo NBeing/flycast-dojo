@@ -26,6 +26,8 @@
 #include "emulator.h"
 #include "dx9_driver.h"
 #include "imgui_impl_dx9.h"
+#include "rend/video_recorder.h"
+#include <vector>
 
 DXContext theDXContext;
 
@@ -97,12 +99,120 @@ bool DXContext::init(bool keepCurrentWindow)
 void DXContext::term()
 {
 	NOTICE_LOG(RENDERER, "DX9 Context terminating");
+	videorec::stop();
+	TermCapture();
 	GraphicsContext::instance = nullptr;
 	overlay.term();
 	imguiDriver.reset();
 	pDevice.reset();
 	pD3D.reset();
 	deviceReady = false;
+}
+
+void DXContext::TermCapture()
+{
+	captureSurface.reset();
+}
+
+bool DXContext::CreateCaptureResources()
+{
+	ComPtr<IDirect3DSurface9> backBuffer;
+	if (FAILED(pDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer.get())))
+	{
+		ERROR_LOG(RENDERER, "[rec] could not get back buffer");
+		return false;
+	}
+	D3DSURFACE_DESC desc;
+	if (FAILED(backBuffer->GetDesc(&desc)))
+		return false;
+
+	// GetRenderTargetData requires a system-memory surface of matching size
+	// and format.
+	if (FAILED(pDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format,
+			D3DPOOL_SYSTEMMEM, &captureSurface.get(), nullptr)))
+	{
+		ERROR_LOG(RENDERER, "[rec] could not create capture surface");
+		return false;
+	}
+	return true;
+}
+
+/*
+ * Video capture hook.
+ *
+ * Runs just before IDirect3DDevice9::Present, so the back buffer holds the
+ * composited frame: game, OSD, and anything Lua drew through ImGui.
+ *
+ * D3D9 offers no asynchronous readback, so GetRenderTargetData() is a
+ * synchronous copy and Lock() blocks until it lands. Unlike the GL, Vulkan and
+ * DX11 paths there is no overlap here; capture costs a stall per frame.
+ */
+void DXContext::DoSwapCapture()
+{
+	if (videorec::stopPending())
+	{
+		videorec::stop();
+		TermCapture();
+	}
+
+	if (videorec::startPending())
+	{
+		int w = settings.display.width;
+		int h = settings.display.height;
+		ComPtr<IDirect3DSurface9> backBuffer;
+		if (SUCCEEDED(pDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer.get())))
+		{
+			D3DSURFACE_DESC desc;
+			if (SUCCEEDED(backBuffer->GetDesc(&desc)))
+			{
+				w = desc.Width;
+				h = desc.Height;
+			}
+		}
+		// D3DFMT_X8R8G8B8 is BGRX in memory order; rows are already top-down.
+		if (!videorec::start(w, h, videorec::PixelFormat::BGRA32, false))
+			return;
+	}
+
+	if (!videorec::isRecording() || !pDevice)
+		return;
+
+	ComPtr<IDirect3DSurface9> backBuffer;
+	if (FAILED(pDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer.get())))
+		return;
+	D3DSURFACE_DESC desc;
+	if (FAILED(backBuffer->GetDesc(&desc)))
+		return;
+	if ((int)desc.Width != videorec::width() || (int)desc.Height != videorec::height())
+	{
+		WARN_LOG(RENDERER, "[rec] back buffer resized to %ux%u (recording %dx%d), stopping",
+				desc.Width, desc.Height, videorec::width(), videorec::height());
+		videorec::requestStop();
+		return;
+	}
+
+	// The surface is released on device loss/reset, so reallocate lazily.
+	if (!captureSurface && !CreateCaptureResources())
+	{
+		videorec::requestStop();
+		return;
+	}
+
+	if (FAILED(pDevice->GetRenderTargetData(backBuffer, captureSurface)))
+		return;
+
+	D3DLOCKED_RECT locked;
+	if (SUCCEEDED(captureSurface->LockRect(&locked, nullptr, D3DLOCK_READONLY)))
+	{
+		const size_t rowBytes = (size_t)videorec::width() * 4;
+		std::vector<u8> frame(videorec::frameBytes());
+		const u8 *src = (const u8 *)locked.pBits;
+		// Pitch can exceed the visible row width.
+		for (int y = 0; y < videorec::height(); y++)
+			memcpy(&frame[y * rowBytes], src + (size_t)y * locked.Pitch, rowBytes);
+		captureSurface->UnlockRect();
+		videorec::submitFrame(std::move(frame));
+	}
 }
 
 void DXContext::Present()
@@ -118,6 +228,7 @@ void DXContext::Present()
 		}
 		return;
 	}
+	DoSwapCapture();
 	HRESULT result = pDevice->Present(NULL, NULL, NULL, NULL);
 	// Handle loss of D3D9 device
 	if (result == D3DERR_DEVICELOST)
@@ -208,6 +319,8 @@ void DXContext::resetDevice()
 		dxrenderer = dynamic_cast<D3DRenderer*>(renderer);
 	if (dxrenderer != nullptr)
 		dxrenderer->preReset();
+	// Reallocated lazily on the next captured frame.
+	TermCapture();
 	overlay.term();
     ImGui_ImplDX9_InvalidateDeviceObjects();
     HRESULT hr = pDevice->Reset(&d3dpp);

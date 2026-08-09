@@ -26,6 +26,8 @@
 #include "emulator.h"
 #include "dx11_driver.h"
 #include "imgui_impl_dx11.h"
+#include "rend/video_recorder.h"
+#include <vector>
 #ifdef TARGET_UWP
 #include <windows.h>
 #include <gamingdeviceinformation.h>
@@ -172,6 +174,8 @@ bool DX11Context::init(bool keepCurrentWindow)
 void DX11Context::term()
 {
 	NOTICE_LOG(RENDERER, "DX11 Context terminating");
+	videorec::stop();
+	TermCapture();
 	GraphicsContext::instance = nullptr;
 	overlay.term();
 	samplers.term();
@@ -195,11 +199,143 @@ void DX11Context::term()
 	}
 }
 
+void DX11Context::TermCapture()
+{
+	for (int i = 0; i < CaptureRingSize; i++)
+		captureStaging[i].reset();
+	captureIndex = 0;
+	capturePrimed = 0;
+}
+
+bool DX11Context::CreateCaptureResources()
+{
+	ComPtr<ID3D11Texture2D> backBuffer;
+	if (FAILED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&backBuffer.get())))
+	{
+		ERROR_LOG(RENDERER, "[rec] could not get back buffer");
+		return false;
+	}
+	D3D11_TEXTURE2D_DESC desc;
+	backBuffer->GetDesc(&desc);
+
+	// A staging texture is CPU-readable and cannot be bound to the pipeline.
+	desc.Usage = D3D11_USAGE_STAGING;
+	desc.BindFlags = 0;
+	desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	desc.MiscFlags = 0;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Quality = 0;
+
+	for (int i = 0; i < CaptureRingSize; i++)
+	{
+		if (FAILED(pDevice->CreateTexture2D(&desc, nullptr, &captureStaging[i].get())))
+		{
+			ERROR_LOG(RENDERER, "[rec] could not create capture staging texture");
+			TermCapture();
+			return false;
+		}
+	}
+	captureIndex = 0;
+	capturePrimed = 0;
+	return true;
+}
+
+/*
+ * Video capture hook.
+ *
+ * Runs just before IDXGISwapChain::Present, so the back buffer holds the
+ * composited frame: game, OSD, and anything Lua drew through ImGui.
+ *
+ * The back buffer is copied into one of two staging textures and the other -
+ * issued a frame earlier - is mapped and read out, so the GPU has a full frame
+ * to finish the copy instead of Map() blocking on it.
+ */
+void DX11Context::DoSwapCapture()
+{
+	if (videorec::stopPending())
+	{
+		videorec::stop();
+		TermCapture();
+	}
+
+	if (videorec::startPending())
+	{
+		ComPtr<ID3D11Texture2D> backBuffer;
+		videorec::PixelFormat pixFmt = videorec::PixelFormat::BGRA32;
+		int w = settings.display.width;
+		int h = settings.display.height;
+		if (SUCCEEDED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&backBuffer.get())))
+		{
+			D3D11_TEXTURE2D_DESC desc;
+			backBuffer->GetDesc(&desc);
+			w = desc.Width;
+			h = desc.Height;
+			// DXGI back buffers are commonly B8G8R8A8; R8G8B8A8 is also legal.
+			pixFmt = (desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM
+					|| desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
+					? videorec::PixelFormat::RGBA32 : videorec::PixelFormat::BGRA32;
+		}
+		// D3D rows are already top-down, so no flip.
+		if (!videorec::start(w, h, pixFmt, false))
+			return;
+	}
+
+	if (!videorec::isRecording() || !swapchain)
+		return;
+
+	ComPtr<ID3D11Texture2D> backBuffer;
+	if (FAILED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&backBuffer.get())))
+		return;
+	D3D11_TEXTURE2D_DESC bbDesc;
+	backBuffer->GetDesc(&bbDesc);
+	if ((int)bbDesc.Width != videorec::width() || (int)bbDesc.Height != videorec::height())
+	{
+		WARN_LOG(RENDERER, "[rec] back buffer resized to %ux%u (recording %dx%d), stopping",
+				bbDesc.Width, bbDesc.Height, videorec::width(), videorec::height());
+		videorec::requestStop();
+		return;
+	}
+
+	// Staging is dropped whenever the swapchain buffers are recreated, so it is
+	// reallocated lazily rather than only at start.
+	if (!captureStaging[0] && !CreateCaptureResources())
+	{
+		videorec::requestStop();
+		return;
+	}
+
+	pDeviceContext->CopyResource(captureStaging[captureIndex], backBuffer);
+
+	if (capturePrimed >= CaptureRingSize - 1)
+	{
+		const int readIndex = (captureIndex + 1) % CaptureRingSize;
+		D3D11_MAPPED_SUBRESOURCE mapped;
+		if (SUCCEEDED(pDeviceContext->Map(captureStaging[readIndex], 0, D3D11_MAP_READ, 0, &mapped)))
+		{
+			const size_t rowBytes = (size_t)videorec::width() * 4;
+			std::vector<u8> frame(videorec::frameBytes());
+			const u8 *src = (const u8 *)mapped.pData;
+			// RowPitch can exceed the visible row width.
+			for (int y = 0; y < videorec::height(); y++)
+				memcpy(&frame[y * rowBytes], src + (size_t)y * mapped.RowPitch, rowBytes);
+			pDeviceContext->Unmap(captureStaging[readIndex], 0);
+			videorec::submitFrame(std::move(frame));
+		}
+	}
+	else
+		capturePrimed++;
+
+	captureIndex = (captureIndex + 1) % CaptureRingSize;
+}
+
 void DX11Context::Present()
 {
 	if (!frameRendered)
 		return;
 	frameRendered = false;
+	DoSwapCapture();
 	bool swapOnVSync = !settings.input.fastForwardMode && config::VSync;
 	HRESULT hr;
 	if (!swapchain)
