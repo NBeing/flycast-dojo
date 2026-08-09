@@ -61,6 +61,7 @@ static std::atomic<u64> dropped{0};
 
 static int recWidth;
 static int recHeight;
+static PixelFormat recFormat = PixelFormat::RGB24;
 static std::string recPath;
 
 static std::mutex requestMutex;
@@ -84,7 +85,24 @@ static std::string defaultOutputPath()
 	return get_writable_data_path(name);
 }
 
-static std::string buildCommand(const std::string& path, int width, int height)
+int bytesPerPixel(PixelFormat format)
+{
+	return format == PixelFormat::RGB24 ? 3 : 4;
+}
+
+static const char *ffmpegPixFmt(PixelFormat format)
+{
+	switch (format)
+	{
+	case PixelFormat::RGBA32: return "rgba";
+	case PixelFormat::BGRA32: return "bgra";
+	case PixelFormat::RGB24:
+	default:                  return "rgb24";
+	}
+}
+
+static std::string buildCommand(const std::string& path, int width, int height,
+		PixelFormat format, bool flipVertically)
 {
 	// All of these are overridable in emu.cfg under [record] so a capture can
 	// be retargeted (different codec, container, or an ffmpeg off $PATH)
@@ -95,12 +113,14 @@ static std::string buildCommand(const std::string& path, int width, int height)
 	const int fps             = cfgLoadInt("record", "fps", 60);
 
 	char cmd[1024];
-	// -vf vflip: OpenGL's origin is bottom-left, encoders expect top-down rows.
+	// vflip is only needed where the framebuffer origin is bottom-left (OpenGL);
+	// D3D and Vulkan already hand over top-down rows.
 	snprintf(cmd, sizeof(cmd),
 			"\"%s\" -hide_banner -loglevel error -y "
-			"-f rawvideo -pix_fmt rgb24 -video_size %dx%d -framerate %d -i - "
-			"-vf vflip -c:v %s -q:v %s \"%s\"",
-			exe.c_str(), width, height, fps,
+			"-f rawvideo -pix_fmt %s -video_size %dx%d -framerate %d -i - "
+			"%s-c:v %s -q:v %s \"%s\"",
+			exe.c_str(), ffmpegPixFmt(format), width, height, fps,
+			flipVertically ? "-vf vflip " : "",
 			codec.c_str(), quality.c_str(), path.c_str());
 	return std::string(cmd);
 }
@@ -170,7 +190,7 @@ bool stopPending()
 	return pendingStop;
 }
 
-bool start(int width, int height)
+bool start(int width, int height, PixelFormat format, bool flipVertically)
 {
 	std::string path;
 	{
@@ -189,7 +209,7 @@ bool start(int width, int height)
 	if (path.empty())
 		path = defaultOutputPath();
 
-	const std::string cmd = buildCommand(path, width, height);
+	const std::string cmd = buildCommand(path, width, height, format, flipVertically);
 	INFO_LOG(COMMON, "[rec] %s", cmd.c_str());
 
 	pipeFile = REC_POPEN(cmd.c_str(), REC_MODE);
@@ -202,6 +222,7 @@ bool start(int width, int height)
 
 	recWidth = width;
 	recHeight = height;
+	recFormat = format;
 	recPath = path;
 	written = 0;
 	dropped = 0;
@@ -256,7 +277,7 @@ void stop()
 bool isRecording() { return recording; }
 int width() { return recWidth; }
 int height() { return recHeight; }
-size_t frameBytes() { return (size_t)recWidth * recHeight * 3; }
+size_t frameBytes() { return (size_t)recWidth * recHeight * bytesPerPixel(recFormat); }
 
 void submitFrame(std::vector<u8>&& rgb)
 {

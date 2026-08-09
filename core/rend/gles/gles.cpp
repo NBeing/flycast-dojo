@@ -472,7 +472,9 @@ void do_swap_capture()
 	}
 	if (videorec::startPending())
 	{
-		if (videorec::start(settings.display.width, settings.display.height))
+		// GL's framebuffer origin is bottom-left, so rows come out flipped.
+		if (videorec::start(settings.display.width, settings.display.height,
+				videorec::PixelFormat::RGB24, true))
 			captureCreatePbos(videorec::frameBytes());
 	}
 	if (!videorec::isRecording())

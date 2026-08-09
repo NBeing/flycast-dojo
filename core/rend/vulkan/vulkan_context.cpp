@@ -33,6 +33,7 @@
 #include "oslib/oslib.h"
 #include "vulkan_driver.h"
 #include "rend/transform_matrix.h"
+#include "rend/video_recorder.h"
 
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -542,6 +543,9 @@ void VulkanContext::CreateSwapChain()
 	{
 		device->waitIdle();
 
+		// The staging image and its command buffer are sized for, and allocated
+		// from, resources this function is about to replace.
+		TermCapture();
 		overlay->Term();
 		framebuffers.clear();
 		drawFences.clear();
@@ -623,11 +627,11 @@ void VulkanContext::CreateSwapChain()
 			u32 imageCount = std::max(3u * swapInterval, surfaceCapabilities.minImageCount);
 			if (surfaceCapabilities.maxImageCount != 0)
 				imageCount = std::min(imageCount, surfaceCapabilities.maxImageCount);
-			vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eColorAttachment;
-#ifdef TEST_AUTOMATION
-			// for final screenshot
-			usage |= vk::ImageUsageFlagBits::eTransferSrc;
-#endif
+			// eTransferSrc is required to copy the composited frame out of the
+			// swapchain, for the automation screenshot and for video capture.
+			// It costs nothing when unused, so it is always requested.
+			vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eColorAttachment
+					| vk::ImageUsageFlagBits::eTransferSrc;
 			vk::SwapchainCreateInfoKHR swapChainCreateInfo(vk::SwapchainCreateFlagsKHR(), GetSurface(), imageCount, colorFormat, vk::ColorSpaceKHR::eSrgbNonlinear,
 					swapchainExtent, 1, usage, vk::SharingMode::eExclusive, 0, nullptr, preTransform, vk::CompositeAlphaFlagBitsKHR::eOpaque, swapchainPresentMode, true, nullptr);
 
@@ -855,6 +859,7 @@ void VulkanContext::Present() noexcept
 	{
 		try {
 			DoSwapAutomation();
+			DoSwapCapture();
 			presentQueue.presentKHR(vk::PresentInfoKHR(1, &(*renderCompleteSemaphores[currentSemaphore]), 1, &(*swapChain), &currentImage));
 			currentSemaphore = (currentSemaphore + 1) % imageViews.size();
 
@@ -992,6 +997,8 @@ void VulkanContext::term()
             }
         }
     }
+	videorec::stop();
+	TermCapture();
 	overlay.reset();
 	textureCache.reset();
 	ShaderCompiler::Term();
@@ -1028,6 +1035,195 @@ void VulkanContext::term()
 #endif
 #endif
 	instance.reset();
+}
+
+void VulkanContext::TermCapture()
+{
+	if (captureInFlight && captureFence)
+		(void)device->waitForFences(1, &captureFence.get(), true, UINT64_MAX);
+	captureInFlight = false;
+	captureFence.reset();
+	captureCmdBuffer.reset();
+	captureImage.reset();
+	captureMemory.reset();
+}
+
+// A blit can convert formats, a plain image copy cannot. Reports whether the
+// swapchain image can be blitted into a linear R8G8B8A8 staging image.
+bool VulkanContext::DetermineCaptureBlit()
+{
+	vk::FormatProperties properties;
+	physicalDevice.getFormatProperties(colorFormat, &properties);
+	captureBlit = (bool)(properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitSrc);
+	physicalDevice.getFormatProperties(vk::Format::eR8G8B8A8Unorm, &properties);
+	if (!(properties.linearTilingFeatures & vk::FormatFeatureFlagBits::eBlitDst))
+		captureBlit = false;
+	return captureBlit;
+}
+
+bool VulkanContext::CreateCaptureResources()
+{
+	try {
+		DetermineCaptureBlit();
+		vk::ImageCreateInfo imageCreateInfo(vk::ImageCreateFlags(), vk::ImageType::e2D, vk::Format::eR8G8B8A8Unorm,
+				vk::Extent3D(width, height, 1), 1, 1,
+				vk::SampleCountFlagBits::e1, vk::ImageTiling::eLinear, vk::ImageUsageFlagBits::eTransferDst,
+				vk::SharingMode::eExclusive, nullptr, vk::ImageLayout::eUndefined);
+		captureImage = device->createImageUnique(imageCreateInfo);
+
+		vk::MemoryRequirements memReq = device->getImageMemoryRequirements(*captureImage);
+		u32 memoryType = findMemoryType(physicalDevice.getMemoryProperties(), memReq.memoryTypeBits,
+				vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
+		captureMemory = device->allocateMemoryUnique(vk::MemoryAllocateInfo(memReq.size, memoryType));
+		device->bindImageMemory(*captureImage, *captureMemory, 0);
+
+		vk::ImageSubresource subresource(vk::ImageAspectFlagBits::eColor, 0, 0);
+		vk::SubresourceLayout layout;
+		device->getImageSubresourceLayout(*captureImage, &subresource, &layout);
+		captureRowPitch = layout.rowPitch;
+		captureOffset = layout.offset;
+
+		captureCmdBuffer = std::move(device->allocateCommandBuffersUnique(
+				vk::CommandBufferAllocateInfo(*commandPools.back(), vk::CommandBufferLevel::ePrimary, 1)).front());
+		captureFence = device->createFenceUnique(vk::FenceCreateInfo());
+		captureInFlight = false;
+		return true;
+	} catch (const vk::SystemError& e) {
+		ERROR_LOG(RENDERER, "[rec] capture staging allocation failed: %s", e.what());
+		TermCapture();
+		return false;
+	}
+}
+
+/*
+ * Video capture hook.
+ *
+ * Runs immediately before vkQueuePresentKHR, so the swapchain image holds the
+ * fully composited frame - game, OSD, and anything Lua drew through ImGui.
+ *
+ * The swapchain image is blitted into a linear, host-visible image which is
+ * mapped and copied out. Rather than stalling the queue with waitIdle(), the
+ * copy submitted for frame N is collected at the start of frame N+1, so the
+ * transfer overlaps with a frame of rendering.
+ */
+void VulkanContext::DoSwapCapture()
+{
+	if (videorec::stopPending())
+	{
+		videorec::stop();
+		TermCapture();
+	}
+
+	if (videorec::startPending())
+	{
+		DetermineCaptureBlit();
+		// A blit converts between formats; a plain copy does not. When blitting
+		// isn't available the bytes keep the swapchain's own channel order, so
+		// tell the encoder about it instead of swizzling on the CPU.
+		const videorec::PixelFormat pixFmt =
+				(!captureBlit && colorFormat == vk::Format::eB8G8R8A8Unorm)
+				? videorec::PixelFormat::BGRA32 : videorec::PixelFormat::RGBA32;
+
+		if (!videorec::start(width, height, pixFmt, false))
+			return;
+	}
+
+	if (!videorec::isRecording())
+		return;
+
+	// A resize invalidates the staging image and the encoder's frame size.
+	if ((u32)videorec::width() != width || (u32)videorec::height() != height)
+	{
+		WARN_LOG(RENDERER, "[rec] swapchain resized to %dx%d (recording %dx%d), stopping",
+				width, height, videorec::width(), videorec::height());
+		videorec::requestStop();
+		return;
+	}
+
+	// The staging image is torn down whenever the swapchain is rebuilt - which
+	// happens routinely, e.g. on the first vsync-mode settle - so it has to be
+	// reallocated lazily rather than only at start.
+	if (!captureImage && !CreateCaptureResources())
+	{
+		videorec::requestStop();
+		return;
+	}
+
+	try {
+		// Collect the previous frame's copy before overwriting the staging image.
+		if (captureInFlight)
+		{
+			(void)device->waitForFences(1, &captureFence.get(), true, UINT64_MAX);
+			device->resetFences(1, &captureFence.get());
+			captureInFlight = false;
+
+			const u8 *mapped = (const u8 *)device->mapMemory(*captureMemory, 0, VK_WHOLE_SIZE) + captureOffset;
+			const size_t rowBytes = (size_t)width * 4;
+			std::vector<u8> frame(videorec::frameBytes());
+			// rowPitch may exceed the visible row width, so copy row by row.
+			for (u32 y = 0; y < height; y++)
+				memcpy(&frame[y * rowBytes], mapped + y * captureRowPitch, rowBytes);
+			device->unmapMemory(*captureMemory);
+			videorec::submitFrame(std::move(frame));
+		}
+
+		vk::Image srcImage = device->getSwapchainImagesKHR(*swapChain)[currentImage];
+		vk::CommandBuffer cmd = *captureCmdBuffer;
+		cmd.reset(vk::CommandBufferResetFlags());
+		cmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+		vk::ImageMemoryBarrier barrier(vk::AccessFlags(), vk::AccessFlagBits::eTransferWrite,
+				vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+				*captureImage, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+		cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer,
+				vk::DependencyFlags(), nullptr, nullptr, barrier);
+
+		barrier = vk::ImageMemoryBarrier(vk::AccessFlagBits::eMemoryRead, vk::AccessFlagBits::eTransferRead,
+				vk::ImageLayout::ePresentSrcKHR, vk::ImageLayout::eTransferSrcOptimal,
+				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+				srcImage, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+		cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer,
+				vk::DependencyFlags(), nullptr, nullptr, barrier);
+
+		if (captureBlit)
+		{
+			vk::Offset3D blitSize(width, height, 1);
+			vk::ImageBlit imageBlit(
+					vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1), { vk::Offset3D(), blitSize },
+					vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1), { vk::Offset3D(), blitSize });
+			cmd.blitImage(srcImage, vk::ImageLayout::eTransferSrcOptimal, *captureImage,
+					vk::ImageLayout::eTransferDstOptimal, imageBlit, vk::Filter::eNearest);
+		}
+		else
+		{
+			vk::ImageCopy imageCopy(vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1), vk::Offset3D(),
+					vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1), vk::Offset3D(), { width, height, 1 });
+			cmd.copyImage(srcImage, vk::ImageLayout::eTransferSrcOptimal, *captureImage,
+					vk::ImageLayout::eTransferDstOptimal, imageCopy);
+		}
+
+		barrier = vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eMemoryRead,
+				vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eGeneral,
+				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+				*captureImage, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+		cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer,
+				vk::DependencyFlags(), nullptr, nullptr, barrier);
+
+		barrier = vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eMemoryRead,
+				vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::ePresentSrcKHR,
+				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+				srcImage, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+		cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer,
+				vk::DependencyFlags(), nullptr, nullptr, barrier);
+		cmd.end();
+
+		graphicsQueue.submit(vk::SubmitInfo(nullptr, nullptr, cmd, nullptr), *captureFence);
+		captureInFlight = true;
+	} catch (const vk::SystemError& e) {
+		ERROR_LOG(RENDERER, "[rec] capture failed: %s", e.what());
+		videorec::requestStop();
+	}
 }
 
 void VulkanContext::DoSwapAutomation()

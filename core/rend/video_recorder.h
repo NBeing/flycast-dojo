@@ -37,6 +37,18 @@
 namespace videorec
 {
 
+// Pixel layout submitted by a backend. Each maps to an ffmpeg -pix_fmt, so
+// backends hand over their native swapchain layout and the encoder converts
+// instead of the CPU.
+enum class PixelFormat
+{
+	RGB24,		// OpenGL glReadPixels(GL_RGB)
+	RGBA32,		// Vulkan eR8G8B8A8Unorm
+	BGRA32,		// D3D9 X8R8G8B8, DXGI B8G8R8A8
+};
+
+int bytesPerPixel(PixelFormat format);
+
 // --- Requests. Safe to call from any thread (UI, Lua). ---------------------
 // The renderer applies these on its next frame, where the framebuffer
 // dimensions are known.
@@ -48,19 +60,22 @@ void toggle();
 bool startPending();
 bool stopPending();
 // Opens the encoder at the given size using the path stashed by requestStart().
+// `flipVertically` is for backends whose framebuffer origin is bottom-left
+// (OpenGL); D3D and Vulkan submit top-down rows and pass false.
 // Returns false and clears the request if the encoder could not be launched.
-bool start(int width, int height);
+bool start(int width, int height, PixelFormat format, bool flipVertically);
 void stop();
 
 bool isRecording();
 int width();
 int height();
-// Bytes in one RGB24 frame at the recording size.
+// Bytes in one frame at the recording size and format.
 size_t frameBytes();
 
-// Hands a finished RGB24 frame to the writer thread. Takes ownership.
-// Frames are dropped (and counted) if the encoder cannot keep up.
-void submitFrame(std::vector<u8>&& rgb);
+// Hands a finished frame to the writer thread, in the format passed to
+// start(). Takes ownership. Frames are dropped (and counted) if the encoder
+// cannot keep up.
+void submitFrame(std::vector<u8>&& frame);
 
 u64 framesWritten();
 u64 framesDropped();

@@ -140,6 +140,10 @@ private:
 	bool InitInstance(const char** extensions, uint32_t extensions_count);
 	void InitImgui();
 	void DoSwapAutomation();
+	void DoSwapCapture();
+	bool CreateCaptureResources();
+	bool DetermineCaptureBlit();
+	void TermCapture();
 	void DrawFrame(vk::ImageView imageView, const vk::Extent2D& extent, float aspectRatio);
 	vk::SurfaceKHR GetSurface() const { return *surface; }
 
@@ -198,6 +202,18 @@ private:
 	std::vector<vk::UniqueSemaphore> renderCompleteSemaphores;
 	std::vector<vk::UniqueSemaphore> imageAcquiredSemaphores;
 	u32 currentSemaphore = 0;
+
+	// Video capture staging. The copy for frame N is collected at the start of
+	// frame N+1, so the GPU gets a full frame to complete it instead of the
+	// queue being stalled inline.
+	vk::UniqueImage captureImage;
+	vk::UniqueDeviceMemory captureMemory;
+	vk::UniqueCommandBuffer captureCmdBuffer;
+	vk::UniqueFence captureFence;
+	vk::DeviceSize captureRowPitch = 0;
+	vk::DeviceSize captureOffset = 0;
+	bool captureBlit = false;
+	bool captureInFlight = false;
 
 	vk::UniquePipelineCache pipelineCache;
 
