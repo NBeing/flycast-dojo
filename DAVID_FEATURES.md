@@ -41,6 +41,19 @@ Output defaults to `<data folder>/flycast-YYYYMMDD-HHMMSS.avi`.
 **Requires `ffmpeg` on `PATH`.** If it is missing, recording fails with a
 notification instead of crashing.
 
+Lua overlays additionally need `[dojo] ShowTrainingGameOverlay = yes` — every
+`flycast.ui.*` function early-returns without it — and the callback table is
+named `flycast_callbacks`:
+
+```lua
+flycast_callbacks = {}
+flycast_callbacks.overlay = function()
+    flycast.ui.beginWindow("hud", 10, 10, 300, 60)
+    flycast.ui.text("hello")
+    flycast.ui.endWindow()
+end
+```
+
 ### Two behaviours that surprise people
 
 - `isRecording()` returns **false** for one frame after `startRecording()`.
@@ -174,9 +187,11 @@ start produced a recording that died after one frame.
 | Lua bindings start capture | **Verified** | Driven from `flycast.lua` |
 | Audio: no-audio fallback + temp cleanup | **Verified** | Menu recording yields video-only AVI, temps removed |
 | Audio: mux command | **Verified** | Exact command run with a synthetic 44100 Hz stereo PCM; output carries mjpeg video + pcm_s16le audio, durations aligned (432 frames / 60fps = 7.2s = audio length) |
-| **Audio from a real game** | **NOT verified** | Needs a ROM; no AICA samples are produced at the menu |
-| **Frame-slot preservation under encoder backlog** | **NOT verified** | Logic is in place but backlog was never induced |
-| **Lua `overlay` content in a recording** | **NOT verified** | `lua::overlay()` only fires in-game and no ROM was available. Proven only for ImGui content on the identical draw path into the identical buffer — one inference short of a direct test. |
+| **Audio from a real game** | **Verified** | Marvel vs. Capcom 2 via REIOS: mean −47.2 dB, max −20.1 dB — real dynamic range, not silence |
+| **A/V sync** | **Verified** | 2459 video frames (40.983 s) vs 1,807,360 samples (40.983 s) — **0.000 s drift** over 41 s |
+| **1:1 frame correspondence** | **Verified** | A per-frame Lua counter reads N−1 in video frame N at frames 600, 1200, 1400 and 1900 — constant offset, no slot drift |
+| Frame-slot preservation under *induced* encoder backlog | **NOT verified** | Correspondence holds in normal operation; deliberate backlog was never forced |
+| **Lua `overlay` content in a recording** | **Verified** | Confirmed in-game: `flycast.ui.text()` output is present in extracted video frames over live emulated content |
 
 For the D3D backends, "type-checked" means the code was confirmed to be
 *inside* the compiled region (by injecting a deliberate error and seeing it

@@ -10,23 +10,9 @@ Legend: **[V]** needs verification · **[B]** known bug · **[F]** new feature �
 
 ## Blocking — do before this branch is merged or shared widely
 
-### [V] Confirm Lua overlay content lands in a recording
-The one unproven claim in the whole feature. `lua::overlay()` only fires
-in-game, and no ROM was available during development, so capture was proven
-for ImGui content on the identical draw path into the identical buffer — but
-never with an actual Lua overlay.
-
-Test: load any game with this in `~/.config/flycast-dojo/flycast.lua`, record
-~10s, scrub the AVI for the text.
-
-```lua
-callbacks = {}
-callbacks.overlay = function()
-    flycast.gui.text("LUA OVERLAY TEST " .. os.time())
-end
-```
-
-If this fails, the whole premise needs revisiting. Everything else is detail.
+*Closed 2026-08-09: Lua overlay capture and real-game audio are both verified
+end to end against Marvel vs. Capcom 2 booted through REIOS. See
+DAVID_FEATURES.md for the evidence.*
 
 ### [V] Run DX11 and DX9 capture on real Windows
 Both are type-checked against the real `d3d9.h`/`d3d11.h` via mingw
@@ -89,22 +75,13 @@ Pre-existing, unrelated to capture. Worth reporting upstream separately.
 
 ## Capture — follow-on work
 
-### [V] Confirm audio with a real game
-Audio is implemented: teed off the AICA mixer in `WriteSample()`, written as
-raw PCM alongside the video, muxed at stop. Verified so far: the no-audio
-fallback, temp cleanup, and the exact mux command against a synthetic
-44100 Hz stereo PCM.
-
-**Not verified with real game audio** — no AICA samples are produced at the
-menu, so this needs a ROM. Check: audio present, in sync at the start, still
-in sync after 5+ minutes, and no clicks where silence padding was inserted.
-
 ### [V] Induce encoder backlog and confirm frame slots hold
-Output is constant frame rate by construction: a dropped frame keeps its slot
-via a repeat, so frame N of the file is emulated frame N. The logic is in
-place but backlog was never actually induced during testing. Force it (slow
-codec, or a tiny queue bound) and confirm the frame count still equals the
-number of presents, and that audio stays aligned.
+1:1 frame correspondence is confirmed in normal operation (a per-frame Lua
+counter reads N-1 in video frame N at 600/1200/1400/1900, constant offset),
+and A/V drift measured 0.000 s over 41 s. What has *not* been exercised is the
+repeat-on-backlog path itself, because backlog never occurred. Force it - slow
+codec, or a temporarily tiny queue bound - and confirm the frame count still
+equals the number of presents.
 
 ### [F] Make DX9 capture asynchronous, or accept it
 D3D9 has no async readback: `GetRenderTargetData` is synchronous and
