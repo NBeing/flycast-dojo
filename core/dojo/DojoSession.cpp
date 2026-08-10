@@ -3,6 +3,8 @@
 #include <input/gamepad_device.h>
 #include "hw/sh4/sh4_mem.h"
 #include "dojo/DojoFile.hpp"
+#include "dojo/ReplayManager.hpp"
+#include "rend/gui.h"
 
 DojoSession::DojoSession()
 {
@@ -50,6 +52,7 @@ void DojoSession::Init()
 	net_coin_press = false;
 
 	replay_filename = "";
+	recording_replay = false;
 
 	host_status = 0;//"IDLE";
 
@@ -308,7 +311,10 @@ void DojoSession::resume()
 void DojoSession::StartSession(int session_delay, int session_ppf, int session_num_bf)
 {
 	if (config::RecordMatches && !dojo.PlayMatch && !config::Receiving)
+	{
 		CreateReplayFile();
+		recording_replay = true;
+	}
 
 	FillDelay(session_delay);
 	delay = session_delay;
@@ -346,7 +352,7 @@ void DojoSession::FillDelay(int fill_delay)
 			net_inputs[j][new_index] = new_frame;
 			net_input_keys[j].insert(new_index);
 
-			if (config::RecordMatches && !dojo.PlayMatch)
+			if (dojo.recording_replay && !dojo.PlayMatch)
 			{
 				if (FrameNumber >= SkipFrame ||
 					settings.platform.system != DC_PLATFORM_NAOMI)
@@ -676,7 +682,7 @@ u16 DojoSession::ApplyNetInputs(PlainJoystickState* pjs, u16 buttons, u32 port)
 
 	std::string to_apply(this_frame);
 
-	if (config::RecordMatches && !dojo.PlayMatch)
+	if (dojo.recording_replay && !dojo.PlayMatch)
 	{
 		if (GetEffectiveFrameNumber((u8*)this_frame.data()) >= SkipFrame ||
 			settings.platform.system != DC_PLATFORM_NAOMI)
@@ -784,6 +790,42 @@ std::string DojoSession::CreateReplayFile(std::string rom_name, int version)
 		AppendHeaderToReplayFile(rom_name);
 
 	return filename;
+}
+
+bool DojoSession::StartReplayRecording(const std::string& displayName)
+{
+	if (recording_replay)
+		return true;
+	if (PlayMatch)
+	{
+		WARN_LOG(NETWORK, "[replay] refusing to record while playing a replay back");
+		return false;
+	}
+
+	CreateReplayFile();
+	if (replay_filename.empty())
+		return false;
+
+	// Give it a name up front. The file path is left alone so anything already
+	// referencing it - transmission, spectating - stays valid.
+	replaymgr::ReplayInfo info = replaymgr::describe(replay_filename);
+	if (!displayName.empty())
+		info.displayName = displayName;
+	replaymgr::writeMetadata(info);
+
+	recording_replay = true;
+	INFO_LOG(NETWORK, "[replay] recording to %s", replay_filename.c_str());
+	gui_display_notification("Replay recording started", 2000);
+	return true;
+}
+
+void DojoSession::StopReplayRecording()
+{
+	if (!recording_replay)
+		return;
+	recording_replay = false;
+	INFO_LOG(NETWORK, "[replay] stopped recording %s", replay_filename.c_str());
+	gui_display_notification("Replay saved", 3000);
 }
 
 void DojoSession::AppendHeaderToReplayFile(std::string rom_name)
@@ -2006,7 +2048,7 @@ u16 DojoSession::ApplyOfflineInputs(PlainJoystickState* pjs, u16 buttons, u32 po
 		std::string p1_frame = net_inputs[0].at(FrameNumber + delay);
 		std::string p2_frame = net_inputs[1].at(FrameNumber + delay);
 
-		if (config::RecordMatches && !config::GGPOEnable)
+		if (recording_replay && !config::GGPOEnable)
 		{
 			AppendToReplayFile(p1_frame);
 			AppendToReplayFile(p2_frame);

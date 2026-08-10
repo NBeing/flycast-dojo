@@ -195,6 +195,15 @@ public:
 
 	std::string CreateReplayFile();
 	std::string CreateReplayFile(std::string rom_name, int version=1);
+
+	// Manual replay recording. Independent of config::RecordMatches, which only
+	// controls whether a session starts recording automatically; once running,
+	// frames are appended while recording_replay is set, whatever started it.
+	// An empty name gets a timestamped default.
+	bool StartReplayRecording(const std::string& displayName = "");
+	void StopReplayRecording();
+	bool IsRecordingReplay() const { return recording_replay; }
+	std::atomic<bool> recording_replay{ false };
 	void AppendHeaderToReplayFile(std::string rom_name="");
 	void AppendPlayerInfoToReplayFile();
 	void AppendPlayerWinToReplay(int player);

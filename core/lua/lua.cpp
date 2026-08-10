@@ -610,6 +610,22 @@ static void luaRegister(lua_State *L)
 					return videorec::outputPath();
 				}))
 			.endNamespace()
+
+			// Input-replay recording, independent of the video capture above.
+	  		.beginNamespace("replay")
+				.addFunction("startRecording", std::function<bool(std::string)>([](std::string name) {
+					return dojo.StartReplayRecording(name);
+				}))
+				.addFunction("stopRecording", std::function<void()>([]() {
+					dojo.StopReplayRecording();
+				}))
+				.addFunction("isRecording", std::function<bool()>([]() {
+					return dojo.IsRecordingReplay();
+				}))
+				.addFunction("currentPath", std::function<std::string()>([]() {
+					return dojo.replay_filename;
+				}))
+			.endNamespace()
 #endif
 
 	  		.beginNamespace("config")

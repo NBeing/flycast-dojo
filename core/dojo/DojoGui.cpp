@@ -1,5 +1,8 @@
 #include "DojoGui.hpp"
 #include <hw/naomi/naomi_cart.h>
+#include "dojo/ReplayManager.hpp"
+#include <cstring>
+
 namespace fs = ghc::filesystem;
 
 void DojoGui::gui_display_bios_rom_warning(float scaling)
@@ -2457,13 +2460,40 @@ void DojoGui::gui_display_paused(float scaling)
 	show_playback_menu(scaling, true);
 }
 
+// Replay library browser.
+//
+// Metadata comes from replaymgr, which reads a JSON sidecar and falls back to
+// the legacy "game__date__host__guest__" filename convention. Nothing here
+// parses filenames, so a replay may be named anything.
+static std::string replay_rename_target;
+static char replay_rename_buf[128];
+static std::string replay_delete_target;
+static std::string replay_import_selection;
+
+static bool replay_import_callback(bool cancelled, std::string selection)
+{
+	if (!cancelled)
+		replay_import_selection = selection;
+	return true;
+}
+
+static std::string sanitize_filename(const std::string& name)
+{
+	std::string out;
+	for (char c : name)
+		out += (strchr("/\\:*?\"<>|", c) != nullptr) ? '_' : c;
+	if (out.empty())
+		out = "replay";
+	return out;
+}
+
 void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_list)
 {
 	ImGui::SetNextWindowPos(ImVec2(0, 0));
 	ImGui::SetNextWindowSize(ImVec2(settings.display.width, settings.display.height));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
 
-	ImGui::Begin("Replays", NULL, /*ImGuiWindowFlags_AlwaysAutoResize |*/ ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+	ImGui::Begin("Replays", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 	ImVec2 normal_padding = ImGui::GetStyle().FramePadding;
 
 	if (ImGui::Button("Done", ImVec2(100 * scaling, 30 * scaling)))
@@ -2475,103 +2505,195 @@ void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_lis
 			gui_state = GuiState::Main;
 	}
 
+	ImGui::SameLine();
+	if (ImGui::Button("Import...", ImVec2(110 * scaling, 30 * scaling)))
+		ImGui::OpenPopup("Import Replay");
+
+	// Manual recording control. Only meaningful with a game running, and never
+	// while a replay is being played back.
+	if (game_started && !dojo.PlayMatch)
+	{
+		ImGui::SameLine();
+		const bool rec = dojo.IsRecordingReplay();
+		if (rec)
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.32f, 0.32f, 1.f));
+		if (ImGui::Button(rec ? "Stop Recording" : "Record Replay", ImVec2(160 * scaling, 30 * scaling)))
+		{
+			if (rec)
+				dojo.StopReplayRecording();
+			else
+				dojo.StartReplayRecording("");
+		}
+		if (rec)
+			ImGui::PopStyleColor();
+	}
+
 	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Record All Sessions").x - ImGui::GetStyle().FramePadding.x * 4.0f - ImGui::GetStyle().ItemSpacing.x * 4);
 
 	OptionCheckbox("Record All Sessions", config::RecordMatches);
 	ImGui::SameLine();
 	ShowHelpMarker("Record all netplay sessions to a local file");
 
-	ImGui::Columns(3, "mycolumns"); // 4-ways, with border
+	// Import: pick a bundle produced by Export.
+	if (ImGui::BeginPopupModal("Import Replay", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		replay_import_selection.clear();
+		select_file_popup("Select a replay bundle", &replay_import_callback, true, "zip");
+		if (!replay_import_selection.empty())
+		{
+			const std::string imported = replaymgr::importBundle(replay_import_selection);
+			gui_display_notification(imported.empty() ? "Import failed"
+					: "Replay imported", 4000);
+			replay_import_selection.clear();
+			ImGui::CloseCurrentPopup();
+		}
+		if (ImGui::Button("Cancel", ImVec2(100 * scaling, 30 * scaling)))
+			ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+	}
+
 	ImGui::Separator();
+
+	const std::vector<replaymgr::ReplayInfo> replays = replaymgr::list();
+	if (replays.empty())
+	{
+		ImGui::Spacing();
+		ImGui::TextDisabled("No replays yet. Enable \"Record All Sessions\", or start one from the Record button.");
+	}
+
+	ImGui::BeginChild("replay_list", ImVec2(0, 0), true);
+	ImGui::Columns(5, "replaycolumns", false);
+	const float actionsWidth = 230 * scaling;
+	ImGui::SetColumnWidth(4, actionsWidth);
 	ImGui::Text("Date"); ImGui::NextColumn();
+	ImGui::Text("Name"); ImGui::NextColumn();
 	ImGui::Text("Players"); ImGui::NextColumn();
 	ImGui::Text("Game"); ImGui::NextColumn();
+	ImGui::Text(""); ImGui::NextColumn();
 	ImGui::Separator();
 
-#if defined(__WIN32__)
-	fs::path path = fs::current_path() / "replays";
-#else
-	fs::path path = get_writable_data_path("") + "/replays";
-#endif
-
-	if (!ghc::filesystem::exists(path))
-		ghc::filesystem::create_directory(path);
-
-	std::map<std::string, std::string> replays;
-	for (auto& p : fs::directory_iterator(path))
+	for (const auto& replay : replays)
 	{
-		std::string replay_path = p.path().string();
+		ImGui::PushID(replay.path.c_str());
 
-		if (stringfix::get_extension(replay_path) == "flyreplay" ||
-			stringfix::get_extension(replay_path) == "flyr")
+		bool is_selected = false;
+		if (ImGui::Selectable(replay.date.c_str(), &is_selected, ImGuiSelectableFlags_SpanAllColumns))
 		{
-
-			std::string s = replay_path;
-			std::string delimiter = "__";
-
-			std::vector<std::string> replay_entry;
-
-			size_t pos = 0;
-			std::string token;
-			while ((pos = s.find(delimiter)) != std::string::npos) {
-				token = s.substr(0, pos);
-				//std::cout << token << std::endl;
-				replay_entry.push_back(token);
-				s.erase(0, pos + delimiter.length());
-			}
-
-#ifdef _WIN32
-			std::string game_name = replay_entry[0].substr(replay_entry[0].rfind("\\") + 1);
-#else
-			std::string game_name = replay_entry[0].substr(replay_entry[0].rfind("/") + 1);
-#endif
-
-			std::string date = replay_entry[1];
-			std::string host_player = replay_entry[2];
-			std::string guest_player = replay_entry[3];
-
-			std::string game_path = "";
-
-			std::vector<GameMedia> games = game_list;
-			std::vector<GameMedia>::iterator it = std::find_if(games.begin(), games.end(),
-				[&](GameMedia gm) { return (gm.name.rfind(game_name, 0) == 0); });
-
-			if (it != games.end())
-			{
+			// Resolve the rom this replay belongs to.
+			std::string game_path;
+			auto it = std::find_if(game_list.begin(), game_list.end(),
+				[&](const GameMedia& gm) { return (gm.name.rfind(replay.game, 0) == 0); });
+			if (it != game_list.end())
 				game_path = it->path;
-			}
 
-			bool is_selected = false;
-			if (ImGui::Selectable(date.c_str(), &is_selected, ImGuiSelectableFlags_SpanAllColumns))
+			if (game_path.empty())
+			{
+				gui_display_notification("Game for this replay was not found", 5000);
+			}
+			else
 			{
 				if (cfgLoadBool("dojo", "Receiving", false))
 					gui_state = GuiState::StreamWait;
 
-				dojo.ReplayFilename = replay_path;
+				dojo.ReplayFilename = replay.path;
 				dojo.PlayMatch = true;
-
 				gui_state = GuiState::Closed;
-				//dojo.StartDojoSession();
 
-				if (guest_player.empty())
+				if (replay.guestPlayer.empty())
 					dojo.offline_replay = true;
 
 				config::DojoEnable = true;
 				gui_start_game(game_path);
 			}
-			ImGui::NextColumn();
-
-			std::string players = host_player;
-			if (!guest_player.empty())
-				players += " vs " + guest_player;
-
-			ImGui::TextUnformatted(players.c_str());  ImGui::NextColumn();
-			ImGui::TextUnformatted(game_name.c_str());  ImGui::NextColumn();
 		}
-	}
+		if (ImGui::IsItemHovered() && !replay.notes.empty())
+			ImGui::SetTooltip("%s", replay.notes.c_str());
+		ImGui::NextColumn();
 
-    ImGui::End();
-    ImGui::PopStyleVar();
+		ImGui::TextUnformatted(replay.displayName.c_str()); ImGui::NextColumn();
+		ImGui::TextUnformatted(replay.playersLabel().c_str()); ImGui::NextColumn();
+		ImGui::TextUnformatted(replay.game.c_str()); ImGui::NextColumn();
+
+		if (ImGui::Button("Rename"))
+		{
+			replay_rename_target = replay.path;
+			strncpy(replay_rename_buf, replay.displayName.c_str(), sizeof(replay_rename_buf) - 1);
+			replay_rename_buf[sizeof(replay_rename_buf) - 1] = '\0';
+			ImGui::OpenPopup("Rename Replay");
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Export"))
+		{
+			const std::string dir = replaymgr::replaysDir() + "/exports";
+			ghc::filesystem::create_directories(dir);
+			const std::string dest = dir + "/" + sanitize_filename(replay.displayName) + ".zip";
+			if (replaymgr::exportBundle(replay.path, dest))
+			{
+				char msg[512];
+				snprintf(msg, sizeof(msg), "Exported to replays/exports/%s.zip",
+						sanitize_filename(replay.displayName).c_str());
+				gui_display_notification(msg, 5000);
+			}
+			else
+				gui_display_notification("Export failed", 4000);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Delete"))
+		{
+			replay_delete_target = replay.path;
+			ImGui::OpenPopup("Delete Replay");
+		}
+
+		// Rename: changes the display name only, so the file path stays valid
+		// for anything already referencing it.
+		if (ImGui::BeginPopupModal("Rename Replay", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Name this replay:");
+			ImGui::InputText("##replayname", replay_rename_buf, sizeof(replay_rename_buf));
+			ImGui::Spacing();
+			if (ImGui::Button("Save", ImVec2(100 * scaling, 30 * scaling)))
+			{
+				replaymgr::setDisplayName(replay_rename_target, replay_rename_buf);
+				replay_rename_target.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(100 * scaling, 30 * scaling)))
+			{
+				replay_rename_target.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+
+		if (ImGui::BeginPopupModal("Delete Replay", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Delete this replay permanently?");
+			ImGui::TextDisabled("%s", replay.displayName.c_str());
+			ImGui::Spacing();
+			if (ImGui::Button("Delete", ImVec2(100 * scaling, 30 * scaling)))
+			{
+				replaymgr::remove(replay_delete_target);
+				replay_delete_target.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(100 * scaling, 30 * scaling)))
+			{
+				replay_delete_target.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+
+		ImGui::NextColumn();
+		ImGui::PopID();
+	}
+	ImGui::Columns(1, nullptr, false);
+	ImGui::EndChild();
+
+	ImGui::End();
+	ImGui::PopStyleVar();
 }
 
 inline static void header(const char *title)
