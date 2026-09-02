@@ -158,8 +158,30 @@ PC context — document the gap rather than calling it an fbneo-equivalent hook.
 - **Per-access memory read/write hooks.** The SH4 dynarec inlines memory
   access into generated code; hooking every access means dynarec surgery or
   forcing the interpreter.
-- **Counterfactual rollout / speculative stepping.** Blocked on 10–20 MB
-  monolithic savestates. Revisit only if Phase 4 yields delta snapshots.
+- **Counterfactual rollout / speculative stepping.** *Correction: this was
+  filed as "blocked on 10–20 MB monolithic savestates". That is wrong — the
+  delta snapshots it was waiting on already exist.*
+
+  A rollback snapshot does **not** contain bulk memory. `Serializer` carries a
+  `rollback` flag and every large region is skipped when it is set: AICA RAM
+  and main RAM (`core/serialize.cpp:176,216`), VRAM (`core/hw/pvr/pvr.cpp:80`)
+  and elan RAM (`core/hw/pvr/elan.cpp:1785`). Those are restored instead from
+  page-granularity deltas: `memwatch` write-protects the regions, the fault
+  handler (`core/linux/common.cpp:48`) copies each page's *pre-write* contents
+  before letting the write through, and `load_game_state` walks those maps
+  backwards from the newest frame to the target, undoing writes.
+
+  The 10–20 MB in `save_game_state` is a worst-case *allocation*, not a copy;
+  `*len = ser.size()` is what is actually used. Measured on this machine, the
+  allocator costs 0.002–0.010 ms/frame (under 0.06% of a 60fps budget), so it
+  is a footprint wart, not a speed problem.
+
+  What actually dominates a rollback snapshot is the TA display list:
+  `serializeContext` (`core/hw/pvr/ta_ctx.cpp`) writes
+  `tad.thd_data - tad.thd_root` per context, bounded by `TA_DATA_SIZE` = 8 MB.
+
+  So speculative stepping is more tractable than this entry claimed. Reassess
+  against the TA payload, not against RAM size.
 
 ---
 
