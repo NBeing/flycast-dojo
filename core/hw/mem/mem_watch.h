@@ -24,6 +24,7 @@
 #include "hw/pvr/pvr_mem.h"
 #include "hw/pvr/elan.h"
 #include "rend/TexCache.h"
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -66,6 +67,7 @@ class Watcher
 	// never faulted in, so the reservation costs address space rather than RSS.
 	std::unique_ptr<u8[]> slab;
 	std::unique_ptr<u32[]> offsets;
+	std::unique_ptr<u32[]> sorted;	// scratch for coalescing, keeps offsets in first-touch order
 	std::unique_ptr<u32[]> bitmap;	// one bit per page index
 	u32 maxPages = 0;
 	u32 count = 0;
@@ -89,6 +91,7 @@ class Watcher
 		maxPages = pages;
 		slab.reset(new u8[(size_t)pages * PAGE_SIZE]);
 		offsets.reset(new u32[pages]);
+		sorted.reset(new u32[pages]);
 		bitmap.reset(new u32[bitmapWords()]);
 		count = 0;
 		clearBitmap();
@@ -102,12 +105,35 @@ public:
 		{
 			static_cast<T&>(*this).protectMem(0, 0xffffffff);
 			started = true;
+			return;
 		}
-		else
+		if (count == 0)
+			return;
+
+		// Re-protect the pages dirtied since the last call. Done one page at a
+		// time this is an mprotect syscall each, which at a few hundred dirty
+		// pages costs more than copying them; merging adjacent pages into runs
+		// makes a contiguous stretch a single call.
+		//
+		// Sorting happens in scratch so that getPages still hands pages over in
+		// first-touch order.
+		memcpy(sorted.get(), offsets.get(), (size_t)count * sizeof(u32));
+		std::sort(sorted.get(), sorted.get() + count);
+
+		u32 runStart = sorted[0];
+		u32 runEnd = runStart + PAGE_SIZE;
+		for (u32 i = 1; i < count; i++)
 		{
-			for (u32 i = 0; i < count; i++)
-				static_cast<T&>(*this).protectMem(offsets[i], PAGE_SIZE);
+			if (sorted[i] == runEnd)
+			{
+				runEnd += PAGE_SIZE;
+				continue;
+			}
+			static_cast<T&>(*this).protectMem(runStart, runEnd - runStart);
+			runStart = sorted[i];
+			runEnd = runStart + PAGE_SIZE;
 		}
+		static_cast<T&>(*this).protectMem(runStart, runEnd - runStart);
 	}
 
 	void unprotect()

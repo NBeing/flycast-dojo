@@ -198,12 +198,17 @@ const u32 NULL_CONTEXT = ~0u;
 
 static void serializeContext(Serializer& ser, const TA_context *ctx)
 {
-	if (ser.dryrun())
+	if (ser.dryrun() && !ser.rollback())
 	{
+		// A savestate sizes its buffer before the state is walked, and the used
+		// size can change in between, so reserve the worst case.
 		// Maximum size: address, size, data
 		ser.skip(4 + 4 + TA_DATA_SIZE);
 		return;
 	}
+	// For rollback the CPU is stopped across both passes, so the real path is
+	// walked instead and reports the exact size. It copies nothing in dry-run:
+	// Serializer::doSerialize only writes when it has a buffer.
 	if (ctx == nullptr)
 	{
 		ser << NULL_CONTEXT;
