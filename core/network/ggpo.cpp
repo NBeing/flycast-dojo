@@ -290,14 +290,14 @@ static bool load_game_state(unsigned char *buffer, int len)
 	for (int f = lastSavedFrame - 1; f >= frame; f--)
 	{
 		const MemPages& pages = deltaStates[f];
-		for (const auto& pair : pages.ram)
-			memcpy(memwatch::ramWatcher.getMemPage(pair.first), &pair.second.data[0], PAGE_SIZE);
-		for (const auto& pair : pages.vram)
-			memcpy(memwatch::vramWatcher.getMemPage(pair.first), &pair.second.data[0], PAGE_SIZE);
-		for (const auto& pair : pages.aram)
-			memcpy(memwatch::aramWatcher.getMemPage(pair.first), &pair.second.data[0], PAGE_SIZE);
-		for (const auto& pair : pages.elanram)
-			memcpy(memwatch::elanWatcher.getMemPage(pair.first), &pair.second.data[0], PAGE_SIZE);
+		for (u32 i = 0; i < pages.ram.size(); i++)
+			memcpy(memwatch::ramWatcher.getMemPage(pages.ram.offsetAt(i)), pages.ram.dataAt(i), PAGE_SIZE);
+		for (u32 i = 0; i < pages.vram.size(); i++)
+			memcpy(memwatch::vramWatcher.getMemPage(pages.vram.offsetAt(i)), pages.vram.dataAt(i), PAGE_SIZE);
+		for (u32 i = 0; i < pages.aram.size(); i++)
+			memcpy(memwatch::aramWatcher.getMemPage(pages.aram.offsetAt(i)), pages.aram.dataAt(i), PAGE_SIZE);
+		for (u32 i = 0; i < pages.elanram.size(); i++)
+			memcpy(memwatch::elanWatcher.getMemPage(pages.elanram.offsetAt(i)), pages.elanram.dataAt(i), PAGE_SIZE);
 		DEBUG_LOG(NETWORK, "Restored frame %d pages: %d ram, %d vram, %d eram, %d aica ram", f, (u32)pages.ram.size(),
 					(u32)pages.vram.size(), (u32)pages.elanram.size(), (u32)pages.aram.size());
 	}

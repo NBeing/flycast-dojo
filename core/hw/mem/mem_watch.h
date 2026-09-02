@@ -24,29 +24,80 @@
 #include "hw/pvr/pvr_mem.h"
 #include "hw/pvr/elan.h"
 #include "rend/TexCache.h"
-#include <unordered_map>
+#include <cstring>
+#include <memory>
+#include <vector>
 
 namespace memwatch
 {
 
-struct Page
+/*
+ * Pages captured during one frame, in the order they were first written.
+ *
+ * This used to be an unordered_map<u32, Page> whose Page held an inline
+ * PAGE_SIZE array, so every newly dirtied page cost a hash-node allocation of
+ * over 4 KB - inside the SIGSEGV handler, where malloc is not
+ * async-signal-safe. The restore path only ever iterates these, never looks a
+ * page up, so the map bought nothing for the cost.
+ *
+ * Capture now writes into a slab sized once to the whole region, with a bitmap
+ * marking which pages are already held, so the fault path performs no
+ * allocation at all.
+ */
+struct PageList
 {
-	Page() {
-		// don't initialize data
-	}
-	u8 data[PAGE_SIZE];
+	std::vector<u32> offsets;
+	std::vector<u8> data;		// offsets.size() * PAGE_SIZE bytes
+
+	u32 size() const { return (u32)offsets.size(); }
+	u32 offsetAt(u32 i) const { return offsets[i]; }
+	const u8 *dataAt(u32 i) const { return &data[(size_t)i * PAGE_SIZE]; }
+	void clear() { offsets.clear(); data.clear(); }
 };
-using PageMap = std::unordered_map<u32, Page>;
+// Legacy name, still used by the rollback code.
+using PageMap = PageList;
 
 template<typename T>
 class Watcher
 {
-	bool started;
-	PageMap pages;
+	bool started = false;
+
+	// Capture buffers, sized once to the whole region. Untouched slab pages are
+	// never faulted in, so the reservation costs address space rather than RSS.
+	std::unique_ptr<u8[]> slab;
+	std::unique_ptr<u32[]> offsets;
+	std::unique_ptr<u32[]> bitmap;	// one bit per page index
+	u32 maxPages = 0;
+	u32 count = 0;
+
+	u32 bitmapWords() const { return (maxPages + 31) / 32; }
+
+	void clearBitmap()
+	{
+		if (bitmap)
+			memset(bitmap.get(), 0, (size_t)bitmapWords() * sizeof(u32));
+	}
+
+	// Region sizes are runtime settings, so this runs at the first protect()
+	// rather than at construction. Never called from the fault handler.
+	void initCapture()
+	{
+		const u32 memSize = static_cast<T&>(*this).getMemSize();
+		const u32 pages = (memSize + PAGE_SIZE - 1) / PAGE_SIZE;
+		if (pages == maxPages)
+			return;
+		maxPages = pages;
+		slab.reset(new u8[(size_t)pages * PAGE_SIZE]);
+		offsets.reset(new u32[pages]);
+		bitmap.reset(new u32[bitmapWords()]);
+		count = 0;
+		clearBitmap();
+	}
 
 public:
 	void protect()
 	{
+		initCapture();
 		if (!started)
 		{
 			static_cast<T&>(*this).protectMem(0, 0xffffffff);
@@ -54,8 +105,8 @@ public:
 		}
 		else
 		{
-			for (const auto& pair : pages)
-				static_cast<T&>(*this).protectMem(pair.first, PAGE_SIZE);
+			for (u32 i = 0; i < count; i++)
+				static_cast<T&>(*this).protectMem(offsets[i], PAGE_SIZE);
 		}
 	}
 
@@ -67,29 +118,49 @@ public:
 	void reset()
 	{
 		started = false;
-		pages.clear();
+		count = 0;
+		clearBitmap();
 	}
 
+	// Runs in the SIGSEGV handler: no allocation, no locks.
 	bool hit(void *addr)
 	{
 		u32 offset = static_cast<T&>(*this).getMemOffset(addr);
 		if (offset == (u32)-1)
 			return false;
 		offset &= ~PAGE_MASK;
-	    auto rv = pages.emplace(offset, Page());
-	    if (!rv.second)
-	      // already saved
-	      return true;
-	    Page& page = rv.first->second;
-	    memcpy(&page.data[0], static_cast<T&>(*this).getMemPage(offset), PAGE_SIZE);
+		const u32 idx = offset / PAGE_SIZE;
+		if (idx >= maxPages)
+			// Not sized yet, so this region is not being watched.
+			return false;
+
+		u32& word = bitmap[idx >> 5];
+		const u32 bit = 1u << (idx & 31);
+		if (word & bit)
+			// already saved
+			return true;
+		word |= bit;
+
+		offsets[count] = offset;
+		memcpy(&slab[(size_t)count * PAGE_SIZE],
+				static_cast<T&>(*this).getMemPage(offset), PAGE_SIZE);
+		count++;
+
 		static_cast<T&>(*this).unprotectMem(offset, PAGE_SIZE);
 		return true;
 	}
 
-	void getPages(PageMap& other)
+	// Hands this frame's pages over and starts a new frame. Compacts into
+	// exactly-sized buffers so a stored frame costs what it actually dirtied,
+	// rather than holding a whole-region reservation.
+	void getPages(PageList& other)
 	{
-		std::swap(pages, other);
-		pages = PageMap();
+		other.offsets.assign(offsets.get(), offsets.get() + count);
+		other.data.resize((size_t)count * PAGE_SIZE);
+		if (count != 0)
+			memcpy(other.data.data(), slab.get(), (size_t)count * PAGE_SIZE);
+		count = 0;
+		clearBitmap();
 	}
 };
 
@@ -112,6 +183,8 @@ protected:
 	{
 		return _vmem_get_vram_offset(p);
 	}
+
+	u32 getMemSize() { return VRAM_SIZE; }
 
 public:
 	void *getMemPage(u32 addr)
@@ -140,6 +213,8 @@ protected:
 		return bm_getRamOffset(p);
 	}
 
+	u32 getMemSize() { return RAM_SIZE; }
+
 public:
 	void *getMemPage(u32 addr)
 	{
@@ -155,6 +230,7 @@ protected:
 	void protectMem(u32 addr, u32 size);
 	void unprotectMem(u32 addr, u32 size);
 	u32 getMemOffset(void *p);
+	u32 getMemSize() { return ARAM_SIZE; }
 
 public:
 	void *getMemPage(u32 addr)
@@ -170,6 +246,7 @@ class ElanRamWatcher : public Watcher<ElanRamWatcher>
 protected:
 	void protectMem(u32 addr, u32 size);
 	u32 getMemOffset(void *p);
+	u32 getMemSize() { return elan::ERAM_SIZE; }
 
 public:
 	void unprotectMem(u32 addr, u32 size);
