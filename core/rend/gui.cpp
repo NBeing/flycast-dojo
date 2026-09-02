@@ -2912,7 +2912,14 @@ static void gui_display_settings()
 		dojo_gui.insert_netplay_tab(normal_padding);
 
 	if (sections[selected] == "Replays")
-		dojo_gui.insert_replays_tab(normal_padding);
+	{
+		// Copy under the lock rather than holding it across the render, which
+		// can launch a replay and re-enter the scanner.
+		scanner.get_mutex().lock();
+		std::vector<GameMedia> replay_games = scanner.get_game_list();
+		scanner.get_mutex().unlock();
+		dojo_gui.insert_replays_tab(normal_padding, replay_games);
+	}
 
 	if (sections[selected] == "Training")
 		dojo_gui.insert_training_tab(normal_padding);

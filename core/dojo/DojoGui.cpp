@@ -2465,6 +2465,11 @@ void DojoGui::gui_display_paused(float scaling)
 // Metadata comes from replaymgr, which reads a JSON sidecar and falls back to
 // the legacy "game__date__host__guest__" filename convention. Nothing here
 // parses filenames, so a replay may be named anything.
+//
+// Rendered in two places from one implementation: the full-screen Replays
+// screen, and the Library tab under Settings > Replays. The latter is what
+// keeps the library reachable once a game is running, since the full-screen
+// screen is dismissed on launch.
 static std::string replay_rename_target;
 static char replay_rename_buf[128];
 static std::string replay_delete_target;
@@ -2487,25 +2492,8 @@ static std::string sanitize_filename(const std::string& name)
 	return out;
 }
 
-void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_list)
+void DojoGui::draw_replay_library(float scaling, std::vector<GameMedia> game_list)
 {
-	ImGui::SetNextWindowPos(ImVec2(0, 0));
-	ImGui::SetNextWindowSize(ImVec2(settings.display.width, settings.display.height));
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
-
-	ImGui::Begin("Replays", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
-	ImVec2 normal_padding = ImGui::GetStyle().FramePadding;
-
-	if (ImGui::Button("Done", ImVec2(100 * scaling, 30 * scaling)))
-	{
-		cfgSaveBool("dojo", "RecordMatches", config::RecordMatches);
-		if (game_started)
-			gui_state = GuiState::Commands;
-		else
-			gui_state = GuiState::Main;
-	}
-
-	ImGui::SameLine();
 	if (ImGui::Button("Import...", ImVec2(110 * scaling, 30 * scaling)))
 		ImGui::OpenPopup("Import Replay");
 
@@ -2527,12 +2515,6 @@ void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_lis
 		if (rec)
 			ImGui::PopStyleColor();
 	}
-
-	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Record All Sessions").x - ImGui::GetStyle().FramePadding.x * 4.0f - ImGui::GetStyle().ItemSpacing.x * 4);
-
-	OptionCheckbox("Record All Sessions", config::RecordMatches);
-	ImGui::SameLine();
-	ShowHelpMarker("Record all netplay sessions to a local file");
 
 	// Import: pick a bundle produced by Export.
 	if (ImGui::BeginPopupModal("Import Replay", NULL, ImGuiWindowFlags_AlwaysAutoResize))
@@ -2558,13 +2540,24 @@ void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_lis
 	if (replays.empty())
 	{
 		ImGui::Spacing();
-		ImGui::TextDisabled("No replays yet. Enable \"Record All Sessions\", or start one from the Record button.");
+		ImGui::TextDisabled("No replays yet. Enable \"Record All Sessions\", or use Record Replay during a game.");
+		return;
 	}
 
 	ImGui::BeginChild("replay_list", ImVec2(0, 0), true);
 	ImGui::Columns(5, "replaycolumns", false);
-	const float actionsWidth = 230 * scaling;
-	ImGui::SetColumnWidth(4, actionsWidth);
+	// This list renders both full-screen and inside the much narrower Settings
+	// panel, so the text columns are sized as fractions of whatever width is
+	// available rather than fixed. Icon buttons keep the action column small.
+	{
+		const float actions = 120 * scaling;
+		const float rest = std::max(120.f, ImGui::GetWindowContentRegionWidth() - actions);
+		ImGui::SetColumnWidth(0, rest * 0.32f);	// fits "YYYY-MM-DD HH:MM"
+		ImGui::SetColumnWidth(1, rest * 0.34f);
+		ImGui::SetColumnWidth(2, rest * 0.20f);
+		ImGui::SetColumnWidth(3, rest * 0.14f);
+		ImGui::SetColumnWidth(4, actions);
+	}
 	ImGui::Text("Date"); ImGui::NextColumn();
 	ImGui::Text("Name"); ImGui::NextColumn();
 	ImGui::Text("Players"); ImGui::NextColumn();
@@ -2576,8 +2569,16 @@ void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_lis
 	{
 		ImGui::PushID(replay.path.c_str());
 
+		// Legacy names carry an ISO timestamp with ':' replaced by '_'; show
+		// both that and the mtime fallback as "YYYY-MM-DD HH:MM".
+		std::string shortDate = replay.date;
+		std::replace(shortDate.begin(), shortDate.end(), 'T', ' ');
+		std::replace(shortDate.begin(), shortDate.end(), '_', ':');
+		if (shortDate.size() > 16)
+			shortDate = shortDate.substr(0, 16);
+
 		bool is_selected = false;
-		if (ImGui::Selectable(replay.date.c_str(), &is_selected, ImGuiSelectableFlags_SpanAllColumns))
+		if (ImGui::Selectable(shortDate.c_str(), &is_selected, ImGuiSelectableFlags_SpanAllColumns))
 		{
 			// Resolve the rom this replay belongs to.
 			std::string game_path;
@@ -2614,15 +2615,17 @@ void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_lis
 		ImGui::TextUnformatted(replay.playersLabel().c_str()); ImGui::NextColumn();
 		ImGui::TextUnformatted(replay.game.c_str()); ImGui::NextColumn();
 
-		if (ImGui::Button("Rename"))
+		if (ImGui::Button(ICON_FA_PEN))
 		{
 			replay_rename_target = replay.path;
 			strncpy(replay_rename_buf, replay.displayName.c_str(), sizeof(replay_rename_buf) - 1);
 			replay_rename_buf[sizeof(replay_rename_buf) - 1] = '\0';
 			ImGui::OpenPopup("Rename Replay");
 		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Rename");
 		ImGui::SameLine();
-		if (ImGui::Button("Export"))
+		if (ImGui::Button(ICON_FA_FILE_EXPORT))
 		{
 			const std::string dir = replaymgr::replaysDir() + "/exports";
 			ghc::filesystem::create_directories(dir);
@@ -2637,14 +2640,18 @@ void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_lis
 			else
 				gui_display_notification("Export failed", 4000);
 		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Export as a shareable bundle");
 		ImGui::SameLine();
-		if (ImGui::Button("Delete"))
+		if (ImGui::Button(ICON_FA_TRASH))
 		{
 			replay_delete_target = replay.path;
 			ImGui::OpenPopup("Delete Replay");
 		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Delete");
 
-		// Rename: changes the display name only, so the file path stays valid
+		// Rename changes the display name only, so the file path stays valid
 		// for anything already referencing it.
 		if (ImGui::BeginPopupModal("Rename Replay", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 		{
@@ -2691,6 +2698,27 @@ void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_lis
 	}
 	ImGui::Columns(1, nullptr, false);
 	ImGui::EndChild();
+}
+
+void DojoGui::gui_display_replays(float scaling, std::vector<GameMedia> game_list)
+{
+	ImGui::SetNextWindowPos(ImVec2(0, 0));
+	ImGui::SetNextWindowSize(ImVec2(settings.display.width, settings.display.height));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+
+	ImGui::Begin("Replays", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+
+	if (ImGui::Button("Done", ImVec2(100 * scaling, 30 * scaling)))
+	{
+		cfgSaveBool("dojo", "RecordMatches", config::RecordMatches);
+		if (game_started)
+			gui_state = GuiState::Commands;
+		else
+			gui_state = GuiState::Main;
+	}
+	ImGui::SameLine();
+
+	draw_replay_library(scaling, game_list);
 
 	ImGui::End();
 	ImGui::PopStyleVar();
@@ -2932,7 +2960,32 @@ void DojoGui::insert_netplay_tab(ImVec2 normal_padding)
 	ImGui::PopStyleVar();
 }
 
-void DojoGui::insert_replays_tab(ImVec2 normal_padding)
+void DojoGui::insert_replays_tab(ImVec2 normal_padding, std::vector<GameMedia> game_list)
+{
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, normal_padding);
+
+	// Two tabs: the library itself, and the options that govern recording and
+	// streaming. The library lives here so it stays reachable during a game -
+	// the full-screen Replays screen is dismissed the moment one launches.
+	if (ImGui::BeginTabBar("replay_tabs", ImGuiTabBarFlags_None))
+	{
+		if (ImGui::BeginTabItem("Library"))
+		{
+			draw_replay_library(settings.display.uiScale, game_list);
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("Settings"))
+		{
+			insert_replays_settings(normal_padding);
+			ImGui::EndTabItem();
+		}
+		ImGui::EndTabBar();
+	}
+
+	ImGui::PopStyleVar();
+}
+
+void DojoGui::insert_replays_settings(ImVec2 normal_padding)
 {
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, normal_padding);
 
