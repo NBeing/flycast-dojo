@@ -32,36 +32,45 @@ half is syntax-checked and its guards exercised.
 
 ## Known bugs
 
-### [B] Lua `vblank` callback double-fires during rollback
-**Real bug, live today, not hypothetical.** `ggpo::rollbacking()` exists at
-`core/network/ggpo.h:39-43` but has essentially no callers, and nothing on the
-`Event::VBlank` dispatch path consults it. So Lua's `vblank` callback runs
-again for every re-simulated frame, double-counting anything it accumulates.
+### [x] Lua `vblank` double-fires during rollback — FIXED
+`Event::VBlank` is now gated on `!ggpo::rollbacking()` in `core/lua/lua.cpp`,
+so a re-simulated frame no longer re-runs a script's `vblank` callback.
+`flycast.state.isRollback()` is exposed for scripts that deliberately want to
+observe re-simulation.
 
-`overlay` is naturally safe — rollback frames are dropped before render — but
-`vblank` is not. This hits during **local dojo replay playback**, where Lua is
-active, so it is not netplay-only.
+**Scope correction.** This was filed as also hitting local dojo replay
+playback, "so it is not netplay-only". That is wrong. `ggpo::active()` returns
+true for `dojo.PlayMatch && replay_version >= 2`, but `inRollback` is written
+in exactly two places (`ggpo.cpp:261,268`), both inside `advance_frame`, which
+is a GGPO *session* callback. Replay playback reuses the ggpo input path with
+`ggpoSession == nullptr`, so GGPO never calls it and no rollback occurs. The
+bug was real but **netplay-only**, and needed a connection bad enough to
+mispredict.
 
-Fix: gate the `VBlank` dispatch in `core/lua/lua.cpp` on
-`!ggpo::rollbacking()`, and expose `flycast.state.isRollback()`.
+### [x] `dojo.FrameNumber` drift under rollback — CONFIRMED and addressed
+The mechanism checks out: `endOfFrame()` increments `dojo.FrameNumber`
+(`ggpo.cpp`) and is reached from `rend_start_render()`
+(`core/hw/pvr/Renderer_if.cpp:402`), which is *not* gated by
+`rend_enable_renderer(false)` — so re-simulated frames increment it — and
+`load_game_state` never restores it.
 
-Also audit the other `Event::VBlank` listeners for the same hazard:
-`core/cheats.cpp`, `core/network/output.h`, `core/hw/naomi/naomi_m3comm.cpp`.
+`flycast.state.getConfirmedFrameNumber()` reports a number on the same scale
+that does not drift, by counting how many increments happened during rollback
+and subtracting. Offline nothing is re-simulated, so the two are equal
+(verified: 117/117, 237/237, 357/357). `getFrameNumber()` is left alone rather
+than changed under existing scripts.
 
-*(Reported by a codebase survey; the mechanism is well-evidenced, but confirm
-by observation before building on it.)*
-
-### [V][B] Verify whether `dojo.FrameNumber` drifts under rollback
-`state.getFrameNumber()` returns `dojo.FrameNumber`, incremented in
-`ggpo::endOfFrame()` which is reached during rollback re-execution, and it is
-not among the fields restored by `load_game_state`. That would make it drift
-upward across a rollback burst — the same defect fbneo-rr documents for its
-own frame counter.
-
-**Reasoned from source, not observed.** Measure it before acting. If
-confirmed, add a rollback-stable `getConfirmedFrameNumber()` and decide
-whether to fix `getFrameNumber()` in place (a behaviour change for existing
-scripts) or add a sibling.
+### [ ] Audit of the other `Event::VBlank` listeners — done, no action taken
+- `core/cheats.cpp:363` → `CheatManager::apply()`. Re-applies cheat values to
+  memory during rollback. Idempotent (same values, and the writes are captured
+  and rolled back like any other), so wasteful rather than wrong. Gating it
+  would change when cheats land; left alone deliberately.
+- `core/network/output.h:55` → `acceptConnections()`. Network IO, accumulates
+  nothing. Doing it on re-simulated frames is wasted work during a rollback
+  burst, which is the worst moment for it, but it is not a correctness bug.
+- `core/hw/naomi/naomi_m3comm.cpp` → `NaomiM3Comm::vblank()`. Blocks up to
+  100 ms waiting on comm-board data. Only for NAOMI multiboard setups, which
+  are not a GGPO netplay configuration, so it cannot overlap in practice.
 
 ### [B] `EventManager` has no locking
 `broadcastEvent` iterates its listener vector while `registerEvent` /

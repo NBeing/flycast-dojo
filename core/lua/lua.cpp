@@ -22,6 +22,7 @@
 #include <lua.hpp>
 #include <LuaBridge/LuaBridge.h>
 #include "rend/gui.h"
+#include "network/ggpo.h"
 #ifndef LIBRETRO
 #include "rend/video_recorder.h"
 #endif
@@ -70,6 +71,16 @@ void restorePressedButtons()
 static void emuEventCallback(Event event, void *)
 {
 	if (L == nullptr)
+		return;
+	// GGPO re-simulates a frame for every rollback, and the VBlank event fires
+	// again on each pass. A script that accumulates - a counter, a tally, a log
+	// line - would count the same logical frame several times, so re-simulated
+	// frames are not dispatched. The overlay callback needs no such guard: it
+	// runs on the render path, and rollback frames are dropped before render.
+	//
+	// A script that deliberately wants to observe re-simulation can check
+	// flycast.state.isRollback() from a callback that does fire.
+	if (event == Event::VBlank && ggpo::rollbacking())
 		return;
 	lock_guard lock(mutex);
 	try {
@@ -752,6 +763,17 @@ static void luaRegister(lua_State *L)
 			.endNamespace()
 
 			.beginNamespace("state")
+				// True while GGPO is re-simulating a frame it has already run.
+				.addFunction("isRollback", std::function<bool()>([]() {
+					return ggpo::rollbacking();
+				}))
+				// Frame number that does not move during rollback, unlike
+				// getFrameNumber(): dojo.FrameNumber is incremented from
+				// endOfFrame() on every re-simulated frame and is not restored
+				// by load_game_state, so it drifts upward across a rollback.
+				.addFunction("getConfirmedFrameNumber", std::function<int()>([]() {
+					return (int)ggpo::confirmedFrame();
+				}))
 				.addProperty("system", &settings.platform.system, false)
 				.addProperty("media", &settings.content.path, false)
 				.addProperty("gameId", &settings.content.gameId, false)

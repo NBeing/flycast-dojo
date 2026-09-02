@@ -34,6 +34,8 @@ namespace ggpo
 {
 
 bool inRollback;
+// How many times dojo.FrameNumber advanced on a re-simulated frame.
+static u32 rollbackInflation;
 
 static void getLocalInput(MapleInputState inputState[4])
 {
@@ -490,6 +492,8 @@ static void on_message(u8 *msg, int len)
 
 void startSession(int localPort, int localPlayerNum)
 {
+	// dojo.FrameNumber restarts with the session, so the inflation must too.
+	rollbackInflation = 0;
 	GGPOSessionCallbacks cb{};
 	cb.begin_game      = begin_game;
 	cb.advance_frame   = advance_frame;
@@ -964,9 +968,21 @@ void endOfFrame()
 	if (active())
 	{
 		dojo.FrameNumber++;
+		// dojo.FrameNumber counts every pass, including re-simulated ones, and
+		// load_game_state does not restore it - so it drifts upward across a
+		// rollback burst. Counting the inflation lets confirmedFrame() report a
+		// number on the same scale that does not drift, in every mode: offline
+		// nothing is re-simulated, so the two are equal.
+		if (inRollback)
+			rollbackInflation++;
 		_endOfFrame = true;
 		sh4_cpu.Stop();
 	}
+}
+
+u32 confirmedFrame()
+{
+	return dojo.FrameNumber - rollbackInflation;
 }
 
 void setMapleInput(MapleInputState inputState[4])
@@ -1054,6 +1070,11 @@ void displayStats() {
 }
 
 void endOfFrame() {
+}
+
+u32 confirmedFrame() {
+	// No rollback without GGPO, so nothing inflates the count.
+	return dojo.FrameNumber;
 }
 
 void sendChatMessage(int playerNum, const std::string& msg) {

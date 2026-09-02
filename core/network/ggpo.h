@@ -36,6 +36,10 @@ void endOfFrame();
 void sendChatMessage(int playerNum, const std::string& msg);
 void receiveChatMessages(void (*callback)(int playerNum, const std::string& msg));
 
+// Frames the emulator has run forward for the first time, ignoring rollback
+// re-simulation. Unlike dojo.FrameNumber this does not drift.
+u32 confirmedFrame();
+
 static inline bool rollbacking() {
 	extern bool inRollback;
 
