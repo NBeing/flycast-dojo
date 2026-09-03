@@ -144,6 +144,48 @@
 --- the largest single conformance cost identified so far.
 ---
 ---
+--- THE UI SURFACE — ImGui is the interface, not an implementation detail
+---
+--- There are two different drawing problems and they want different answers.
+---
+---   WIDGET UI - windows, buttons, sliders, text fields, plots. Panels a
+---   person interacts with. Abstracting this to text/box/line primitives means
+---   reimplementing layout, hit-testing and focus in Lua, badly.
+---
+---   CONTENT OVERLAY - marks locked to the game image: hitboxes, positions,
+---   trajectories. These must be in game pixels or they do not line up.
+---
+--- For widget UI the interface IS ImGui. Every C++ emulator in scope already
+--- embeds it, so the integration contract becomes small: give the script an
+--- ImGui context and call its draw callback inside a live frame. Add that
+--- canvas to an emulator and the whole UI surface arrives with it.
+---
+--- VERSION SKEW is the obvious objection and it measures smaller than it
+--- looks. flycast-dojo ships ImGui 1.80 WIP, fbneo-rr ships 1.92.9 WIP - five
+--- years apart - yet all 19 ImGui functions fbneo-rr actually exposes to Lua
+--- exist in 1.80. A conservative subset is what emulators bind in practice, so
+--- that subset is the baseline:
+---
+---   Begin End Text TextColored Button Checkbox Selectable
+---   SliderFloat SliderInt InputText SameLine Separator Spacing
+---   SetNextWindowSize SetNextWindowPos
+---   GetMousePos IsMouseClicked IsMouseDown IsMouseReleased Image
+---
+--- A conforming host MUST provide all of the baseline under `ui.*`. Anything
+--- beyond it - tables, plots, docking - is capability-gated like everything
+--- else, so a script degrades instead of crashing:
+---
+---     if emu.supports("ui.BeginTable") then ... else ... end
+---
+--- Names match ImGui's own, deliberately. A script author already knows this
+--- API, and renaming it to look neutral would only add a translation layer
+--- between the documentation and the binding.
+---
+--- `gui.*` remains, narrowed to its real job: content overlay in game pixels.
+--- ImGui does not solve that, because a widget positioned in window space does
+--- not track the game image across resizes, letterboxing or scaling.
+---
+---
 --- ADDRESS SPACES — resolved
 ---
 --- Systems have more than one. fbneo-rr exposes a second CPU through suffixed
@@ -359,11 +401,41 @@ function savestate.registersave(fn) end  --- [port] attach script data to a stat
 function savestate.registerload(fn) end  --- [port]
 
 --- ---------------------------------------------------------------------
---- gui — drawing
+--- ui — widget UI. ImGui, under its own names. See THE UI SURFACE.
 --- ---------------------------------------------------------------------
---- flycast-dojo draws through ImGui inside an overlay callback and needs a
---- window open first; fbneo-rr draws immediate primitives. The neutral surface
---- is the primitives, which the ImGui side can implement on a draw list.
+--- Baseline profile; a conforming host provides all of it. Legal only inside a
+--- gui.register callback, per CALLBACK THREADING.
+ui = {}
+
+function ui.Begin(name, open, flags) end      --- [ok] partial: beginWindow
+function ui.End() end                         --- [ok] endWindow
+function ui.Text(s) end                       --- [ok]
+function ui.TextColored(r,g,b,a,s) end        --- [ok] textColor
+function ui.Button(label, w, h) end           --- [ok]
+function ui.SameLine(offset) end              --- [ok]
+function ui.Checkbox(label, value) end        --- [port]
+function ui.Selectable(label, selected) end   --- [port]
+function ui.SliderFloat(label, v, lo, hi) end --- [port]
+function ui.SliderInt(label, v, lo, hi) end   --- [port]
+function ui.InputText(label, text) end        --- [port]
+function ui.Separator() end                   --- [port]
+function ui.Spacing() end                     --- [port]
+function ui.SetNextWindowSize(w, h) end       --- [port] folded into beginWindow today
+function ui.SetNextWindowPos(x, y) end        --- [port] folded into beginWindow today
+function ui.GetMousePos() end                 --- [port]
+function ui.IsMouseClicked(button) end        --- [port]
+function ui.IsMouseDown(button) end           --- [port]
+function ui.IsMouseReleased(button) end       --- [port]
+function ui.Image(id, w, h) end               --- [port]
+
+--- ---------------------------------------------------------------------
+--- gui — content overlay, in GAME pixels
+--- ---------------------------------------------------------------------
+--- Not a lesser ImGui. This is the layer that tracks the game image: origin at
+--- its top-left corner, one unit per game pixel, and the emulator owns the
+--- mapping to screen including scaling and letterboxing. A mark drawn at a
+--- character's position must stay on that character when the window resizes,
+--- which window-space widgets cannot do.
 gui = {}
 
 function gui.text(x, y, s) end           --- [ok]   flycast.ui.text (needs beginWindow)
@@ -408,8 +480,9 @@ function sound.voice(n) end              --- [port] per-channel state; drives au
 --- quark.*    Fightcade replay format. Emulator-specific by definition.
 --- macro.*    fbneo-rr's macro editor timeline. A tool, not an emulator API.
 --- vsav.*     Per-game recorder. Belongs in a script, not the interface.
---- imgui.*    Direct ImGui bindings leak the host toolkit into scripts. The
----            neutral `gui.*` primitives are the portable subset.
+--- (imgui.* was previously excluded here as "leaking the host toolkit into
+---  scripts". That was wrong for this target set - see THE UI SURFACE above.
+---  It is now the primary UI surface.)
 --- socket.*   Scripts opening sockets is a real security question. If it is
 ---            ever specified it needs a capability gate, not a default.
 ---

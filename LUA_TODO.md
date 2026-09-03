@@ -118,12 +118,56 @@ unmapped address rather than `nil`, because detecting mapped-ness is not cheap
 in `_vmem`. Tier 2 says this should be `nil`. Left as-is and recorded here
 rather than quietly ignored.
 
-### [S] 5. Drawing coordinate system
-`gui.*` says nothing about origin, units, or scaling. flycast draws through
-ImGui with a `uiScale` factor and window-relative coordinates; fbneo draws
-game-pixel primitives. Specify: game pixels, origin top-left, with the
-emulator responsible for scaling. Anything else and overlays land in different
-places on each emulator, which defeats the point.
+### [x] 5. Drawing — RESOLVED as two layers, not one
+The original question ("what coordinate system does `gui.*` use?") was the
+wrong question. There are two drawing problems:
+
+**Widget UI** — panels, buttons, sliders. **The interface is ImGui itself,
+under `ui.*`, using ImGui's own names.** Every C++ emulator in scope already
+embeds it, so the integration contract shrinks to "give the script an ImGui
+context and call its draw callback inside a live frame" — add that canvas and
+the UI surface arrives with it. Abstracting this to primitives would mean
+reimplementing layout, hit-testing and focus in Lua, badly.
+
+**Content overlay** — hitboxes, position markers. Stays `gui.*`, and is defined
+in **game pixels, origin at the top-left of the game image**, with the emulator
+owning the mapping including scaling and letterboxing. ImGui does not solve
+this: a widget positioned in window space does not track the game image across
+a resize.
+
+**Version skew measures smaller than it looks.** flycast ships ImGui 1.80 WIP,
+fbneo ships 1.92.9 WIP — five years apart — yet **all 19 ImGui functions
+fbneo actually exposes to Lua exist in 1.80** (verified against
+`core/deps/imgui/imgui.h`). Emulators bind a conservative subset in practice,
+so that subset is the baseline profile every conforming host must provide.
+Beyond it (`BeginTable`, plots, docking) is capability-gated:
+`emu.supports("ui.BeginTable")`.
+
+*Reverses an earlier exclusion.* The spec had ruled out `imgui.*` as "leaking
+the host toolkit into scripts". That was the right call for an unbounded target
+set and the wrong one for this one — C++ emulators that all embed ImGui.
+
+**Follow-up work, now split:**
+
+- [P] Bring `ui.*` up to the baseline. flycast covers roughly 6 of 20 today
+  (`Begin`, `End`, `Text`, `TextColored`, `Button`, `SameLine` under different
+  names). Missing: `Checkbox`, `Selectable`, `SliderFloat`, `SliderInt`,
+  `InputText`, `Separator`, `Spacing`, `SetNextWindowSize`/`Pos` as separate
+  calls, `GetMousePos`, `IsMouseClicked`/`Down`/`Released`, `Image`.
+- [B] `beginWindow` is incoherent about units: position is passed to ImGui
+  raw while size is multiplied by `settings.display.uiScale`. At any scale
+  other than 1 a window's position and size are in different units. Fix when
+  splitting out `SetNextWindowPos`/`Size`.
+- [S] `gui.*` game-pixel mapping needs the game viewport rect, which is
+  currently renderer-local (`TransformMatrix` is constructed inside the
+  renderer; `getPvrFramebufferSize` needs a `rend_context`). Exposing it means
+  caching the viewport where the Lua layer can reach it. Until then the adapter
+  draws in window pixels — **a known deviation**, and the reason a hitbox
+  overlay would not yet track a resized window.
+- [?] `emu.screenwidth()`/`screenheight()` currently return the *window* size
+  (`settings.display.width`). For game-pixel drawing a script needs the *game*
+  resolution. Decide whether these report the game and add separate window
+  accessors, or vice versa.
 
 ### [x] 6. Callback threading — RESOLVED, and enforced
 **`gui.*` is legal only inside a `gui.register` callback. Everywhere else it
