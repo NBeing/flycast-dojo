@@ -4,12 +4,13 @@
 ---
 --- STATUS: DRAFT. Not finished, and not yet safe to implement against.
 ---
---- It names the right things and settles three questions (capability is
+--- It names the right things and settles four questions (capability is
 --- queryable, rollback safety is in the contract, unportable hooks are
---- excluded with reasons). It does NOT yet pin down button representation,
---- player indexing, address spaces, failure semantics, drawing coordinates,
---- callback threading, or interface versioning - and two emulators can both
---- conform to what is written here and still disagree in every one of those.
+--- excluded with reasons, and buttons are named booleans). It does NOT yet pin
+--- down player indexing, address spaces, failure semantics, drawing
+--- coordinates, callback threading, or interface versioning - and two
+--- emulators can both conform to what is written here and still disagree in
+--- every one of those.
 --- See LUA_TODO.md, Part 1, before building on this.
 ---
 --- WHAT THIS IS
@@ -156,10 +157,32 @@ function memory.registerexec(a, fn) end
 --- ---------------------------------------------------------------------
 --- input / joypad
 --- ---------------------------------------------------------------------
+--- RESOLVED: buttons are named booleans, never a bitmask.
+---
+--- A bitmask cannot be the interface. Its layout is per-system by definition,
+--- and polarity is an implementation detail that leaks: flycast-dojo's kcode
+--- is active-low, so a *cleared* bit means held, and it exposed no constants
+--- at all - scripts were hardcoding inverted tests against Dreamcast bit
+--- values. An emulator MAY keep a raw accessor for its own scripts, but it is
+--- not part of this interface.
+---
+--- Contract:
+---   * A button reads `true` when it is held, whatever the hardware does.
+---   * `joypad.buttons()` enumerates the names this system understands, so a
+---     script adapts instead of assuming. Names are lowercase strings.
+---   * On set: present-and-true presses, present-and-false releases, and an
+---     absent key leaves that button ALONE. This is what lets one script drive
+---     one button without fighting another script, or the player.
+---   * An unknown button name is an error, not a silent no-op.
+---
+--- Common names, where the system has them: up down left right, start, coin,
+--- a b c d x y z, l r. Systems add their own; `joypad.buttons()` is the truth.
 joypad = {}
 
-function joypad.get(player) end          --- [ok]   flycast.input.getButtons
-function joypad.set(player, buttons) end --- [ok]   flycast.input.pressButtons
+function joypad.buttons() end            --- [ok]   flycast.input.buttonNames
+function joypad.get(player) end          --- [ok]   flycast.input.getButtonTable
+function joypad.set(player, buttons) end --- [ok]   flycast.input.setButtonTable
+function joypad.setbutton(player, name, held) end --- [ok] flycast.input.setButton
 function joypad.getdown(player) end      --- [port] newly pressed this frame
 function joypad.getup(player) end        --- [port] newly released this frame
 function joypad.getaxis(player, axis) end     --- [ok] flycast.input.getAxis

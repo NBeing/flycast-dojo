@@ -3,9 +3,10 @@
 Working list for `docs/lua_api_spec.lua`, the cross-emulator Lua interface, and
 for porting fbneo-rr's remaining script surface into flycast-dojo.
 
-**Is the interface done? No.** It is a first draft that names the right things
-and settles three real questions (capability is queryable, rollback safety is
-in the contract, unportable hooks are excluded with reasons). What it does not
+**Is the interface done? No, but it is one question closer.** It names the
+right things and settles four real questions (capability is queryable,
+rollback safety is in the contract, unportable hooks are excluded with
+reasons, and buttons are named booleans — resolved and implemented). What it does not
 yet do is pin down the details that make two implementations actually
 interchangeable. Those are Part 1, and they matter more than the port itself:
 a spec with unresolved semantics produces two conforming emulators that still
@@ -17,20 +18,31 @@ Legend: **[S]** spec gap · **[P]** port work · **[T]** tooling · **[?]** need
 
 ## Part 1 — Spec gaps, in the order they will bite
 
-### [S][?] 1. Button representation — the biggest divergence
-flycast-dojo's `input.getButtons(player)` returns a raw `u32` (`kcode`), and
-**no button constants are exposed to Lua at all** (`core/lua/lua.cpp`), so a
-script hardcodes Dreamcast bit values. fbneo-rr's `joypad.get()` returns a
-table of named buttons, FCEUX-lineage.
+### [x] 1. Button representation — RESOLVED, and implemented
+**Buttons are named booleans, never a bitmask.**
 
-A shared interface needs one of:
-- a canonical name set (`up`, `down`, `a`, `b`, `start`, …) that each emulator
-  maps onto, with an escape hatch for hardware-specific buttons, or
-- named-table in, named-table out, with the vocabulary declared per system via
-  something like `joypad.buttons()`.
+A bitmask could not be the interface: its layout is per-system by definition,
+and polarity leaks. flycast-dojo's `kcode` is active-low, so a *cleared* bit
+means held, and no constants were exposed to Lua at all — every script was
+hardcoding inverted tests against Dreamcast bit values.
 
-Bitmasks cannot be the interface: the bit layout is per-system by definition.
-**Decide this first** — everything input-related depends on it.
+Contract (now in `docs/lua_api_spec.lua`):
+- a button reads `true` when held, whatever the hardware does
+- `joypad.buttons()` enumerates this system's names, so scripts adapt
+- on set: present-and-true presses, present-and-false releases, **absent leaves
+  that button alone** — so one script can drive one button without fighting
+  another script or the player
+- an unknown name is an error, not a silent no-op
+
+Implemented in flycast-dojo as `input.buttonNames`, `input.getButtonTable`,
+`input.setButtonTable` and `input.setButton`. The raw `input.getButtons`
+bitmask is kept for existing scripts but is explicitly not part of the
+interface.
+
+Verified in-game: 17 names; absent keys preserved across successive sets;
+explicit false releases; unknown name rejected; and the raw mask cross-checked
+against the table to confirm the active-low inversion is hidden correctly
+(`0xFFFFFFF5` ⇒ `b` and `start` held).
 
 ### [S][?] 2. Player indexing
 flycast is 1-based (`checkPlayerNum`, then `player - 1` internally). Confirm

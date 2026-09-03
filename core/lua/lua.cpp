@@ -305,6 +305,107 @@ static u32 getButtons(int player, lua_State *L)
 	return kcode[player - 1];
 }
 
+/*
+ * Buttons as named booleans.
+ *
+ * kcode is a raw bitmask whose layout is specific to this system, and it is
+ * active-low: a *cleared* bit means the button is held. Neither fact is
+ * discoverable from Lua, and no constants were ever exposed, so scripts had to
+ * hardcode inverted tests against Dreamcast bit values.
+ *
+ * The table form is the portable contract - see docs/lua_api_spec.lua. A
+ * button reads as true when it is held, which is the opposite polarity to the
+ * bitmask underneath, deliberately.
+ */
+struct ButtonMapping
+{
+	const char *name;
+	u32 bit;
+};
+
+static const ButtonMapping ButtonMappings[] = {
+	{ "a",      DC_BTN_A },
+	{ "b",      DC_BTN_B },
+	{ "c",      DC_BTN_C },
+	{ "d",      DC_BTN_D },
+	{ "x",      DC_BTN_X },
+	{ "y",      DC_BTN_Y },
+	{ "z",      DC_BTN_Z },
+	{ "start",  DC_BTN_START },
+	{ "up",     DC_DPAD_UP },
+	{ "down",   DC_DPAD_DOWN },
+	{ "left",   DC_DPAD_LEFT },
+	{ "right",  DC_DPAD_RIGHT },
+	{ "up2",    DC_DPAD2_UP },
+	{ "down2",  DC_DPAD2_DOWN },
+	{ "left2",  DC_DPAD2_LEFT },
+	{ "right2", DC_DPAD2_RIGHT },
+	{ "reload", DC_BTN_RELOAD },
+};
+
+// Every button name this system understands, so a script can adapt rather
+// than assume.
+static LuaRef getButtonNames(lua_State *L)
+{
+	LuaRef t(L);
+	t = newTable(L);
+	int i = 1;
+	for (const ButtonMapping& m : ButtonMappings)
+		t[i++] = m.name;
+	return t;
+}
+
+static LuaRef getButtonTable(int player, lua_State *L)
+{
+	checkPlayerNum(L, player);
+	const u32 k = kcode[player - 1];
+	LuaRef t(L);
+	t = newTable(L);
+	for (const ButtonMapping& m : ButtonMappings)
+		t[m.name] = (k & m.bit) == 0;	// active-low
+	return t;
+}
+
+// Present and true presses, present and false releases, absent leaves the
+// button alone - so a script can drive one button without disturbing the rest.
+static void setButtonTable(int player, LuaRef buttons, lua_State *L)
+{
+	checkPlayerNum(L, player);
+	if (!buttons.isTable())
+	{
+		luaL_argerror(L, 2, "expected a table of button names");
+		return;
+	}
+	u32& k = kcode[player - 1];
+	for (const ButtonMapping& m : ButtonMappings)
+	{
+		LuaRef v = buttons[m.name];
+		if (v.isNil())
+			continue;
+		if (v.cast<bool>())
+			k &= ~m.bit;	// held
+		else
+			k |= m.bit;		// released
+	}
+}
+
+static void setButton(int player, const std::string& name, bool pressed, lua_State *L)
+{
+	checkPlayerNum(L, player);
+	for (const ButtonMapping& m : ButtonMappings)
+	{
+		if (name == m.name)
+		{
+			if (pressed)
+				kcode[player - 1] &= ~m.bit;
+			else
+				kcode[player - 1] |= m.bit;
+			return;
+		}
+	}
+	luaL_argerror(L, 2, "unknown button name; see input.buttonNames()");
+}
+
 static void pressButtons(int player, u32 buttons, lua_State *L)
 {
 	checkPlayerNum(L, player);
@@ -749,6 +850,13 @@ static void luaRegister(lua_State *L)
 			.endNamespace()
 
 			.beginNamespace("input")
+				// Named-boolean form: the portable contract. getButtons below
+				// returns the raw active-low bitmask and is kept for existing
+				// scripts.
+				.addFunction("getButtonTable", getButtonTable)
+				.addFunction("setButtonTable", setButtonTable)
+				.addFunction("setButton", setButton)
+				.addFunction("buttonNames", getButtonNames)
 				.addFunction("getButtons", getButtons)
 				.addFunction("pressButtons", pressButtons)
 				.addFunction("releaseButtons", releaseButtons)
