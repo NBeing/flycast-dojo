@@ -154,13 +154,29 @@ struct DrawContextGuard
 	~DrawContextGuard() { inDrawCallback = false; }
 };
 
+static const char *DrawContextMessage =
+		": drawing is only allowed from the overlay callback, which runs on the"
+		" render thread. Other callbacks run on the emulation thread. Buffer what"
+		" you want to draw and emit it from overlay.";
+
+//! For bindings LuaBridge wraps: it catches C++ exceptions and turns them into
+//! Lua errors.
 static void checkDrawContext(const char *fn)
 {
 	if (!inDrawCallback)
-		throw std::runtime_error(std::string(fn)
-				+ ": drawing is only allowed from the overlay callback, which runs on"
-				" the render thread. Other callbacks run on the emulation thread."
-				" Buffer what you want to draw and emit it from overlay.");
+		throw std::runtime_error(std::string(fn) + DrawContextMessage);
+}
+
+//! For bindings registered as a raw lua_CFunction. Those are called straight
+//! from Lua with no wrapper, so a thrown exception unwinds past the interpreter
+//! and reaches terminate instead of becoming a catchable Lua error. luaL_error
+//! is the correct mechanism there; it must be reached before any local with a
+//! destructor is constructed, which is why every call sits first in its body.
+static int checkDrawContextL(lua_State *L, const char *fn)
+{
+	if (!inDrawCallback)
+		return luaL_error(L, "%s%s", fn, DrawContextMessage);
+	return 0;
 }
 
 void overlay()
@@ -651,6 +667,156 @@ static int uiButton(lua_State *L)
 	return 0;
 }
 
+/*
+ * ImGui baseline profile - see docs/lua_api_spec.lua, THE UI SURFACE.
+ *
+ * Names match ImGui's own on purpose: a script author already knows this API,
+ * and renaming it to look neutral would only put a translation layer between
+ * the documentation and the binding.
+ *
+ * Nothing here applies settings.display.uiScale. The older beginWindow does,
+ * to its size but not its position, which means at any scale other than 1 the
+ * two are in different units; that is kept for the scripts that depend on it
+ * rather than silently changed. New code should position in raw pixels and
+ * scale deliberately using ui.GetScale().
+ *
+ * Widgets that own a value return (value, changed) - Lua has multiple returns,
+ * so there is no need for the pointer dance the C++ API uses.
+ */
+static float uiGetScale()
+{
+	checkDrawContext("GetScale");
+	return settings.display.uiScale;
+}
+
+static int uiBegin(lua_State *L)
+{
+	checkDrawContextL(L, "Begin");
+	const char *name = luaL_checkstring(L, 1);
+	// Returns whether the window is expanded, matching ImGui: skip the body
+	// when it is false.
+	lua_pushboolean(L, ImGui::Begin(name));
+	return 1;
+}
+
+static void uiEnd()          { checkDrawContext("End"); ImGui::End(); }
+static void uiSeparator()    { checkDrawContext("Separator"); ImGui::Separator(); }
+static void uiSpacing()      { checkDrawContext("Spacing"); ImGui::Spacing(); }
+
+static void uiSetNextWindowPos(float x, float y)
+{
+	checkDrawContext("SetNextWindowPos");
+	ImGui::SetNextWindowPos(ImVec2(x, y));
+}
+
+static void uiSetNextWindowSize(float w, float h)
+{
+	checkDrawContext("SetNextWindowSize");
+	ImGui::SetNextWindowSize(ImVec2(w, h));
+}
+
+static int uiCheckbox(lua_State *L)
+{
+	checkDrawContextL(L, "Checkbox");
+	const char *label = luaL_checkstring(L, 1);
+	bool v = lua_toboolean(L, 2) != 0;
+	const bool changed = ImGui::Checkbox(label, &v);
+	lua_pushboolean(L, v);
+	lua_pushboolean(L, changed);
+	return 2;
+}
+
+static int uiSelectable(lua_State *L)
+{
+	checkDrawContextL(L, "Selectable");
+	const char *label = luaL_checkstring(L, 1);
+	const bool selected = lua_toboolean(L, 2) != 0;
+	lua_pushboolean(L, ImGui::Selectable(label, selected));
+	return 1;
+}
+
+static int uiSliderFloat(lua_State *L)
+{
+	checkDrawContextL(L, "SliderFloat");
+	const char *label = luaL_checkstring(L, 1);
+	float v = (float)luaL_checknumber(L, 2);
+	const float lo = (float)luaL_checknumber(L, 3);
+	const float hi = (float)luaL_checknumber(L, 4);
+	const bool changed = ImGui::SliderFloat(label, &v, lo, hi);
+	lua_pushnumber(L, v);
+	lua_pushboolean(L, changed);
+	return 2;
+}
+
+static int uiSliderInt(lua_State *L)
+{
+	checkDrawContextL(L, "SliderInt");
+	const char *label = luaL_checkstring(L, 1);
+	int v = (int)luaL_checkinteger(L, 2);
+	const int lo = (int)luaL_checkinteger(L, 3);
+	const int hi = (int)luaL_checkinteger(L, 4);
+	const bool changed = ImGui::SliderInt(label, &v, lo, hi);
+	lua_pushinteger(L, v);
+	lua_pushboolean(L, changed);
+	return 2;
+}
+
+static int uiInputText(lua_State *L)
+{
+	checkDrawContextL(L, "InputText");
+	const char *label = luaL_checkstring(L, 1);
+	const char *initial = luaL_optstring(L, 2, "");
+	// A fixed buffer rather than a resize callback: the callback form needs a
+	// std::string that outlives the call, and a script editing more than this
+	// in a text field wants a different widget anyway.
+	char buf[512];
+	strncpy(buf, initial, sizeof(buf) - 1);
+	buf[sizeof(buf) - 1] = '\0';
+	const bool changed = ImGui::InputText(label, buf, sizeof(buf));
+	lua_pushstring(L, buf);
+	lua_pushboolean(L, changed);
+	return 2;
+}
+
+static int uiGetMousePos(lua_State *L)
+{
+	checkDrawContextL(L, "GetMousePos");
+	const ImVec2 p = ImGui::GetMousePos();
+	lua_pushnumber(L, p.x);
+	lua_pushnumber(L, p.y);
+	return 2;
+}
+
+//! Mouse buttons are 1-based here, per the interface's indexing rule; ImGui's
+//! own are 0-based.
+static int checkMouseButton(lua_State *L, int arg)
+{
+	const int b = (int)luaL_checkinteger(L, arg);
+	luaL_argcheck(L, b >= 1 && b <= 5, arg, "mouse button must be between 1 and 5");
+	return b - 1;
+}
+
+static int uiIsMouseClicked(lua_State *L)
+{
+	checkDrawContextL(L, "IsMouseClicked");
+	lua_pushboolean(L, ImGui::IsMouseClicked(checkMouseButton(L, 1)));
+	return 1;
+}
+
+static int uiIsMouseDown(lua_State *L)
+{
+	checkDrawContextL(L, "IsMouseDown");
+	lua_pushboolean(L, ImGui::IsMouseDown(checkMouseButton(L, 1)));
+	return 1;
+}
+
+static int uiIsMouseReleased(lua_State *L)
+{
+	checkDrawContextL(L, "IsMouseReleased");
+	lua_pushboolean(L, ImGui::IsMouseReleased(checkMouseButton(L, 1)));
+	return 1;
+}
+
 static int uiRect(float x, float y, float w, float h, u32 fill, u32 border)
 {
 	checkDrawContext("uiRect");
@@ -948,7 +1114,31 @@ static void luaRegister(lua_State *L)
 				.addFunction("getFrameNumber", getFrameNumber)
 			.endNamespace()
 
+			// ImGui baseline profile, under ImGui's own names. See
+			// docs/lua_api_spec.lua, THE UI SURFACE.
 			.beginNamespace("ui")
+				.addFunction("Begin", uiBegin)
+				.addFunction("End", uiEnd)
+				.addFunction("Text", uiText)
+				.addFunction("TextColored", uiTextColor)
+				.addFunction("Button", uiButton)
+				.addFunction("SameLine", uiSameLine)
+				.addFunction("Checkbox", uiCheckbox)
+				.addFunction("Selectable", uiSelectable)
+				.addFunction("SliderFloat", uiSliderFloat)
+				.addFunction("SliderInt", uiSliderInt)
+				.addFunction("InputText", uiInputText)
+				.addFunction("Separator", uiSeparator)
+				.addFunction("Spacing", uiSpacing)
+				.addFunction("SetNextWindowPos", uiSetNextWindowPos)
+				.addFunction("SetNextWindowSize", uiSetNextWindowSize)
+				.addFunction("GetMousePos", uiGetMousePos)
+				.addFunction("IsMouseClicked", uiIsMouseClicked)
+				.addFunction("IsMouseDown", uiIsMouseDown)
+				.addFunction("IsMouseReleased", uiIsMouseReleased)
+				.addFunction("GetScale", uiGetScale)
+
+				// Pre-existing names, kept for the scripts that use them.
 				.addFunction("beginWindow", beginWindow)
 				.addFunction("endWindow", endWindow)
 				.addFunction("text", uiText)

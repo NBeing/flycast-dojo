@@ -149,15 +149,21 @@ set and the wrong one for this one — C++ emulators that all embed ImGui.
 
 **Follow-up work, now split:**
 
-- [P] Bring `ui.*` up to the baseline. flycast covers roughly 6 of 20 today
-  (`Begin`, `End`, `Text`, `TextColored`, `Button`, `SameLine` under different
-  names). Missing: `Checkbox`, `Selectable`, `SliderFloat`, `SliderInt`,
-  `InputText`, `Separator`, `Spacing`, `SetNextWindowSize`/`Pos` as separate
-  calls, `GetMousePos`, `IsMouseClicked`/`Down`/`Released`, `Image`.
-- [B] `beginWindow` is incoherent about units: position is passed to ImGui
-  raw while size is multiplied by `settings.display.uiScale`. At any scale
-  other than 1 a window's position and size are in different units. Fix when
-  splitting out `SetNextWindowPos`/`Size`.
+- [x] **Baseline `ui.*` implemented** — 19 of 20 under ImGui's own names, plus
+  `GetScale()`. Verified in-game with a live panel: `Text`, `TextColored`,
+  `Checkbox`, `SliderFloat`, `SliderInt`, `InputText`, `Selectable`, `Button`,
+  `Separator`, `Spacing`, `SetNextWindowPos`/`Size`, `GetMousePos`,
+  `IsMouseClicked`/`Down`/`Released`, `Begin`/`End`. Value-owning widgets
+  return `(value, changed)` rather than the C++ pointer dance. Mouse buttons
+  are 1-based per the indexing rule; ImGui's own are 0-based.
+- [ ] `ui.Image` is the one baseline member not implemented: it needs host
+  texture management, which is genuinely emulator-specific. Capability-gated
+  rather than faked — `emu.supports("ui.Image")` answers false.
+- [x] **New `ui.*` applies no implicit scaling.** `GetScale()` hands the factor
+  to the script instead. The old `beginWindow` still scales its size but not
+  its position — incoherent at any scale but 1 — and is left alone rather than
+  silently changed under the scripts that depend on it. Prefer
+  `SetNextWindowPos`/`Size`.
 - [S] `gui.*` game-pixel mapping needs the game viewport rect, which is
   currently renderer-local (`TransformMatrix` is constructed inside the
   renderer; `getPvrFramebufferSize` needs a `rend_context`). Exposing it means

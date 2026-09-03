@@ -407,26 +407,30 @@ function savestate.registerload(fn) end  --- [port]
 --- gui.register callback, per CALLBACK THREADING.
 ui = {}
 
-function ui.Begin(name, open, flags) end      --- [ok] partial: beginWindow
+function ui.Begin(name, open, flags) end      --- [ok]
+function ui.GetScale() end                   --- [ok] UI scale factor, so a
+--- script can scale deliberately rather than have it applied behind its back
 function ui.End() end                         --- [ok] endWindow
 function ui.Text(s) end                       --- [ok]
 function ui.TextColored(r,g,b,a,s) end        --- [ok] textColor
 function ui.Button(label, w, h) end           --- [ok]
 function ui.SameLine(offset) end              --- [ok]
-function ui.Checkbox(label, value) end        --- [port]
-function ui.Selectable(label, selected) end   --- [port]
-function ui.SliderFloat(label, v, lo, hi) end --- [port]
-function ui.SliderInt(label, v, lo, hi) end   --- [port]
-function ui.InputText(label, text) end        --- [port]
-function ui.Separator() end                   --- [port]
-function ui.Spacing() end                     --- [port]
-function ui.SetNextWindowSize(w, h) end       --- [port] folded into beginWindow today
-function ui.SetNextWindowPos(x, y) end        --- [port] folded into beginWindow today
-function ui.GetMousePos() end                 --- [port]
-function ui.IsMouseClicked(button) end        --- [port]
-function ui.IsMouseDown(button) end           --- [port]
-function ui.IsMouseReleased(button) end       --- [port]
-function ui.Image(id, w, h) end               --- [port]
+function ui.Checkbox(label, value) end        --- [ok]
+function ui.Selectable(label, selected) end   --- [ok]  
+function ui.SliderFloat(label, v, lo, hi) end --- [ok]  
+function ui.SliderInt(label, v, lo, hi) end   --- [ok]  
+function ui.InputText(label, text) end        --- [ok]
+function ui.Separator() end                   --- [ok]  
+function ui.Spacing() end                     --- [ok]  
+function ui.SetNextWindowSize(w, h) end       --- [ok]
+function ui.SetNextWindowPos(x, y) end        --- [ok]
+function ui.GetMousePos() end                 --- [ok]  
+function ui.IsMouseClicked(button) end        --- [ok]
+function ui.IsMouseDown(button) end           --- [ok]  
+function ui.IsMouseReleased(button) end       --- [ok]  
+function ui.Image(id, w, h) end               --- [no] needs host texture
+--- management, which is emulator-specific. Capability-gated rather than faked:
+--- emu.supports("ui.Image") answers false where it is absent.
 
 --- ---------------------------------------------------------------------
 --- gui — content overlay, in GAME pixels
