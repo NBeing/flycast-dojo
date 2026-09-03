@@ -131,8 +131,41 @@ static void eventCallback(const char *tag)
 	}
 }
 
+/*
+ * Drawing is only legal from the overlay callback.
+ *
+ * Callbacks do not all run on the same thread. `overlay` is dispatched from
+ * gui_display_osd() on the render thread, inside an ImGui frame; `vblank` is
+ * dispatched from Emulator::vblank() on the emulation thread, which is a
+ * separate std::async thread whenever ThreadedRendering is on - the default on
+ * desktop. ImGui keeps global per-frame state, so a script that draws from
+ * vblank races the render thread and corrupts it.
+ *
+ * The flag is thread_local, so the emulation thread always reads false no
+ * matter what the render thread is doing, and no synchronisation is needed. It
+ * also catches drawing from outside any callback at all, where there is no
+ * ImGui frame to draw into.
+ */
+static thread_local bool inDrawCallback;
+
+struct DrawContextGuard
+{
+	DrawContextGuard() { inDrawCallback = true; }
+	~DrawContextGuard() { inDrawCallback = false; }
+};
+
+static void checkDrawContext(const char *fn)
+{
+	if (!inDrawCallback)
+		throw std::runtime_error(std::string(fn)
+				+ ": drawing is only allowed from the overlay callback, which runs on"
+				" the render thread. Other callbacks run on the emulation thread."
+				" Buffer what you want to draw and emit it from overlay.");
+}
+
 void overlay()
 {
+	DrawContextGuard guard;
 	eventCallback("overlay");
 }
 
@@ -505,6 +538,7 @@ static void setRelCoordinates(int player, float x, float y, lua_State *L)
 
 static void beginWindow(const char *title, int x, int y, int w, int h)
 {
+	checkDrawContext("beginWindow");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
@@ -518,6 +552,7 @@ static void beginWindow(const char *title, int x, int y, int w, int h)
 
 static void endWindow()
 {
+	checkDrawContext("endWindow");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::PopStyleColor();
@@ -527,6 +562,7 @@ static void endWindow()
 
 static void uiText(const std::string& text)
 {
+	checkDrawContext("uiText");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::Text("%s", text.c_str());
@@ -534,6 +570,7 @@ static void uiText(const std::string& text)
 
 static void uiTextRightAligned(const std::string& text)
 {
+	checkDrawContext("uiTextRightAligned");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text.c_str()).x);
@@ -542,6 +579,7 @@ static void uiTextRightAligned(const std::string& text)
 
 static void uiTextColor(const std::string& text, float r, float g, float b, float a)
 {
+	checkDrawContext("uiTextColor");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::TextColored(ImVec4(r, g, b, a), "%s", text.c_str());
@@ -549,6 +587,7 @@ static void uiTextColor(const std::string& text, float r, float g, float b, floa
 
 static void uiTextColorRightAligned(const std::string& text, float r, float g, float b, float a)
 {
+	checkDrawContext("uiTextColorRightAligned");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text.c_str()).x);
@@ -557,6 +596,7 @@ static void uiTextColorRightAligned(const std::string& text, float r, float g, f
 
 static void uiSameLine()
 {
+	checkDrawContext("uiSameLine");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::SameLine();
@@ -564,6 +604,7 @@ static void uiSameLine()
 
 static void uiSameLinePlaceholder(const std::string& text)
 {
+	checkDrawContext("uiSameLinePlaceholder");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text.c_str()).x);
@@ -571,6 +612,7 @@ static void uiSameLinePlaceholder(const std::string& text)
 
 static void uiSameLinePlaceholderRightAligned(const std::string& text)
 {
+	checkDrawContext("uiSameLinePlaceholderRightAligned");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text.c_str()).x);
@@ -578,6 +620,7 @@ static void uiSameLinePlaceholderRightAligned(const std::string& text)
 
 static void uiBargraph(float v)
 {
+	checkDrawContext("uiBargraph");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::ProgressBar(v, ImVec2(-1, 10.f * settings.display.uiScale), "");
@@ -585,6 +628,7 @@ static void uiBargraph(float v)
 
 static void uiBargraphColor(float v, u32 color)
 {
+	checkDrawContext("uiBargraphColor");
 	if (!config::ShowTrainingGameOverlay)
 		return;
 	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, color);
@@ -594,6 +638,7 @@ static void uiBargraphColor(float v, u32 color)
 
 static int uiButton(lua_State *L)
 {
+	checkDrawContext("uiButton");
 	if (!config::ShowTrainingGameOverlay)
 		return 0;
 	const char *label = luaL_checkstring(L, 1);
@@ -608,6 +653,7 @@ static int uiButton(lua_State *L)
 
 static int uiRect(float x, float y, float w, float h, u32 fill, u32 border)
 {
+	checkDrawContext("uiRect");
 	if (!config::ShowTrainingGameOverlay)
 		return 0;
 	ImDrawList *draw_list = ImGui::GetForegroundDrawList();
@@ -618,6 +664,7 @@ static int uiRect(float x, float y, float w, float h, u32 fill, u32 border)
 
 static int uiLine(float x1, float y1, float x2, float y2, u32 color)
 {
+	checkDrawContext("uiLine");
 	if (!config::ShowTrainingGameOverlay)
 		return 0;
 	ImDrawList *draw_list = ImGui::GetForegroundDrawList();

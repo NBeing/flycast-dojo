@@ -4,13 +4,13 @@
 ---
 --- STATUS: DRAFT. Not finished, and not yet safe to implement against.
 ---
---- It names the right things and settles six questions (capability is
+--- It names the right things and settles seven questions (capability is
 --- queryable, rollback safety is in the contract, unportable hooks are
---- excluded with reasons, buttons are named booleans, indices are 1-based, and
---- failure is loud). It does NOT yet pin down address spaces, drawing
---- coordinates, callback threading, interface versioning, or namespace
---- collision - and two emulators can both conform to what is written here and
---- still disagree in every one of those.
+--- excluded with reasons, buttons are named booleans, indices are 1-based,
+--- failure is loud, and only draw callbacks may draw). It does NOT yet pin
+--- down address spaces, drawing coordinates, interface versioning, or
+--- namespace collision - and two emulators can both conform to what is written
+--- here and still disagree in every one of those.
 --- See LUA_TODO.md, Part 1, before building on this.
 ---
 --- WHAT THIS IS
@@ -142,6 +142,43 @@
 --- ignored. Conforming there means splitting that table by player and mapping
 --- driver names onto button names. That is real work, not a rename, and it is
 --- the largest single conformance cost identified so far.
+---
+---
+--- CALLBACK THREADING — resolved. A correctness rule, not a style note.
+---
+--- Callbacks do not all run on the same thread, and an emulator is not
+--- required to make them. flycast-dojo dispatches its draw callback from the
+--- render thread inside an active drawing frame, and its frame callback from a
+--- separate emulation thread (ThreadedRendering, on by default). A UI toolkit
+--- keeps global per-frame state, so a script that draws from a frame callback
+--- races the renderer and corrupts it - silently, and only under load.
+---
+--- The rule:
+---
+---   * `gui.*` may be called ONLY from a `gui.register` callback. Everywhere
+---     else it MUST raise, per failure tier 1 - this is a script bug and has
+---     to be loud, because the alternative is an intermittent crash that looks
+---     like an emulator fault.
+---   * Everything else - memory, input, frame counters, savestates - is
+---     callable from any callback.
+---   * An observer that wants to draw BUFFERS on the frame callback and emits
+---     from the draw callback. This is the portable shape:
+---
+---         local pending = {}
+---         emu.registerafter(function()
+---             pending.hp = memory.readbyte(0x8C0100)   -- emulation thread
+---         end)
+---         gui.register(function()
+---             gui.text(8, 8, "HP " .. (pending.hp or "?"))  -- render thread
+---         end)
+---
+---   * A single-threaded emulator MUST still enforce this. Scripts written
+---     against a permissive host break on a threaded one, which is exactly the
+---     portability failure this interface exists to prevent.
+---
+--- Implementers: a thread-local "inside the draw callback" flag is enough, and
+--- is cheaper and more precise than comparing thread ids. It also catches
+--- drawing from outside any callback, where there is no frame to draw into.
 ---
 ---
 --- THE ROLLBACK CONTRACT — read before writing an observer
@@ -299,6 +336,8 @@ function gui.box(x, y, x2, y2, c) end    --- [ok]   flycast.ui.rect
 function gui.line(x, y, x2, y2, c) end   --- [ok]   flycast.ui.line
 function gui.pixel(x, y, c) end          --- [spec]
 function gui.register(fn) end            --- [ok]   flycast_callbacks.overlay
+--- Reminder: every gui.* above is legal ONLY inside a gui.register callback.
+--- See CALLBACK THREADING at the top of this file.
 
 --- ---------------------------------------------------------------------
 --- movie — recording and rerecording

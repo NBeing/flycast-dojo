@@ -103,6 +103,9 @@ function savestate.save(slot) host.emulator.saveState(slotToHost(slot)) end
 function savestate.load(slot) host.emulator.loadState(slotToHost(slot)) end
 
 --- gui ------------------------------------------------------------------
+--- Legal only inside a gui.register callback - the host raises otherwise,
+--- because these run on the render thread and the frame callbacks do not.
+---
 --- The interface draws immediate primitives at game-pixel coordinates; the
 --- host draws ImGui flow layout inside a window. Each primitive therefore
 --- opens a borderless window at the requested point. Workable, but a native

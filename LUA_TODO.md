@@ -3,11 +3,11 @@
 Working list for `docs/lua_api_spec.lua`, the cross-emulator Lua interface, and
 for porting fbneo-rr's remaining script surface into flycast-dojo.
 
-**Is the interface done? No, but it is three questions closer.** It names the
-right things and settles six (capability is queryable, rollback safety is in
+**Is the interface done? No, but it is four questions closer.** It names the
+right things and settles seven (capability is queryable, rollback safety is in
 the contract, unportable hooks are excluded with reasons, buttons are named
-booleans, indices are 1-based, and failure is loud — the last three resolved
-and implemented). What it does not
+booleans, indices are 1-based, failure is loud, and only draw callbacks may
+draw — the last four resolved and implemented). What it does not
 yet do is pin down the details that make two implementations actually
 interchangeable. Those are Part 1, and they matter more than the port itself:
 a spec with unresolved semantics produces two conforming emulators that still
@@ -101,12 +101,30 @@ game-pixel primitives. Specify: game pixels, origin top-left, with the
 emulator responsible for scaling. Anything else and overlays land in different
 places on each emulator, which defeats the point.
 
-### [S] 6. Callback threading — a correctness rule, not a style note
-flycast runs `overlay` on the render thread and `vblank` on the emulation
-thread, serialised by a mutex. A script that draws from a frame callback is
-touching the UI toolkit from the wrong thread. The spec must state which
-callbacks may draw and which may not, and require observers to buffer rather
-than draw directly.
+### [x] 6. Callback threading — RESOLVED, and enforced
+**`gui.*` is legal only inside a `gui.register` callback. Everywhere else it
+raises.** Everything else — memory, input, frame counters, savestates — is
+callable from any callback. An observer that wants to draw buffers on the frame
+callback and emits from the draw callback.
+
+This was a live hazard, not a theoretical one. `ThreadedRendering` defaults to
+**true**, emulation runs on a separate `std::async` thread, `overlay` is
+dispatched from the render thread and `vblank` from the emulation thread — and
+the `ui.*` bindings called ImGui with **no thread guard and no frame guard**.
+A script drawing from `vblank` raced ImGui's global per-frame state. Silent,
+and only under load.
+
+Enforced with a `thread_local` "inside the draw callback" flag checked by all
+14 `ui.*` entry points — cheaper and more precise than comparing thread ids,
+and it also catches drawing from outside any callback, where there is no frame
+to draw into.
+
+The spec requires single-threaded emulators to enforce it too: a script written
+against a permissive host that breaks on a threaded one is exactly the
+portability failure this interface exists to prevent.
+
+Verified in-game: drawing from `vblank` raises with a message naming the fix,
+memory reads from `vblank` still work, and drawing from `overlay` renders.
 
 ### [S][?] 7. Callback registration model
 Two shapes in play: flycast's `flycast_callbacks` table with well-known keys,
