@@ -164,16 +164,25 @@ set and the wrong one for this one — C++ emulators that all embed ImGui.
   its position — incoherent at any scale but 1 — and is left alone rather than
   silently changed under the scripts that depend on it. Prefer
   `SetNextWindowPos`/`Size`.
-- [S] `gui.*` game-pixel mapping needs the game viewport rect, which is
-  currently renderer-local (`TransformMatrix` is constructed inside the
-  renderer; `getPvrFramebufferSize` needs a `rend_context`). Exposing it means
-  caching the viewport where the Lua layer can reach it. Until then the adapter
-  draws in window pixels — **a known deviation**, and the reason a hitbox
-  overlay would not yet track a resized window.
-- [?] `emu.screenwidth()`/`screenheight()` currently return the *window* size
-  (`settings.display.width`). For game-pixel drawing a script needs the *game*
-  resolution. Decide whether these report the game and add separate window
-  accessors, or vice versa.
+- [x] **`gui.*` game-pixel mapping done.** No renderer hook was needed after
+  all: `getDCFramebufferAspectRatio()` reads only config (`Rotate90`,
+  `ScreenStretching`), so the letterbox rectangle can be computed exactly as
+  `renderLastFrame()` does it, from a neutral place. Exposed as
+  `state.getGameViewport()` → x,y,w,h and `state.getGameResolution()` → w,h;
+  the adapter maps game pixels through it.
+
+  Verified visually at a deliberately non-4:3 window (960×480, so the 4:3 game
+  is pillarboxed with 160px bars): a box drawn at game (0,0)–(639,479) hugs the
+  game image exactly, diagonals run corner-to-corner of the picture rather than
+  the window, and the reported viewport is `160,0 640×480`.
+- [x] **Colour format documented.** `gui.*` colours are `0xAABBGGRR` — ImGui's
+  own `IM_COL32` packing, not the `0xRRGGBBAA` a reader assumes. Found by
+  drawing a "blue" line that came out red. Greys are identical under both
+  readings, so the mistake survives casual testing.
+- [?] `emu.screenwidth()`/`screenheight()` still return the *window* size
+  (`settings.display.width`). Game-pixel drawing now has
+  `state.getGameResolution()`, so the remaining decision is only whether the
+  neutral accessors should report the game and gain separate window accessors.
 
 ### [x] 6. Callback threading — RESOLVED, and enforced
 **`gui.*` is legal only inside a `gui.register` callback. Everywhere else it

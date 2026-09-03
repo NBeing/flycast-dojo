@@ -145,15 +145,27 @@ end
 function savestate.save(slot) host.emulator.saveState(slotToHost(slot)) end
 function savestate.load(slot) host.emulator.loadState(slotToHost(slot)) end
 
---- gui ------------------------------------------------------------------
+--- gui - content overlay, in GAME pixels ---------------------------------
 --- Legal only inside a gui.register callback - the host raises otherwise,
 --- because these run on the render thread and the frame callbacks do not.
 ---
---- The interface draws immediate primitives at game-pixel coordinates; the
---- host draws ImGui flow layout inside a window. Each primitive therefore
---- opens a borderless window at the requested point. Workable, but a native
---- implementation on a draw list would be cheaper - the case for moving this
---- one to a native binding later.
+--- Coordinates are game pixels with the origin at the top-left of the game
+--- image, so a mark stays on the thing it marks when the window is resized or
+--- letterboxed. The host reports the image's rectangle and the logical game
+--- resolution; the mapping is here.
+local function mapper()
+	local vx, vy, vw, vh = host.state.getGameViewport()
+	local gw, gh = host.state.getGameResolution()
+	local sx, sy = vw / gw, vh / gh
+	return function(x, y) return vx + x * sx, vy + y * sy end, sx, sy
+end
+
+--- Game-pixel size of one screen pixel, for callers that need to scale a
+--- thickness or a font.
+function gui.scale()
+	local _, sx, sy = mapper()
+	return sx, sy
+end
 --- Reset every frame, so the Nth draw call each frame keeps a stable ImGui id.
 --- Letting it grow monotonically mints a new window per frame and leaks ImGui
 --- state for thousands of windows.
@@ -167,15 +179,33 @@ local function inWindow(x, y, w, h, body)
 end
 
 function gui.text(x, y, s)
-	inWindow(x, y, nil, nil, function() host.ui.text(tostring(s)) end)
+	local to = mapper()
+	local px, py = to(x, y)
+	inWindow(px, py, nil, nil, function() host.ui.text(tostring(s)) end)
 end
 
+--- Outline only. gui.boxfill is the filled variant.
 function gui.box(x, y, x2, y2, colour)
-	host.ui.rect(x, y, x2 - x, y2 - y, colour or 0xFFFFFFFF)
+	local to = mapper()
+	local px, py = to(x, y)
+	local qx, qy = to(x2, y2)
+	--- The host's rect takes fill and border separately; gui.box is an
+	--- outline, so the fill is fully transparent.
+	host.ui.rect(px, py, qx - px, qy - py, 0x00000000, colour or 0xFFFFFFFF)
+end
+
+function gui.boxfill(x, y, x2, y2, fill, border)
+	local to = mapper()
+	local px, py = to(x, y)
+	local qx, qy = to(x2, y2)
+	host.ui.rect(px, py, qx - px, qy - py, fill or 0x80FFFFFF, border or 0x00000000)
 end
 
 function gui.line(x, y, x2, y2, colour)
-	host.ui.line(x, y, x2, y2, colour or 0xFFFFFFFF)
+	local to = mapper()
+	local px, py = to(x, y)
+	local qx, qy = to(x2, y2)
+	host.ui.line(px, py, qx, qy, colour or 0xFFFFFFFF)
 end
 
 --- movie ----------------------------------------------------------------

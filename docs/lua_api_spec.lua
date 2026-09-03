@@ -440,10 +440,17 @@ function ui.Image(id, w, h) end               --- [no] needs host texture
 --- mapping to screen including scaling and letterboxing. A mark drawn at a
 --- character's position must stay on that character when the window resizes,
 --- which window-space widgets cannot do.
+--- COLOURS are 0xAABBGGRR - alpha, blue, green, red, high byte to low. This is
+--- ImGui's own packing (IM_COL32), not the 0xRRGGBBAA a reader tends to
+--- assume, and the two are indistinguishable for greys so the mistake survives
+--- casual testing. Opaque red is 0xFF0000FF, opaque green 0xFF00FF00, opaque
+--- blue 0xFFFF0000.
 gui = {}
 
 function gui.text(x, y, s) end           --- [ok]   flycast.ui.text (needs beginWindow)
-function gui.box(x, y, x2, y2, c) end    --- [ok]   flycast.ui.rect
+function gui.box(x, y, x2, y2, c) end    --- [ok]   outline
+function gui.boxfill(x, y, x2, y2, fill, border) end --- [ok]
+function gui.scale() end                 --- [ok]   screen px per game px
 function gui.line(x, y, x2, y2, c) end   --- [ok]   flycast.ui.line
 function gui.pixel(x, y, c) end          --- [spec]
 function gui.register(fn) end            --- [ok]   flycast_callbacks.overlay
