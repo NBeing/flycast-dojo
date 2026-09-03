@@ -33,26 +33,65 @@
 ---
 --- CONFORMANCE
 ---
---- 1. Namespaces are ROOT-LEVEL and neutral: `emu`, `memory`, `input`,
----    `joypad`, `savestate`, `gui`, `movie`, `sound`, `frame`.
+--- This interface is designed to the domain, NOT to the intersection of what
+--- existing emulators happen to expose. Where an emulator's surface disagrees,
+--- the emulator adapts. An adapter is a normal cost, not a spec failure.
 ---
----    Neither emulator does this today. flycast-dojo nests everything under
----    `flycast.*` (`flycast.emulator.startGame`), fbneo-rr exposes `emu.*` and
----    an `fba.*` alias. Conforming means publishing the neutral names as
----    aliases of whatever the emulator already has. Existing names stay: this
----    interface adds, it does not rename.
+--- The reason is concrete. fbneo-rr's `joypad.get(which)` ignores its argument
+--- and returns one flat table of every game input, keyed by the driver's own
+--- string ("P1 Fire 1"). flycast-dojo returned a raw active-low bitmask with no
+--- constants exposed. Neither is a worse *spelling* of per-player buttons; they
+--- are different data models. A spec assembled from the intersection would have
+--- had to adopt one of them, or omit per-player input altogether. Designing the
+--- sane thing and paying for an adapter is the only option that yields a
+--- surface worth writing scripts against.
 ---
---- 2. An emulator declares what it implements. A script asks rather than
----    assumes, because no emulator will implement all of this:
+--- ONE BOUNDARY. Existing API *shape* is incidental and must not constrain the
+--- design - adapt it. Existing *architecture* is essential and must - respect
+--- it. That is why per-access memory hooks are excluded rather than specified:
+--- they assume an interpreter core, and no adapter can paper over a
+--- recompiler. The rule is: most logical, bounded by implementable on at least
+--- two real emulators, even if expensively. An abstraction nothing can
+--- implement is not logical, only tidy.
+---
+--- WHAT CONFORMANCE MEANS
+---
+--- 1. The conformance suite is the definition. If it passes, you conform.
+---    Everything else is opinion. See LUA_TODO.md Part 3.
+---
+--- 2. Partial conformance is the normal case. Nothing will implement all of
+---    this. Declare what you have:
 ---
 ---        if emu.supports("memory.registerwrite") then ... end
 ---
----    Absent capability MUST be a missing/false answer from `emu.supports`,
----    never a silently-does-nothing function. A stub that pretends to work is
----    worse than one that admits it does not.
+---    An absent capability MUST answer false and MUST raise if called anyway.
+---    A function that silently does nothing is worse than one that admits it
+---    does not exist. `emu.supports` should be derived from the bindings that
+---    actually exist, never a hand-maintained list, so it cannot drift.
 ---
---- 3. Anything not marked [core] is optional.
+--- 3. Namespaces are root-level and neutral: `emu`, `memory`, `input`,
+---    `joypad`, `savestate`, `gui`, `movie`, `sound`, `frame`. Note that
+---    fbneo-rr already owns the global `emu`; an adapter must snapshot the
+---    host's tables before installing over them.
 ---
+--- 4. Anything not marked [core] is optional.
+---
+--- WHERE THE ADAPTER LIVES
+---
+--- Three options, and the first is underrated:
+---
+---   a. A Lua shim over the emulator's native API. Requires no changes to the
+---      emulator at all, which means an emulator you do not control - or one
+---      whose licence forbids sharing code with yours - can still present this
+---      surface. Getting the design wrong costs a text edit, not a release.
+---      See docs/adapters/.
+---
+---   b. Native implementation in the emulator. Best performance; needs upstream
+---      buy-in. Worth it for hot paths (per-frame memory reads, drawing).
+---
+---   c. Hybrid: native where it is hot, shim for the rest. Expected end state.
+---
+--- Start at (a). Move a function to (b) when measurement says to.
 ---
 --- STATUS TAGS
 ---
