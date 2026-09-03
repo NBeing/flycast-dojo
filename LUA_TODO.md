@@ -3,10 +3,11 @@
 Working list for `docs/lua_api_spec.lua`, the cross-emulator Lua interface, and
 for porting fbneo-rr's remaining script surface into flycast-dojo.
 
-**Is the interface done? No, but it is one question closer.** It names the
-right things and settles four real questions (capability is queryable,
-rollback safety is in the contract, unportable hooks are excluded with
-reasons, and buttons are named booleans — resolved and implemented). What it does not
+**Is the interface done? No, but it is three questions closer.** It names the
+right things and settles six (capability is queryable, rollback safety is in
+the contract, unportable hooks are excluded with reasons, buttons are named
+booleans, indices are 1-based, and failure is loud — the last three resolved
+and implemented). What it does not
 yet do is pin down the details that make two implementations actually
 interchangeable. Those are Part 1, and they matter more than the port itself:
 a spec with unresolved semantics produces two conforming emulators that still
@@ -44,10 +45,23 @@ explicit false releases; unknown name rejected; and the raw mask cross-checked
 against the table to confirm the active-low inversion is hidden correctly
 (`0xFFFFFFF5` ⇒ `b` and `start` held).
 
-### [S][?] 2. Player indexing
-flycast is 1-based (`checkPlayerNum`, then `player - 1` internally). Confirm
-fbneo's convention and state it. Lua convention argues for 1-based. Cheap to
-settle, expensive to get wrong silently.
+### [x] 2. Player indexing — RESOLVED, and validated
+**Every index a script sees is 1-based**: players, axes, slots, ports. Out of
+range raises. An emulator's internal base is its own business but must not
+leak — flycast-dojo is 1-based for players and axes and 0-based for savestate
+slots internally, and the neutral `savestate.*` alias owns that shift, not the
+script.
+
+The survey turned up something larger than a base-off-by-one. fbneo-rr's
+`joypad.get(which)` **ignores its argument entirely** and returns one flat
+table of every game input, keyed by the driver's own name (`"P1 Fire 1"`), with
+the player encoded in the string. Conforming means splitting that table by
+player and mapping driver names onto button names — real work, not a rename,
+and the largest single conformance cost found so far. Recorded in the spec.
+
+Validation in flycast-dojo was already consistent for players (1–4) and axes
+(1–6). Savestate slots were **not** range-checked at all; they now raise
+outside 0–9.
 
 ### [S][?] 3. Address spaces
 flycast's `memory.read*` take SH4 virtual addresses. fbneo has per-CPU address
@@ -55,11 +69,30 @@ spaces. The interface currently pretends there is one flat space. Options: an
 implicit "main CPU, main space" default plus an explicit
 `memory.space("sh4")` / `memory.cpu(n)` selector, or require the selector.
 
-### [S] 4. Failure semantics
-Unspecified today: what an out-of-range read does. Error, `nil`, or zero? What
-a write to ROM does. What happens when a capability is missing but called
-anyway. Pick one rule and state it — silent zeros and thrown errors are very
-different to write against.
+### [x] 4. Failure semantics — RESOLVED, and verified
+Three tiers, because "it failed" covers three situations that deserve
+different answers:
+
+1. **A programmer mistake raises** — wrong type, index out of range, unknown
+   button name. Bugs in the script must be loud at the call site.
+2. **Genuinely absent data returns `nil`** — no game loaded, no session, an
+   unmapped address. Never a silent zero: zero is a legitimate value and
+   indistinguishable from failure, which turns a missing feature into wrong
+   data.
+3. **A missing capability** answers false from `emu.supports()` and raises if
+   called anyway. Never a silent no-op.
+
+Rule of thumb: if a correct script can hit it at runtime, return `nil`; if only
+a wrong script can hit it, raise.
+
+Verified in-game across 11 cases — player 0/5, axis 0/7, unknown button name,
+non-table argument, savestate slot -1/10, maple bus 9 all raise with
+descriptive messages; the valid calls do not.
+
+**Known deviation, follow-up:** flycast-dojo's `memory.read*` return 0 for an
+unmapped address rather than `nil`, because detecting mapped-ness is not cheap
+in `_vmem`. Tier 2 says this should be `nil`. Left as-is and recorded here
+rather than quietly ignored.
 
 ### [S] 5. Drawing coordinate system
 `gui.*` says nothing about origin, units, or scaling. flycast draws through

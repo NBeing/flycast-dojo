@@ -4,13 +4,13 @@
 ---
 --- STATUS: DRAFT. Not finished, and not yet safe to implement against.
 ---
---- It names the right things and settles four questions (capability is
+--- It names the right things and settles six questions (capability is
 --- queryable, rollback safety is in the contract, unportable hooks are
---- excluded with reasons, and buttons are named booleans). It does NOT yet pin
---- down player indexing, address spaces, failure semantics, drawing
---- coordinates, callback threading, or interface versioning - and two
---- emulators can both conform to what is written here and still disagree in
---- every one of those.
+--- excluded with reasons, buttons are named booleans, indices are 1-based, and
+--- failure is loud). It does NOT yet pin down address spaces, drawing
+--- coordinates, callback threading, interface versioning, or namespace
+--- collision - and two emulators can both conform to what is written here and
+--- still disagree in every one of those.
 --- See LUA_TODO.md, Part 1, before building on this.
 ---
 --- WHAT THIS IS
@@ -62,6 +62,47 @@
 ---   [no]    deliberately excluded, with the reason given
 ---
 --- Tags describe flycast-dojo. fbneo-rr's own conformance is a separate pass.
+---
+---
+--- FAILURE SEMANTICS — resolved
+---
+--- Three tiers, because "it failed" covers three different situations that
+--- deserve different answers.
+---
+---   1. A programmer mistake RAISES. Wrong type, index out of range, unknown
+---      button name, malformed argument. These are bugs in the script and must
+---      be loud at the call site.
+---
+---   2. Genuinely absent data returns `nil`. No game loaded, no session, an
+---      address that is not mapped. Never a silent zero: zero is a legitimate
+---      value and indistinguishable from failure, which turns a missing
+---      feature into wrong data.
+---
+---   3. A missing capability answers false from `emu.supports()`, and RAISES
+---      if called anyway. Never a function that silently does nothing.
+---
+--- The rule of thumb: if a correct script could hit it at runtime, return nil;
+--- if only a wrong script can hit it, raise.
+---
+---
+--- INDEXING — resolved
+---
+--- Every index a script sees is 1-BASED: players, axes, slots, ports. Lua is a
+--- 1-based language and a mixed convention is a permanent source of off-by-one
+--- bugs. Out of range raises, per tier 1 above.
+---
+--- Note for implementers: an emulator's internal base is its own business, but
+--- it MUST NOT leak. flycast-dojo is 1-based for players and axes, and 0-based
+--- for savestate slots internally; its neutral `savestate.*` alias is
+--- responsible for the shift, not the script.
+---
+--- Note on players: this interface is per-player, and `joypad.get(player)` is
+--- expected to return only that player's buttons. fbneo-rr's native model is
+--- different - one flat table of every game input, keyed by the driver's own
+--- name ("P1 Fire 1"), with the player encoded in the string and the argument
+--- ignored. Conforming there means splitting that table by player and mapping
+--- driver names onto button names. That is real work, not a rename, and it is
+--- the largest single conformance cost identified so far.
 ---
 ---
 --- THE ROLLBACK CONTRACT — read before writing an observer

@@ -36,6 +36,7 @@
 #include "stdclass.h"
 #include "imgui/imgui.h"
 #include "dojo/DojoSession.hpp"
+#include <stdexcept>
 
 namespace lua
 {
@@ -678,7 +679,13 @@ static void luaRegister(lua_State *L)
 					if (gui_state == GuiState::Commands)
 						gui_open_settings();
 				}))
+				// Slots are 0..9 here, matching config::SavestateSlot, while
+				// players are 1-based. The neutral savestate.* alias is
+				// 1-based per the spec; this one keeps its existing base so
+				// current scripts are not silently shifted by one.
 				.addFunction("saveState", std::function<void(int)>([](int index) {
+					if (index < 0 || index > 9)
+						throw std::runtime_error("savestate slot must be between 0 and 9");
 					bool restart = false;
 					if (gui_state == GuiState::Closed) {
 						gui_open_settings();
@@ -689,6 +696,8 @@ static void luaRegister(lua_State *L)
 						gui_open_settings();
 				}))
 				.addFunction("loadState", std::function<void(int)>([](int index) {
+					if (index < 0 || index > 9)
+						throw std::runtime_error("savestate slot must be between 0 and 9");
 					bool restart = false;
 					if (gui_state == GuiState::Closed) {
 						gui_open_settings();
