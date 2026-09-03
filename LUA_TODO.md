@@ -3,11 +3,13 @@
 Working list for `docs/lua_api_spec.lua`, the cross-emulator Lua interface, and
 for porting fbneo-rr's remaining script surface into flycast-dojo.
 
-**Is the interface done? No, but it is four questions closer.** It names the
-right things and settles seven (capability is queryable, rollback safety is in
-the contract, unportable hooks are excluded with reasons, buttons are named
-booleans, indices are 1-based, failure is loud, and only draw callbacks may
-draw — the last four resolved and implemented). What it does not
+**Is the interface done? No, but only two questions remain.** It settles eight
+(capability is queryable, rollback safety is in the contract, unportable hooks
+are excluded with reasons, buttons are named booleans, indices are 1-based,
+failure is loud, only draw callbacks may draw, and memory is addressed by named
+space — the last five resolved and implemented). Still open: drawing
+coordinates, and namespace collision. Versioning is stubbed as
+`emu.apiversion()` returning 0. What it does not
 yet do is pin down the details that make two implementations actually
 interchangeable. Those are Part 1, and they matter more than the port itself:
 a spec with unresolved semantics produces two conforming emulators that still
@@ -63,11 +65,33 @@ Validation in flycast-dojo was already consistent for players (1–4) and axes
 (1–6). Savestate slots were **not** range-checked at all; they now raise
 outside 0–9.
 
-### [S][?] 3. Address spaces
-flycast's `memory.read*` take SH4 virtual addresses. fbneo has per-CPU address
-spaces. The interface currently pretends there is one flat space. Options: an
-implicit "main CPU, main space" default plus an explicit
-`memory.space("sh4")` / `memory.cpu(n)` selector, or require the selector.
+### [x] 3. Address spaces — RESOLVED, and implemented
+**Spaces are named and queried**, not encoded in function names:
+
+```lua
+memory.spaces()                        -- {"main", "sound"}
+memory.space("sound").readbyte(0x100)
+memory.readbyte(0x8C010000)            -- shorthand for main
+```
+
+fbneo-rr's suffixed accessors (`readbyte_audio`, …) do not scale: the set of
+spaces is per-system, so a suffix per space means a new function for every CPU
+any supported system might have. `"main"` always exists; everything else is
+queried; an unknown name raises.
+
+**Addresses are not normalised** — they are whatever that CPU uses, in its own
+convention. A script reading a game's health value is bound to that game's
+memory map by nature, and a "portable address" would be a translation layer
+that lies about the hardware and breaks the moment an author cross-references a
+disassembly or a cheat file.
+
+The two emulators reach the same interface by different mechanisms, which is
+the adapter philosophy working: fbneo's audio space is a genuinely separate
+accessor, while flycast's sound RAM is a **window in the SH4 space at
+`0x00800000`** (`_vmem.cpp:478`), presented with its own 0-based addresses by
+the adapter. Verified empirically before relying on it — a byte written through
+`memory.space("sound")` at `0x400` reads back identically through the main
+space at `0x00800400`.
 
 ### [x] 4. Failure semantics — RESOLVED, and verified
 Three tiers, because "it failed" covers three situations that deserve

@@ -100,12 +100,50 @@ function joypad.buttons()
 end
 
 --- memory ---------------------------------------------------------------
-function memory.readbyte(a)      return native.memory.readbyte(a) end
-function memory.readword(a)      return native.memory.readword(a) end
-function memory.readdword(a)     return native.memory.readdword(a) end
-function memory.writebyte(a, v)  native.memory.writebyte(a, v) end
-function memory.getregister(n)   return native.memory.getregister(n) end
-function memory.setregister(n,v) native.memory.setregister(n, v) end
+--- Where flycast presents its second space as an offset window, fbneo already
+--- has genuinely separate accessors - the _audio suffixed family. Same
+--- interface either way, which is the point: a script asks for a space by name
+--- and never learns whether it is a distinct CPU or a window.
+local nm = native.memory
+
+local spaces = {
+	main = {
+		readbyte      = function(a)    return nm.readbyte(a) end,
+		readword      = function(a)    return nm.readword(a) end,
+		readdword     = function(a)    return nm.readdword(a) end,
+		writebyte     = function(a, v) nm.writebyte(a, v) end,
+		writeword     = function(a, v) nm.writeword(a, v) end,
+		writedword    = function(a, v) nm.writedword(a, v) end,
+	},
+	audio = {
+		readbyte      = function(a)    return nm.readbyte_audio(a) end,
+		readword      = function(a)    return nm.readword_audio(a) end,
+		readdword     = function(a)    return nm.readdword_audio(a) end,
+		writebyte     = function(a, v) nm.writebyte_audio(a, v) end,
+		writeword     = function(a, v) nm.writeword_audio(a, v) end,
+		writedword    = function(a, v) nm.writedword_audio(a, v) end,
+	},
+}
+
+function memory.spaces() return { "main", "audio" } end
+
+function memory.space(name)
+	local sp = spaces[name]
+	if sp == nil then
+		error("unknown address space '" .. tostring(name) .. "'; see memory.spaces()", 2)
+	end
+	return sp
+end
+
+memory.readbyte   = spaces.main.readbyte
+memory.readword   = spaces.main.readword
+memory.readdword  = spaces.main.readdword
+memory.writebyte  = spaces.main.writebyte
+memory.writeword  = spaces.main.writeword
+memory.writedword = spaces.main.writedword
+
+function memory.getregister(n)   return nm.getregister(n) end
+function memory.setregister(n,v) nm.setregister(n, v) end
 
 --- savestate ------------------------------------------------------------
 --- Confirm fbneo's slot base before trusting this; the interface is 1-based.

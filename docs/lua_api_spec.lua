@@ -4,13 +4,13 @@
 ---
 --- STATUS: DRAFT. Not finished, and not yet safe to implement against.
 ---
---- It names the right things and settles seven questions (capability is
+--- It names the right things and settles eight questions (capability is
 --- queryable, rollback safety is in the contract, unportable hooks are
 --- excluded with reasons, buttons are named booleans, indices are 1-based,
---- failure is loud, and only draw callbacks may draw). It does NOT yet pin
---- down address spaces, drawing coordinates, interface versioning, or
---- namespace collision - and two emulators can both conform to what is written
---- here and still disagree in every one of those.
+--- failure is loud, only draw callbacks may draw, and memory is addressed by
+--- named space). It does NOT yet pin down drawing coordinates, interface
+--- versioning, or namespace collision - and two emulators can both conform to
+--- what is written here and still disagree in every one of those.
 --- See LUA_TODO.md, Part 1, before building on this.
 ---
 --- WHAT THIS IS
@@ -144,6 +144,39 @@
 --- the largest single conformance cost identified so far.
 ---
 ---
+--- ADDRESS SPACES — resolved
+---
+--- Systems have more than one. fbneo-rr exposes a second CPU through suffixed
+--- accessors (readbyte_audio, writeword_audio, ...), which does not scale: the
+--- set of spaces is per-system, so a fixed suffix per space means a new
+--- function for every CPU any supported system might have.
+---
+--- Spaces are named and queried instead, the same shape as joypad.buttons():
+---
+---     memory.spaces()               -- {"main", "sound"}
+---     memory.space("sound").readbyte(0x100)
+---     memory.readbyte(0x8C010000)   -- shorthand for the main space
+---
+---   * "main" always exists. It is the primary CPU's space.
+---   * Every other name is per-system; a script asks rather than assumes.
+---   * An unknown space name raises, per failure tier 1.
+---   * A space object is a plain table of the same read/write functions, so it
+---     can be hoisted out of a loop: local snd = memory.space("sound").
+---
+--- ADDRESSES ARE NOT NORMALISED. They are whatever that CPU uses, in its own
+--- convention - SH4 virtual addresses on a Dreamcast, 68K addresses on a CPS2.
+--- This is deliberate. A script reading a game's health value is bound to that
+--- game's memory map by its nature, and a "portable address" would be a
+--- translation layer that lies about the hardware while breaking the moment a
+--- script author cross-references a disassembly or a cheat file.
+---
+--- Whether a space is a separate CPU or a window into the main one is an
+--- implementation detail the script must not have to care about. fbneo-rr's
+--- audio space is a genuinely separate accessor; flycast-dojo's sound RAM is a
+--- window in the SH4 space at 0x00800000, presented as a space with its own
+--- 0-based addresses by the adapter. Same interface, different mechanism.
+---
+---
 --- CALLBACK THREADING — resolved. A correctness rule, not a style note.
 ---
 --- Callbacks do not all run on the same thread, and an emulator is not
@@ -242,6 +275,8 @@ function frame.resimsteps() end          --- [port] frames re-simulated so far
 --- ---------------------------------------------------------------------
 memory = {}
 
+function memory.spaces() end             --- [ok]   adapter; see ADDRESS SPACES
+function memory.space(name) end          --- [ok]   adapter; returns an accessor table
 function memory.readbyte(addr) end       --- [ok]   memory.read8
 function memory.readword(addr) end       --- [ok]   memory.read16
 function memory.readdword(addr) end      --- [ok]   memory.read32

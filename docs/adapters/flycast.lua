@@ -80,12 +80,55 @@ local function snapshotInputs()
 end
 
 --- memory ---------------------------------------------------------------
-function memory.readbyte(a)      return host.memory.read8(a) end
-function memory.readword(a)      return host.memory.read16(a) end
-function memory.readdword(a)     return host.memory.read32(a) end
-function memory.writebyte(a, v)  host.memory.write8(a, v) end
-function memory.writeword(a, v)  host.memory.write16(a, v) end
-function memory.writedword(a, v) host.memory.write32(a, v) end
+--- Two named spaces. "main" is the SH4's own virtual address space, passed
+--- through unchanged. "sound" is the AICA/ARM7 view, which on this hardware is
+--- a window in the SH4 space at 0x00800000 - so the adapter presents it with
+--- its own 0-based addresses and applies the offset. A script asking for
+--- sound-CPU address 0x100 does not need to know that.
+---
+--- Verified: writes at SH4 0x00800400 read back through the same window.
+local ARAM_WINDOW = 0x00800000
+local ARAM_SIZE   = 0x00200000		-- 2 MB on Dreamcast
+
+local function makeSpace(translate)
+	local sp = {}
+	function sp.readbyte(a)      return host.memory.read8(translate(a)) end
+	function sp.readword(a)      return host.memory.read16(translate(a)) end
+	function sp.readdword(a)     return host.memory.read32(translate(a)) end
+	function sp.writebyte(a, v)  host.memory.write8(translate(a), v) end
+	function sp.writeword(a, v)  host.memory.write16(translate(a), v) end
+	function sp.writedword(a, v) host.memory.write32(translate(a), v) end
+	return sp
+end
+
+local spaces = {
+	main  = makeSpace(function(a) return a end),
+	sound = makeSpace(function(a)
+		if type(a) ~= "number" or a < 0 or a >= ARAM_SIZE then
+			error(string.format("sound address out of range (0..0x%X)", ARAM_SIZE - 1), 3)
+		end
+		return ARAM_WINDOW + a
+	end),
+}
+
+function memory.spaces() return { "main", "sound" } end
+
+function memory.space(name)
+	local sp = spaces[name]
+	if sp == nil then
+		error("unknown address space '" .. tostring(name)
+			.. "'; see memory.spaces()", 2)
+	end
+	return sp
+end
+
+--- Unqualified access is the main space.
+memory.readbyte      = spaces.main.readbyte
+memory.readword      = spaces.main.readword
+memory.readdword     = spaces.main.readdword
+memory.writebyte     = spaces.main.writebyte
+memory.writeword     = spaces.main.writeword
+memory.writedword    = spaces.main.writedword
 
 --- savestate ------------------------------------------------------------
 --- The interface is 1-based throughout; the host's slots are 0-based. The

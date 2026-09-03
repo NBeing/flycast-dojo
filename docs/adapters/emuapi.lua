@@ -77,6 +77,7 @@ M.surface = {
 	"frame.count", "frame.confirmed", "frame.resimsteps",
 	"joypad.buttons", "joypad.get", "joypad.set", "joypad.setbutton",
 	"joypad.getdown", "joypad.getup", "joypad.getaxis", "joypad.setaxis",
+	"memory.spaces", "memory.space",
 	"memory.readbyte", "memory.readword", "memory.readdword",
 	"memory.writebyte", "memory.writeword", "memory.writedword",
 	"memory.getregister", "memory.setregister", "memory.watch",
