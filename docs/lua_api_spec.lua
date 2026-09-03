@@ -2,6 +2,16 @@
 --- Emulator Lua API — a conformance stub
 --- =====================================================================
 ---
+--- STATUS: DRAFT. Not finished, and not yet safe to implement against.
+---
+--- It names the right things and settles three questions (capability is
+--- queryable, rollback safety is in the contract, unportable hooks are
+--- excluded with reasons). It does NOT yet pin down button representation,
+--- player indexing, address spaces, failure semantics, drawing coordinates,
+--- callback threading, or interface versioning - and two emulators can both
+--- conform to what is written here and still disagree in every one of those.
+--- See LUA_TODO.md, Part 1, before building on this.
+---
 --- WHAT THIS IS
 ---
 --- A stub, not an implementation. Nothing here executes. It declares an
