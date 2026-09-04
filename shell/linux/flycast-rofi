@@ -42,7 +42,42 @@ ROOT="${FLYCAST_ROOT_DIR:-$(dirname "$(dirname "$(dirname "$SELF")")")}"
 BUILD_DIR="${FLYCAST_BUILD_DIR:-$ROOT/artifact/bin}"
 BIN="$BUILD_DIR/flycast-dojo"
 SCANNER="$ROOT/core/rend/game_scanner.h"
-GAME_DIR="${FLYCAST_GAME_DIR:-$HOME/Downloads}"
+# WHERE GAMES ARE, ASKED OF FLYCAST'S OWN CONFIG FIRST
+#
+# `Dreamcast.ContentPath` in emu.cfg is what the emulator itself scans, so it
+# is the owner of this fact and the launcher reads it rather than keeping a
+# second list that can disagree. It is a `;`-separated list, so more than one
+# directory is normal and all of them are searched.
+#
+# FLYCAST_GAME_DIR overrides entirely, for a one-off. Otherwise the configured
+# paths are searched together with the default below, because a user whose
+# games are not yet on flycast's content path should still get a menu rather
+# than an empty one - and the two are unioned rather than one shadowing the
+# other, so adding a directory to flycast never removes it from here.
+DEFAULT_GAME_DIR="$HOME/ROMs/dc"
+FLYCAST_CFG="${FLYCAST_CFG:-${XDG_CONFIG_HOME:-$HOME/.config}/flycast-dojo/emu.cfg}"
+
+content_paths() {
+    if [ -n "${FLYCAST_GAME_DIR:-}" ]; then
+        printf '%s\n' "$FLYCAST_GAME_DIR"
+        return
+    fi
+    if [ -r "$FLYCAST_CFG" ]; then
+        sed -n 's/^[[:space:]]*Dreamcast\.ContentPath[[:space:]]*=[[:space:]]*//p' "$FLYCAST_CFG" \
+            | tr ';' '\n'
+    fi
+    printf '%s\n' "$DEFAULT_GAME_DIR"
+}
+
+# Only the ones that exist; a configured path that has been deleted is not an
+# error, it is just nothing to scan.
+game_dirs() {
+    local d
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        [ -d "$d" ] && printf '%s\n' "$d"
+    done < <(content_paths) | sort -u
+}
 ADAPTER_DIR="${FLYCAST_ADAPTER_DIR:-$ROOT/docs/adapters}"
 OUT_DIR="${FLYCAST_OUT_DIR:-$ROOT/out/rofi}"
 # WHERE A FAILED LAUNCH LEAVES ITS EVIDENCE. Started from a menu there is no
@@ -69,17 +104,35 @@ supported_extensions() {
         | grep -oE '"[a-z0-9]+"' | tr -d '"' | sort -u
 }
 
-# Games present on disk whose extension the scanner accepts. Presented rather
-# than every file in the directory, because a menu that mostly fails on click
-# is a menu that wastes the click.
+# Games present on disk whose extension the scanner accepts.
+#
+# `-maxdepth 1` MIRRORS THE SCANNER, and is not an arbitrary limit. DirectoryTree
+# iterates one directory and add_game_directory is called once per configured
+# content path, so flycast does not descend - and descending here listed the
+# seven loose .bin components inside an extracted mvsc2/ set as if each were a
+# separate game. A launcher offering seven rows that all fail is worse than one
+# offering none.
+#
+# `._` files are skipped for the same reason game_scanner.h skips them.
+#
+# KNOWN DIVERGENCE: for .zip and .7z the scanner also requires the basename to
+# match a known arcade set, which is a table built at runtime from the driver
+# list and is not reachable from a shell. So an unrecognised zip appears here
+# and would not appear in flycast's own list. It fails on launch with the
+# emulator's own message rather than silently, which is the acceptable side of
+# that trade.
 games() {
-    local exts
+    local exts dirs
     exts="$(supported_extensions)"
     [ -n "$exts" ] || return 1
-    local ext
-    while IFS= read -r ext; do
-        find "$GAME_DIR" -maxdepth 2 -type f -iname "*.$ext" 2>/dev/null
-    done <<< "$exts" | sort -u
+    dirs="$(game_dirs)"
+    [ -n "$dirs" ] || return 1
+    local ext d
+    while IFS= read -r d; do
+        while IFS= read -r ext; do
+            find "$d" -maxdepth 1 -type f -iname "*.$ext" ! -name '._*' 2>/dev/null
+        done <<< "$exts"
+    done <<< "$dirs" | sort -u
 }
 
 lua_scripts() {
@@ -98,7 +151,8 @@ replays() {
 preflight() {
     [ -d "$ROOT" ]      || die "repo root is not a directory: $ROOT"
     [ -r "$SCANNER" ]   || die "no game scanner at $SCANNER -- is FLYCAST_ROOT_DIR right?"
-    [ -d "$GAME_DIR" ]  || die "game dir is not a directory: $GAME_DIR (set FLYCAST_GAME_DIR)"
+    [ -n "$(game_dirs)" ] || die "no game directory exists. Tried: $(content_paths | tr '\n' ' ')
+Add one to flycast's Content Location, or set FLYCAST_GAME_DIR."
     [ -x "$BIN" ]       || die "no flycast-dojo at $BIN -- build it, or set FLYCAST_BUILD_DIR"
 }
 
@@ -112,7 +166,8 @@ if [ "${1:-}" = "--check" ]; then
     n_rep=$(replays | wc -l)
     printf 'root        %s\n' "$ROOT"
     printf 'binary      %s\n' "$BIN"
-    printf 'game-dir    %s\n' "$GAME_DIR"
+    printf 'game-dirs   %s\n' "$(game_dirs | tr '\n' ' ')"
+    printf 'config      %s%s\n' "$FLYCAST_CFG" "$([ -r "$FLYCAST_CFG" ] || printf ' (absent)')"
     printf 'extensions  %s (%s)\n' "$n_ext" "$(supported_extensions | tr '\n' ' ')"
     printf 'games       %s\n' "$n_game"
     printf 'lua         %s\n' "$n_lua"
@@ -130,7 +185,7 @@ if [ "${1:-}" = "--check" ]; then
         exit 3
     fi
     if [ "$n_game" -eq 0 ]; then
-        printf 'no games: %s holds nothing the scanner would open\n' "$GAME_DIR"
+        printf 'no games: nothing the scanner would open under %s\n' "$(game_dirs | tr '\n' ' ')"
         exit 1
     fi
     # Replays legitimately start at zero on a fresh checkout, so an empty list
@@ -218,7 +273,8 @@ full log: $LOG"
 
 # --- step one: which game ---------------------------------------------------
 GAMES="$(games)"
-[ -n "$GAMES" ] || die "no games: $GAME_DIR holds nothing the scanner would open"
+[ -n "$GAMES" ] || die "no games under: $(game_dirs | tr '\n' ' ')
+Add a directory to flycast's Content Location, or set FLYCAST_GAME_DIR."
 
 DEFAULT_GAME="$(printf '%s\n' "$GAMES" | head -n 1)"
 
