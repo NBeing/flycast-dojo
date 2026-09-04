@@ -124,3 +124,19 @@ What it enforces, by spec section:
 The rollback group is the one flycast-dojo would have failed before
 `cf47f4745`. It reports honestly when no rollback occurred during the session,
 because a rule that was never exercised has not been tested.
+
+## Poking at it live
+
+Press `` ` `` in-game to open the Lua console. It evaluates in the global
+environment, so the locals a script binds (`emu`, `joypad`, ...) are not in
+scope there - reach the adapter through the instance it memoises instead:
+
+```lua
+api = _G["emuapi.instance"]
+return api.emu.gamename(), api.frame.count()
+return api.emu.supports("memory.registerwrite")   --> false
+```
+
+A line that throws prints red and changes nothing else; the interpreter and
+every registered callback survive it. Everything the console shows is also
+appended to `flycast-lua.log` beside the config, flushed per line.

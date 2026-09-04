@@ -17,6 +17,8 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include "lua_console.h"
+
+#include <algorithm>
 #ifdef USE_LUA
 #include <lua.hpp>
 #include "stdclass.h"
@@ -175,12 +177,37 @@ void reset()
 
 void draw()
 {
+	// The toggle lives here rather than in the caller because draw() is already
+	// called every frame from the OSD, and a panel you can only reach by
+	// causing an error is not a console. Suppressed while a text field has
+	// focus, so typing a backtick into the console does not close it.
+	// io.KeysDown here is indexed by USB HID usage ID, not SDL scancode -
+	// keyboard_device.h feeds it dc_keycodes - and 0x35 is the backtick.
+	// ImGuiKey_* in this ImGui (1.80) only covers the navigation keys, so the
+	// native index is the right way to ask for an arbitrary one.
+	constexpr int HidGraveAccent = 0x35;
+	ImGuiIO& io = ImGui::GetIO();
+	const bool wasShown = shown;
+	if (!io.WantTextInput && ImGui::IsKeyPressed(HidGraveAccent, false))
+		shown = !shown;
+	// The rising edge, so the input can be focused exactly once per opening
+	// rather than every frame (which would fight any other click).
+	const bool justOpened = shown && !wasShown;
+
 	if (!shown)
 		return;
-	ImGui::SetNextWindowSize(ImVec2(560, 300), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowPos(ImVec2(40, 300), ImGuiCond_FirstUseEver);
+
+	// Sized and placed against the viewport rather than at fixed pixels. A
+	// fixed 300px-tall window at y=300 puts its input row off the bottom of an
+	// 800x600 output entirely - the console opens, and there is nothing to type
+	// into. Anchoring to the bottom edge keeps the input reachable at any size.
+	const float w = std::min(560.f, std::max(320.f, io.DisplaySize.x - 80.f));
+	const float h = std::min(300.f, std::max(160.f, io.DisplaySize.y * 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(40, std::max(0.f, io.DisplaySize.y - h - 40.f)),
+			ImGuiCond_FirstUseEver);
 	bool open = true;
-	if (ImGui::Begin("Lua console", &open))
+	if (ImGui::Begin("Lua console (`)", &open))
 	{
 		if (ImGui::Button("clear"))
 		{
@@ -219,6 +246,10 @@ void draw()
 		ImGui::EndChild();
 
 		ImGui::PushItemWidth(-1);
+		// Opening the console is always a prelude to typing in it, so the
+		// caret goes to the input without a click.
+		if (justOpened)
+			ImGui::SetKeyboardFocusHere();
 		// Queued, never evaluated here: see THE UI NEVER EVALUATES in the header.
 		if (ImGui::InputText("##lua_input", inputBuf, sizeof(inputBuf),
 				ImGuiInputTextFlags_EnterReturnsTrue))

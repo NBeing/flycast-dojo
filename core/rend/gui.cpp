@@ -425,6 +425,16 @@ bool gui_keyboard_captured()
 	return io.WantCaptureKeyboard;
 }
 
+bool gui_typing_text()
+{
+	// WantCaptureKeyboard is true for any focused ImGui window; WantTextInput
+	// is true only when a text field has the caret. Emulator hotkeys must yield
+	// to the second and not the first, or typing a name into a field triggers
+	// whatever single-key binding those letters happen to have.
+	ImGuiIO& io = ImGui::GetIO();
+	return io.WantTextInput;
+}
+
 bool gui_mouse_captured()
 {
 	ImGuiIO& io = ImGui::GetIO();

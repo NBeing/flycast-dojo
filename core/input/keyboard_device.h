@@ -484,7 +484,15 @@ void KeyboardDeviceTemplate<Keycode>::keyboard_input(Keycode keycode, bool press
 			kb_shift[port] |= modifier_keys;
 		}
 	}
-	if (gui_keyboard_captured())
+	if (gui_typing_text())
+	{
+		// A text field has the caret, so the letters being typed are text and
+		// nothing else. Passing them to gamepad_btn_input as well means naming
+		// a replay or typing into the Lua console fires whatever single-key
+		// emulator bindings those letters carry - which is how typing an
+		// expression into the console paused the emulator.
+	}
+	else if (gui_keyboard_captured())
 	{
 		// chat: disable the keyboard controller. Only accept emu keys (menu, escape...)
 		set_maple_port(-1);
