@@ -193,7 +193,25 @@ local function checkDrawingWorks()
 	local g = "drawing"
 	needs({"gui.text", "gui.box"}, g, function()
 		ok(not raises(function() gui.text(4, 4, "") end), g, "gui.text inside draw works")
-		ok(not raises(function() gui.box(0, 0, 1, 1, 0xFFFFFFFF) end), g, "gui.box inside draw works")
+		--- GREEN, DELIBERATELY, and not the white this used to pass.
+		--- 0xFFFFFFFF and every grey are byte-identical under 0xAABBGGRR and
+		--- 0xRRGGBBAA, and so is opaque red - 0xFF0000FF means opaque red under
+		--- BOTH. A check written with any of those cannot fail on a host that
+		--- packs the other way round, which is the whole thing being tested.
+		ok(not raises(function() gui.box(0, 0, 1, 1, gui.rgba(0, 255, 0)) end),
+				g, "gui.box inside draw works")
+	end)
+
+	--- The packing itself, asserted through the constructor. An adapter that
+	--- packs 0xRRGGBBAA returns 0x00FF00FF for green and fails here rather
+	--- than rendering the wrong colour silently.
+	needs({"gui.rgba"}, g, function()
+		ok(gui.rgba(0, 255, 0, 255) == 0xFF00FF00, g, "gui.rgba packs green as 0xAABBGGRR")
+		ok(gui.rgba(0, 0, 255, 255) == 0xFFFF0000, g, "gui.rgba packs blue as 0xAABBGGRR")
+		ok(gui.rgba(255, 0, 0, 255) == 0xFF0000FF, g, "gui.rgba packs red")
+		ok(gui.rgba(1, 2, 3) == 0xFF030201, g, "gui.rgba defaults alpha to opaque")
+		ok(raises(function() gui.rgba(0, 0, 300) end), g, "gui.rgba rejects out-of-range")
+		ok(raises(function() gui.rgba(0, 0, "x") end), g, "gui.rgba rejects non-number")
 	end)
 	needs({"ui.Begin", "ui.End", "ui.Text"}, g, function()
 		ok(not raises(function()

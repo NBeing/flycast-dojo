@@ -249,6 +249,43 @@ clobbers**, naming the conflicts — loud, per failure tier 1.
 Verified: local binding gives the full API with no globals touched;
 `install()` succeeds on flycast; a second `install()` is refused.
 
+### [x] 10. Third surface surveyed — nbneo-rr
+`docs/adapters/NBNEO_SURVEY.md` `[SURVEYED 2026-09-04]`, read-only.
+
+The most useful surface so far, because it is the same author's deliberate
+successor to fbneo-rr: where it agrees with this spec independently that is
+corroboration, and where it disagrees one of the two is wrong on purpose. It
+also separates **positions it argues for** from **positions it implements** —
+several of its strongest README claims have no implementation, and one is
+retracted by its own `docs/FACTS.md`.
+
+Three of its sixteen recommendations are already applied (see the status table
+at the end of that file):
+
+- **`gui.rgba(r, g, b, a)`**, because nbneo packs `0xRRGGBBAA` where this spec
+  packs `0xAABBGGRR` and **the two agree on every grey and on opaque red** —
+  the colours anyone tests with first. A control run against a deliberately
+  wrong packing was caught by 2 of 3 colour assertions; red did not catch it.
+  The conformance suite now asserts with green and blue.
+- **`memory.registerexec` re-opened**, capability-gated rather than excluded.
+  The old rationale argued against trap-opcode patching and then banned the
+  capability; nbneo rides a PC-changed callback with a bitmap and patches
+  nothing, so none of the objection survives. It is also 29 call sites in the
+  corpus against `joypad.*`'s 29 for the whole namespace.
+- **Indices vs byte offsets** stated separately: indices are 1-based, a byte
+  offset into an opaque blob is 0-based and must be documented at the call site.
+
+Thirteen remain open, ranked in that file. The two largest are passing the draw
+surface into the draw callback (a capability object rather than a thread-local
+flag) and tier 2 returning `nil, reason`.
+
+**Declined:** "capabilities are declared, not discovered" — it has zero
+implementation sites, and declaration (authorisation) answers a different
+question from `emu.supports()` (portability). Also declined: derives,
+transcripts and the timeline as spec surface.
+
+---
+
 ## Part 2 — Port work, in dependency order
 
 ### [P] Tier 1 — unlocks the most script functionality

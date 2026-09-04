@@ -139,7 +139,7 @@
 ---
 --- INDEXING — resolved
 ---
---- Every index a script sees is 1-BASED: players, axes, slots, ports. Lua is a
+--- Every INDEX a script sees is 1-BASED: players, axes, slots, ports. Lua is a
 --- 1-based language and a mixed convention is a permanent source of off-by-one
 --- bugs. Out of range raises, per tier 1 above.
 ---
@@ -288,6 +288,17 @@
 ---     omitting these, so one script works on both.
 ---
 --- =====================================================================
+---
+--- A BYTE OFFSET INTO AN OPAQUE BLOB IS NOT AN INDEX, and is 0-based. An offset
+--- into a savestate string or a memory region is an address, and addresses are
+--- reported in the machine's own terms everywhere else in this interface; a
+--- host that added one to them would be inventing a convention no disassembly
+--- or cheat file shares. A host publishing such an offset must say so at the
+--- call site and give the Lua slice form, as nbneo-rr does:
+---     blob:sub(r.offset + 1, r.offset + r.bytes)
+--- Stated because the rule above says "every index" without qualification, and
+--- getting this backwards reads a region one byte out - which is plausible
+--- data, not an error.
 
 local spec = {}
 
@@ -378,10 +389,32 @@ function memory.registerwrite(a, l, fn) end
 ---      confirmed frame, with no PC context. That is a different capability
 ---      and is spelled differently on purpose.
 function memory.registerexec(a, fn) end
---- [no] Execution hooks. Typically implemented by patching a trap opcode into
----      emulated memory. Under rollback that patched memory is snapshotted and
----      restored, and differs from the peer's - a desync. Excluded until some
----      emulator has hardware breakpoints that survive a state load.
+--- [capability] Execution hooks. RE-OPENED 2026-09-04: the exclusion stood on a
+---      rationale that does not hold.
+---
+---      It read: "typically implemented by patching a trap opcode into emulated
+---      memory; under rollback that patched memory is snapshotted and restored,
+---      and differs from the peer's - a desync." That is an argument against
+---      OPCODE PATCHING, not against exec hooks, and it silently assumed the
+---      one implementation.
+---
+---      nbneo-rr does it a different way and none of the objection survives:
+---      `core/compat/exec_hook.cpp` rides the m68k PC-changed callback the core
+---      already has, dispatching through a 1 MiB bitmap over the 24-bit address
+---      space. Nothing is written into emulated memory, so nothing is
+---      snapshotted, nothing is restored and nothing can differ from a peer.
+---      Cost with no hooks registered is one load and one branch.
+---
+---      Nor was it a fringe request: in the phobos corpus `registerexec` has 29
+---      call sites - busier than the whole of `joypad.*`, which this spec calls
+---      its largest conformance cost - and nbneo's entire tick model is built
+---      on it.
+---
+---      So it is CAPABILITY-GATED, not excluded. A host with a recompiler that
+---      inlines memory access answers false from emu.supports("memory.registerexec")
+---      and raises if called, which is exactly what the gate is for. A host with
+---      a per-instruction seam may implement it. The blocker is the mechanism,
+---      and the spec had promoted one mechanism's limitation into a rule.
 
 --- ---------------------------------------------------------------------
 --- input / joypad
@@ -475,11 +508,25 @@ function ui.Image(id, w, h) end               --- [no] needs host texture
 --- mapping to screen including scaling and letterboxing. A mark drawn at a
 --- character's position must stay on that character when the window resizes,
 --- which window-space widgets cannot do.
---- COLOURS are 0xAABBGGRR - alpha, blue, green, red, high byte to low. This is
---- ImGui's own packing (IM_COL32), not the 0xRRGGBBAA a reader tends to
---- assume, and the two are indistinguishable for greys so the mistake survives
---- casual testing. Opaque red is 0xFF0000FF, opaque green 0xFF00FF00, opaque
---- blue 0xFFFF0000.
+--- COLOURS: build them with gui.rgba(r, g, b, a) and never write a packed
+--- literal. The packing is 0xAABBGGRR here - ImGui's own IM_COL32, not the
+--- 0xRRGGBBAA a reader tends to assume - but a portable script has no business
+--- knowing that, because conforming hosts disagree: nbneo-rr packs 0xRRGGBBAA
+--- and keeps that convention deliberately, so its existing corpus of colour
+--- constants keeps meaning what it meant.
+---
+--- THE TWO CONVENTIONS AGREE ON EXACTLY THE COLOURS A PERSON TESTS WITH FIRST.
+--- Every grey is byte-identical under both. So is opaque red: 0xFF0000FF is
+--- opaque red under 0xAABBGGRR AND under 0xRRGGBBAA. They disagree on green
+--- (0xFF00FF00 vs 0x00FF00FF) and blue (0xFFFF0000 vs 0x0000FFFF). A script
+--- that hardcodes numbers therefore passes its first test on either host and
+--- renders wrong on one of them the moment it draws something that is not
+--- white, grey or red.
+---
+--- Corollary for anyone writing checks: assert colour with GREEN or BLUE. A
+--- test written with white or red cannot fail on a host that packs the other
+--- way round, which is the only thing such a test is for.
+function gui.rgba(r, g, b, a) end        --- [ok]   channels in, packing hidden; a defaults to 255
 gui = {}
 
 function gui.text(x, y, s) end           --- [ok]   flycast.ui.text (needs beginWindow)

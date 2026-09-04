@@ -141,6 +141,7 @@ M.surface = {
 	"savestate.save", "savestate.load", "savestate.save_mem",
 	"savestate.load_mem", "savestate.hash",
 	"gui.text", "gui.box", "gui.boxfill", "gui.line", "gui.register", "gui.scale",
+	"gui.rgba",
 	-- ImGui baseline profile
 	"ui.Begin", "ui.End", "ui.Text", "ui.TextColored", "ui.Button", "ui.SameLine",
 	"ui.Checkbox", "ui.Selectable", "ui.SliderFloat", "ui.SliderInt",

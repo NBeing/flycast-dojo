@@ -240,6 +240,24 @@ local function inWindow(x, y, w, h, body)
 	host.ui.endWindow()
 end
 
+--- THE CONSTRUCTOR EXISTS SO NO PORTABLE SCRIPT WRITES A PACKED LITERAL.
+--- Packing is 0xAABBGGRR here and 0xRRGGBBAA on nbneo-rr, and the two agree on
+--- exactly one colour a person is likely to test with: opaque red is
+--- 0xFF0000FF under BOTH. Greys agree too. So a script that hardcodes numbers
+--- passes its first test on either host and renders wrong on one of them the
+--- moment it uses green or blue. Channels in, packing hidden.
+function gui.rgba(r, g, b, a)
+	if a == nil then a = 255 end
+	local function chan(v, name)
+		if type(v) ~= "number" or v < 0 or v > 255 then
+			error("gui.rgba: " .. name .. " must be 0-255, got " .. tostring(v), 2)
+		end
+		return math.floor(v)
+	end
+	r, g, b, a = chan(r, "r"), chan(g, "g"), chan(b, "b"), chan(a, "a")
+	return a * 0x1000000 + b * 0x10000 + g * 0x100 + r
+end
+
 function gui.text(x, y, s)
 	local to = mapper()
 	local px, py = to(x, y)
