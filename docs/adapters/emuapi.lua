@@ -131,7 +131,13 @@ M.surface = {
 	"memory.getregister", "memory.setregister", "memory.watch",
 	"savestate.save", "savestate.load", "savestate.save_mem",
 	"savestate.load_mem", "savestate.hash",
-	"gui.text", "gui.box", "gui.line", "gui.register",
+	"gui.text", "gui.box", "gui.boxfill", "gui.line", "gui.register", "gui.scale",
+	-- ImGui baseline profile
+	"ui.Begin", "ui.End", "ui.Text", "ui.TextColored", "ui.Button", "ui.SameLine",
+	"ui.Checkbox", "ui.Selectable", "ui.SliderFloat", "ui.SliderInt",
+	"ui.InputText", "ui.Separator", "ui.Spacing", "ui.SetNextWindowPos",
+	"ui.SetNextWindowSize", "ui.GetMousePos", "ui.IsMouseClicked",
+	"ui.IsMouseDown", "ui.IsMouseReleased", "ui.Image",
 	"movie.record", "movie.stop", "movie.mode", "movie.framecount",
 	"sound.voicecount", "sound.outputrate",
 }

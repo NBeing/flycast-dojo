@@ -41,6 +41,10 @@ void receiveChatMessages(void (*callback)(int playerNum, const std::string& msg)
 u32 confirmedFrame();
 //! Called once per delivered VBlank, i.e. not for re-simulated frames.
 void countConfirmedFrame();
+//! Called once per VBlank that IS a re-simulation.
+void countResimulatedFrame();
+//! Cumulative re-simulated frames this session.
+u32 resimSteps();
 
 static inline bool rollbacking() {
 	extern bool inRollback;

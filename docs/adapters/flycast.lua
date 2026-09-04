@@ -19,6 +19,8 @@ local memory     = {}
 local savestate  = {}
 local gui        = {}
 local movie      = {}
+local sound      = {}
+local ui         = {}
 
 --- emu ------------------------------------------------------------------
 function emu.pause()          host.emulator.pause() end
@@ -46,6 +48,7 @@ function emu.gamename()       return host.state.gameId end
 --- frame ----------------------------------------------------------------
 function frame.count()        return host.state.getFrameNumber() end
 function frame.confirmed()    return host.state.getConfirmedFrameNumber() end
+function frame.resimsteps()   return host.state.getResimSteps() end
 
 --- joypad ---------------------------------------------------------------
 function joypad.buttons()             return host.input.buttonNames() end
@@ -191,6 +194,19 @@ function savestate.save_mem()  return host.emulator.saveStateString() end
 function savestate.load_mem(s) host.emulator.loadStateString(s) end
 function savestate.hash(s)     return host.emulator.hashState(s) end
 
+--- ui - the ImGui baseline profile ---------------------------------------
+--- Forwarded under ImGui's own names, which the host already uses. Legal only
+--- inside a gui.register callback; the host raises otherwise.
+for _, name in ipairs({
+	"Begin", "End", "Text", "TextColored", "Button", "SameLine",
+	"Checkbox", "Selectable", "SliderFloat", "SliderInt", "InputText",
+	"Separator", "Spacing", "SetNextWindowPos", "SetNextWindowSize",
+	"GetMousePos", "IsMouseClicked", "IsMouseDown", "IsMouseReleased",
+	"GetScale",
+}) do
+	ui[name] = host.ui[name]
+end
+
 --- gui - content overlay, in GAME pixels ---------------------------------
 --- Legal only inside a gui.register callback - the host raises otherwise,
 --- because these run on the render thread and the frame callbacks do not.
@@ -259,8 +275,15 @@ function movie.record(path) return host.replay.startRecording(path or "") end
 function movie.stop()       host.replay.stopRecording() end
 function movie.mode()
 	if host.replay.isRecording() then return "record" end
+	if host.emulator.isReplay() then return "playback" end
 	return nil
 end
+
+function movie.framecount() return host.emulator.getReplayFrameCount() end
+
+--- sound -----------------------------------------------------------------
+function sound.voicecount() return host.emulator.getVoiceCount() end
+function sound.outputrate() return host.emulator.getOutputRate() end
 
 --- callbacks ------------------------------------------------------------
 --- The host dispatches through a well-known table; the interface uses
@@ -352,13 +375,13 @@ end
 return {
 	namespaces = {
 		emu = emu, frame = frame, joypad = joypad, memory = memory,
-		savestate = savestate, gui = gui, movie = movie,
+		savestate = savestate, gui = gui, ui = ui, movie = movie, sound = sound,
 	},
 	--- Present in the interface, deliberately not implemented here. Declared so
 	--- emu.supports() answers false rather than the name simply being absent.
 	unsupported = {
 		["memory.registerwrite"] = true,   -- SH4 dynarec inlines memory access
 		["memory.registerexec"]  = true,   -- breakpoints patch guest memory; desyncs
-		["sound.voicecount"]     = true,
+		["ui.Image"]             = true,   -- needs host texture management
 	},
 }

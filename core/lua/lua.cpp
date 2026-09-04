@@ -1173,6 +1173,19 @@ static void luaRegister(lua_State *L)
 				.addFunction("isReplay", std::function<bool()>([]() {
 					return dojo.PlayMatch;
 				}))
+				//! Frames in the replay being played back, or recorded so far.
+				.addFunction("getReplayFrameCount", std::function<int()>([]() {
+					if (dojo.PlayMatch)
+						return (int)dojo.maple_inputs.size();
+					return dojo.recording_replay ? (int)dojo.FrameNumber : 0;
+				}))
+				//! AICA has 64 hardware voices and mixes at 44100 Hz.
+				.addFunction("getVoiceCount", std::function<int()>([]() {
+					return 64;
+				}))
+				.addFunction("getOutputRate", std::function<int()>([]() {
+					return 44100;
+				}))
 				.addFunction("getSpeedMode", std::function<bool()>([]() {
 					return settings.input.fastForwardMode;
 				}))
@@ -1373,6 +1386,11 @@ static void luaRegister(lua_State *L)
 				// by load_game_state, so it drifts upward across a rollback.
 				.addFunction("getConfirmedFrameNumber", std::function<int()>([]() {
 					return (int)ggpo::confirmedFrame();
+				}))
+				//! Cumulative frames re-simulated by rollback. Rises when
+				//! prediction is failing, so it doubles as a connection readout.
+				.addFunction("getResimSteps", std::function<int()>([]() {
+					return (int)ggpo::resimSteps();
 				}))
 				.addProperty("system", &settings.platform.system, false)
 				.addProperty("media", &settings.content.path, false)

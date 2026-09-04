@@ -1025,6 +1025,8 @@ void Emulator::vblank()
 	// counter, which is what keeps it monotonic.
 	if (!ggpo::rollbacking())
 		ggpo::countConfirmedFrame();
+	else
+		ggpo::countResimulatedFrame();
 	EventManager::event(Event::VBlank);
 	// Time out if a frame hasn't been rendered for 50 ms
 	if (sh4_sched_now64() - startTime <= 10000000)

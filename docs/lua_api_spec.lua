@@ -354,10 +354,18 @@ function memory.setregister(name, v) end --- [port]
 --- could not give it. The range is exact - a write one byte past it does not
 --- register.
 ---
---- An implementation is free to use dirty-page tracking if it has some, but it
---- must still answer for the bytes asked for. flycast-dojo compares a snapshot
---- instead: its page tracking exists for rollback, is only armed under GGPO,
---- and reports whole pages.
+--- Snapshot-compare and dirty-page tracking answer different questions, and
+--- this is the former. Comparing a copy is O(watched bytes) per poll, paid
+--- only by whoever watches - a 4-byte watch at 60Hz is 240 bytes a second -
+--- and it is byte-exact and content-based. Page tracking is O(dirtied pages)
+--- globally, paid whether or not anyone is watching, write-based, and reports
+--- 4KB granules that must then be compared anyway to find what moved. Scripts
+--- watch tens of bytes, so the crossover is nowhere near them.
+---
+--- An implementation with tracking already armed may use it as a pre-filter,
+--- but must still answer for the exact bytes. The question page tracking is
+--- actually good at - "what changed anywhere" - is a different capability and
+--- belongs under a different name.
 function memory.watch(addr, len) end     --- [ok]
 function memory.unwatch(w) end           --- [ok]
 function memory.registerwrite(a, l, fn) end

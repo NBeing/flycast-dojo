@@ -41,6 +41,9 @@ bool inRollback;
 //! stalled and jumped, and a script asking "what frame is it" got neither a
 //! monotonic count nor a 1:1 one.
 static u32 confirmedFrames;
+//! Frames re-simulated by rollback, cumulative for the session. Useful as a
+//! connection-quality readout: it rises when prediction is failing.
+static u32 resimulatedFrames;
 
 static void getLocalInput(MapleInputState inputState[4])
 {
@@ -499,6 +502,7 @@ void startSession(int localPort, int localPlayerNum)
 {
 	// Frame numbering restarts with the session.
 	confirmedFrames = 0;
+	resimulatedFrames = 0;
 	GGPOSessionCallbacks cb{};
 	cb.begin_game      = begin_game;
 	cb.advance_frame   = advance_frame;
@@ -983,6 +987,16 @@ void countConfirmedFrame()
 	confirmedFrames++;
 }
 
+void countResimulatedFrame()
+{
+	resimulatedFrames++;
+}
+
+u32 resimSteps()
+{
+	return resimulatedFrames;
+}
+
 u32 confirmedFrame()
 {
 	return confirmedFrames;
@@ -1076,6 +1090,13 @@ void endOfFrame() {
 }
 
 void countConfirmedFrame() {
+}
+
+void countResimulatedFrame() {
+}
+
+u32 resimSteps() {
+	return 0;
 }
 
 u32 confirmedFrame() {
