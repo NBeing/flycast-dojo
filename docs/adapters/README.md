@@ -94,6 +94,33 @@ emuapi: host=flycast api=0  35/51 implemented
 That missing list is exactly the `[port]` items in the spec, which is a useful
 cross-check: the report and the specification agree about what is absent.
 
-Presence is not conformance. The real suite (LUA_TODO.md Part 3) must also
-check shapes and failure modes, and include a case that fails on an emulator
-delivering frame callbacks during re-simulation.
+Presence is not conformance, which is what `conformance.lua` is for.
+
+## The conformance suite
+
+```lua
+dofile("adapters/conformance.lua")   -- run with a game loaded
+```
+
+It checks shapes, failure modes and the contract rules, not just presence. A
+missing capability is reported as SKIP, not a failure — `emu.supports()`
+answering false is a legitimate answer. A **failure** means the interface was
+claimed and then behaved differently to the specification.
+
+flycast-dojo today: **83 pass, 0 fail, 2 skip.**
+
+What it enforces, by spec section:
+
+| Group | Checks |
+|---|---|
+| capability | `supports()` agrees with reality both ways; malformed names are false |
+| indexing | player 0 and 99 raise, player 1 works; axis 0 raises; savestate slot 0 raises |
+| buttons | names are strings, values are booleans, **absent keys are left alone**, unknown name raises |
+| memory | `spaces()` non-empty and contains `main`; unknown space raises |
+| frames | `confirmed()` and `count()` are numbers; `isrollback()` is a boolean |
+| threading | `gui.*` and `ui.*` raise outside a draw callback, and work inside one |
+| rollback | a frame callback must **never** observe `isrollback()` true; the confirmed counter must never go backwards |
+
+The rollback group is the one flycast-dojo would have failed before
+`cf47f4745`. It reports honestly when no rollback occurred during the session,
+because a rule that was never exercised has not been tested.

@@ -290,16 +290,31 @@ Verified: local binding gives the full API with no globals touched;
 
 ## Part 3 — Tooling
 
-### [T] Conformance test suite — the thing that keeps this honest
-A spec with no executable check drifts into fiction. A Lua script that any
-emulator can run, which walks `emu.supports()`, calls everything claimed,
-checks shapes and failure modes, and prints a conformance report. Should run
-headless. This is worth more than any single Tier 2 item.
+### [x] Conformance suite — DONE (`docs/adapters/conformance.lua`)
+Checks shapes, failure modes and contract rules, not just presence. A missing
+capability is SKIP, not a failure; a failure means the interface was claimed
+and then behaved differently to the spec. Runs headless.
 
-### [T] Rollback conformance case
-Specifically: a script that fails on an emulator which delivers frame
-callbacks during re-simulation. flycast-dojo would have failed it before
-`cf47f4745`. Ship it with the fix it validates.
+**flycast-dojo: 83 pass, 0 fail, 2 skip.**
+
+Includes the rollback case — a frame callback must never observe
+`isrollback()` true, which is the rule flycast would have failed before
+`cf47f4745`.
+
+**Caveat worth keeping in view:** 83/83 on the host the adapter was written
+against is a weaker signal than it looks. The suite has only ever been run on
+one emulator by the person who wrote both it and the adapter. Its real value
+arrives the first time it runs somewhere else.
+
+**A false failure it produced on its first run, kept as a warning:** the
+rollback check originally asserted that `frame.confirmed()` advances by one per
+frame callback. That premise only holds while a session is running — offline
+the counter tracks emulated game frames rather than display vblanks, so it
+legitimately repeats, and the suite reported ~15% "stalls" as
+NON-CONFORMING. The rule is directly observable instead (a frame callback must
+never see `isrollback()` true), and stalls are now informational. A conformance
+suite asserting a proxy rather than the rule is worse than no suite, because it
+manufactures distrust in a correct implementation.
 
 ---
 
