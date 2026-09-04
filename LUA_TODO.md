@@ -268,13 +268,24 @@ Verified: local binding gives the full API with no globals touched;
 - `joypad.getdown` / `getup` — edge detection. Trivial once (1) is settled;
   currently every script reimplements it and gets rollback wrong.
 
-### [P] Tier 2 — cheap, self-contained
-- `savestate.save_mem` / `load_mem` / `hash` — states as strings. `hash` is
-  the desync-hunting tool and is worth having regardless of the port.
-- `emu.gamename`, `emu.isonline`, `emu.isreplay` — flycast has all the
-  underlying state; these are accessors.
-- `memory.getregister` / `setregister` — CPU registers by name.
-- `emu.speedmode` — flycast has fast-forward internally.
+### [x] Tier 2 — DONE
+- `savestate.save_mem` / `load_mem` / `hash` — states as strings, sized by a
+  dry run so the buffer is exact. Verified: 27.8 MB in 0.09 s, the live hash
+  equals the hash of the serialised string, the hash **changes** after a memory
+  write, and loading restores it. That combination is what makes it useful for
+  hunting desyncs — two peers compare per frame and the first divergence is
+  where to look.
+- `emu.isonline`, `emu.isreplay`, `emu.speedmode`, `emu.gamename` — accessors.
+  `speedmode` maps to a fast-forward boolean here rather than named tiers;
+  `gamename` reports the game id, which is all the host knows.
+- `memory.getregister` / `setregister` — `r0`–`r15`, `pc`, `pr`, `gbr`, `vbr`,
+  `ssr`, `spc`, `sgr`, `dbr`, `fpul`. Unknown names raise. Coherent from the
+  frame callback, which runs on the emulation thread; from a draw callback they
+  race the running CPU exactly as the memory accessors do.
+
+**Coverage: 49/54, 84 conformance checks, 0 failures.** Remaining unimplemented:
+`frame.resimsteps`, `memory.watch`, `movie.framecount`, `sound.voicecount`,
+`sound.outputrate`.
 
 ### [P] Tier 3 — larger, still portable
 - `movie.*` — mode, framecount, rerecord counting, read-only flag. Overlaps

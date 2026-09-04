@@ -29,6 +29,19 @@ function emu.romname()        return host.state.gameId end
 function emu.screenwidth()    return host.state.display.width end
 function emu.screenheight()   return host.state.display.height end
 function emu.isrollback()     return host.state.isRollback() end
+function emu.isonline()       return host.emulator.isOnline() end
+function emu.isreplay()       return host.emulator.isReplay() end
+
+--- The host has a fast-forward boolean rather than named modes, so "normal"
+--- is off and anything else is on. A host with genuine speed tiers should map
+--- them properly.
+function emu.speedmode(mode)
+	host.emulator.setSpeedMode(mode ~= nil and mode ~= "normal")
+end
+
+--- The host knows a game id but not a separate display name; reporting the id
+--- is better than reporting nothing, and it is what a script keys on anyway.
+function emu.gamename()       return host.state.gameId end
 
 --- frame ----------------------------------------------------------------
 function frame.count()        return host.state.getFrameNumber() end
@@ -111,6 +124,9 @@ local spaces = {
 	end),
 }
 
+function memory.getregister(name)      return host.memory.getRegister(name) end
+function memory.setregister(name, v)  host.memory.setRegister(name, v) end
+
 function memory.spaces() return { "main", "sound" } end
 
 function memory.space(name)
@@ -144,6 +160,13 @@ end
 
 function savestate.save(slot) host.emulator.saveState(slotToHost(slot)) end
 function savestate.load(slot) host.emulator.loadState(slotToHost(slot)) end
+
+--- States as strings, and a cheap identity for them. hash() takes an optional
+--- state; with no argument it hashes the live machine, so two peers can
+--- compare per frame and find the first one where they diverge.
+function savestate.save_mem()  return host.emulator.saveStateString() end
+function savestate.load_mem(s) host.emulator.loadStateString(s) end
+function savestate.hash(s)     return host.emulator.hashState(s) end
 
 --- gui - content overlay, in GAME pixels ---------------------------------
 --- Legal only inside a gui.register callback - the host raises otherwise,

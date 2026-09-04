@@ -28,7 +28,19 @@ local function selfDir()
 	return (src:sub(1, 1) == "@") and src:sub(2):match("^(.*[/\\])") or ""
 end
 
+--- Loading twice must not build two adapters. Each one installs its own
+--- handlers into the host's callback table, so the second would silently
+--- orphan the first's - a script that requires this alongside another that
+--- does the same would find only one of them running. The instance is
+--- therefore cached in the registry, which survives separate dofile() calls,
+--- rather than in this file's locals, which do not.
+local REGISTRY_KEY = "emuapi.instance"
+
 function M.load(hostOverride)
+	local existing = rawget(_G, REGISTRY_KEY)
+	if existing ~= nil then
+		return existing
+	end
 	local host = hostOverride or detectHost()
 	if host == nil then
 		error("emuapi: unrecognised host emulator; pass a name to emuapi.load()")
@@ -68,6 +80,7 @@ function M.load(hostOverride)
 
 	M.host = host
 	M.adapter = adapter
+	rawset(_G, REGISTRY_KEY, M)
 	return M
 end
 

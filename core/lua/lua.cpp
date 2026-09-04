@@ -34,6 +34,11 @@
 #include "hw/maple/maple_devs.h"
 #include "hw/maple/maple_if.h"
 #include "stdclass.h"
+#include <vector>
+#include <limits>
+#include <xxhash.h>
+#include "hw/sh4/sh4_if.h"
+#include "serialize.h"
 #include "imgui/imgui.h"
 #include "rend/transform_matrix.h"
 #include "dojo/DojoSession.hpp"
@@ -685,6 +690,125 @@ static int uiButton(lua_State *L)
  * so there is no need for the pointer dance the C++ API uses.
  */
 /*
+ * SH4 registers by name.
+ *
+ * Reads are coherent from the frame callback, which runs on the emulation
+ * thread; from a draw callback they race the running CPU, exactly as the
+ * existing memory accessors do. The interface documents that rather than
+ * paying for a guard on every access.
+ */
+struct RegisterMapping
+{
+	const char *name;
+	u32 *ptr;
+};
+
+static bool findRegister(const std::string& name, u32*& out)
+{
+	// General purpose registers, r0..r15.
+	if (name.size() >= 2 && name[0] == 'r')
+	{
+		const std::string idx = name.substr(1);
+		if (!idx.empty() && idx.find_first_not_of("0123456789") == std::string::npos)
+		{
+			const int n = std::stoi(idx);
+			if (n >= 0 && n <= 15)
+			{
+				out = &Sh4cntx.r[n];
+				return true;
+			}
+		}
+	}
+	static const RegisterMapping named[] = {
+		{ "pc",   &Sh4cntx.pc },
+		{ "pr",   &Sh4cntx.pr },
+		{ "gbr",  &Sh4cntx.gbr },
+		{ "vbr",  &Sh4cntx.vbr },
+		{ "ssr",  &Sh4cntx.ssr },
+		{ "spc",  &Sh4cntx.spc },
+		{ "sgr",  &Sh4cntx.sgr },
+		{ "dbr",  &Sh4cntx.dbr },
+		{ "fpul", &Sh4cntx.fpul },
+	};
+	for (const RegisterMapping& m : named)
+	{
+		if (name == m.name)
+		{
+			out = m.ptr;
+			return true;
+		}
+	}
+	return false;
+}
+
+static u32 getRegister(const std::string& name, lua_State *L)
+{
+	u32 *p = nullptr;
+	if (!findRegister(name, p))
+		luaL_argerror(L, 1, "unknown register; try r0..r15, pc, pr, gbr, vbr, ssr, spc, sgr, dbr, fpul");
+	return p != nullptr ? *p : 0;
+}
+
+static void setRegister(const std::string& name, u32 value, lua_State *L)
+{
+	u32 *p = nullptr;
+	if (!findRegister(name, p))
+		luaL_argerror(L, 1, "unknown register; try r0..r15, pc, pr, gbr, vbr, ssr, spc, sgr, dbr, fpul");
+	if (p != nullptr)
+		*p = value;
+}
+
+/*
+ * Savestates as strings.
+ *
+ * The same serializer the file path uses, sized by a dry run first so the
+ * buffer is exact. rollback=false, so this is a whole state including memory -
+ * expect megabytes, and do not call it every frame.
+ */
+static int saveStateToString(lua_State *L)
+{
+	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), false);
+	dc_serialize(sizer);
+	std::vector<u8> buf(sizer.size());
+	Serializer ser(buf.data(), buf.size(), false);
+	dc_serialize(ser);
+	lua_pushlstring(L, (const char *)buf.data(), ser.size());
+	return 1;
+}
+
+static int loadStateFromString(lua_State *L)
+{
+	size_t len = 0;
+	const char *data = luaL_checklstring(L, 1, &len);
+	if (len == 0)
+		return luaL_error(L, "empty savestate string");
+	Deserializer deser(data, len, false);
+	dc_deserialize(deser);
+	return 0;
+}
+
+//! Cheap identity for a state, for hunting desyncs: two machines that agree
+//! frame by frame produce the same hash, and the first frame they differ is
+//! where to look.
+static int hashState(lua_State *L)
+{
+	if (lua_isstring(L, 1))
+	{
+		size_t len = 0;
+		const char *data = lua_tolstring(L, 1, &len);
+		lua_pushinteger(L, (lua_Integer)XXH32(data, len, 0));
+		return 1;
+	}
+	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), false);
+	dc_serialize(sizer);
+	std::vector<u8> buf(sizer.size());
+	Serializer ser(buf.data(), buf.size(), false);
+	dc_serialize(ser);
+	lua_pushinteger(L, (lua_Integer)XXH32(buf.data(), ser.size(), 0));
+	return 1;
+}
+
+/*
  * The game image's rectangle inside the window, in window pixels.
  *
  * A content overlay - a hitbox, a position marker - has to be positioned in
@@ -968,6 +1092,21 @@ static void luaRegister(lua_State *L)
 						gui_open_settings();
 				}))
 				.addFunction("exit", dc_exit)
+				.addFunction("isOnline", std::function<bool()>([]() {
+					return settings.network.online;
+				}))
+				.addFunction("isReplay", std::function<bool()>([]() {
+					return dojo.PlayMatch;
+				}))
+				.addFunction("getSpeedMode", std::function<bool()>([]() {
+					return settings.input.fastForwardMode;
+				}))
+				.addFunction("setSpeedMode", std::function<void(bool)>([](bool fast) {
+					settings.input.fastForwardMode = fast;
+				}))
+				.addFunction("saveStateString", saveStateToString)
+				.addFunction("loadStateString", loadStateFromString)
+				.addFunction("hashState", hashState)
 				.addFunction("displayNotification", gui_display_notification)
 			.endNamespace()
 
@@ -1116,6 +1255,8 @@ static void luaRegister(lua_State *L)
 				.addFunction("write16", _vmem_writet<u16>)
 				.addFunction("write32", _vmem_writet<u32>)
 				.addFunction("write64", _vmem_writet<u64>)
+				.addFunction("getRegister", getRegister)
+				.addFunction("setRegister", setRegister)
 			.endNamespace()
 
 			.beginNamespace("input")
