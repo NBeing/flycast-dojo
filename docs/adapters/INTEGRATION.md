@@ -99,6 +99,27 @@ Note the asymmetry — flycast-dojo namespaces everything under `flycast.*`, so
 all ten names are free there. A global-install design looks correct on the host
 you can test and breaks on the one you cannot.
 
+### A script must not depend on the working directory
+
+`dofile("adapters/emuapi.lua")` resolves against the cwd, which is the config
+directory when the emulator is started from a terminal there and something
+arbitrary when it is started from a desktop menu. The same script therefore
+worked in every test and failed from the launcher.
+
+A host should point `package.path` at its script directory and expose that
+directory (flycast-dojo sets `SCRIPT_DIR`), and a script should build absolute
+paths from it.
+
+*Found because a script "did nothing" — the load error went to a log with no
+terminal attached to read it.*
+
+### An error nobody can see is the expensive kind
+
+A failed script and an absent one are indistinguishable without somewhere for
+the message to go. flycast-dojo has a Lua console that opens itself on error
+and a `flycast-lua.log` beside the config; a host without either turns every
+script mistake into "Lua is broken".
+
 ### Colour packing is rarely what you assume
 
 flycast-dojo's are `0xAABBGGRR` (ImGui's `IM_COL32`), not `0xRRGGBBAA`. Greys

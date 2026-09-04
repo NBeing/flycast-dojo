@@ -1061,6 +1061,8 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/oslib/host_context.h
 		core/oslib/oslib.h
 		core/lua/lua.cpp
+		core/lua/lua_console.cpp
+		core/lua/lua_console.h
 		core/lua/lua.h)
 
 if (ENABLE_DC_PROFILER)

@@ -27,7 +27,14 @@
 --- the draw callback, and the two communicate through a table. Drawing from a
 --- frame callback raises - see CALLBACK THREADING in lua_api_spec.lua.
 
-local api = dofile("adapters/emuapi.lua").load()
+-- Resolve the adapter relative to the CONFIG DIRECTORY, not the working one.
+-- dofile("adapters/...") resolves against the cwd, which is the config dir when
+-- flycast is started from a terminal there and something arbitrary when it is
+-- started from a desktop menu - so the same script worked in testing and failed
+-- from the launcher. SCRIPT_DIR is set by the host; the fallback keeps this
+-- working on a host that does not set it.
+local here = rawget(_G, "SCRIPT_DIR")
+local api = dofile((here and (here .. "/") or "") .. "adapters/emuapi.lua").load()
 local emu, frame, joypad, memory  = api.emu, api.frame, api.joypad, api.memory
 local savestate, gui, ui          = api.savestate, api.gui, api.ui
 local movie, sound                = api.movie, api.sound

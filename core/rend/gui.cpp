@@ -19,6 +19,9 @@
 #include "gui.h"
 #include "osd.h"
 #include "video_recorder.h"
+#ifdef USE_LUA
+#include "lua/lua_console.h"
+#endif
 #include "cfg/cfg.h"
 #include "hw/maple/maple_if.h"
 #include "hw/maple/maple_devs.h"
@@ -4567,6 +4570,11 @@ void gui_display_osd()
 
 		if (!settings.network.online)
 			lua::overlay();
+#ifdef USE_LUA
+		// Drawn here rather than from a script, so the console is available
+		// when the script is the thing that is broken.
+		luaconsole::draw();
+#endif
 
 		if (dojo.stepping)
 			dojo_gui.show_pause(settings.display.uiScale);

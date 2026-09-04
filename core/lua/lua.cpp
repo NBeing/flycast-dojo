@@ -22,6 +22,7 @@
 #include <lua.hpp>
 #include <LuaBridge/LuaBridge.h>
 #include "rend/gui.h"
+#include "lua_console.h"
 #include "network/ggpo.h"
 #ifndef LIBRETRO
 #include "rend/video_recorder.h"
@@ -76,6 +77,26 @@ void restorePressedButtons()
 	}
 }
 
+//! print() reaches the console and the log as well as stdout. A script started
+//! from a desktop menu has no terminal, so stdout alone is a message nobody
+//! receives.
+static int luaPrint(lua_State *L)
+{
+	const int n = lua_gettop(L);
+	std::string out;
+	for (int i = 1; i <= n; i++)
+	{
+		const char *s = luaL_tolstring(L, i, nullptr);
+		if (i > 1)
+			out += "\t";
+		out += (s != nullptr ? s : "nil");
+		lua_pop(L, 1);
+	}
+	luaconsole::add(luaconsole::Kind::Output, out);
+	printf("%s\n", out.c_str());
+	return 0;
+}
+
 static void emuEventCallback(Event event, void *)
 {
 	if (L == nullptr)
@@ -91,6 +112,11 @@ static void emuEventCallback(Event event, void *)
 	if (event == Event::VBlank && ggpo::rollbacking())
 		return;
 	lock_guard lock(mutex);
+	// THE FRAME BOUNDARY IS THE SAFE POINT: no ImGui frame is open and the
+	// emulated frame has ended, so a typed line cannot re-enter a half-drawn
+	// window or redefine a table the dispatcher is walking.
+	if (event == Event::VBlank)
+		luaconsole::drain(L);
 	try {
 		LuaRef v = LuaRef::getGlobal(L, CallbackTable);
 		if (!v.isTable())
@@ -121,6 +147,7 @@ static void emuEventCallback(Event event, void *)
 			v[key]();
 	} catch (const LuaException& e) {
 		WARN_LOG(COMMON, "Lua exception: %s", e.what());
+		luaconsole::add(luaconsole::Kind::Error, e.what());
 	}
 }
 
@@ -135,6 +162,7 @@ static void eventCallback(const char *tag)
 			v[tag]();
 	} catch (const LuaException& e) {
 		WARN_LOG(COMMON, "Lua exception[%s]: %s", tag, e.what());
+		luaconsole::addf(luaconsole::Kind::Error, "[%s] %s", tag, e.what());
 	}
 }
 
@@ -1465,7 +1493,16 @@ static void doExec(const std::string& path)
 	DEBUG_LOG(COMMON, "Executing script: %s", path.c_str());
 	int err = luaL_dofile(L, path.c_str());
 	if (err != 0)
-		WARN_LOG(COMMON, "Lua error: %s", lua_tostring(L, -1));
+	{
+		const char *msg = lua_tostring(L, -1);
+		WARN_LOG(COMMON, "Lua error: %s", msg);
+		// Opens the console, because this exact error - a relative dofile that
+		// could not resolve - previously produced total silence and read as
+		// "Lua does nothing".
+		luaconsole::add(luaconsole::Kind::Error, msg != nullptr ? msg : "script failed to load");
+	}
+	else
+		luaconsole::addf(luaconsole::Kind::Info, "loaded %s", path.c_str());
 }
 
 void exec(const std::string& path)
@@ -1483,7 +1520,40 @@ void init()
 		return;
 	L = luaL_newstate();
 	luaL_openlibs(L);
+
+	// THE SCRIPT MUST NOT DEPEND ON THE WORKING DIRECTORY.
+	//
+	// dofile("adapters/emuapi.lua") resolves against the CWD, which is the
+	// config directory when flycast is started from a terminal there and
+	// something arbitrary when it is started from a desktop menu. The same
+	// script therefore worked in testing and failed from the launcher, with the
+	// error going to a log nobody reads.
+	//
+	// package.path is pointed at the config directory so require() works, and
+	// SCRIPT_DIR is exposed so a dofile can be made absolute.
+	{
+		const std::string dir = get_readonly_config_path("");
+		lua_getglobal(L, "package");
+		if (lua_istable(L, -1))
+		{
+			lua_getfield(L, -1, "path");
+			const char *existing = lua_tostring(L, -1);
+			const std::string path = dir + "/?.lua;" + dir + "/?/init.lua;"
+					+ (existing != nullptr ? existing : "");
+			lua_pop(L, 1);
+			lua_pushstring(L, path.c_str());
+			lua_setfield(L, -2, "path");
+		}
+		lua_pop(L, 1);
+		lua_pushstring(L, dir.c_str());
+		lua_setglobal(L, "SCRIPT_DIR");
+	}
+
 	luaRegister(L);
+	// print() after openlibs, so ours replaces the stock one.
+	lua_pushcfunction(L, luaPrint);
+	lua_setglobal(L, "print");
+	luaconsole::reset();
     EventManager::listen(Event::Start, emuEventCallback);
     EventManager::listen(Event::Resume, emuEventCallback);
     EventManager::listen(Event::Pause, emuEventCallback);

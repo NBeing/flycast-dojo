@@ -14,7 +14,14 @@
 --- a legitimate answer and is reported as SKIP. A failure means the interface
 --- was claimed and then behaved differently to the specification.
 
-local api = dofile("adapters/emuapi.lua").load()
+-- Resolve the adapter relative to the CONFIG DIRECTORY, not the working one.
+-- dofile("adapters/...") resolves against the cwd, which is the config dir when
+-- flycast is started from a terminal there and something arbitrary when it is
+-- started from a desktop menu - so the same script worked in testing and failed
+-- from the launcher. SCRIPT_DIR is set by the host; the fallback keeps this
+-- working on a host that does not set it.
+local here = rawget(_G, "SCRIPT_DIR")
+local api = dofile((here and (here .. "/") or "") .. "adapters/emuapi.lua").load()
 local emu, joypad, memory, gui, ui, frame, savestate =
 	api.emu, api.joypad, api.memory, api.gui, api.ui, api.frame, api.savestate
 

@@ -23,9 +23,18 @@ end
 
 --- Directory this file was loaded from, so sibling adapters can be found
 --- without depending on the working directory.
+--- Where this file was loaded from, so sibling adapters are found without
+--- depending on the working directory. debug.getinfo gives the path dofile was
+--- called with, which is absolute when the caller used SCRIPT_DIR and relative
+--- otherwise; SCRIPT_DIR is the fallback for the relative case.
 local function selfDir()
 	local src = debug.getinfo(1, "S").source
-	return (src:sub(1, 1) == "@") and src:sub(2):match("^(.*[/\\])") or ""
+	local dir = (src:sub(1, 1) == "@") and src:sub(2):match("^(.*[/\\])") or ""
+	if dir == "" or dir:sub(1, 1) ~= "/" then
+		local here = rawget(_G, "SCRIPT_DIR")
+		if here then return here .. "/adapters/" end
+	end
+	return dir
 end
 
 --- Loading twice must not build two adapters. Each one installs its own
