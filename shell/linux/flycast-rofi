@@ -135,9 +135,20 @@ games() {
     done <<< "$dirs" | sort -u
 }
 
+# Only the scripts meant to be RUN, which is not every .lua next to them:
+# emuapi.lua and the per-host adapters are libraries, and offering them here
+# would be a menu row that loads a module and does nothing visible - the
+# failure that looks like a working launch.
+#
+# The marker is carried by the file rather than inferred from its name, so a
+# new example is offered by writing `@runnable` in it and a renamed one does
+# not silently vanish from the menu.
 lua_scripts() {
     { find "$ADAPTER_DIR" -maxdepth 1 -name '*.lua' 2>/dev/null
-      find "$ROOT/scripts" -maxdepth 1 -name '*.lua' 2>/dev/null; } | sort -u
+      find "$ROOT/scripts" -maxdepth 1 -name '*.lua' 2>/dev/null; } \
+        | sort -u | while IFS= read -r f; do
+            grep -q '@runnable' "$f" 2>/dev/null && printf '%s\n' "$f"
+        done
 }
 
 # Replays live under the data path, which follows FLYCAST_ROOT when set and
@@ -181,7 +192,8 @@ if [ "${1:-}" = "--check" ]; then
         exit 3
     fi
     if [ "$n_lua" -eq 0 ]; then
-        printf 'VACUOUS: no Lua found under %s -- the adapters should be there.\n' "$ADAPTER_DIR"
+        printf 'VACUOUS: no @runnable Lua under %s -- tour.lua and conformance.lua\n' "$ADAPTER_DIR"
+        printf '         should carry the marker.\n'
         exit 3
     fi
     if [ "$n_game" -eq 0 ]; then

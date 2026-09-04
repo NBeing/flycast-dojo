@@ -1,4 +1,5 @@
 --- Conformance suite for the cross-emulator Lua interface.
+--- @runnable -- a launcher may offer this as a script to run.
 ---
 --- The interface's own definition of conformance: if this passes, you conform.
 --- Presence is not enough - it also checks shapes, failure modes, and the
