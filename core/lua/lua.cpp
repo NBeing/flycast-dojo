@@ -99,8 +99,6 @@ static int luaPrint(lua_State *L)
 
 static void emuEventCallback(Event event, void *)
 {
-	if (L == nullptr)
-		return;
 	// GGPO re-simulates a frame for every rollback, and the VBlank event fires
 	// again on each pass. A script that accumulates - a counter, a tally, a log
 	// line - would count the same logical frame several times, so re-simulated
@@ -111,7 +109,13 @@ static void emuEventCallback(Event event, void *)
 	// flycast.state.isRollback() from a callback that does fire.
 	if (event == Event::VBlank && ggpo::rollbacking())
 		return;
+	// L IS READ UNDER THE LOCK, NEVER BEFORE IT. This runs on the emulation
+	// thread while term() runs on the main thread, so an unlocked null check
+	// only proves L was non-null at some point in the past - lua_close can land
+	// between that check and the first use of the state.
 	lock_guard lock(mutex);
+	if (L == nullptr)
+		return;
 	// THE FRAME BOUNDARY IS THE SAFE POINT: no ImGui frame is open and the
 	// emulated frame has ended, so a typed line cannot re-enter a half-drawn
 	// window or redefine a table the dispatcher is walking.
@@ -1513,11 +1517,14 @@ void exec(const std::string& path)
 	doExec(file);
 }
 
-void init()
+//! ONE SETUP PATH, because two drifted. init() and reinit() each built their
+//! own interpreter, and reinit()'s copy was missing package.path, SCRIPT_DIR,
+//! our print() and the console reset - so a script loaded from the Settings
+//! toggle silently got a weaker environment than the same script loaded at
+//! startup, including the working-directory bug the first had been fixed for.
+//! Caller holds the lock.
+static void openState(const std::string& initFile)
 {
-	std::string initFile = getLuaFile();
-	if (!file_exists(initFile))
-		return;
 	L = luaL_newstate();
 	luaL_openlibs(L);
 
@@ -1554,43 +1561,6 @@ void init()
 	lua_pushcfunction(L, luaPrint);
 	lua_setglobal(L, "print");
 	luaconsole::reset();
-    EventManager::listen(Event::Start, emuEventCallback);
-    EventManager::listen(Event::Resume, emuEventCallback);
-    EventManager::listen(Event::Pause, emuEventCallback);
-    EventManager::listen(Event::Terminate, emuEventCallback);
-    EventManager::listen(Event::LoadState, emuEventCallback);
-    EventManager::listen(Event::VBlank, emuEventCallback);
-
-	doExec(initFile);
-}
-
-void term()
-{
-	if (L == nullptr)
-		return;
-    EventManager::unlisten(Event::Start, emuEventCallback);
-    EventManager::unlisten(Event::Resume, emuEventCallback);
-    EventManager::unlisten(Event::Pause, emuEventCallback);
-    EventManager::unlisten(Event::Terminate, emuEventCallback);
-    EventManager::unlisten(Event::LoadState, emuEventCallback);
-    EventManager::unlisten(Event::VBlank, emuEventCallback);
-	// Watches are per-session; a new game must not inherit the last one's.
-	clearWatches();
-	lua_close(L);
-	L = nullptr;
-}
-
-void reinit(const std::string& initFile)
-{
-	term();
-	if (!file_exists(initFile))
-	{
-		init();
-		return;
-	}
-	L = luaL_newstate();
-	luaL_openlibs(L);
-	luaRegister(L);
 	EventManager::listen(Event::Start, emuEventCallback);
 	EventManager::listen(Event::Resume, emuEventCallback);
 	EventManager::listen(Event::Pause, emuEventCallback);
@@ -1599,6 +1569,47 @@ void reinit(const std::string& initFile)
 	EventManager::listen(Event::VBlank, emuEventCallback);
 
 	doExec(initFile);
+}
+
+void init()
+{
+	// The same lock the event callback takes. Assigning and closing L is what
+	// the emulation thread is reading, so the lifetime of the interpreter is
+	// covered by the same mutex as its use.
+	lock_guard lock(mutex);
+	std::string initFile = getLuaFile();
+	if (!file_exists(initFile))
+		return;
+	openState(initFile);
+}
+
+void term()
+{
+	lock_guard lock(mutex);
+	if (L == nullptr)
+		return;
+	EventManager::unlisten(Event::Start, emuEventCallback);
+	EventManager::unlisten(Event::Resume, emuEventCallback);
+	EventManager::unlisten(Event::Pause, emuEventCallback);
+	EventManager::unlisten(Event::Terminate, emuEventCallback);
+	EventManager::unlisten(Event::LoadState, emuEventCallback);
+	EventManager::unlisten(Event::VBlank, emuEventCallback);
+	// Watches are per-session; a new game must not inherit the last one's.
+	clearWatches();
+	lua_close(L);
+	L = nullptr;
+}
+
+void reinit(const std::string& initFile)
+{
+	lock_guard lock(mutex);
+	term();
+	if (!file_exists(initFile))
+	{
+		init();
+		return;
+	}
+	openState(initFile);
 }
 
 }

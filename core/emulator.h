@@ -81,10 +81,18 @@ private:
 
 	void registerEvent(Event event, Callback callback, void *param);
 	void unregisterEvent(Event event, Callback callback, void *param);
+	//! Caller holds the lock. registerEvent needs to remove-then-add without
+	//! releasing it in between, or a concurrent broadcast could see neither.
+	void unregisterEventLocked(Event event, Callback callback, void *param);
 	void broadcastEvent(Event event);
 
 	static EventManager Instance;
 	std::map<Event, std::vector<std::pair<Callback, void *>>> callbacks;
+	//! Listeners are registered from the main thread (a menu toggle can start
+	//! and stop Lua) and broadcast from the emulation thread, so the container
+	//! itself needs a lock. Held only across the container access - never
+	//! across a callback: see broadcastEvent.
+	std::mutex mutex;
 };
 
 struct LoadProgress

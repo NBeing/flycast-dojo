@@ -72,13 +72,47 @@ than changed under existing scripts.
   100 ms waiting on comm-board data. Only for NAOMI multiboard setups, which
   are not a GGPO netplay configuration, so it cannot overlap in practice.
 
-### [B] `EventManager` has no locking
-`broadcastEvent` iterates its listener vector while `registerEvent` /
-`unregisterEvent` mutate it, and `lua::init/term/reinit` assign and close `L`
-without holding `lua::mutex`. A `VBlank` dispatch on the emulation thread
-racing `lua::term()` on the main thread is undefined behaviour today.
+### [x] `EventManager` has no locking — FIXED
+Two races, not one, and they needed different fixes.
 
-Pre-existing, unrelated to capture. Worth reporting upstream separately.
+**The container race.** `broadcastEvent` iterated its listener vector while
+`registerEvent`/`unregisterEvent` mutated it. `EventManager` now holds a mutex,
+and `broadcastEvent` **copies the listener list under the lock and dispatches
+outside it**. Both halves are load-bearing: copying survives a listener that
+unregisters itself from inside its own callback, and releasing before the call
+is what keeps the two locks from being taken in both orders — `lua::term()`
+holds `lua::mutex` and wants this one, while a broadcast wants `lua::mutex`.
+Dispatching under the lock would also let `NaomiM3Comm::vblank`, which blocks up
+to 100 ms, stall registration on another thread.
+
+**The lifetime race.** `lua::init/term/reinit` assigned and closed `L` without
+holding `lua::mutex`, and `emuEventCallback` read `L` *before* taking it — an
+unlocked null check only proves `L` was non-null at some point in the past.
+All three lifecycle functions now take the lock, and the null check moved
+inside it.
+
+Reachable, not theoretical: `core/rend/gui.cpp:1466` calls `lua::term()` from
+the main thread when Training Lua is toggled off, while `Event::VBlank`
+dispatches on the emulation thread.
+
+`[MEASURED 2026-09-04]` 108/108 conformance checks pass against the locked
+build with a clean shutdown — that exercises the changed dispatch path at 60 Hz
+for the length of a session, so it is a regression gate on the fix.
+
+`[REASONED]` **The race itself has not been demonstrated failing.** Both call
+sites that tear Lua down mid-session are training-mode-gated and reachable only
+through the GUI, so the concurrent toggle was not driven. What would settle it:
+a ThreadSanitizer build, or hammering the Settings toggle with the emulator
+running. Recorded here rather than counted as verified.
+
+### [x] `lua::reinit()` built a weaker interpreter than `lua::init()` — FIXED
+Found while fixing the above. The two functions each constructed their own
+`lua_State`, and `reinit`'s copy was missing `package.path`, `SCRIPT_DIR`, the
+console-aware `print`, and the console session reset — so a script loaded from
+the Settings toggle silently got a different environment from the same script
+loaded at startup, **including the working-directory bug `init` had just been
+fixed for**. Both now call one `openState()`, so there is no second copy to
+drift.
 
 ---
 

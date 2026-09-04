@@ -217,11 +217,11 @@ reconciling them. Registration functions are the better contract (multiple
 subscribers, unregistration), but the table form is what flycast scripts use
 today, so both need to work.
 
-### [S] 8. Interface versioning
-There is no `emu.apiversion()`. Without it a script cannot tell a partial
-implementation from an old one, and `emu.supports()` alone cannot express
-"this function exists but changed shape". Add a single integer, bumped on
-breaking change.
+### [S] 8. Interface versioning — STUBBED, not settled
+`emu.apiversion()` exists (`emuapi.lua:88`) and returns `0`. What is not
+settled is the policy: nothing bumps it, and there is no rule saying what
+constitutes a breaking change. Until something does, it cannot distinguish a
+partial implementation from an old one, which was the point of having it.
 
 ### [x] 9. Namespace collision — RESOLVED
 **Namespaces are named neutrally but not installed as globals.** The loader
@@ -265,8 +265,10 @@ Verified: local binding gives the full API with no globals touched;
   the two names buy here is *order* — before-callbacks run first, so a script
   injecting input runs ahead of one reading state. Verified `B-A-B-A` with
   equal counts.
-- `joypad.getdown` / `getup` — edge detection. Trivial once (1) is settled;
-  currently every script reimplements it and gets rollback wrong.
+- [x] **`joypad.getdown` / `getup` — DONE.** Synthesised in the adapter
+  (`flycast.lua:85-86`) rather than bound in the host, because edge detection is
+  a diff of two frames' button tables and needs no host support. Held stable for
+  the whole frame however many callbacks read it.
 
 ### [x] Tier 2 — DONE
 - `savestate.save_mem` / `load_mem` / `hash` — states as strings, sized by a
@@ -283,16 +285,17 @@ Verified: local binding gives the full API with no globals touched;
   frame callback, which runs on the emulation thread; from a draw callback they
   race the running CPU exactly as the memory accessors do.
 
-**Coverage: 49/54, 84 conformance checks, 0 failures.** Remaining unimplemented:
-`frame.resimsteps`, `memory.watch`, `movie.framecount`, `sound.voicecount`,
-`sound.outputrate`.
+**Coverage: 75/76, 108 conformance checks, 0 failures, 0 skips**
+`[MEASURED 2026-09-04]`. The one remaining unimplemented member is `ui.Image`,
+which is capability-gated rather than faked.
 
-### [P] Tier 3 — larger, still portable
-- `movie.*` — mode, framecount, rerecord counting, read-only flag. Overlaps
-  the replay library work already done; reuse `ReplayManager` rather than
-  adding a second concept of a recording.
-- `sound.voicecount` / `outputrate` / `voice(n)` — per-channel AICA state.
-  Drives audio-reactive overlays.
+### [x] Tier 3 — DONE
+- [x] `movie.*` — `mode`, `framecount`, `record`, `stop`
+  (`flycast.lua:274-282`), built on `ReplayManager` rather than a second
+  concept of a recording. `mode()` returns `"record"`, `"playback"` or `nil`.
+- [x] `sound.voicecount` / `outputrate` (`flycast.lua:285-286`). `voice(n)` —
+  per-channel AICA state — is **not** implemented; it is the one part of this
+  tier still open.
 - [x] **`memory.watch` — DONE**, and better than the page-granularity design
   originally sketched. Snapshot-and-compare rather than `memwatch` dirty pages:
   that tracking exists for rollback, is only armed under GGPO, reports whole
@@ -360,8 +363,10 @@ Recorded in `docs/lua_api_spec.lua`; summarised here so this file stands alone.
 - **`spec.*` (counterfactual rollout)** — needs cheap speculative stepping.
   Assess against whatever dominates snapshot cost, not against RAM size.
 - **`quark.*`, `macro.*`, `vsav.*`** — emulator- or tool-specific.
-- **`imgui.*`** — leaks the host toolkit into scripts; `gui.*` is the portable
-  subset.
+- ~~**`imgui.*`** — leaks the host toolkit into scripts~~ **REVERSED by
+  question 5.** ImGui *is* the widget interface, under `ui.*` and ImGui's own
+  names. The exclusion was right for an unbounded set of hosts and wrong for
+  this one, where every C++ emulator in scope already embeds it.
 - **`socket.*`** — needs a capability gate, not a default.
 
 ---

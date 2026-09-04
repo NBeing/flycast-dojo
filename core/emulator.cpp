@@ -862,7 +862,8 @@ EventManager EventManager::Instance;
 
 void EventManager::registerEvent(Event event, Callback callback, void *param)
 {
-	unregisterEvent(event, callback, param);
+	std::lock_guard<std::mutex> lock(mutex);
+	unregisterEventLocked(event, callback, param);
 	auto it = callbacks.find(event);
 	if (it != callbacks.end())
 		it->second.push_back(std::make_pair(callback, param));
@@ -871,6 +872,11 @@ void EventManager::registerEvent(Event event, Callback callback, void *param)
 }
 
 void EventManager::unregisterEvent(Event event, Callback callback, void *param) {
+	std::lock_guard<std::mutex> lock(mutex);
+	unregisterEventLocked(event, callback, param);
+}
+
+void EventManager::unregisterEventLocked(Event event, Callback callback, void *param) {
 	auto it = callbacks.find(event);
 	if (it == callbacks.end())
 		return;
@@ -883,11 +889,31 @@ void EventManager::unregisterEvent(Event event, Callback callback, void *param) 
 }
 
 void EventManager::broadcastEvent(Event event) {
-	auto it = callbacks.find(event);
-	if (it == callbacks.end())
-		return;
-
-	for (auto& pair : it->second)
+	// COPY UNDER THE LOCK, DISPATCH OUTSIDE IT, and both halves matter.
+	//
+	// Copying is what makes the iteration safe: a listener that registers or
+	// unregisters from inside its own callback - lua::term() reached from a
+	// menu toggle does exactly that - would otherwise invalidate the iterator
+	// being walked.
+	//
+	// Dispatching outside the lock is what keeps it from deadlocking. A
+	// callback may take its own lock (lua::mutex), while a thread holding that
+	// lock may call listen/unlisten and want this one. Releasing before the
+	// call means the two locks are never held in both orders, so there is no
+	// cycle to close. It also keeps a slow listener - NaomiM3Comm::vblank
+	// blocks up to 100 ms - from stalling registration on another thread.
+	//
+	// The copy is a handful of pointer pairs per event and is not worth
+	// optimising away at the cost of either property.
+	std::vector<std::pair<Callback, void *>> listeners;
+	{
+		std::lock_guard<std::mutex> lock(mutex);
+		auto it = callbacks.find(event);
+		if (it == callbacks.end())
+			return;
+		listeners = it->second;
+	}
+	for (auto& pair : listeners)
 		pair.first(event, pair.second);
 }
 
