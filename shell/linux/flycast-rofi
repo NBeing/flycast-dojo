@@ -1,0 +1,321 @@
+#!/usr/bin/env bash
+#
+# flycast-rofi -- a rofi launcher for flycast-dojo.
+#
+#   RUN:   shell/linux/flycast-rofi
+#   PASS:  a rofi menu appears; picking a game and an action launches it.
+#   FAIL:  a rofi menu appears saying WHAT is missing, and exit 1. It never
+#          exits silently, and it never launches something other than the pick.
+#
+#   SELF-CHECK (no menu, no launch):
+#          shell/linux/flycast-rofi --check
+#   PASS:  exit 0 and a line per resolved path. exit 1 naming the first thing
+#          missing. exit 3 if a list came back EMPTY because a derivation
+#          broke, which is a vacuous pass rather than an empty collection.
+#
+# ---------------------------------------------------------------------------
+# THE EXTENSION LIST IS ASKED OF THE SOURCE, NOT HELD HERE
+#
+# core/rend/game_scanner.h decides what flycast will open. A second copy of
+# that list in a launcher rots in the quiet direction: a format the emulator
+# gained simply never appears in the menu, which reads as "unsupported" rather
+# than as a stale script. So it is parsed out of the scanner every run, and the
+# parse is checked for vacuity -- an extension list that came back empty and a
+# games directory that is genuinely empty look identical in a menu, and only
+# one of them is your fault.
+#
+# ---------------------------------------------------------------------------
+# THIS SCRIPT NEVER cd's
+#
+# The root comes from this file's own location, every path handed to the binary
+# is absolute, and each is overridable by an environment variable named below.
+# A launcher resolving against $PWD makes one command mean different things
+# depending on where the menu happened to be invoked from -- and flycast reads
+# a relative "data" directory, so that is not hypothetical.
+# ---------------------------------------------------------------------------
+
+set -uo pipefail
+
+SELF="$(realpath "${BASH_SOURCE[0]}")"
+ROOT="${FLYCAST_ROOT_DIR:-$(dirname "$(dirname "$(dirname "$SELF")")")}"
+
+BUILD_DIR="${FLYCAST_BUILD_DIR:-$ROOT/artifact/bin}"
+BIN="$BUILD_DIR/flycast-dojo"
+SCANNER="$ROOT/core/rend/game_scanner.h"
+GAME_DIR="${FLYCAST_GAME_DIR:-$HOME/Downloads}"
+ADAPTER_DIR="${FLYCAST_ADAPTER_DIR:-$ROOT/docs/adapters}"
+OUT_DIR="${FLYCAST_OUT_DIR:-$ROOT/out/rofi}"
+# WHERE A FAILED LAUNCH LEAVES ITS EVIDENCE. Started from a menu there is no
+# terminal, so stderr going nowhere IS the bug report nobody receives.
+LOG="${FLYCAST_LOG:-${XDG_RUNTIME_DIR:-/tmp}/flycast-rofi.log}"
+
+ROFI_ARGS=(-dmenu -i -no-custom)
+
+die() {
+    printf 'flycast-rofi: %s\n' "$1" >&2
+    if [ -z "${FLYCAST_ROFI_NO_UI:-}" ] && command -v rofi >/dev/null 2>&1; then
+        printf 'flycast-rofi: %s\n(press Escape)' "$1" \
+            | rofi -dmenu -p 'cannot launch' >/dev/null 2>&1
+    fi
+    exit 1
+}
+
+# --- derived lists ---------------------------------------------------------
+
+# Every extension game_scanner.h names, from its own comparisons. Sorted and
+# de-duplicated so a format tested twice cannot make the count lie.
+supported_extensions() {
+    grep -oE 'extension (==|!=) "[a-z0-9]+"' "$SCANNER" 2>/dev/null \
+        | grep -oE '"[a-z0-9]+"' | tr -d '"' | sort -u
+}
+
+# Games present on disk whose extension the scanner accepts. Presented rather
+# than every file in the directory, because a menu that mostly fails on click
+# is a menu that wastes the click.
+games() {
+    local exts
+    exts="$(supported_extensions)"
+    [ -n "$exts" ] || return 1
+    local ext
+    while IFS= read -r ext; do
+        find "$GAME_DIR" -maxdepth 2 -type f -iname "*.$ext" 2>/dev/null
+    done <<< "$exts" | sort -u
+}
+
+lua_scripts() {
+    { find "$ADAPTER_DIR" -maxdepth 1 -name '*.lua' 2>/dev/null
+      find "$ROOT/scripts" -maxdepth 1 -name '*.lua' 2>/dev/null; } | sort -u
+}
+
+# Replays live under the data path, which follows FLYCAST_ROOT when set and
+# ~/.local/share otherwise. Both are offered rather than guessed between.
+replays() {
+    { find "$ROOT/data/replays" -maxdepth 1 \( -name '*.flyr' -o -name '*.flyreplay' \) 2>/dev/null
+      find "$HOME/.local/share/flycast-dojo/replays" -maxdepth 1 \
+           \( -name '*.flyr' -o -name '*.flyreplay' \) 2>/dev/null; } | sort -u
+}
+
+preflight() {
+    [ -d "$ROOT" ]      || die "repo root is not a directory: $ROOT"
+    [ -r "$SCANNER" ]   || die "no game scanner at $SCANNER -- is FLYCAST_ROOT_DIR right?"
+    [ -d "$GAME_DIR" ]  || die "game dir is not a directory: $GAME_DIR (set FLYCAST_GAME_DIR)"
+    [ -x "$BIN" ]       || die "no flycast-dojo at $BIN -- build it, or set FLYCAST_BUILD_DIR"
+}
+
+# --- --check ---------------------------------------------------------------
+if [ "${1:-}" = "--check" ]; then
+    FLYCAST_ROFI_NO_UI=1
+    preflight
+    n_ext=$(supported_extensions | wc -l)
+    n_game=$(games | wc -l)
+    n_lua=$(lua_scripts | wc -l)
+    n_rep=$(replays | wc -l)
+    printf 'root        %s\n' "$ROOT"
+    printf 'binary      %s\n' "$BIN"
+    printf 'game-dir    %s\n' "$GAME_DIR"
+    printf 'extensions  %s (%s)\n' "$n_ext" "$(supported_extensions | tr '\n' ' ')"
+    printf 'games       %s\n' "$n_game"
+    printf 'lua         %s\n' "$n_lua"
+    printf 'replays     %s\n' "$n_rep"
+
+    # VACUITY, ASSERTED RATHER THAN HOPED FOR. A parse yielding nothing gives an
+    # empty menu, and an empty menu looks exactly like "you own no games".
+    if [ "$n_ext" -eq 0 ]; then
+        printf 'VACUOUS: the scanner parsed to ZERO extensions -- the parse is broken,\n'
+        printf '         not your collection. %s\n' "$SCANNER"
+        exit 3
+    fi
+    if [ "$n_lua" -eq 0 ]; then
+        printf 'VACUOUS: no Lua found under %s -- the adapters should be there.\n' "$ADAPTER_DIR"
+        exit 3
+    fi
+    if [ "$n_game" -eq 0 ]; then
+        printf 'no games: %s holds nothing the scanner would open\n' "$GAME_DIR"
+        exit 1
+    fi
+    # Replays legitimately start at zero on a fresh checkout, so an empty list
+    # is reported without failing: the entry is hidden rather than opening onto
+    # nothing.
+    printf 'ok\n'
+    exit 0
+fi
+
+preflight
+command -v rofi >/dev/null 2>&1 || die 'rofi is not installed'
+
+# --- a terminal for the actions whose OUTPUT is the point ------------------
+term_run() {
+    local title="$1"; shift
+    local t
+    for t in kitty alacritty wezterm foot gnome-terminal konsole xfce4-terminal xterm; do
+        command -v "$t" >/dev/null 2>&1 || continue
+        case "$t" in
+            gnome-terminal) setsid "$t" --title="$title" -- bash -lc "$*; echo; read -rp 'enter to close'" & ;;
+            konsole)        setsid "$t" -p "tabtitle=$title" -e bash -lc "$*; echo; read -rp 'enter to close'" & ;;
+            *)              setsid "$t" -T "$title" -e bash -lc "$*; echo; read -rp 'enter to close'" & ;;
+        esac
+        return 0
+    done
+    die 'no terminal emulator found, and this action prints the answer it produces'
+}
+
+log() { printf '%s %s\n' "$(date +%H:%M:%S)" "$1" >> "$LOG" 2>/dev/null; }
+
+# Started from `rofi -show drun`, this runs while THAT rofi is still tearing
+# down; the second instance asks X for the same keyboard grab, does not get it,
+# and exits. The menu never appears and nothing is logged, because from rofi's
+# side the exec succeeded. Wait, bounded, so a stuck one is visible.
+wait_for_rofi() {
+    local i=0
+    while [ "$i" -lt 40 ]; do
+        pgrep -x rofi >/dev/null 2>&1 || return 0
+        sleep 0.05
+        i=$((i + 1))
+    done
+    log 'another rofi is still running after 2s; showing the menu anyway'
+    return 0
+}
+
+pick() {
+    wait_for_rofi
+    rofi "${ROFI_ARGS[@]}" -p "$1"
+}
+
+# --- launching, with the failure visible -----------------------------------
+# No setsid: a detached child's pid stops being ours, so `kill -0` cannot tell
+# a healthy start from a dead one. A plain background child is a pid we own and
+# can ask about honestly, and it survives this script exiting anyway.
+#
+# The wait is three seconds because flycast's refusals are not immediate: it
+# reads config, opens GL, prints its banner, and only then rejects a bad ROM.
+launch() {
+    : > "$LOG"
+    log "exec: $*"
+    "$@" >> "$LOG" 2>&1 &
+    local pid=$!
+    local i=0
+    while [ "$i" -lt 30 ]; do
+        sleep 0.1
+        i=$((i + 1))
+        kill -0 "$pid" 2>/dev/null || break
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        log "alive after ${i}00ms"
+        disown "$pid" 2>/dev/null
+        return 0
+    fi
+    wait "$pid" 2>/dev/null
+    local rc=$?
+    [ "$rc" -eq 0 ] && { log 'exited 0 within 3s'; return 0; }
+    local why
+    why="$(grep -iE 'error|no such|cannot|failed|refus' "$LOG" | tail -3)"
+    [ -n "$why" ] || why="$(tail -3 "$LOG")"
+    die "flycast-dojo exited $rc. Its last words:
+$why
+
+full log: $LOG"
+}
+
+# --- step one: which game ---------------------------------------------------
+GAMES="$(games)"
+[ -n "$GAMES" ] || die "no games: $GAME_DIR holds nothing the scanner would open"
+
+DEFAULT_GAME="$(printf '%s\n' "$GAMES" | head -n 1)"
+
+GAME=""; ACTION=""
+case "${1:-}" in
+    --play)       GAME="$DEFAULT_GAME"; ACTION='Play' ;;
+    --record)     GAME="$DEFAULT_GAME"; ACTION='Play + record video' ;;
+    --conformance) GAME="$DEFAULT_GAME"; ACTION='Run the Lua conformance suite' ;;
+    "")           ;;
+    *)            die "unknown option: $1 (try --check, --play, --record, --conformance)" ;;
+esac
+
+if [ -z "$GAME" ]; then
+    GAME="$(printf '%s\n' "$GAMES" | pick 'game')"
+    [ -n "$GAME" ] || exit 0
+fi
+GAME_NAME="$(basename "$GAME")"
+
+# --- step two: what to do with it -------------------------------------------
+ACTIONS='Play
+Play + Lua script
+Play + record video
+Play with Vulkan
+Play with a scratch config
+Play a replay
+Run the Lua conformance suite'
+
+if [ -z "$ACTION" ]; then
+    ACTION="$(printf '%s\n' "$ACTIONS" | pick "$GAME_NAME")"
+    [ -n "$ACTION" ] || exit 0
+fi
+
+mkdir -p "$OUT_DIR"
+base=("$BIN")
+
+case "$ACTION" in
+Play)
+    launch "${base[@]}" "$GAME"
+    ;;
+
+'Play + Lua script')
+    # Copied into a scratch root rather than run in place: flycast loads exactly
+    # one script, named flycast.lua, from its config directory. Pointing the
+    # root at OUT_DIR means picking a script cannot disturb a real config.
+    script="$(lua_scripts | pick 'script')"
+    [ -n "$script" ] || exit 0
+    mkdir -p "$OUT_DIR/lua-root/adapters"
+    cp "$ADAPTER_DIR"/*.lua "$OUT_DIR/lua-root/adapters/" 2>/dev/null
+    cp "$script" "$OUT_DIR/lua-root/flycast.lua" || die "cannot stage $script"
+    FLYCAST_ROOT="$OUT_DIR/lua-root" launch "${base[@]}" "$GAME"
+    ;;
+
+'Play + record video')
+    command -v ffmpeg >/dev/null 2>&1 \
+        || die 'ffmpeg is not installed, and video capture pipes frames to it'
+    mkdir -p "$OUT_DIR/rec-root"
+    printf 'flycast.video.startRecording("")\n' > "$OUT_DIR/rec-root/flycast.lua"
+    FLYCAST_ROOT="$OUT_DIR/rec-root" launch "${base[@]}" "$GAME"
+    ;;
+
+'Play with Vulkan')
+    # pvr.rend=4 is RenderType::Vulkan in core/types.h.
+    launch "${base[@]}" -config config:pvr.rend=4 "$GAME"
+    ;;
+
+'Play with a scratch config')
+    # A throwaway root, so a wedged setting is one pick away from being ruled
+    # out. It never touches the real config.
+    mkdir -p "$OUT_DIR/scratch"
+    FLYCAST_ROOT="$OUT_DIR/scratch" launch "${base[@]}" "$GAME"
+    ;;
+
+'Play a replay')
+    REPLAYS="$(replays)"
+    [ -n "$REPLAYS" ] || die 'no replays found -- record one first'
+    replay="$(printf '%s\n' "$REPLAYS" | pick 'replay')"
+    [ -n "$replay" ] || exit 0
+    [ -r "$replay" ] || die "no such replay: '$replay'"
+    launch "${base[@]}" -config dojo:LaunchReplay=yes \
+                        -config "dojo:ReplayFilename=$replay" "$GAME"
+    ;;
+
+'Run the Lua conformance suite')
+    # The suite prints its verdict and exits; launching it detached would throw
+    # the verdict away and report success. It runs against a scratch root so a
+    # conformance run cannot disturb a real config.
+    [ -r "$ADAPTER_DIR/conformance.lua" ] \
+        || die "no conformance suite at $ADAPTER_DIR/conformance.lua"
+    mkdir -p "$OUT_DIR/conf-root/adapters"
+    cp "$ADAPTER_DIR"/*.lua "$OUT_DIR/conf-root/adapters/"
+    printf 'local api = dofile("adapters/emuapi.lua").load()\napi.emu.registerexit(function() api.report() end)\ndofile("adapters/conformance.lua")\n' \
+        > "$OUT_DIR/conf-root/flycast.lua"
+    term_run "flycast conformance" \
+        "FLYCAST_ROOT='$OUT_DIR/conf-root' '$BIN' '$GAME' 2>&1 | grep -E 'emuapi|pass=|FAIL|RESULT|missing'"
+    ;;
+
+*)
+    die "unknown action: $ACTION"
+    ;;
+esac
