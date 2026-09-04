@@ -4,13 +4,13 @@
 ---
 --- STATUS: DRAFT. Not finished, and not yet safe to implement against.
 ---
---- It names the right things and settles eight questions (capability is
---- queryable, rollback safety is in the contract, unportable hooks are
---- excluded with reasons, buttons are named booleans, indices are 1-based,
---- failure is loud, only draw callbacks may draw, and memory is addressed by
---- named space). It does NOT yet pin down drawing coordinates, interface
---- versioning, or namespace collision - and two emulators can both conform to
---- what is written here and still disagree in every one of those.
+--- Every question it set out to settle is settled: capability is queryable,
+--- rollback safety is in the contract, unportable hooks are excluded with
+--- reasons, buttons are named booleans, indices are 1-based, failure is loud,
+--- only draw callbacks may draw, memory is addressed by named space, drawing
+--- splits into ImGui widgets and game-pixel overlay, and namespaces are bound
+--- locally rather than installed. What remains is porting, and a conformance
+--- suite to keep the two honest - see LUA_TODO.md.
 --- See LUA_TODO.md, Part 1, before building on this.
 ---
 --- WHAT THIS IS
@@ -69,10 +69,23 @@
 ---    does not exist. `emu.supports` should be derived from the bindings that
 ---    actually exist, never a hand-maintained list, so it cannot drift.
 ---
---- 3. Namespaces are root-level and neutral: `emu`, `memory`, `input`,
----    `joypad`, `savestate`, `gui`, `movie`, `sound`, `frame`. Note that
----    fbneo-rr already owns the global `emu`; an adapter must snapshot the
----    host's tables before installing over them.
+--- 3. Namespaces are NAMED neutrally - `emu`, `memory`, `input`, `joypad`,
+---    `savestate`, `gui`, `ui`, `movie`, `sound`, `frame` - but they are NOT
+---    installed as globals. The loader returns them and a script binds what it
+---    wants:
+---
+---        local api = dofile("adapters/emuapi.lua").load()
+---        local emu, joypad, memory, gui = api.emu, api.joypad, api.memory, api.gui
+---
+---    A file-scope local shadows a global for that file alone, so nothing else
+---    in the Lua state is disturbed and the shape is identical on every host.
+---
+---    Installing globals cannot be the contract, because the names are not
+---    free everywhere: fbneo-rr already owns emu, memory, input, joypad,
+---    savestate, movie and gui. Overwriting them would break both its existing
+---    scripts and the adapter itself, which reaches the host through those
+---    very tables. A host with room may still opt in with api.install(), which
+---    REFUSES rather than clobbers - loud, per failure tier 1.
 ---
 --- 4. Anything not marked [core] is optional.
 ---

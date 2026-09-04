@@ -3,13 +3,14 @@
 Working list for `docs/lua_api_spec.lua`, the cross-emulator Lua interface, and
 for porting fbneo-rr's remaining script surface into flycast-dojo.
 
-**Is the interface done? No, but only two questions remain.** It settles eight
+**Is the interface done? The design questions are.** It settles ten
 (capability is queryable, rollback safety is in the contract, unportable hooks
 are excluded with reasons, buttons are named booleans, indices are 1-based,
 failure is loud, only draw callbacks may draw, and memory is addressed by named
-space — the last five resolved and implemented). Still open: drawing
-coordinates, and namespace collision. Versioning is stubbed as
-`emu.apiversion()` returning 0. What it does not
+space, drawing splits into ImGui widgets and game-pixel overlay, and namespaces
+are bound locally rather than installed). What remains is porting and a
+conformance suite, not design. Versioning is stubbed as `emu.apiversion()`
+returning 0 and should be bumped on the first breaking change. What it does not
 yet do is pin down the details that make two implementations actually
 interchangeable. Those are Part 1, and they matter more than the port itself:
 a spec with unresolved semantics produces two conforming emulators that still
@@ -222,13 +223,31 @@ implementation from an old one, and `emu.supports()` alone cannot express
 "this function exists but changed shape". Add a single integer, bumped on
 breaking change.
 
-### [S] 9. Namespace collision policy
-The spec asks for root-level `emu`, `memory`, `gui`. Those are plausible names
-for a script's own globals, and `gui`/`input` are generic enough to collide.
-State whether the neutral names are always published, opt-in via
-`require`, or namespaced behind a single root.
+### [x] 9. Namespace collision — RESOLVED
+**Namespaces are named neutrally but not installed as globals.** The loader
+returns them; a script binds what it wants:
 
----
+```lua
+local api = dofile("adapters/emuapi.lua").load()
+local emu, joypad, memory, gui = api.emu, api.joypad, api.memory, api.gui
+```
+
+A file-scope `local` shadows a global for that file alone, so nothing else in
+the Lua state is disturbed and the shape is identical on every host.
+
+Installing globals could not be the contract: fbneo-rr already owns `emu`,
+`memory`, `input`, `joypad`, `savestate`, `movie` and `gui` — **seven of the
+ten names**. Overwriting them would break both its existing scripts and the
+adapter itself, which reaches the host through those same tables. Note the
+asymmetry: flycast namespaces everything under `flycast.*` so all ten are free
+there, meaning a global-install design would have looked correct on the host
+that can be tested and broken on the one that cannot.
+
+`api.install()` remains for hosts with room, and **refuses rather than
+clobbers**, naming the conflicts — loud, per failure tier 1.
+
+Verified: local binding gives the full API with no globals touched;
+`install()` succeeds on flycast; a second `install()` is refused.
 
 ## Part 2 — Port work, in dependency order
 

@@ -3,8 +3,8 @@
 --- Detects the host emulator, loads its adapter, and installs the neutral
 --- namespaces as globals. See ../lua_api_spec.lua for the interface itself.
 ---
----   local emuapi = dofile("adapters/emuapi.lua")
----   -- emu, frame, joypad, memory, savestate, gui are now available
+---   local api = dofile("adapters/emuapi.lua").load()
+---   local emu, joypad, gui = api.emu, api.joypad, api.gui
 ---
 --- Loading: emulators typically run one script file and do not necessarily put
 --- its directory on package.path, so this is written to work under a plain
@@ -41,29 +41,64 @@ function M.load(hostOverride)
 	end
 	local adapter = chunk()
 
-	--- Install the neutral namespaces.
+	--- Namespaces are returned, NOT installed. Installing them as globals
+	--- cannot work everywhere: fbneo-rr already owns emu, memory, input,
+	--- joypad, savestate, movie and gui, so overwriting them would break both
+	--- its existing scripts and this adapter, which calls through those very
+	--- tables. Scripts bind locally instead - see install() below.
 	for name, tbl in pairs(adapter.namespaces) do
-		_G[name] = tbl
+		M[name] = tbl
 	end
 
-	--- supports() is derived from the tables that were actually installed, so
-	--- it cannot drift from reality the way a hand-maintained list does. A name
+	--- supports() is derived from the tables that were actually loaded, so it
+	--- cannot drift from reality the way a hand-maintained list does. A name
 	--- that exists but is explicitly unimplemented is declared in
 	--- adapter.unsupported and answers false.
 	local unsupported = adapter.unsupported or {}
-	function _G.emu.supports(name)
+	function M.emu.supports(name)
 		if unsupported[name] then return false end
 		local ns, fn = tostring(name):match("^([%w_]+)%.([%w_]+)$")
 		if ns == nil then return false end
-		local t = rawget(_G, ns)
+		local t = M[ns]
 		return type(t) == "table" and type(rawget(t, fn)) == "function"
 	end
 
 	--- Bumped on breaking change. See LUA_TODO.md item 8.
-	function _G.emu.apiversion() return 0 end
+	function M.emu.apiversion() return 0 end
 
 	M.host = host
 	M.adapter = adapter
+	return M
+end
+
+--- Optional convenience for a host with room for them: publish the namespaces
+--- as globals. Refuses rather than clobbers, because silently replacing a name
+--- another script owns is the worst outcome available - and on fbneo-rr, where
+--- seven of them are taken, it will refuse every time. That is the correct
+--- answer there; use local binding instead.
+---
+---     local api = dofile("adapters/emuapi.lua").load()
+---     local emu, joypad = api.emu, api.joypad
+---
+--- A file-scope local shadows a global for that file alone, so nothing else in
+--- the Lua state is disturbed and it behaves the same on every host.
+function M.install(opts)
+	opts = opts or {}
+	local prefix = opts.prefix or ""
+	local taken = {}
+	for name in pairs(M.adapter.namespaces) do
+		if rawget(_G, prefix .. name) ~= nil then
+			taken[#taken + 1] = prefix .. name
+		end
+	end
+	if #taken > 0 and not opts.force then
+		error("emuapi.install: these globals are already in use: "
+			.. table.concat(taken, ", ")
+			.. ". Bind locally instead, or pass a prefix.", 2)
+	end
+	for name, tbl in pairs(M.adapter.namespaces) do
+		_G[prefix .. name] = tbl
+	end
 	return M
 end
 
@@ -94,10 +129,10 @@ M.surface = {
 function M.report()
 	local have, miss = 0, {}
 	for _, name in ipairs(M.surface) do
-		if emu.supports(name) then have = have + 1 else miss[#miss + 1] = name end
+		if M.emu.supports(name) then have = have + 1 else miss[#miss + 1] = name end
 	end
 	print(string.format("emuapi: host=%s api=%d  %d/%d implemented",
-		M.host, emu.apiversion(), have, #M.surface))
+		M.host, M.emu.apiversion(), have, #M.surface))
 	if #miss > 0 then print("  missing: " .. table.concat(miss, " ")) end
 	return have, miss
 end

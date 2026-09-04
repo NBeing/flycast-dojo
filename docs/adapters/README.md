@@ -5,14 +5,34 @@ emulator's native API. A script written against the neutral interface runs
 unchanged on any emulator that has an adapter here.
 
 ```lua
-local emuapi = dofile("adapters/emuapi.lua").load()
--- emu, frame, joypad, memory, savestate, gui, movie are now globals
+local api = dofile("adapters/emuapi.lua").load()
+local emu, joypad, memory, gui, frame = api.emu, api.joypad, api.memory, api.gui, api.frame
 
 emu.registerafter(function()
     if joypad.getdown(1).a then emu.message("A pressed") end
 end)
 gui.register(function() gui.text(8, 8, "frame " .. frame.confirmed()) end)
 ```
+
+## Nothing is installed as a global
+
+The loader returns the namespaces; a script binds what it wants. A file-scope
+`local` shadows a global for that file alone, so nothing else in the Lua state
+is disturbed and the shape is identical on every host.
+
+Installing globals cannot be the contract because the names are not free
+everywhere — fbneo-rr already owns `emu`, `memory`, `input`, `joypad`,
+`savestate`, `movie` and `gui`. Overwriting them would break both its scripts
+and the adapter, which reaches the host through those same tables.
+
+A host with room may opt in:
+
+```lua
+local api = dofile("adapters/emuapi.lua").load():install()
+emu.pause()   -- now a global; succeeds on flycast, raises on fbneo
+```
+
+`install()` refuses rather than clobbers, and names the conflicts.
 
 ## Why a shim rather than native bindings
 
