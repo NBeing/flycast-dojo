@@ -108,7 +108,7 @@ M.surface = {
 	"emu.pause", "emu.unpause", "emu.exit", "emu.message", "emu.romname",
 	"emu.gamename", "emu.screenwidth", "emu.screenheight", "emu.isonline",
 	"emu.isreplay", "emu.isrollback", "emu.frameadvance", "emu.speedmode",
-	"emu.registerbefore", "emu.registerafter", "emu.registerexit",
+	"emu.registerbefore", "emu.registerafter", "emu.registerexit", "emu.run",
 	"frame.count", "frame.confirmed", "frame.resimsteps",
 	"joypad.buttons", "joypad.get", "joypad.set", "joypad.setbutton",
 	"joypad.getdown", "joypad.getup", "joypad.getaxis", "joypad.setaxis",

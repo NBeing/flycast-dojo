@@ -39,6 +39,8 @@ void receiveChatMessages(void (*callback)(int playerNum, const std::string& msg)
 // Frames the emulator has run forward for the first time, ignoring rollback
 // re-simulation. Unlike dojo.FrameNumber this does not drift.
 u32 confirmedFrame();
+//! Called once per delivered VBlank, i.e. not for re-simulated frames.
+void countConfirmedFrame();
 
 static inline bool rollbacking() {
 	extern bool inRollback;

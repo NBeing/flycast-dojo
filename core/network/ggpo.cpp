@@ -34,8 +34,13 @@ namespace ggpo
 {
 
 bool inRollback;
-// How many times dojo.FrameNumber advanced on a re-simulated frame.
-static u32 rollbackInflation;
+//! Frames observers have been told about: incremented once per delivered
+//! VBlank, which excludes re-simulated frames by construction. Deriving it
+//! from dojo.FrameNumber instead looked tidier - same scale - but that counter
+//! advances on the dojo session's schedule rather than per frame, so offline it
+//! stalled and jumped, and a script asking "what frame is it" got neither a
+//! monotonic count nor a 1:1 one.
+static u32 confirmedFrames;
 
 static void getLocalInput(MapleInputState inputState[4])
 {
@@ -492,8 +497,8 @@ static void on_message(u8 *msg, int len)
 
 void startSession(int localPort, int localPlayerNum)
 {
-	// dojo.FrameNumber restarts with the session, so the inflation must too.
-	rollbackInflation = 0;
+	// Frame numbering restarts with the session.
+	confirmedFrames = 0;
 	GGPOSessionCallbacks cb{};
 	cb.begin_game      = begin_game;
 	cb.advance_frame   = advance_frame;
@@ -968,21 +973,19 @@ void endOfFrame()
 	if (active())
 	{
 		dojo.FrameNumber++;
-		// dojo.FrameNumber counts every pass, including re-simulated ones, and
-		// load_game_state does not restore it - so it drifts upward across a
-		// rollback burst. Counting the inflation lets confirmedFrame() report a
-		// number on the same scale that does not drift, in every mode: offline
-		// nothing is re-simulated, so the two are equal.
-		if (inRollback)
-			rollbackInflation++;
 		_endOfFrame = true;
 		sh4_cpu.Stop();
 	}
 }
 
+void countConfirmedFrame()
+{
+	confirmedFrames++;
+}
+
 u32 confirmedFrame()
 {
-	return dojo.FrameNumber - rollbackInflation;
+	return confirmedFrames;
 }
 
 void setMapleInput(MapleInputState inputState[4])
@@ -1072,8 +1075,10 @@ void displayStats() {
 void endOfFrame() {
 }
 
+void countConfirmedFrame() {
+}
+
 u32 confirmedFrame() {
-	// No rollback without GGPO, so nothing inflates the count.
 	return dojo.FrameNumber;
 }
 

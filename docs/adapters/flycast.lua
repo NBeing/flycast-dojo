@@ -219,11 +219,68 @@ end
 --- callbacks ------------------------------------------------------------
 --- The host dispatches through a well-known table; the interface uses
 --- registration functions, which allow more than one subscriber.
-local drawCallbacks, frameCallbacks, exitCallbacks = {}, {}, {}
+local drawCallbacks, frameCallbacks, beforeCallbacks, exitCallbacks = {}, {}, {}, {}
 
 function gui.register(fn)        drawCallbacks[#drawCallbacks + 1] = fn end
 function emu.registerafter(fn)   frameCallbacks[#frameCallbacks + 1] = fn end
 function emu.registerexit(fn)    exitCallbacks[#exitCallbacks + 1] = fn end
+
+--- registerbefore and registerafter share a hook here, and that is correct
+--- rather than a shortcut. The host dispatches at the frame boundary, and at a
+--- boundary "after frame N" and "before frame N+1" are the same instant: there
+--- is no input latch in between, so input set from either lands on the coming
+--- frame. What the two names buy on this host is ORDER - before-callbacks run
+--- first, so a script that injects input runs ahead of one that reads state.
+---
+--- A host with a genuinely separate pre-simulation hook should use it instead;
+--- the ordering guarantee is the same either way.
+function emu.registerbefore(fn)  beforeCallbacks[#beforeCallbacks + 1] = fn end
+
+--- Frame stepping.
+---
+--- emu.frameadvance() suspends until the next confirmed frame. It is only
+--- legal inside a body started by emu.run(), which drives it one resume per
+--- frame - so a script reads as a straight line while still advancing exactly
+--- one frame at a time:
+---
+---     emu.run(function()
+---         while true do
+---             joypad.set(1, { a = true })
+---             emu.frameadvance()
+---             joypad.set(1, { a = false })
+---             emu.frameadvance()
+---         end
+---     end)
+---
+--- Rollback-safe for free: the resume happens on the host's frame callback,
+--- which is not delivered for re-simulated frames, so one advance is one
+--- confirmed frame.
+local stepper = nil
+
+function emu.run(body)
+	if type(body) ~= "function" then
+		error("emu.run expects a function", 2)
+	end
+	stepper = coroutine.create(body)
+end
+
+function emu.frameadvance()
+	if coroutine.isyieldable() then
+		coroutine.yield()
+	else
+		error("emu.frameadvance() is only legal inside emu.run()", 2)
+	end
+end
+
+local function stepOnce()
+	if stepper == nil then return end
+	if coroutine.status(stepper) == "dead" then stepper = nil return end
+	local ok, err = coroutine.resume(stepper)
+	if not ok then
+		print("emuapi: emu.run body error: " .. tostring(err))
+		stepper = nil
+	end
+end
 
 local function runAll(list)
 	for _, fn in ipairs(list) do
@@ -241,6 +298,8 @@ _G.flycast_callbacks.terminate = function() runAll(exitCallbacks) end
 --- Host-gated to confirmed frames, so this is rollback-safe.
 _G.flycast_callbacks.vblank    = function()
 	snapshotInputs()
+	runAll(beforeCallbacks)
+	stepOnce()
 	runAll(frameCallbacks)
 end
 
@@ -254,7 +313,6 @@ return {
 	unsupported = {
 		["memory.registerwrite"] = true,   -- SH4 dynarec inlines memory access
 		["memory.registerexec"]  = true,   -- breakpoints patch guest memory; desyncs
-		["emu.frameadvance"]     = true,   -- no host primitive yet
 		["sound.voicecount"]     = true,
 	},
 }

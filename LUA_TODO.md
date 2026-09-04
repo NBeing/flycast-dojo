@@ -252,11 +252,19 @@ Verified: local binding gives the full API with no globals touched;
 ## Part 2 — Port work, in dependency order
 
 ### [P] Tier 1 — unlocks the most script functionality
-- `emu.frameadvance()` — the TAS primitive. Everything step-based needs it.
-  Interacts with rollback: define it as advancing one *confirmed* frame.
-- `emu.registerbefore` / `registerafter` / `registerexit` — the observation
-  points. `registerafter` must be confirmed-frames-only per the rollback
-  contract already implemented for `vblank`.
+- [x] **`emu.frameadvance()` + `emu.run()` — DONE.** Frame stepping via a
+  coroutine the adapter resumes once per delivered frame, so a script reads as
+  a straight line while advancing exactly one frame at a time. Rollback-safe by
+  construction: the resume rides the frame callback, which is not delivered for
+  re-simulated frames. Verified: 1,489 advances, **zero** that were not exactly
+  one frame; calling it outside `emu.run()` raises.
+- [x] **`emu.registerbefore` — DONE.** Shares the frame-boundary hook with
+  `registerafter`, which is correct rather than a shortcut on this host: at a
+  boundary "after frame N" and "before frame N+1" are the same instant, with no
+  input latch between, so input set from either lands on the coming frame. What
+  the two names buy here is *order* — before-callbacks run first, so a script
+  injecting input runs ahead of one reading state. Verified `B-A-B-A` with
+  equal counts.
 - `joypad.getdown` / `getup` — edge detection. Trivial once (1) is settled;
   currently every script reimplements it and gets rollback wrong.
 
