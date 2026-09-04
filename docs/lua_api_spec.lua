@@ -343,9 +343,23 @@ function memory.writedword(addr, v) end  --- [ok]   memory.write32
 function memory.getregister(name) end    --- [port] CPU register by name
 function memory.setregister(name, v) end --- [port]
 
---- Change detection. Two tiers, because the strong one is not portable.
-function memory.watch(addr, len) end     --- [spec] poll-based: did this range change
-function memory.unwatch(id) end          --- [spec]
+--- Change detection, poll-based.
+---
+---     local hp = memory.watch(0x8C123456, 4)
+---     if hp:changed() then ... end        -- since the last call
+---     hp:release()
+---
+--- changed() compares CONTENT, not writes: rewriting the same bytes reports no
+--- change, which is what a script watching a value wants and what a write hook
+--- could not give it. The range is exact - a write one byte past it does not
+--- register.
+---
+--- An implementation is free to use dirty-page tracking if it has some, but it
+--- must still answer for the bytes asked for. flycast-dojo compares a snapshot
+--- instead: its page tracking exists for rollback, is only armed under GGPO,
+--- and reports whole pages.
+function memory.watch(addr, len) end     --- [ok]
+function memory.unwatch(w) end           --- [ok]
 function memory.registerwrite(a, l, fn) end
 --- [no] Per-access write hooks. fbneo-rr injects these into its M68K
 ---      accessors, which works because that core is an interpreter. An

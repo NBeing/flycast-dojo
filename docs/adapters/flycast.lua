@@ -124,6 +124,29 @@ local spaces = {
 	end),
 }
 
+--- Watches. The host answers "did this range change since you last asked", so
+--- a poll each frame is the intended use. Returned as an object because a bare
+--- integer handle invites passing the wrong one.
+local Watch = {}
+Watch.__index = Watch
+
+function Watch:changed()  return host.memory.watchChanged(self.id) end
+function Watch:release()
+	if self.id ~= nil then
+		host.memory.watchRelease(self.id)
+		self.id = nil
+	end
+end
+
+function memory.watch(addr, len)
+	return setmetatable({ id = host.memory.watchCreate(addr, len or 1) }, Watch)
+end
+
+function memory.unwatch(w)
+	if type(w) == "table" and w.release then w:release()
+	else host.memory.watchRelease(w) end
+end
+
 function memory.getregister(name)      return host.memory.getRegister(name) end
 function memory.setregister(name, v)  host.memory.setRegister(name, v) end
 

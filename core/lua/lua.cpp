@@ -35,6 +35,7 @@
 #include "hw/maple/maple_if.h"
 #include "stdclass.h"
 #include <vector>
+#include <unordered_map>
 #include <limits>
 #include <xxhash.h>
 #include "hw/sh4/sh4_if.h"
@@ -690,6 +691,80 @@ static int uiButton(lua_State *L)
  * so there is no need for the pointer dance the C++ API uses.
  */
 /*
+ * Memory watches: did this range change since I last asked?
+ *
+ * A snapshot compared on each poll, rather than the dirty-page tracking in
+ * hw/mem/mem_watch.h. That tracking exists for rollback and is only armed when
+ * GGPO is enabled, it reports whole pages rather than the bytes asked for, and
+ * arming it outside netplay would add page faults to every write in the
+ * emulated machine. Comparing a copy costs the caller proportionally to what
+ * they actually watch, needs nothing from the emulator, and answers exactly the
+ * question asked.
+ *
+ * changed() reports "since the last call", updating the snapshot, which is the
+ * shape a per-frame poll wants.
+ */
+struct MemoryWatch
+{
+	u32 addr;
+	u32 len;
+	std::vector<u8> snapshot;
+};
+
+static std::unordered_map<int, MemoryWatch> memoryWatches;
+static int nextWatchId = 1;
+
+//! Bounded so a typo cannot ask for a gigabyte of comparison every frame.
+static constexpr u32 MaxWatchBytes = 1024 * 1024;
+
+static void readRange(u32 addr, u32 len, std::vector<u8>& out)
+{
+	out.resize(len);
+	for (u32 i = 0; i < len; i++)
+		out[i] = _vmem_ReadMem8(addr + i);
+}
+
+static int watchCreate(u32 addr, u32 len, lua_State *L)
+{
+	if (len == 0 || len > MaxWatchBytes)
+		luaL_argerror(L, 2, "watch length must be between 1 and 1048576 bytes");
+	MemoryWatch w;
+	w.addr = addr;
+	w.len = len;
+	readRange(addr, len, w.snapshot);
+	const int id = nextWatchId++;
+	memoryWatches[id] = std::move(w);
+	return id;
+}
+
+static bool watchChanged(int id, lua_State *L)
+{
+	auto it = memoryWatches.find(id);
+	if (it == memoryWatches.end())
+		luaL_argerror(L, 1, "no such memory watch (already released?)");
+	MemoryWatch& w = it->second;
+	std::vector<u8> now;
+	readRange(w.addr, w.len, now);
+	if (now == w.snapshot)
+		return false;
+	w.snapshot = std::move(now);
+	return true;
+}
+
+static void watchRelease(int id, lua_State *L)
+{
+	if (memoryWatches.erase(id) == 0)
+		luaL_argerror(L, 1, "no such memory watch");
+}
+
+//! Watches are per-session state; a new game must not inherit them.
+static void clearWatches()
+{
+	memoryWatches.clear();
+	nextWatchId = 1;
+}
+
+/*
  * SH4 registers by name.
  *
  * Reads are coherent from the frame callback, which runs on the emulation
@@ -1255,6 +1330,9 @@ static void luaRegister(lua_State *L)
 				.addFunction("write16", _vmem_writet<u16>)
 				.addFunction("write32", _vmem_writet<u32>)
 				.addFunction("write64", _vmem_writet<u64>)
+				.addFunction("watchCreate", watchCreate)
+				.addFunction("watchChanged", watchChanged)
+				.addFunction("watchRelease", watchRelease)
 				.addFunction("getRegister", getRegister)
 				.addFunction("setRegister", setRegister)
 			.endNamespace()
@@ -1408,6 +1486,8 @@ void term()
     EventManager::unlisten(Event::Terminate, emuEventCallback);
     EventManager::unlisten(Event::LoadState, emuEventCallback);
     EventManager::unlisten(Event::VBlank, emuEventCallback);
+	// Watches are per-session; a new game must not inherit the last one's.
+	clearWatches();
 	lua_close(L);
 	L = nullptr;
 }

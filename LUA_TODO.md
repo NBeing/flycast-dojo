@@ -293,10 +293,21 @@ Verified: local binding gives the full API with no globals touched;
   adding a second concept of a recording.
 - `sound.voicecount` / `outputrate` / `voice(n)` — per-channel AICA state.
   Drives audio-reactive overlays.
-- `memory.watch` / `unwatch` — page-granularity change detection built on the
-  existing `memwatch` dirty-page tracking, evaluated once per confirmed frame.
-  Deliberately weaker than fbneo's per-access hooks, and named differently for
-  that reason. See the exclusions in the spec.
+- [x] **`memory.watch` — DONE**, and better than the page-granularity design
+  originally sketched. Snapshot-and-compare rather than `memwatch` dirty pages:
+  that tracking exists for rollback, is only armed under GGPO, reports whole
+  pages rather than the bytes asked for, and arming it outside netplay would
+  add a page fault to every write in the emulated machine. Comparing a copy
+  costs the caller proportionally to what they watch and answers exactly the
+  question asked.
+
+  `changed()` compares **content, not writes** — rewriting the same bytes
+  reports nothing, which is what a script watching a value wants and what a
+  write hook could not give it. Verified: fresh watch quiet, change seen,
+  repeat poll quiet, same-value rewrite quiet, write one byte past the range
+  ignored, write inside seen, use-after-release raises, zero and oversize
+  lengths rejected. Watches are cleared on teardown so a new game cannot
+  inherit them.
 
 ### [P] Tier 4 — conformance surface
 - Publish neutral root-level aliases (`emu`, `memory`, `joypad`, …) over the
