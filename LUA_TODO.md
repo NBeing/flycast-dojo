@@ -257,7 +257,11 @@ full, so existing scripts are unaffected; declaring is opting IN to being
 restricted, and is irreversible because a script that could widen its own tier
 would not be declaring anything.
 
-`[MEASURED 2026-09-05]` 133/133 conformance checks, 0 skips. Both mechanisms
+`[MEASURED 2026-09-05]` 133/133 conformance checks, 0 skips. The tour exercises
+both live: `tier full` in its header line, `delivered before/after/draw` climbing
+(1572/1572/1242 - the frame hooks match confirmed frames, draw runs at its own
+rate), `faults 0 0 0`, and a probe that unregisters ITSELF from inside a
+callback and freezes at 120 while the others keep climbing. Both mechanisms
 were made to fail on purpose first: with enforcement disabled and `hits()`
 stubbed to zero, the suite reported exactly 5 failures and NON-CONFORMING - the
 three enforcement checks and the two delivery counts, and nothing else.

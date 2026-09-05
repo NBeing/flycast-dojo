@@ -3,8 +3,9 @@
 ---
 ---   RUN:   copy into your config dir as flycast.lua, with adapters/ beside it,
 ---          and start a game. Or: flycast-rofi -> "Play + Lua script" -> tour.lua
----   PASS:  a panel appears listing live values from every namespace, and a
----          green box hugs the game image.
+---   PASS:  a panel appears listing live values from every namespace, a green
+---          box hugs the game image, the "delivered" counts climb every frame,
+---          and the "retires itself" count stops at 120 and stays there.
 ---
 --- This is not the conformance suite. conformance.lua ASSERTS the rules and
 --- prints a verdict; this EXERCISES the surface so you can watch it work, and
@@ -39,6 +40,21 @@ local emu, frame, joypad, memory  = api.emu, api.frame, api.joypad, api.memory
 local savestate, gui, ui          = api.savestate, api.gui, api.ui
 local movie, sound                = api.movie, api.sound
 
+--- DECLARE FIRST, before anything is called. This tour drives input, takes
+--- savestates and pauses the emulator, so it needs the top tier and says so.
+--- A read-only overlay would ask for "observer" instead and would then be safe
+--- to run in a session that refuses anything more.
+---
+--- Note what the granted tier does NOT depend on: the locals bound above. The
+--- enforcement wrapper rawsets into the same namespace tables these locals
+--- point at, so declaring after binding still governs every call made through
+--- them. Binding early is not a way to escape a tier.
+local tier = emu.declare({ tier = "full" })
+if tier ~= "full" then
+    print(("[tour] asked for full, granted '%s' - the on-demand buttons will refuse")
+            :format(tier))
+end
+
 --- Anything the panel shows is captured here and drawn later.
 local live = {
     buttons = {}, downs = {}, axes = {},
@@ -60,7 +76,13 @@ local watch = nil
 --------------------------------------------------------------------------
 -- Frame callback: everything that READS the machine.
 --------------------------------------------------------------------------
-emu.registerbefore(function()
+--- HANDLES. Registration returns one, and the counts it carries are the
+--- reason: a callback that is registered but never delivered looks exactly
+--- like a callback whose condition never came true. The panel shows these
+--- climbing, so "the tour is running" is observable rather than assumed.
+local hBefore, hAfter, hDraw, hRetiring
+
+hBefore = emu.registerbefore(function()
     -- registerbefore runs ahead of registerafter, so input driven here is in
     -- place before anything below reads it back.
     if opt.drive and buttonNames then
@@ -73,7 +95,7 @@ emu.registerbefore(function()
     end
 end)
 
-emu.registerafter(function()
+hAfter = emu.registerafter(function()
     buttonNames = buttonNames or joypad.buttons()
 
     live.buttons = joypad.get(1)
@@ -112,6 +134,15 @@ emu.registerafter(function()
     request = nil
 end)
 
+--- A subscriber that retires itself, so unregister() can be watched working
+--- rather than taken on trust. It unregisters from INSIDE a callback, which is
+--- the case that breaks a naive dispatcher walking its own list - the panel's
+--- count freezing at 120 while the others keep climbing is the proof it did
+--- not.
+hRetiring = emu.registerafter(function()
+    if hRetiring:hits() >= 120 then hRetiring:unregister() end
+end)
+
 --- Frame stepping, running alongside the callbacks above.
 emu.run(function()
     while true do
@@ -132,23 +163,28 @@ local function heldList()
     return (n == 0) and "(none)" or table.concat(out, " ")
 end
 
-gui.register(function()
+hDraw = gui.register(function()
     -- Content overlay, in GAME pixels: it tracks the picture, not the window.
     if opt.showOverlay then
         local w, h = 640, 480
-        gui.box(0, 0, w - 1, h - 1, 0xFF00FF00)                  -- game bounds
-        gui.line(w / 2 - 12, h / 2, w / 2 + 12, h / 2, 0xFFFFFFFF)  -- crosshair
-        gui.line(w / 2, h / 2 - 12, w / 2, h / 2 + 12, 0xFFFFFFFF)
+        -- Colours through gui.rgba, never a packed literal. The packing
+        -- differs between conforming hosts, and the two conventions agree on
+        -- exactly white, the greys and opaque red - so a hardcoded number
+        -- passes its first test everywhere and renders wrong on one host the
+        -- moment it is green.
+        gui.box(0, 0, w - 1, h - 1, gui.rgba(0, 255, 0))              -- game bounds
+        gui.line(w / 2 - 12, h / 2, w / 2 + 12, h / 2, gui.rgba(255, 255, 255))
+        gui.line(w / 2, h / 2 - 12, w / 2, h / 2 + 12, gui.rgba(255, 255, 255))
         -- a marker that sweeps, so a frozen overlay is obvious at a glance
         local x = (frame.confirmed() * 2) % w
-        gui.box(x, h - 16, x + 8, h - 8, 0xFF00FFFF)
+        gui.box(x, h - 16, x + 8, h - 8, gui.rgba(0, 255, 255))
     end
 
     ui.SetNextWindowPos(8, 8)
-    ui.SetNextWindowSize(360, 470)
+    ui.SetNextWindowSize(360, 560)
     if ui.Begin("emuapi tour") then
-        ui.Text(string.format("%s  api %d  %s",
-            api.host, emu.apiversion(), emu.romname() or "?"))
+        ui.Text(string.format("%s  api %d  %s   tier %s",
+            api.host, emu.apiversion(), emu.romname() or "?", emu.tier()))
         ui.Text(string.format("%dx%d  online=%s replay=%s rollback=%s",
             emu.screenwidth(), emu.screenheight(),
             tostring(emu.isonline()), tostring(emu.isreplay()),
@@ -158,6 +194,17 @@ gui.register(function()
         ui.Text(string.format("frame  %d   confirmed %d   resim %d",
             frame.count(), frame.confirmed(), frame.resimsteps()))
         ui.Text(string.format("steps  %d  (emu.run + frameadvance)", live.steps))
+        ui.Separator()
+
+        --- DELIVERY COUNTS. These climbing is what tells you the tour is
+        --- running rather than merely loaded - the distinction a registered
+        --- callback cannot otherwise report about itself.
+        ui.Text(string.format("delivered  before %d   after %d   draw %d",
+            hBefore:hits(), hAfter:hits(), hDraw:hits()))
+        ui.Text(string.format("faults     before %d   after %d   draw %d",
+            hBefore:faults(), hAfter:faults(), hDraw:faults()))
+        ui.Text(string.format("retires itself: %d  (stops at 120, then frozen)",
+            hRetiring:hits()))
         ui.Separator()
 
         ui.Text("held:  " .. heldList())
