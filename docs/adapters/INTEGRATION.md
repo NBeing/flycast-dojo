@@ -165,3 +165,21 @@ the suite and the adapter written by the same author against the same host —
 the suite earns its keep the first time it runs somewhere else. And it reports
 honestly when a rule was never exercised, such as the rollback gate in a
 session where no rollback occurred.
+
+### "Absent leaves that button alone" means you must release what you pressed
+
+The setter contract is that a present-and-true key presses, a present-and-false
+key releases, and an **absent** key leaves that button alone. The absent rule is
+there so two scripts can drive different buttons without fighting.
+
+It applies just as much to the button *this* script pressed a moment ago.
+
+`[MEASURED 2026-09-05]` A tour pattern that walks every button in turn named
+only the button it wanted on each step. Every previous button stayed held,
+because absent means "leave alone" and not "release". After fifteen steps the
+whole pad was down, which on a Dreamcast is A+B+X+Y+Start - the soft reset. The
+emulator rebooted to BIOS and the screen went black, and it read as a broken
+emulator rather than a script holding every button.
+
+A script must release what it pressed. Naming its own previous button `false`
+costs nothing and still names nothing it does not own.

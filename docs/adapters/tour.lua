@@ -61,6 +61,7 @@ local live = {
     pc = 0, r15 = 0, ram = 0, snd = 0,
     watchHits = 0, watchPolls = 0,
     steps = 0,
+    patternLabel = "(not driving)",
 }
 
 --- Options the panel owns.
@@ -82,16 +83,62 @@ local watch = nil
 --- climbing, so "the tour is running" is observable rather than assumed.
 local hBefore, hAfter, hDraw, hRetiring
 
+--- The four input patterns the "pattern" slider chooses between. Each returns
+--- the table joypad.set is given, so each is also a worked example of the
+--- setter's contract: PRESENT-AND-TRUE presses, PRESENT-AND-FALSE releases,
+--- and ABSENT leaves a button alone. Pattern 4 relies on that last rule - it
+--- names one button per step and never mentions the others, so it does not
+--- fight anything else holding the pad.
+local patterns = {
+    --- 1: alternate the first two buttons every half second.
+    function(f, names)
+        local a, b = names[1], names[2] or names[1]
+        local phase = (f % 60) < 30
+        return { [a] = phase, [b] = not phase }, "alternate " .. a .. "/" .. b
+    end,
+    --- 2: mash the first button - four frames on, four off.
+    function(f, names)
+        return { [names[1]] = (f % 8) < 4 }, "mash " .. names[1]
+    end,
+    --- 3: hold the first button down. The dull case, and worth having: a
+    --- pattern that never changes is how you tell a stuck reader from a
+    --- working one.
+    function(_, names)
+        return { [names[1]] = true }, "hold " .. names[1]
+    end,
+    --- 4: walk every button in turn, a quarter second each. Sweeps the whole
+    --- named set, so a button missing from joypad.buttons() shows up as a gap.
+    ---
+    --- IT NAMES TWO BUTTONS, NOT ONE, AND THAT IS THE LESSON. "Absent leaves
+    --- that button alone" is what keeps a script from fighting whoever else is
+    --- holding the pad - but it applies just as much to the button this script
+    --- pressed a moment ago. Naming only the new one held every previous one
+    --- down too: after fifteen steps the whole pad was pressed, which on a
+    --- Dreamcast is A+B+X+Y+Start, which is the soft reset. The tour rebooted
+    --- the machine to BIOS and looked like a broken emulator.
+    ---
+    --- So a script must release what it pressed. It still names nothing it does
+    --- not own, so it still does not fight anything else.
+    function(f, names)
+        local step = math.floor(f / 15)
+        local i    = (step % #names) + 1
+        local prev = ((step - 1) % #names) + 1
+        local set  = { [names[i]] = true }
+        if prev ~= i then set[names[prev]] = false end
+        return set, "walk " .. names[i]
+    end,
+}
+
 hBefore = emu.registerbefore(function()
     -- registerbefore runs ahead of registerafter, so input driven here is in
     -- place before anything below reads it back.
     if opt.drive and buttonNames then
-        -- A visible pattern rather than a constant hold: alternate two buttons
-        -- every 30 frames so you can see it in the button list.
-        local a = buttonNames[1]
-        local b = buttonNames[2] or a
-        local phase = (frame.confirmed() % 60) < 30
-        joypad.set(1, { [a] = phase, [b] = not phase })
+        local fn = patterns[opt.pattern] or patterns[1]
+        local set, label = fn(frame.confirmed(), buttonNames)
+        joypad.set(1, set)
+        live.patternLabel = label
+    else
+        live.patternLabel = "(not driving)"
     end
 end)
 
@@ -232,6 +279,11 @@ hDraw = gui.register(function()
         opt.drive       = ui.Checkbox("drive input", opt.drive)
         opt.showOverlay = ui.Checkbox("game-pixel overlay", opt.showOverlay)
         opt.pattern     = ui.SliderInt("pattern", opt.pattern, 1, 4)
+        --- What the slider is actually doing. It used to select nothing: the
+        --- value was read and stored and no code consumed it, so the control
+        --- looked functional and was not - the exact defect this tour exists
+        --- to make visible elsewhere.
+        ui.Text("  pattern: " .. tostring(live.patternLabel))
         local scale     = ui.SliderFloat("ui scale (read-only)", ui.GetScale(), 0, 4)
         local mx, my    = ui.GetMousePos()
         ui.Text(string.format("mouse %d,%d  buttons %s%s",
