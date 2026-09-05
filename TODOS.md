@@ -137,6 +137,32 @@ Currently a resize stops the capture cleanly rather than corrupting it.
 Better would be to restart the encoder at the new size, or letterbox into the
 original frame size.
 
+`[MEASURED 2026-09-05]` This is not only a user resizing the window. **Booting
+a game triggers it**: a capture started 60 frames in produced **3 packets** and
+stopped, because the resolution changes as REIOS hands over to the game. The
+integration test now starts recording at frame 900 to sit entirely inside the
+game, which is a workaround in the test rather than a fix in the code - anyone
+scripting "record from launch" hits this.
+
+### [x] Integration tests — `shell/linux/integration-tests`
+Five cases, each covering something a unit check cannot: mock conformance with
+no emulator, the package running from a wrongly-named directory, conformance
+inside the emulator, a script loading with an unrelated working directory, and
+a captured video having pictures in it.
+
+`[MEASURED 2026-09-05]` 5 pass, 0 fail, 0 skip.
+
+A skip exits **2**, not 0: a suite that goes green when its prerequisites are
+missing is reporting on the machine rather than on the code.
+
+The blank-video case was made to fail on purpose before being trusted. A
+240-packet, structurally perfect, entirely black AVI - the 2026-08-09 failure
+reproduced with ffmpeg - is caught at stddev 0, while a real capture reads
+49-93. Its first implementation parsed `YSTDEV` from ffmpeg's `signalstats`,
+which **does not exist** in that filter, so the grep matched nothing, the value
+defaulted to zero, and a good 3.3 MB capture was reported blank. A check that
+fails when the thing works is worse than no check.
+
 ### [F] Hotkey binding for record toggle
 Toolbar, Settings and Lua all work, but there is no keyboard shortcut. Most
 useful mid-match, when the UI is closed.
