@@ -8,9 +8,11 @@
 --- rollback safety is in the contract, unportable hooks are excluded with
 --- reasons, buttons are named booleans, indices are 1-based, failure is loud,
 --- only draw callbacks may draw, memory is addressed by named space, drawing
---- splits into ImGui widgets and game-pixel overlay, and namespaces are bound
---- locally rather than installed. What remains is porting, and a conformance
---- suite to keep the two honest - see LUA_TODO.md.
+--- splits into ImGui widgets and game-pixel overlay, namespaces are bound
+--- locally rather than installed, registration returns a handle that counts
+--- its own deliveries, and a script declares what it is allowed to do.
+--- What remains is porting, and a conformance suite to keep the two honest -
+--- see LUA_TODO.md.
 --- See LUA_TODO.md, Part 1, before building on this.
 ---
 --- WHAT THIS IS
@@ -308,6 +310,51 @@ local spec = {}
 emu = {}
 
 function emu.supports(name) end          --- [spec] [core] string -> bool
+
+--- ---------------------------------------------------------------------
+--- DECLARATION - what this script is ALLOWED to do
+--- ---------------------------------------------------------------------
+--- DECLARATION AND DISCOVERY ARE ORTHOGONAL, NOT ALTERNATIVES. Conflating
+--- them is how a host ends up with neither, and it is worth stating because a
+--- surveyed host argues at length that declaration REPLACES discovery.
+---
+---     emu.supports(name)   PORTABILITY:    does this host have the function
+---     emu.declare{...}     AUTHORISATION:  may this script call it, here, now
+---
+--- A host can answer yes to the first and no to the second - the function
+--- exists, and this session will not let you have it - and a script needs
+--- both answers to do anything sensible about either.
+---
+--- Three tiers, ordered:
+---     observer   reads and draws. Cannot touch the machine.
+---     mutator    drives input and writes memory.
+---     full       savestates, recording, emulator control.
+---
+--- The granted tier MAY BE NARROWER than the one requested, and that is not an
+--- error. A script that can degrade should be able to:
+---
+---     local tier = emu.declare{ tier = "mutator" }
+---     if tier ~= "mutator" then  -- observe only; do not drive input
+---
+--- WHY A SCRIPT WOULD LIMIT ITSELF: because that is what makes it portable to
+--- a session that limits it involuntarily. The motivating case is netplay.
+--- flycast-dojo today refuses Lua ENTIRELY when online, which is the bluntest
+--- possible version of this - an overlay that could not desync anything is
+--- refused alongside a script that could. A tier is what lets the first one
+--- run, and a script that already declares observer needs no change when the
+--- host starts enforcing.
+---
+--- DECLARING IS IRREVERSIBLE AND HAPPENS ONCE. A script that could widen its
+--- own tier later would not be declaring anything. Declaring twice raises;
+--- it is a bug, not a widening.
+---
+--- UNDECLARED MEANS FULL, so every script written before this existed keeps
+--- working. Declaring is opting IN to being restricted.
+---
+--- A host with no authorisation model of its own grants what was asked for.
+--- That is the honest answer; a pretend restriction is worse than none.
+function emu.declare(req) end            --- [ok]   {tier=} -> granted tier
+function emu.tier() end                  --- [ok]   the tier in force; never nil
 function emu.capability() end            --- [port] tier: "off"|"observer"|"mutator"|"full"
 function emu.can(what) end               --- [port] may this script do `what` right now
 function emu.pause() end                 --- [ok]   flycast.emulator.pause
@@ -323,9 +370,49 @@ function emu.isreplay() end              --- [port] playing a recorded session b
 function emu.isrollback() end            --- [ok]   flycast.state.isRollback
 function emu.frameadvance() end          --- [port] yield one frame; the TAS primitive
 function emu.speedmode(mode) end         --- [port] "normal"|"turbo"|"maximum"
-function emu.registerbefore(fn) end      --- [port] before the frame is simulated
-function emu.registerafter(fn) end       --- [port] after, confirmed frames only
-function emu.registerexit(fn) end        --- [port]
+--- ---------------------------------------------------------------------
+--- REGISTRATION RETURNS A HANDLE, AND THE HANDLE COUNTS ITS OWN DELIVERIES
+--- ---------------------------------------------------------------------
+--- Every registration function returns a handle:
+---
+---     h:hits()        deliveries so far
+---     h:faults()      deliveries that threw
+---     h:unregister()  stop delivering
+---
+--- THE COUNT IS PART OF THE INTERFACE, NOT A DIAGNOSTIC EXTRA, and it is here
+--- for one reason: an action that produces nothing observable is
+--- indistinguishable from one that worked. A callback that is registered but
+--- never delivered looks exactly like a callback whose condition never came
+--- true, and no amount of care in the script can tell those apart from the
+--- inside. hits() is the difference.
+---
+--- This promotes a testing rule into the surface deliberately. The same shape
+--- has produced every expensive defect on the hosts surveyed: a well-formed
+--- video file that was entirely black, a memory watch reporting zero changes,
+--- a coverage report reading 54/54 with a fifth of the surface unwired, a
+--- script that loaded nothing and said nothing, and - on fbneo-rr - a probe
+--- that pressed a button for 180 frames, passed its neutral control, and had
+--- pressed nothing at all while every downstream check agreed with it.
+---
+--- The rule generalises past callbacks: ANY primitive that can silently do
+--- nothing must expose how often it did something. A watch reports polls and
+--- changes; a bounded queue reports drops; an input write reports refusals.
+---
+--- MULTIPLE SUBSCRIBERS ARE NORMAL. Registering a second handler must not
+--- replace the first. Unregistration takes a handle, not a function, so two
+--- subscribers sharing one closure remain distinguishable.
+---
+--- A THROWING SUBSCRIBER IS CONTAINED, NOT EVICTED. One bad frame in one
+--- observer must not remove it for the session: that turns a transient into a
+--- feature that appears never to have been enabled. It is counted and called
+--- again. (fbneo-rr evicts, and both successors independently rejected that.)
+---
+--- UNREGISTERING FROM INSIDE A CALLBACK IS NORMAL, not an edge case, and a
+--- host must survive it - by copying the list before the walk, or by marking
+--- and sweeping after it.
+function emu.registerbefore(fn) end      --- [ok]   before the frame is simulated
+function emu.registerafter(fn) end       --- [ok]   after, confirmed frames only
+function emu.registerexit(fn) end        --- [ok]
 
 --- ---------------------------------------------------------------------
 --- frame — the rollback-safe clock

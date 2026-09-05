@@ -210,12 +210,62 @@ portability failure this interface exists to prevent.
 Verified in-game: drawing from `vblank` raises with a message naming the fix,
 memory reads from `vblank` still work, and drawing from `overlay` renders.
 
-### [S][?] 7. Callback registration model
-Two shapes in play: flycast's `flycast_callbacks` table with well-known keys,
-and fbneo's `emu.registerbefore(fn)`. The spec lists the latter without
-reconciling them. Registration functions are the better contract (multiple
-subscribers, unregistration), but the table form is what flycast scripts use
-today, so both need to work.
+### [x] 7. Callback registration model — RESOLVED as handles, and implemented
+**Registration returns a handle; unregistration takes one.** Two hosts reached
+this independently after fbneo-rr, whose single-slot model silently *replaced*
+a first subscriber with a second, so one of two panels simply did not run with
+nothing said.
+
+The handle carries the delivery counts, which is the part worth more than the
+registration model:
+
+    local h = emu.registerafter(step)
+    h:hits()        -- deliveries
+    h:faults()      -- deliveries that threw
+    h:unregister()
+
+**A throwing subscriber is contained, not evicted** - counted, and called again
+next frame. **Unregistering from inside a callback is normal**, and the adapter
+marks-and-sweeps rather than mutating the walk (the host solves the same hazard
+by copying; both are correct, and the choice follows how often the list is
+walked versus read).
+
+flycast's `flycast_callbacks` table stays as the host dispatch mechanism; the
+handles live in the adapter above it, so no host change was needed.
+
+Still open from the same finding: **ownership**. nbneo stamps every hook, task
+and painter with the file that registered it, so `stop(owner)` is expressible
+and returns counts. Neither this spec nor fbneo-rr has an answer.
+
+### [x] 11. Declaration — what a script is ALLOWED to do
+`emu.declare{tier = "observer" | "mutator" | "full"}` -> granted tier, and
+`emu.tier()`. Orthogonal to `emu.supports()`: **supports is portability
+(does this host have it), declare is authorisation (may this script call it
+here, now)**. A host can answer yes to one and no to the other.
+
+Adopted on our own need rather than nbneo's argument - which is worth recording
+precisely, because the survey first declined it. nbneo argues declaration
+*replaces* discovery and has **zero** enforcement sites; declining the
+replacement claim was right, and letting that carry the mechanism with it was
+not. Our largest open feature *is* a declaration system: `core/nullDC.cpp`
+refuses Lua entirely when online, and Phase 2 in `TODOS.md` is exactly these
+tiers.
+
+Enforced by wrapping the namespaces after the adapter builds them, so an
+adapter needs no knowledge of tiers to be governed by them. Undeclared means
+full, so existing scripts are unaffected; declaring is opting IN to being
+restricted, and is irreversible because a script that could widen its own tier
+would not be declaring anything.
+
+`[MEASURED 2026-09-05]` 133/133 conformance checks, 0 skips. Both mechanisms
+were made to fail on purpose first: with enforcement disabled and `hits()`
+stubbed to zero, the suite reported exactly 5 failures and NON-CONFORMING - the
+three enforcement checks and the two delivery counts, and nothing else.
+
+*The original wording of question 7, kept because the answer turned out to be
+"both, at different layers": flycast's `flycast_callbacks` table with well-known
+keys is the HOST dispatch mechanism, and the registration functions live in the
+adapter above it. Neither had to lose.*
 
 ### [S] 8. Interface versioning — STUBBED, not settled
 `emu.apiversion()` exists (`emuapi.lua:88`) and returns `0`. What is not

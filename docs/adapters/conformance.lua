@@ -220,8 +220,89 @@ local function checkDrawingWorks()
 	end)
 end
 
+--- Registration handles, delivery counts, and fault containment.
+--- Probes registered up front so the driver has frames to deliver to them.
+local probeHits, probeFaults = nil, nil
+local probeFaultCount = 0
+local deadProbe, deadProbeCalls = nil, 0
+
+local function armDeliveryProbes()
+	if type(emu.registerafter) ~= "function" then return end
+	probeHits = emu.registerafter(function() end)
+	probeFaults = emu.registerafter(function()
+		probeFaultCount = probeFaultCount + 1
+		error("deliberate: a throwing subscriber must be contained, not evicted")
+	end)
+	deadProbe = emu.registerafter(function() deadProbeCalls = deadProbeCalls + 1 end)
+end
+
+local function checkDelivery()
+	local g = "delivery"
+	if type(probeHits) ~= "table" or type(probeHits.hits) ~= "function" then
+		skipped(g, "registration does not return a handle")
+		return
+	end
+	--- The count is the whole point: a callback that is registered but never
+	--- delivered is indistinguishable from one whose condition never came true.
+	ok(probeHits:hits() > 0, g, "handle:hits() counts deliveries")
+	--- Containment, asserted from both ends. The subscriber threw on every
+	--- delivery and must still have been called more than once.
+	ok(probeFaultCount > 1, g, "a throwing subscriber is called again next frame")
+	ok(probeFaults:faults() == probeFaultCount, g, "handle:faults() counts throws")
+	ok(probeFaults:hits() == probeFaultCount, g, "a throw still counts as a delivery")
+	--- Unregistering stops delivery, and does so without disturbing the walk
+	--- it may have been called from.
+	local before = deadProbeCalls
+	deadProbe:unregister()
+	ok(before > 0, g, "probe was live before unregister")
+	ok(type(deadProbe.unregister) == "function", g, "handle:unregister() exists")
+end
+
+--- Declaration - authorisation, as distinct from emu.supports() portability.
+--- RUNS LAST AND ONLY ONCE, because declaring is deliberately irreversible:
+--- a script that could widen its own tier would not be declaring anything.
+local function checkDeclaration()
+	local g = "declaration"
+	if type(emu.declare) ~= "function" then
+		skipped(g, "emu.declare")
+		return
+	end
+	ok(emu.tier() == "full", g, "an undeclared script is unrestricted")
+	ok(raises(function() emu.declare({ tier = "wizard" }) end), g,
+			"unknown tier raises")
+	ok(raises(function() emu.declare("observer") end), g,
+			"non-table argument raises")
+
+	local granted = emu.declare({ tier = "observer" })
+	ok(granted == "observer", g, "declare returns the granted tier")
+	ok(emu.tier() == "observer", g, "tier() reports what was granted")
+	ok(raises(function() emu.declare({ tier = "full" }) end), g,
+			"declaring twice raises rather than widening")
+
+	--- Enforcement. These are the checks that can actually fail: a host that
+	--- accepts a declaration and then ignores it passes everything above.
+	if emu.supports("joypad.set") then
+		ok(raises(function() joypad.set(1, { a = true }) end), g,
+				"observer cannot drive input")
+	end
+	if emu.supports("memory.writebyte") then
+		ok(raises(function() memory.writebyte(0x8C010000, 0) end), g,
+				"observer cannot write memory")
+	end
+	if emu.supports("savestate.save_mem") then
+		ok(raises(function() savestate.save_mem() end), g,
+				"observer cannot take savestates")
+	end
+	--- ...and reading still works, or the tier has simply broken the host.
+	if emu.supports("memory.readbyte") then
+		ok(not raises(function() memory.readbyte(0x8C010000) end), g,
+				"observer can still read")
+	end
+end
+
 --- Driver ------------------------------------------------------------------
 local ran, drawChecked = false, false
+armDeliveryProbes()
 
 emu.registerafter(function()
 	sampleRollback()
@@ -243,6 +324,10 @@ end)
 
 --- Reported at exit so the rollback sampling has a whole session to observe.
 emu.registerexit(function()
+	--- Delivery counts need a session's worth of frames behind them, and
+	--- declaration must come after every check that needs a mutator.
+	checkDelivery()
+	checkDeclaration()
 	--- The contract itself.
 	ok(rollbackSeen == 0, "rollback",
 		string.format("frame callback observed isrollback() true %d times -"

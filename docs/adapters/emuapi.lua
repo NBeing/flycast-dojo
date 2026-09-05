@@ -87,6 +87,108 @@ function M.load(hostOverride)
 	--- Bumped on breaking change. See LUA_TODO.md item 8.
 	function M.emu.apiversion() return 0 end
 
+	--- ---------------------------------------------------------------
+	--- DECLARATION - what this script is allowed to do
+	--- ---------------------------------------------------------------
+	--- Declaration and discovery are ORTHOGONAL, not alternatives, and the
+	--- spec says so because conflating them is how a host ends up with
+	--- neither. emu.supports() is a PORTABILITY question - does this host
+	--- have the function. declare() is an AUTHORISATION question - may this
+	--- script call it here, now, in this session. A host can answer yes to
+	--- the first and no to the second, and a script needs both answers.
+	---
+	--- Three tiers, ordered:
+	---   observer  reads and draws. Cannot touch the machine.
+	---   mutator   drives input and writes memory.
+	---   full      savestates, recording, emulator control.
+	---
+	--- WHY A SCRIPT WOULD LIMIT ITSELF. Because that is what makes it
+	--- portable to a session that limits it involuntarily. flycast-dojo today
+	--- refuses Lua ENTIRELY when online (core/nullDC.cpp: lua::init is called
+	--- only when !settings.network.online), which is the bluntest possible
+	--- version of this: an overlay that could not desync anything is refused
+	--- alongside one that could. When the host grows tiers, the mechanism
+	--- below is what enforces them, and a script that already declares
+	--- observer runs unchanged.
+	---
+	--- The granted tier may be NARROWER than the one asked for, and that is
+	--- deliberately not an error - a script that can degrade should be able
+	--- to, and one that cannot can say so itself:
+	---
+	---     local tier = emu.declare{ tier = "mutator" }
+	---     if tier ~= "mutator" then  -- observe only, do not drive input
+	local TIERS = { observer = 1, mutator = 2, full = 3 }
+
+	--- What each name NEEDS, by interface name rather than by host binding, so
+	--- this list is the spec's and not one adapter's. Anything absent needs
+	--- only "observer": reading and drawing are the floor.
+	local REQUIRES = {
+		["joypad.set"] = "mutator",       ["joypad.setbutton"] = "mutator",
+		["joypad.setaxis"] = "mutator",   ["memory.writebyte"] = "mutator",
+		["memory.writeword"] = "mutator", ["memory.writedword"] = "mutator",
+		["memory.setregister"] = "mutator",
+		["savestate.save"] = "full",      ["savestate.load"] = "full",
+		["savestate.save_mem"] = "full",  ["savestate.load_mem"] = "full",
+		["movie.record"] = "full",        ["movie.stop"] = "full",
+		["emu.pause"] = "full",           ["emu.unpause"] = "full",
+		["emu.speedmode"] = "full",       ["emu.exit"] = "full",
+		["emu.frameadvance"] = "full",    ["emu.run"] = "full",
+	}
+
+	--- Undeclared means full, so every script written before this existed keeps
+	--- working. Declaring is opting IN to being restricted.
+	local granted = "full"
+	local declared = false
+
+	--- A host with no authorisation model of its own permits everything, which
+	--- is the honest answer rather than a pretend restriction. When a host
+	--- gains one it caps here.
+	local function hostCeiling()
+		if type(M.emu.isonline) == "function" and M.emu.isonline() then
+			return "observer"
+		end
+		return "full"
+	end
+
+	function M.emu.declare(req)
+		if type(req) ~= "table" then
+			error("emu.declare: expected a table, got " .. type(req), 2)
+		end
+		local want = req.tier
+		if TIERS[want] == nil then
+			error("emu.declare: unknown tier '" .. tostring(want)
+					.. "' (observer, mutator, full)", 2)
+		end
+		if declared then
+			error("emu.declare: already declared '" .. granted
+					.. "'; declaring twice is a bug, not a widening", 2)
+		end
+		local ceiling = hostCeiling()
+		granted = (TIERS[want] < TIERS[ceiling]) and want or
+				((TIERS[ceiling] < TIERS[want]) and ceiling or want)
+		declared = true
+
+		--- Enforcement wraps the namespaces AFTER the adapter built them, so an
+		--- adapter needs no knowledge of tiers to be governed by them.
+		for name, need in pairs(REQUIRES) do
+			local ns, fn = name:match("^([%w_]+)%.([%w_]+)$")
+			local t = M[ns]
+			if type(t) == "table" and type(rawget(t, fn)) == "function" then
+				if TIERS[need] > TIERS[granted] then
+					rawset(t, fn, function()
+						error(name .. " needs tier '" .. need
+								.. "' but this script declared '" .. granted
+								.. "'", 2)
+					end)
+				end
+			end
+		end
+		return granted
+	end
+
+	--- The tier actually in force. Never nil: an undeclared script is "full".
+	function M.emu.tier() return granted end
+
 	M.host = host
 	M.adapter = adapter
 	rawset(_G, REGISTRY_KEY, M)
@@ -131,6 +233,7 @@ M.surface = {
 	"emu.gamename", "emu.screenwidth", "emu.screenheight", "emu.isonline",
 	"emu.isreplay", "emu.isrollback", "emu.frameadvance", "emu.speedmode",
 	"emu.registerbefore", "emu.registerafter", "emu.registerexit", "emu.run",
+	"emu.declare", "emu.tier",
 	"frame.count", "frame.confirmed", "frame.resimsteps",
 	"joypad.buttons", "joypad.get", "joypad.set", "joypad.setbutton",
 	"joypad.getdown", "joypad.getup", "joypad.getaxis", "joypad.setaxis",

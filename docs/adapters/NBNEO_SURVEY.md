@@ -170,6 +170,30 @@ machine in memory". Worth an `[OPEN]` in the spec rather than silence.
 
 ## (B) Opinion documented, implementation absent or partial
 
+### B0. Two kinds of "unimplemented", which this survey first ran together
+
+`[REASONED]` **Unbuilt** and **attempted-and-diverged** are different evidence
+and were originally filed together under (B).
+
+*Capabilities declared* (B2) is unbuilt: nobody tried, which says nothing about
+whether the idea is good.
+
+*Ticks not frames* (B1) is attempted and diverged: the docstring was written,
+`tick_from`, the exec hook and the bitmap were built, the derive graph was
+wired to ticks — and the scheduler still pumps once per drawn frame. Someone
+with full knowledge and full motive did not close that gap, which is far
+stronger evidence, and it points at a structural reason.
+
+The likely reason, and the transferable lesson: **a tick is observable but not
+schedulable.** Counting ticks from an exec hook costs one load and one branch.
+*Resuming script control* there would re-enter the machine mid-instruction —
+which is why nbneo refuses `nb.step` from inside a hook — so the pump has
+nowhere to live but the frame loop. Observation points and control points are
+different sets, and a spec assuming one clock serves both will always have this
+gap. Our own `emu.frameadvance` has the same shape: it resumes on the frame
+callback because that is the only safe place, not because frames are the right
+granularity.
+
 ### B1. "`emu` advances ticks, not frames" — the scheduler runs on frames
 
 `[VERIFIED HERE]` The strongest claim in nbneo's README, and it does not hold
@@ -205,6 +229,19 @@ length. A grep for `capabilit`, `require_caps`, `caps =` across `script/`,
 `lua/`, `observe/`, `timeline/`, `shell/` returns **zero** declaration or
 enforcement sites. There is no manifest, no `declare{}`, no runtime refusal.
 The `nb.act` gate system is a *hotkey* gate, and `nb.act.fire` bypasses it.
+
+**CORRECTION 2026-09-05.** Declining the *replacement claim* was right;
+letting that decline carry the *mechanism* with it was not. flycast-dojo's
+largest open feature is exactly a declaration system — Lua is refused entirely
+when online (`core/nullDC.cpp`), and the fix in `TODOS.md` is OFF / OBSERVER /
+MUTATOR / FULL tiers. We need declaration for our own reasons, and its place in
+the spec should never have been contingent on whether nbneo built theirs.
+
+`emu.declare{tier=}` / `emu.tier()` are now in the spec and implemented in
+`emuapi.lua`, enforced by wrapping the namespaces after the adapter builds them
+— so an adapter needs no knowledge of tiers to be governed by them. The two
+mechanisms are stated as orthogonal: `supports()` is portability, `declare()`
+is authorisation.
 
 **Keep `emu.supports()`.** The critique of the old one-bit `SpecIsResim()` is
 sound, but it is separately answered by two mechanisms that do exist
@@ -422,8 +459,8 @@ it and carry its licence."* `core/` is 42 translation units of FBNeo lineage.
 | 6 | `gui.rgba`, and assert colour with green | **done** 2026-09-04 |
 | 7 | explicit "unset" button value + refusal channel | open |
 | 8 | `memory.spaces()` returns records | open |
-| 9 | callback handles (settles Q7) + ownership | open |
-| 10 | delivery counts as API, not just test doctrine | open |
+| 9 | callback handles (settles Q7) + ownership | **handles done** 2026-09-05; ownership open |
+| 10 | delivery counts as API, not just test doctrine | **done** 2026-09-05 — *underranked at 10; this is the best idea in the survey* |
 | 11 | require an overflow policy, never default one | open |
 | 12 | permit a single-root install | open |
 | 13 | re-scope the port list against measured usage | open |
@@ -431,8 +468,9 @@ it and carry its licence."* `core/` is 42 translation units of FBNeo lineage.
 | 15 | take the honesty flag, not ticks as the clock | open |
 | 16 | a raw toolkit namespace alongside a gated one | open |
 
-**Declined, with reasons:** "capabilities declared, not discovered" (B2 — no
-implementation, and it answers a different question from `emu.supports()`); and
+**Declined, with reasons:** the claim that declaration *replaces* discovery
+(B2 — they answer different questions). **Note the correction below: the
+declaration MECHANISM was adopted 2026-09-05 on its own merits.** Also declined:
 derives, transcripts and the timeline as spec surface (B3, B5 — excellent
 designs that need a state arena and node-identity model which is
 emulator-specific, and two of the three are themselves partly unbuilt).

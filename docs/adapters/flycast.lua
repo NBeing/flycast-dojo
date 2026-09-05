@@ -308,9 +308,42 @@ function sound.outputrate() return host.emulator.getOutputRate() end
 --- registration functions, which allow more than one subscriber.
 local drawCallbacks, frameCallbacks, beforeCallbacks, exitCallbacks = {}, {}, {}, {}
 
-function gui.register(fn)        drawCallbacks[#drawCallbacks + 1] = fn end
-function emu.registerafter(fn)   frameCallbacks[#frameCallbacks + 1] = fn end
-function emu.registerexit(fn)    exitCallbacks[#exitCallbacks + 1] = fn end
+--- REGISTRATION RETURNS A HANDLE, AND THE HANDLE COUNTS DELIVERIES.
+---
+--- The count is the point, not a diagnostic extra. Every expensive defect in
+--- this project has had the same shape: an action that produced nothing
+--- observable is indistinguishable from one that worked. A well-formed video
+--- that was entirely black. A watch reporting zero changes. Coverage reading
+--- 54/54 with a fifth of the surface unwired. A script that loaded nothing and
+--- said nothing. A callback that is registered but never delivered looks
+--- exactly like a callback whose condition never came true, and `hits()` is
+--- the difference between those two.
+---
+---     local h = emu.registerafter(step)
+---     ...
+---     if h:hits() == 0 then error("frame hook never fired") end
+---
+--- `faults()` is the same argument one level down: a subscriber that throws
+--- every frame is contained (see runAll) and therefore silent, so the count is
+--- how anyone finds out.
+local function registrar(list, what)
+	return function(fn)
+		if type(fn) ~= "function" then
+			error(what .. ": expected a function, got " .. type(fn), 2)
+		end
+		local rec = { fn = fn, hits = 0, faults = 0, dead = false }
+		list[#list + 1] = rec
+		return {
+			hits        = function() return rec.hits end,
+			faults      = function() return rec.faults end,
+			unregister  = function() rec.dead = true end,
+		}
+	end
+end
+
+gui.register       = registrar(drawCallbacks,   "gui.register")
+emu.registerafter  = registrar(frameCallbacks,  "emu.registerafter")
+emu.registerexit   = registrar(exitCallbacks,   "emu.registerexit")
 
 --- registerbefore and registerafter share a hook here, and that is correct
 --- rather than a shortcut. The host dispatches at the frame boundary, and at a
@@ -321,7 +354,7 @@ function emu.registerexit(fn)    exitCallbacks[#exitCallbacks + 1] = fn end
 ---
 --- A host with a genuinely separate pre-simulation hook should use it instead;
 --- the ordering guarantee is the same either way.
-function emu.registerbefore(fn)  beforeCallbacks[#beforeCallbacks + 1] = fn end
+emu.registerbefore = registrar(beforeCallbacks, "emu.registerbefore")
 
 --- Frame stepping.
 ---
@@ -369,10 +402,37 @@ local function stepOnce()
 	end
 end
 
+--- A THROWING SUBSCRIBER IS CONTAINED, NEVER EVICTED. One bad frame in one
+--- observer must not silently remove it for the rest of the session - that
+--- turns a transient into a feature that looks like it was never enabled.
+--- It is counted instead, and runs again next frame.
+---
+--- Unregistering from inside a callback is normal, not an edge case, so
+--- removal MARKS and the sweep happens after the walk. Same hazard as
+--- EventManager::broadcastEvent in the host, solved the other way round:
+--- there the list is copied, here it is marked and swept, because here the
+--- list is walked far less often than it is read.
 local function runAll(list)
-	for _, fn in ipairs(list) do
-		local ok, err = pcall(fn)
-		if not ok then print("emuapi callback error: " .. tostring(err)) end
+	local sweep = false
+	for i = 1, #list do
+		local rec = list[i]
+		if rec ~= nil and not rec.dead then
+			rec.hits = rec.hits + 1
+			local ok, err = pcall(rec.fn)
+			if not ok then
+				rec.faults = rec.faults + 1
+				print("emuapi callback error: " .. tostring(err))
+			end
+		end
+		if rec ~= nil and rec.dead then sweep = true end
+	end
+	if sweep then
+		local keep = {}
+		for _, rec in ipairs(list) do
+			if not rec.dead then keep[#keep + 1] = rec end
+		end
+		for i = #list, 1, -1 do list[i] = nil end
+		for i, rec in ipairs(keep) do list[i] = rec end
 	end
 end
 
