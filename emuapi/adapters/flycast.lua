@@ -455,6 +455,16 @@ return {
 		emu = emu, frame = frame, joypad = joypad, memory = memory,
 		savestate = savestate, gui = gui, ui = ui, movie = movie, sound = sound,
 	},
+	--- WHERE THE SUITE MAY POKE. Addresses are per-system by design - the spec
+	--- refuses to normalise them - so a portable conformance suite cannot
+	--- hardcode one and must ask the adapter instead. It used to hardcode
+	--- 0x8C010000, an SH4 address, which passed everywhere it was ever run
+	--- because it was only ever run here.
+	probe = {
+		readable = 0x8C010000,
+		writable = 0x8C010000,
+		space    = "sound",
+	},
 	--- Present in the interface, deliberately not implemented here. Declared so
 	--- emu.supports() answers false rather than the name simply being absent.
 	unsupported = {

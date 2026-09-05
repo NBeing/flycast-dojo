@@ -78,7 +78,7 @@ game_dirs() {
         [ -d "$d" ] && printf '%s\n' "$d"
     done < <(content_paths) | sort -u
 }
-ADAPTER_DIR="${FLYCAST_ADAPTER_DIR:-$ROOT/docs/adapters}"
+PKG_DIR="${FLYCAST_EMUAPI_DIR:-$ROOT/emuapi}"
 OUT_DIR="${FLYCAST_OUT_DIR:-$ROOT/out/rofi}"
 # WHERE A FAILED LAUNCH LEAVES ITS EVIDENCE. Started from a menu there is no
 # terminal, so stderr going nowhere IS the bug report nobody receives.
@@ -144,7 +144,7 @@ games() {
 # new example is offered by writing `@runnable` in it and a renamed one does
 # not silently vanish from the menu.
 lua_scripts() {
-    { find "$ADAPTER_DIR" -maxdepth 1 -name '*.lua' 2>/dev/null
+    { find "$PKG_DIR" -maxdepth 2 -name '*.lua' 2>/dev/null
       find "$ROOT/scripts" -maxdepth 1 -name '*.lua' 2>/dev/null; } \
         | sort -u | while IFS= read -r f; do
             grep -q '@runnable' "$f" 2>/dev/null && printf '%s\n' "$f"
@@ -192,7 +192,7 @@ if [ "${1:-}" = "--check" ]; then
         exit 3
     fi
     if [ "$n_lua" -eq 0 ]; then
-        printf 'VACUOUS: no @runnable Lua under %s -- tour.lua and conformance.lua\n' "$ADAPTER_DIR"
+        printf 'VACUOUS: no @runnable Lua under %s -- tour.lua and conformance.lua\n' "$PKG_DIR"
         printf '         should carry the marker.\n'
         exit 3
     fi
@@ -333,8 +333,10 @@ Play)
     # root at OUT_DIR means picking a script cannot disturb a real config.
     script="$(lua_scripts | pick 'script')"
     [ -n "$script" ] || exit 0
-    mkdir -p "$OUT_DIR/lua-root/adapters"
-    cp "$ADAPTER_DIR"/*.lua "$OUT_DIR/lua-root/adapters/" 2>/dev/null
+    # The whole package, not loose files: scripts reach it with require, so
+    # the directory name is part of the module path and cannot be flattened.
+    mkdir -p "$OUT_DIR/lua-root"
+    cp -r "$PKG_DIR" "$OUT_DIR/lua-root/emuapi"
     cp "$script" "$OUT_DIR/lua-root/flycast.lua" || die "cannot stage $script"
     FLYCAST_ROOT="$OUT_DIR/lua-root" launch "${base[@]}" "$GAME"
     ;;
@@ -373,12 +375,14 @@ Play)
     # The suite prints its verdict and exits; launching it detached would throw
     # the verdict away and report success. It runs against a scratch root so a
     # conformance run cannot disturb a real config.
-    [ -r "$ADAPTER_DIR/conformance.lua" ] \
-        || die "no conformance suite at $ADAPTER_DIR/conformance.lua"
-    mkdir -p "$OUT_DIR/conf-root/adapters"
-    cp "$ADAPTER_DIR"/*.lua "$OUT_DIR/conf-root/adapters/"
-    printf 'local api = dofile("adapters/emuapi.lua").load()\napi.emu.registerexit(function() api.report() end)\ndofile("adapters/conformance.lua")\n' \
-        > "$OUT_DIR/conf-root/flycast.lua"
+    [ -r "$PKG_DIR/conformance.lua" ] \
+        || die "no conformance suite at $PKG_DIR/conformance.lua"
+    # The whole package is copied, not loose files: the suite is reached with
+    # require("emuapi.conformance"), so the directory name is part of the
+    # module path and cannot be flattened away.
+    mkdir -p "$OUT_DIR/conf-root"
+    cp -r "$PKG_DIR" "$OUT_DIR/conf-root/emuapi"
+    printf 'require("emuapi.conformance")\n' > "$OUT_DIR/conf-root/flycast.lua"
     term_run "flycast conformance" \
         "FLYCAST_ROOT='$OUT_DIR/conf-root' '$BIN' '$GAME' 2>&1 | grep -E 'emuapi|pass=|FAIL|RESULT|missing'"
     ;;

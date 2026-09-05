@@ -101,7 +101,7 @@ you can test and breaks on the one you cannot.
 
 ### A script must not depend on the working directory
 
-`dofile("adapters/emuapi.lua")` resolves against the cwd, which is the config
+`dofile("adapters/emuapi.lua")` resolved against the cwd, which is the config
 directory when the emulator is started from a terminal there and something
 arbitrary when it is started from a desktop menu. The same script therefore
 worked in every test and failed from the launcher.

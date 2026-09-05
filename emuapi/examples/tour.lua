@@ -1,8 +1,9 @@
 --- A guided tour of the cross-emulator Lua surface.
 --- @runnable -- a launcher may offer this as a script to run.
 ---
----   RUN:   copy into your config dir as flycast.lua, with adapters/ beside it,
----          and start a game. Or: flycast-rofi -> "Play + Lua script" -> tour.lua
+---   RUN:   put the emuapi package in your config dir and make flycast.lua say
+---            require("emuapi.examples.tour")
+---          Or: flycast-rofi -> "Play + Lua script" -> tour.lua
 ---   PASS:  a panel appears listing live values from every namespace, a green
 ---          box hugs the game image, the "delivered" counts climb every frame,
 ---          and the "retires itself" count stops at 120 and stays there.
@@ -28,14 +29,17 @@
 --- the draw callback, and the two communicate through a table. Drawing from a
 --- frame callback raises - see CALLBACK THREADING in lua_api_spec.lua.
 
--- Resolve the adapter relative to the CONFIG DIRECTORY, not the working one.
--- dofile("adapters/...") resolves against the cwd, which is the config dir when
--- flycast is started from a terminal there and something arbitrary when it is
--- started from a desktop menu - so the same script worked in testing and failed
--- from the launcher. SCRIPT_DIR is set by the host; the fallback keeps this
--- working on a host that does not set it.
-local here = rawget(_G, "SCRIPT_DIR")
-local api = dofile((here and (here .. "/") or "") .. "adapters/emuapi.lua").load()
+-- A package, so require() finds it: no path arithmetic and no dependence on
+-- the working directory, which is what broke this script when it was loaded
+-- from a desktop menu instead of a terminal. The dofile fallback covers a host
+-- that runs one script file and never touches package.path; it needs the host
+-- to expose its script directory, which is what SCRIPT_DIR is.
+local ok_, mod = pcall(require, "emuapi")
+if not ok_ then
+    local here = rawget(_G, "SCRIPT_DIR")
+    mod = dofile((here and (here .. "/") or "") .. "emuapi/init.lua")
+end
+local api = mod.load(rawget(_G, "EMUAPI_HOST"))
 local emu, frame, joypad, memory  = api.emu, api.frame, api.joypad, api.memory
 local savestate, gui, ui          = api.savestate, api.gui, api.ui
 local movie, sound                = api.movie, api.sound

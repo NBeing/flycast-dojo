@@ -20,8 +20,15 @@
 -- started from a desktop menu - so the same script worked in testing and failed
 -- from the launcher. SCRIPT_DIR is set by the host; the fallback keeps this
 -- working on a host that does not set it.
-local here = rawget(_G, "SCRIPT_DIR")
-local api = dofile((here and (here .. "/") or "") .. "adapters/emuapi.lua").load()
+--- A package now, so require() is the idiom. EMUAPI_HOST names a host
+--- explicitly - the mock uses it, since a fake emulator is asked for and never
+--- detected.
+local ok_, mod = pcall(require, "emuapi")
+if not ok_ then
+	local here = rawget(_G, "SCRIPT_DIR")
+	mod = dofile((here and (here .. "/") or "") .. "emuapi/init.lua")
+end
+local api = mod.load(rawget(_G, "EMUAPI_HOST"))
 local emu, joypad, memory, gui, ui, frame, savestate =
 	api.emu, api.joypad, api.memory, api.gui, api.ui, api.frame, api.savestate
 
@@ -285,8 +292,8 @@ local function checkDeclaration()
 		ok(raises(function() joypad.set(1, { a = true }) end), g,
 				"observer cannot drive input")
 	end
-	if emu.supports("memory.writebyte") then
-		ok(raises(function() memory.writebyte(0x8C010000, 0) end), g,
+	if emu.supports("memory.writebyte") and api.probe.writable then
+		ok(raises(function() memory.writebyte(api.probe.writable, 0) end), g,
 				"observer cannot write memory")
 	end
 	if emu.supports("savestate.save_mem") then
@@ -294,8 +301,8 @@ local function checkDeclaration()
 				"observer cannot take savestates")
 	end
 	--- ...and reading still works, or the tier has simply broken the host.
-	if emu.supports("memory.readbyte") then
-		ok(not raises(function() memory.readbyte(0x8C010000) end), g,
+	if emu.supports("memory.readbyte") and api.probe.readable then
+		ok(not raises(function() memory.readbyte(api.probe.readable) end), g,
 				"observer can still read")
 	end
 end
@@ -343,6 +350,9 @@ emu.registerexit(function()
 	print(string.format("rollback: samples=%d isrollback-in-callback=%d regressions=%d"
 		.. "  (stalls=%d, informational)",
 		rollbackSamples, rollbackSeen, regressions, rollbackStalls))
+	--- A machine-readable verdict, so a runner can exit non-zero without
+	--- re-deriving the arithmetic the report just did.
+	rawset(_G, "EMUAPI_CONFORMS", fail == 0)
 	if rollbackSeen == 0 and rollbackSamples > 0 then
 		print("  note: no rollback occurred in this session, so the gate was not"
 			.. " exercised - run under netplay to test it properly")

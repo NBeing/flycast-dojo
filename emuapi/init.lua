@@ -1,14 +1,21 @@
 --- emuapi - entry point for the cross-emulator Lua interface.
 ---
---- Detects the host emulator, loads its adapter, and installs the neutral
---- namespaces as globals. See ../lua_api_spec.lua for the interface itself.
+--- Detects the host emulator, loads its adapter, and returns the neutral
+--- namespaces. The interface itself is in spec.lua; conformance.lua is its
+--- executable definition.
 ---
----   local api = dofile("adapters/emuapi.lua").load()
+---   local api = require("emuapi").load()
 ---   local emu, joypad, gui = api.emu, api.joypad, api.gui
 ---
---- Loading: emulators typically run one script file and do not necessarily put
---- its directory on package.path, so this is written to work under a plain
---- dofile. Where require() works, prefer it.
+--- A PACKAGE, not a pile of files beside a script. Adapters are reached by
+--- require("emuapi.adapters.<host>"), so nothing here does path arithmetic and
+--- nothing depends on the working directory - the failure this package was
+--- carrying before it was one, where the same script worked from a terminal
+--- and silently failed from a desktop menu.
+---
+--- The host is responsible for putting the package on package.path. A host
+--- that runs one script file and sets no path can still reach this through a
+--- plain dofile of init.lua; see the fallback in loadAdapter below.
 
 local M = {}
 
@@ -18,23 +25,39 @@ local M = {}
 local function detectHost()
 	if rawget(_G, "flycast") ~= nil then return "flycast" end
 	if rawget(_G, "fba") ~= nil then return "fbneo" end
+	--- "mock" is never detected. It is a host you ask for by name, because a
+	--- fake emulator that could be auto-selected would silently stand in for a
+	--- real one that failed to be recognised - and a suite passing against the
+	--- mock while claiming to test the emulator is the worst outcome here.
 	return nil
 end
 
---- Directory this file was loaded from, so sibling adapters can be found
---- without depending on the working directory.
---- Where this file was loaded from, so sibling adapters are found without
---- depending on the working directory. debug.getinfo gives the path dofile was
---- called with, which is absolute when the caller used SCRIPT_DIR and relative
---- otherwise; SCRIPT_DIR is the fallback for the relative case.
-local function selfDir()
+--- require() first, because that is what a package is for: it finds adapters
+--- through package.path with no knowledge of where this file sits.
+---
+--- The fallback exists because some hosts run a single script file and never
+--- touch package.path. In that case this file was reached by dofile, and
+--- debug.getinfo tells us the path it was given - absolute if the caller built
+--- one, which is why hosts are asked to expose their script directory.
+local function loadAdapter(host)
+	local modname = "emuapi.adapters." .. host
+	local ok, adapter = pcall(require, modname)
+	if ok and type(adapter) == "table" then return adapter end
+	local requireErr = adapter
+
 	local src = debug.getinfo(1, "S").source
 	local dir = (src:sub(1, 1) == "@") and src:sub(2):match("^(.*[/\\])") or ""
 	if dir == "" or dir:sub(1, 1) ~= "/" then
 		local here = rawget(_G, "SCRIPT_DIR")
-		if here then return here .. "/adapters/" end
+		if here then dir = here .. "/emuapi/" end
 	end
-	return dir
+	local chunk, loadErr = loadfile(dir .. "adapters/" .. host .. ".lua")
+	if chunk == nil then
+		error(string.format(
+			"emuapi: no adapter for '%s'\n  require: %s\n  loadfile: %s",
+			host, tostring(requireErr), tostring(loadErr)))
+	end
+	return chunk()
 end
 
 --- Loading twice must not build two adapters. Each one installs its own
@@ -55,12 +78,7 @@ function M.load(hostOverride)
 		error("emuapi: unrecognised host emulator; pass a name to emuapi.load()")
 	end
 
-	local path = selfDir() .. host .. ".lua"
-	local chunk, err = loadfile(path)
-	if chunk == nil then
-		error("emuapi: no adapter for '" .. host .. "' (" .. tostring(err) .. ")")
-	end
-	local adapter = chunk()
+	local adapter = loadAdapter(host)
 
 	--- Namespaces are returned, NOT installed. Installing them as globals
 	--- cannot work everywhere: fbneo-rr already owns emu, memory, input,
@@ -191,6 +209,9 @@ function M.load(hostOverride)
 
 	M.host = host
 	M.adapter = adapter
+	--- Adapter-declared, never guessed. An adapter that omits it simply skips
+	--- the checks that need an address, which is honest; guessing one is not.
+	M.probe = adapter.probe or {}
 	rawset(_G, REGISTRY_KEY, M)
 	return M
 end

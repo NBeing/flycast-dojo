@@ -1,18 +1,40 @@
-# Adapters
+# emuapi
 
-A Lua shim layer that presents `docs/lua_api_spec.lua`'s surface on top of an
-emulator's native API. A script written against the neutral interface runs
-unchanged on any emulator that has an adapter here.
+A Lua interface more than one emulator can conform to, so an overlay, a
+training tool or a TAS script moves between them unchanged.
 
-```lua
-local api = dofile("adapters/emuapi.lua").load()
-local emu, joypad, memory, gui, frame = api.emu, api.joypad, api.memory, api.gui, api.frame
-
-emu.registerafter(function()
-    if joypad.getdown(1).a then emu.message("A pressed") end
-end)
-gui.register(function() gui.text(8, 8, "frame " .. frame.confirmed()) end)
 ```
+emuapi/
+  init.lua          the loader - detects the host, returns the namespaces
+  spec.lua          the interface itself, with the reasoning
+  conformance.lua   its executable definition
+  adapters/
+    flycast.lua     flycast-dojo
+    fbneo.lua       fbneo-rr
+    mock.lua        a fake emulator, for running the suite with no emulator
+  examples/
+    tour.lua        every call, exercised live
+  run-conformance.lua
+```
+
+## Running the suite
+
+Two runs, and both should pass. When they disagree, the disagreement is the
+finding.
+
+```sh
+lua emuapi/run-conformance.lua      # no emulator, ~1 second
+```
+
+...and inside the emulator, with a game loaded, by making the host's script say
+`require("emuapi.conformance")`.
+
+The headless run is not a convenience. Before it existed the suite had only
+ever run on one emulator, against an adapter by the same author as the
+interface - so a passing result measured agreement between two halves of one
+head, and anything flycast-shaped that leaked into the neutral layer was
+invisible. It caught one immediately: the suite was poking `0x8C010000`, an
+SH4 address. Adapters now declare where the suite may poke.
 
 ## Nothing is installed as a global
 
@@ -28,7 +50,7 @@ and the adapter, which reaches the host through those same tables.
 A host with room may opt in:
 
 ```lua
-local api = dofile("adapters/emuapi.lua").load():install()
+local api = require("emuapi").load():install()
 emu.pause()   -- now a global; succeeds on flycast, raises on fbneo
 ```
 
@@ -99,7 +121,7 @@ Presence is not conformance, which is what `conformance.lua` is for.
 ## The conformance suite
 
 ```lua
-dofile("adapters/conformance.lua")   -- run with a game loaded
+require("emuapi.conformance")   -- run with a game loaded
 ```
 
 It checks shapes, failure modes and the contract rules, not just presence. A
