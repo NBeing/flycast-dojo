@@ -25,3 +25,9 @@
 [submodule "core/deps/libzip"]
 	path = core/deps/libzip
 	url = https://github.com/nih-at/libzip.git
+[submodule "emuapi"]
+	path = emuapi
+	# PLACEHOLDER. A local path works for this machine and for nobody else.
+	# Point this at the published repository before the branch is shared:
+	#   git submodule set-url emuapi git@github.com:<owner>/emuapi.git
+	url = /home/nbee/dev/emuapi
