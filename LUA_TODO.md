@@ -271,11 +271,22 @@ three enforcement checks and the two delivery counts, and nothing else.
 keys is the HOST dispatch mechanism, and the registration functions live in the
 adapter above it. Neither had to lose.*
 
-### [S] 8. Interface versioning — STUBBED, not settled
-`emu.apiversion()` exists (`emuapi.lua:88`) and returns `0`. What is not
-settled is the policy: nothing bumps it, and there is no rule saying what
-constitutes a breaking change. Until something does, it cannot distinguish a
-partial implementation from an old one, which was the point of having it.
+### [x] 8. Interface versioning — DEFERRED, deliberately: this is alpha
+`emu.apiversion()` returns `0`, and **0 means alpha: the surface may change
+without notice and nothing bumps it.**
+
+That is the decision, not an omission. A version number is a promise to people
+downstream, and there are none: one real implementation, one mock written to
+pass, and no external consumer. Maintaining compatibility with a shape nobody
+depends on would cost every improvement the survey is still holding - the draw
+surface becoming a capability object, tier 2 returning `nil, reason`,
+`memory.spaces()` returning records - all of which are breaking, and all of
+which are better.
+
+**What would end alpha:** a second real implementation, or someone outside this
+repo depending on the surface. At that point `apiversion()` starts at 1 and the
+rule for bumping it gets written. Until then, changing the interface is free
+and is the point.
 
 ### [x] 9. Namespace collision — RESOLVED
 **Namespaces are named neutrally but not installed as globals.** The loader
