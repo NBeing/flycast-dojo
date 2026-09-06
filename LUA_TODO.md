@@ -1,7 +1,15 @@
 # Lua API — porting and specification work
 
-Working list for `docs/lua_api_spec.lua`, the cross-emulator Lua interface, and
-for porting fbneo-rr's remaining script surface into flycast-dojo.
+Working list for the cross-emulator Lua interface and for porting fbneo-rr's
+remaining script surface into flycast-dojo.
+
+**The interface is no longer part of this repository.** It lives in `emuapi/`,
+a git submodule of `github.com/NBeing/emuapi` (private for now), with its own
+history. `emuapi/spec.lua` is the interface, `emuapi/conformance.lua` is its
+executable definition, and `lua emuapi/run-conformance.lua` runs the whole
+suite against a mock host in about a second with no emulator at all. That
+separation is the point: while it sat in `docs/`, every conformance question
+was a flycast question by construction.
 
 **Is the interface done? The design questions are.** It settles ten
 (capability is queryable, rollback safety is in the contract, unportable hooks
@@ -30,7 +38,7 @@ and polarity leaks. flycast-dojo's `kcode` is active-low, so a *cleared* bit
 means held, and no constants were exposed to Lua at all — every script was
 hardcoding inverted tests against Dreamcast bit values.
 
-Contract (now in `docs/lua_api_spec.lua`):
+Contract (now in `emuapi/spec.lua`):
 - a button reads `true` when held, whatever the hardware does
 - `joypad.buttons()` enumerates this system's names, so scripts adapt
 - on set: present-and-true presses, present-and-false releases, **absent leaves
@@ -70,7 +78,9 @@ outside 0–9.
 **Spaces are named and queried**, not encoded in function names:
 
 ```lua
-memory.spaces()                        -- {"main", "sound"}
+memory.spaces()                        -- records, not names:
+                                       --   {name="main",  base=nil, size=nil,     writable=true}
+                                       --   {name="sound", base=0,   size=0x200000, writable=true}
 memory.space("sound").readbyte(0x100)
 memory.readbyte(0x8C010000)            -- shorthand for main
 ```
@@ -315,7 +325,7 @@ Verified: local binding gives the full API with no globals touched;
 `install()` succeeds on flycast; a second `install()` is refused.
 
 ### [x] 10. Third surface surveyed — nbneo-rr
-`docs/adapters/NBNEO_SURVEY.md` `[SURVEYED 2026-09-04]`, read-only.
+`emuapi/NBNEO_SURVEY.md` `[SURVEYED 2026-09-04]`, read-only.
 
 The most useful surface so far, because it is the same author's deliberate
 successor to fbneo-rr: where it agrees with this spec independently that is
@@ -425,7 +435,7 @@ which is capability-gated rather than faked.
 
 ## Part 3 — Tooling
 
-### [x] Conformance suite — DONE (`docs/adapters/conformance.lua`)
+### [x] Conformance suite — DONE (`emuapi/conformance.lua`)
 Checks shapes, failure modes and contract rules, not just presence. A missing
 capability is SKIP, not a failure; a failure means the interface was claimed
 and then behaved differently to the spec. Runs headless.
@@ -455,7 +465,7 @@ manufactures distrust in a correct implementation.
 
 ## Part 4 — Excluded, with reasons
 
-Recorded in `docs/lua_api_spec.lua`; summarised here so this file stands alone.
+Recorded in `emuapi/spec.lua`; summarised here so this file stands alone.
 
 - **`memory.registerwrite` / `registerexec`** — per-access hooks assume an
   interpreter core. A recompiler inlines memory access into generated code.
@@ -480,5 +490,5 @@ restrictions, which GPLv2 section 6 forbids adding, so FBNeo-derived code
 cannot be combined into flycast-dojo and distributed. Port ideas and
 independently-authored code; do not transcribe FBNeo sources. Some fbneo-rr
 Lua files are upstream FCEUX/FBA lineage rather than that fork's own work.
-`docs/lua_api_spec.lua` is written from observed API surface and carries no
+`emuapi/spec.lua` is written from observed API surface and carries no
 upstream code.

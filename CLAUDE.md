@@ -10,13 +10,13 @@ from **this** repository rather than that one.
 
 ## 1. Testing doctrine
 
-Five rules. The expensive mistakes here have been skipped rules, not hard
+Six rules. The expensive mistakes here have been skipped rules, not hard
 problems.
 
 **1. Every check must be able to fail. Make it fail once, on purpose, before
 you trust it.** A check that cannot fail reads exactly like a passing one.
 
-> `[MEASURED 2026-09-04]` The first run of `docs/adapters/conformance.lua`
+> `[MEASURED 2026-09-04]` The first run of `emuapi/conformance.lua`
 > reported `NON-CONFORMING` with 243 stalls. The emulator was correct; the
 > check asserted a *proxy* — that `frame.confirmed()` advances once per frame
 > callback — whose premise only holds during a session. A suite asserting a
@@ -26,6 +26,22 @@ you trust it.** A check that cannot fail reads exactly like a passing one.
 > `[MEASURED 2026-09-04]` A test of the rofi launcher's five failure paths
 > printed `exit=0` for all five, including the ones that had just printed their
 > error. The script was fine; `$?` was reading `tail` at the end of a pipeline.
+
+> `[MEASURED 2026-09-05]` The blank-video check parsed `YSTDEV` out of ffmpeg's
+> `signalstats`. **That key does not exist** — the filter emits
+> `YMIN/YLOW/YAVG/YHIGH/YMAX` and no standard deviation. The grep matched
+> nothing, the value defaulted to zero, and a perfectly good 3.3 MB capture was
+> reported as blank. Note the shape of the near-miss: the obvious repair is to
+> loosen the threshold, which would have destroyed the check while making it
+> pass. A measurement whose failure mode is *silently empty* must be built so
+> that empty is an error, not a zero.
+
+> `[MEASURED 2026-09-05]` `conformance.lua` contained
+> `ok(not present or true, ...)` — a constant. The entire "denied" half of the
+> capability loop had never been able to fail, so a rename leaving a stub behind
+> passed it. It had been reviewed, committed and run hundreds of times. **A
+> check reads the same whether or not it can fail; only making it fail tells
+> you.**
 
 **2. Assert non-vacuity.** Frames advanced > 0, pixels not all one colour,
 lists not silently empty.
@@ -47,6 +63,19 @@ check available — and so is running the case where a bug would be visible.
 > matching aspect ratio a broken coordinate mapping is pixel-identical to a
 > correct one.
 
+> `[MEASURED 2026-09-05]` That lesson had to be relearned the same day it was
+> written down. A tour screenshot taken to verify the new draw surface showed
+> `window 640x480` against a `640x480` game — a matching aspect, proving
+> nothing. The window size had to be forced in `emu.cfg` before the run meant
+> anything. **Setting up the control is a step you can silently skip and still
+> get a green picture.**
+
+> `[MEASURED 2026-09-06]` Two controls are sometimes needed, not one. An
+> arbiter that *never* refuses and one that refuses *everything* both satisfy a
+> single "the contested claim was refused" assertion. Only the pair
+> discriminates: sabotage in each direction, and require that each breaks a
+> different half.
+
 **4. State coverage; green is not scope.** Bind each claim to an observable
 boundary, or mark it open.
 
@@ -54,7 +83,25 @@ boundary, or mark it open.
 > gate was not exercised`. A rule that never ran has not been tested, and a
 > green result that hides this is worse than a yellow one that says it.
 
-**5. Determinism failures are intermittent by nature.** One green run is not
+**5. A skipped check is not a passing one, and must not report as one.**
+
+> `shell/linux/integration-tests` exits **2** when a case is skipped, never 0.
+> A suite that goes green because its prerequisites are missing is reporting on
+> the machine rather than on the code.
+
+> `[MEASURED 2026-09-06]` The conformance suite prints the *reason* beside every
+> skip. flycast reports three: `main` states no size because the SH4 space is
+> not a flat buffer; there is no `probe.unmapped` because unmapped reads answer
+> 0, a known deviation; there is no `probe.emptyslot` because a real slot may
+> hold a user's state. Each is a limitation said out loud. The failure this
+> prevents is the quiet one — a check that stops running and keeps reporting
+> green, which is indistinguishable from a check that runs and passes.
+
+> A control that fails to apply is the same defect wearing a lab coat: the
+> sabotage silently does nothing, the unmodified code runs, and the "control"
+> passes. Assert that the patch changed something before trusting its result.
+
+**6. Determinism failures are intermittent by nature.** One green run is not
 evidence.
 
 > The Lua `vblank` double-fire needed a connection bad enough to mispredict.
@@ -121,8 +168,16 @@ run rather than holding a list, because a second copy rots in the quiet
 direction — a format the emulator gains simply never appears in the menu, which
 reads as "unsupported" rather than as a stale script.
 
-The same rule is why `emu.supports()` in `docs/adapters/emuapi.lua` is derived
-from the bindings that actually exist rather than from a declared list.
+The same rule is why `emu.supports()` in `emuapi/init.lua` is derived from the
+bindings that actually exist rather than from a declared list.
+
+> `[MEASURED 2026-09-05]` "Does this host implement this name?" was answered in
+> two places — `emu.supports()`, and the conformance suite's own `rawget`. They
+> agreed for months and parted company the moment a name moved onto a method
+> table: the suite reported `gui.size` as "claimed but absent" while
+> `supports()` could see it perfectly well. Two implementations of one rule do
+> not disagree when you write them; they disagree when one of them is changed.
+> The fix is `api.implements()`, which `supports()` is now built on.
 
 Generated files are not committed when the only difference between two
 checkouts is a path: `shell/linux/flycast-dojo-rofi.desktop.in` is the
@@ -150,7 +205,7 @@ exists to prevent.
 
 ## 6. Traps already paid for
 
-`docs/adapters/INTEGRATION.md` is the running list for the Lua interface —
+`emuapi/INTEGRATION.md` is the running list for the Lua interface —
 adapters must be idempotent to load, error propagation differs between wrapped
 and raw bindings, colour packing is rarely what you assume. Every entry there
 is something that actually went wrong, not a precaution.

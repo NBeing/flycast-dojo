@@ -254,6 +254,31 @@ PC context — document the gap rather than calling it an fbneo-equivalent hook.
 
 ---
 
+## Testing
+
+### [x] Integration tests — `shell/linux/integration-tests`
+Five cases, each reproducing a defect that actually shipped. `--fast` runs the
+two that need no ROM or display. **A skip exits 2, not 0.**
+
+`[MEASURED 2026-09-06]` 5 pass, 0 fail, 0 skip.
+
+### [x] The Lua interface is a separate package and repository
+`emuapi/` is a submodule of `github.com/NBeing/emuapi` (private for now, see
+`.gitmodules` for the one-line command to open it). It carries its own history,
+its own conformance suite, and a mock host so the suite runs with no emulator:
+
+    lua emuapi/run-conformance.lua        # ~1s, no ROM, no window
+
+`[MEASURED 2026-09-06]` mock 189 pass / 0 fail / 0 skip; flycast 183 / 0 / 3,
+every skip naming its reason.
+
+**Note for anyone cloning this fork while the package repo is private:** the
+`emuapi/` directory arrives empty, so the Lua scripts and three of the five
+integration cases will not work until someone with access runs
+`git submodule update --init`.
+
+---
+
 ## Housekeeping
 
 - [?] Decide whether to open a PR against `blueminder/flycast-dojo`. Hold
