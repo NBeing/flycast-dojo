@@ -27,7 +27,7 @@
 	url = https://github.com/nih-at/libzip.git
 [submodule "emuapi"]
 	path = emuapi
-	# PLACEHOLDER. A local path works for this machine and for nobody else.
-	# Point this at the published repository before the branch is shared:
-	#   git submodule set-url emuapi git@github.com:<owner>/emuapi.git
-	url = /home/nbee/dev/emuapi
+	# PRIVATE while NBNEO_SURVEY.md is in it - that file quotes an
+	# unpublished project at length. Make it public with:
+	#   gh repo edit NBeing/emuapi --visibility public --accept-visibility-change-consequences
+	url = git@github.com:NBeing/emuapi.git
