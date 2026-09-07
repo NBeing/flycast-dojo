@@ -62,10 +62,16 @@ public:
 
 private:
 	void resetDevice();
+	void DoSwapCapture();
+	bool CreateCaptureResources();
+	void TermCapture();
 
 	HMODULE d3d9Library = NULL;
 	ComPtr<IDirect3D9> pD3D;
 	ComPtr<IDirect3DDevice9> pDevice;
+	// Video capture staging: a lockable system-memory surface that
+	// GetRenderTargetData() copies the back buffer into.
+	ComPtr<IDirect3DSurface9> captureSurface;
 	D3DPRESENT_PARAMETERS d3dpp{};
 	bool overlayOnly = false;
 	D3DOverlay overlay;

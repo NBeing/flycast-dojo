@@ -24,12 +24,10 @@
 #include "rend/gui.h"
 #include "hw/mem/addrspace.h"
 #include "lua_console.h"
+#ifndef LIBRETRO
+#include "rend/video_recorder.h"
+#endif
 #include "network/ggpo.h"
-// NOTE: rend/video_recorder.h is deliberately absent. The video capture stack is
-// the RENDER half of the migration, which does not merge onto this base (dojo-7
-// deleted core/wsi/{wgl,xgl}.cpp and core/rend/gui_settings.*). The
-// flycast.video.* namespace is guarded out below until those hooks are
-// re-placed. See UPSTREAM_SYNC.md.
 #include "cfg/option.h"
 #include "emulator.h"
 #include "input/gamepad_device.h"
@@ -1237,25 +1235,9 @@ static void luaRegister(lua_State *L)
 				.addFunction("displayNotification", gui_display_notification)
 			.endNamespace()
 
-// MIGRATION GUARD (dojo-7). Two namespaces below belong to halves of the
-// video-recording branch that do NOT move to this base:
-//
-//   flycast.video.*  needs core/rend/video_recorder.{h,cpp}, whose four backend
-//                    hooks live in files dojo-7 deleted (core/wsi/{wgl,xgl}.cpp,
-//                    core/rend/gui_settings.*). Re-placing them is separate work.
-//   flycast.replay.* calls dojo.StartReplayRecording / IsRecordingReplay /
-//                    replay_filename. dojo-7 restructured replay into a Replay
-//                    member class (core/dojo/replay.h) with StartRecording(),
-//                    CreateReplayFile(), LoadReplayFile() and no equivalent of
-//                    IsRecordingReplay or replay_filename on Dojo.
-//
-// Guarded rather than half-adapted: a binding that silently reports the wrong
-// recording state is worse than one that admits it is absent, and emu.supports()
-// answering false is a legitimate answer (emuapi spec, failure tier 3).
-//
-// Everything else in the Lua surface - memory, input, savestates, frame
-// counters, ui.* - is unaffected and is the part emuapi actually binds.
-#if 0	// was: #ifndef LIBRETRO
+// flycast.video.* is LIVE on this base: video_recorder and its GL/Vulkan/DX
+// hooks are ported. flycast.replay.* below is still guarded - see its comment.
+#ifndef LIBRETRO
 			// Capture of the presented frame, overlays included. Pass an empty
 			// path to startRecording() for a timestamped file in the data folder.
 	  		.beginNamespace("video")
@@ -1277,6 +1259,17 @@ static void luaRegister(lua_State *L)
 			.endNamespace()
 
 			// Input-replay recording, independent of the video capture above.
+#if 0	// flycast.replay.* is NOT ported to this base.
+	  		//
+	  		// It calls dojo.StartReplayRecording / StopReplayRecording /
+	  		// IsRecordingReplay / replay_filename. dojo-7 restructured replay
+	  		// into a Replay member class (core/dojo/replay.h) with
+	  		// StartRecording(), CreateReplayFile() and LoadReplayFile(), and has
+	  		// no equivalent of IsRecordingReplay or replay_filename on Dojo.
+	  		//
+	  		// Guarded rather than half-adapted: a binding that misreports
+	  		// recording state is worse than one that admits it is absent, and
+	  		// emu.supports() answering false is a legitimate answer.
 	  		.beginNamespace("replay")
 				.addFunction("startRecording", std::function<bool(std::string)>([](std::string name) {
 					return dojo.StartReplayRecording(name);
@@ -1291,6 +1284,7 @@ static void luaRegister(lua_State *L)
 					return dojo.replay_filename;
 				}))
 			.endNamespace()
+#endif
 #endif
 
 	  		.beginNamespace("config")

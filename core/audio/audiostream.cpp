@@ -1,4 +1,7 @@
 #include "audiostream.h"
+#ifndef LIBRETRO
+#include "rend/video_recorder.h"
+#endif
 #include "cfg/option.h"
 
 struct SoundFrame { s16 l; s16 r; };
@@ -54,6 +57,16 @@ void WriteSample(s16 r, s16 l)
 	{
 		if (currentBackend != nullptr)
 			currentBackend->push(Buffer, SAMPLE_COUNT, config::LimitFPS);
+#ifndef LIBRETRO
+		// Tee the mixed output to the video recorder - the same buffer the
+		// backend gets, so what is recorded is what is heard.
+		//
+		// No samples reach here during rollback: the AICA mixer short-circuits
+		// on muteAudio before WriteSample is called, so re-simulated frames
+		// emit nothing and cannot duplicate audio. That is why the recorder
+		// needs no de-duplication of its own.
+		videorec::submitAudio(Buffer, SAMPLE_COUNT);
+#endif
 		writePtr = 0;
 	}
 }

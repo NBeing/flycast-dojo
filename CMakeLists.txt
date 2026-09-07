@@ -1278,6 +1278,8 @@ if(NOT LIBRETRO)
 			core/rend/game_scanner.h
 			core/rend/imgui_driver.h
 			core/rend/gui.cpp
+			core/rend/video_recorder.cpp
+			core/rend/video_recorder.h
 			core/rend/gui.h
 			core/rend/gui_android.cpp
 			core/rend/gui_android.h
