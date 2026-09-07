@@ -98,6 +98,35 @@ bool mainui_rend_frame()
 	// Ported from the TAS fork. It is pure engine - no piano roll, no States
 	// window - which is why it can come across while the rest of that UI
 	// cannot.
+	// A REPLAY BOOTS PAUSED, and headless has nobody to un-pause it.
+	//
+	// `[SOURCE]` core/rend/gui.cpp, gui_open_pause() -- it is a TOGGLE:
+	//   `else if (gui_state == GuiState::Paused) { ... dojo.buffering = false;
+	//    dojo.manual_pause = false; gui_setState(GuiState::Closed);
+	//    emu.start(); }`
+	// bound to EMU_BTN_PAUSE, which keyboard_device.h maps to ',' (54).
+	// That is dojo's playback control, and it is the same one rollback
+	// playback uses.
+	//
+	// `[MEASURED 2026-09-07]` Without this, a harness-driven replay sits at
+	// `play_match=1 gui_state=22 (Paused) frame=0` forever. Every "successful"
+	// headless capture I produced was ~2800 frames of a still SEGA logo with
+	// the OSD reading "Stepping 0 / 2640" - a file of the right size and
+	// duration containing nothing. AutoSeekState could not fire either, since
+	// it waits for GuiState::Closed and frame > 120.
+	//
+	// Gated on a harness flag rather than on play_match alone: a human opening
+	// a replay should still get the paused-on-frame-0 behaviour they expect.
+	static bool autoPlayDone = false;
+	if (!autoPlayDone && dojo.play_match && gui_state == GuiState::Paused
+			&& (cfgLoadInt("dojo", "AutoSeekState", -1) >= 0
+				|| cfgLoadBool("dojo", "AutoCapture", false)))
+	{
+		autoPlayDone = true;
+		NOTICE_LOG(NETWORK, "TAS TEST: auto-play -> un-pausing the replay (no hotkey headless)");
+		gui_open_pause();
+	}
+
 	static bool autoSeekDone = false;
 	if (!autoSeekDone && dojo.play_match && gui_state == GuiState::Closed && dojo.frame_number > 120)
 	{
