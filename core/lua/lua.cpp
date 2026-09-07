@@ -161,9 +161,15 @@ static void emuEventCallback(Event event, void *)
 
 static void eventCallback(const char *tag)
 {
+	// L IS READ UNDER THE LOCK, NEVER BEFORE IT - the same rule the event
+	// dispatcher above states and for the same reason. This ran the check
+	// UNLOCKED, which only proves L was non-null at some point in the past:
+	// lua_close (term(), main thread) can land between the check and the first
+	// use. This path is reached from the render thread via lua::overlay(), so
+	// the race is real, not theoretical.
+	lock_guard lock(mutex);
 	if (L == nullptr)
 		return;
-	lock_guard lock(mutex);
 	try {
 		LuaRef v = LuaRef::getGlobal(L, CallbackTable);
 		if (v.isTable() && v[tag].isFunction())
@@ -882,7 +888,13 @@ static void uiBargraphColor(float v, u32 color)
 
 static int uiButton(lua_State *L)
 {
-	checkDrawContext("uiButton");
+	// checkDrawContextL, not checkDrawContext. This is a RAW lua_CFunction -
+	// LuaBridge does not wrap it - so a thrown exception unwinds past the
+	// interpreter and reaches std::terminate instead of becoming a catchable
+	// Lua error. That rule is stated where the two guards are defined; this was
+	// the one binding that broke it, so calling ui.Button outside a draw
+	// callback killed the process rather than raising.
+	checkDrawContextL(L, "Button");
 	if (!config::ShowTrainingGameOverlay)
 		return 0;
 	const char *label = luaL_checkstring(L, 1);
