@@ -29,8 +29,9 @@ So `CLIP_SCHEMA.md`, the `CANON_*` design docs, `ROADMAP.md`'s T1–T6 and
 
 ## What is NOT
 
-**The entire UI layer.** `dojo_gui.cpp` on this branch is dojo-7's own **2,544
-lines**; the TAS fork's is **21,877**. Absent, therefore:
+**The entire UI layer.** `[MEASURED 2026-09-07]` `dojo_gui.cpp` on this branch
+is dojo-7's own **2,544 lines**, byte-identical to the base; the TAS fork's is
+**21,877**. Absent, therefore:
 
 - the piano roll, the States window (F4), the input visualizer, the notepad,
   the Input Sender, the TAS settings tab, the savestate HUD, the hotkey
@@ -40,8 +41,15 @@ lines**; the TAS fork's is **21,877**. Absent, therefore:
 
 **Consequence for the hotkey table** at the top of `CLAUDE.tas-fork.md`: almost
 none of it applies. Concretely, **the menu key here is Tab, not Escape** —
-`core/input/keyboard_device.h:57`, `set_button(EMU_BTN_MENU, 43)`. That single
-difference cost a long debugging detour; do not trust the table.
+`[SOURCE]` `core/input/keyboard_device.h` --
+`set_button(EMU_BTN_MENU, 43);			// TAB`, and the saved mapping agrees:
+`bind6 = 43:btn_menu` in `~/.config/flycast-dojo/mappings/SDL_Keyboard.cfg`.
+
+**A saved mapping overrides the compiled default**, so read the mapping before
+concluding a key does not work. Pressing Escape instead of Tab cost a long
+detour and produced two confident, wrong diagnoses along the way ("SDL ignores
+XSendEvent" and "the offscreen window never takes focus"); both were false, and
+window-scoped synthetic input opened the menu first try once the key was right.
 
 `ReleaseTasHolds()` survives in `dojo.cpp` and is called, but it releases hold
 flags for hotkeys that do not exist here. It is an inert belt for absent braces.

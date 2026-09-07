@@ -1,7 +1,27 @@
 # The unified build
 
-This repo is a scratch clone starting at **dojo-7-preview4**, carrying both
-forks' work in one binary. It **builds and runs**.
+Branch `dojo7`, based on **dojo-7-preview4**, carrying both forks' work in one
+binary. It **builds and runs**.
+
+`[CORRECTED 2026-09-07]` This file opened "this repo is a scratch clone". It is
+not one any more: `dojo7` is a branch in `NBeing/flycast-dojo`, pushed, and it
+is the checked-out branch of `~/dev/flycast-dojo` — home base.
+
+## How to read the claims here
+
+Borrowed from `~/dev/anita/nbneo-rr/CLAUDE.md`, because this document has
+already had to retract several things:
+
+- **`[MEASURED <date>]`** — a number this work produced, with the command or
+  log line that produced it. Trust it to the extent you trust that command.
+- **`[SOURCE]`** — read out of code in this checkout. **The quote is the
+  citation and the line number is a hint**, because line numbers rot.
+- **`[CORRECTED <date>]`** — this document previously claimed something else.
+  The old claim is shown, not silently replaced.
+- **Unmarked** — reasoning, not evidence. Treat accordingly.
+
+Nothing here is `[TRACE]`-grade: there is no golden trace for this emulator,
+and the determinism work is what would eventually produce one.
 
 ```sh
 cd ~/dev/flycast-dojo7-draft
@@ -9,7 +29,7 @@ ninja -C build -j 10
 ./build/flycast ~/dev/davids_fly/NoBGM_VMU.cdi
 ```
 
-Boot log from the built binary — not a compile check:
+`[MEASURED 2026-09-07]` Boot log from the built binary — not a compile check:
 
 ```
 emulator.cpp:57        Game ID is [T1212N]
@@ -36,6 +56,8 @@ David's fork is dojo-7 based. So on this branch his re-record work is a
 **same-lineage diff against dojo-7's own dojo layer** — no renames, no API
 drift, no adapter:
 
+`[MEASURED 2026-09-07]` — `diff <(tr -d '\r' < david/$f) <(tr -d '\r' < $f) | grep -c "^[<>]"`:
+
 ```
 dojo.cpp     1195 -> 2896    (+1721 differing lines)
 dojo.h        180 ->  389    (+209)
@@ -48,7 +70,15 @@ On the `video-recording` base the same work needed a `core/tas/tas_host.h`
 adapter to bridge renamed members, and even then `dojo.cpp` could not come
 across at all. Here it is `cp`.
 
-Total friction for the entire re-record pipeline: **two undeclared symbols.**
+Total friction for the entire re-record pipeline: **two undeclared symbols**
+`[MEASURED 2026-09-07]`.
+
+`[CORRECTED 2026-09-07]` That figure was true of the *build* and hid a
+functional gap: `Dojo::SaveStateFrame` / `LoadStateFrame` came across in
+`dojo.cpp` but their only callers live in `nullDC.cpp`, which was only partly
+ported. They compiled, linked, and were **unreachable** — so savestates carried
+no `.frame` sidecar and a seek had nothing to land on. A clean build is not
+evidence that a feature is wired.
 
 ## What is stubbed, and why it is honest
 

@@ -1,22 +1,54 @@
 # Working in flycast-dojo
 
-> **Branch note — `dojo7`.** This branch is the unification: blueminder's
-> `dojo-7-preview4` base, carrying the `video-recording` Lua/emuapi work, the
+> ## Branch `dojo7` — the unification
+>
+> Base **dojo-7-preview4**, carrying the `video-recording` Lua/emuapi work, the
 > TAS fork's re-record engine and `tas_*` modules, the determinism layer and the
-> video capture stack. **Read `UNIFIED.md` first** — it says what is verified,
-> what is stubbed, and what is deliberately absent. `video-recording` remains as
-> the history this came from, not a branch to migrate away from.
+> video capture stack. **Read `UNIFIED.md` first.**
 >
-> The rules below still hold; the ones about `core/oslib/audiostream.cpp`,
-> `gui_settings.cpp` and `core/wsi/{wgl,xgl}.cpp` describe the OLD base and are
-> stale here (dojo-7 moved or deleted all three).
+> `video-recording` is history now, not a branch to migrate away from.
+> `UNIFICATION.md` is superseded and marked as such; it is kept because several
+> of its conclusions were wrong in instructive ways.
 >
-> The TAS fork's own docs and harnesses live under `docs/tas-fork/` and
-> `scripts/tas-fork/`, carried unedited. **`docs/tas-fork/PORTING_NOTES.md`
-> says which half of them is true on this branch** — the engine came across,
-> the UI layer did not, and the originals do not separate the two. It also
-> lists the open architectural collisions: two capture stacks, two frame
-> counters, a half-converted determinism predicate.
+> ### Provenance marks — adopted from `~/dev/anita/nbneo-rr/CLAUDE.md`
+>
+> This work retracted a lot. Six confident claims turned out to be wrong within
+> a day of being written, so claims here carry their evidence:
+>
+> - **`[MEASURED <date>]`** — a number this work produced, with the command.
+> - **`[SOURCE]`** — read out of code in this checkout. **Quote the line; the
+>   line number is only a hint**, because line numbers rot.
+> - **`[CORRECTED <date>]`** — the doc previously claimed something else, and
+>   the old claim is shown rather than silently replaced.
+> - **Unmarked** — reasoning, not evidence.
+>
+> ### Two rules this branch learned the hard way
+>
+> **A clean build is not evidence a feature is wired.** `SaveStateFrame` /
+> `LoadStateFrame` compiled, linked, and were unreachable for several commits,
+> because their only callers lived in a file that was only partly ported.
+> Savestates silently carried no `.frame` sidecar. Likewise `avi_dump` sat as
+> ~1,050 lines behind permanently-false guards, and `dojo:AutoCapture=yes`
+> quietly did nothing.
+>
+> **An absent binding and a broken feature look identical from outside.** A test
+> that flipped `flycast.config.dojo.RecordMatches` reported a false pass: the
+> property was never bound, so the write went nowhere and the missing log read
+> as a failing guard. Verify the *instrument* before trusting the reading.
+>
+> ### Automated testing must not touch the real desktop
+>
+> `scripts/isotest.sh`, and the order of preference matters: **drive it from Lua
+> first** (no display at all), use the offscreen display only when a UI element
+> must actually be seen, and never synthesise input on `:1`. This is
+> `fbneo-rr/CLAUDE.md`'s rule, learned again here the expensive way — a stray
+> `i3` with no `-c` read the real `~/.config/i3/config` and executed its
+> autostart.
+>
+> ### Stale in the rules below
+>
+> They describe the OLD base: `core/oslib/audiostream.cpp` (now `core/audio/`),
+> `gui_settings.cpp` and `core/wsi/{wgl,xgl}.cpp` (deleted upstream).
 
 Workflow rules adapted from `nbneo-rr/CLAUDE.md`. Its architecture sections are
 not reproduced — that project's `step / render / observe / present` model is a

@@ -1507,12 +1507,23 @@ static void luaRegister(lua_State *L)
 			// savestate.* is 1-based per the spec and the adapter still does
 			// that shift.
 			//
-			// THE ADAPTER IS DELIBERATELY NOT MOVED to these names yet.
-			// emuapi/adapters/flycast.lua must keep working against the
-			// video-recording branch, which has only the old spellings. So the
-			// aliases are load-bearing, not politeness. Move the adapter once
-			// both branches carry the new names - or feature-detect, which is
-			// what emu.supports() is for.
+			// THE ADAPTER IS NOT MOVED to these names yet.
+			//
+			// [CORRECTED 2026-09-07] This previously read "the aliases are
+			// load-bearing, not politeness", because emuapi/adapters/flycast.lua
+			// had to keep working against the video-recording branch, which has
+			// only the old spellings. That reason expired the same day: dojo7
+			// became home base and video-recording is now history rather than a
+			// live target.
+			//
+			// The aliases stay anyway, for a weaker but still real reason - the
+			// published emuapi package should not churn mid-rebase, and
+			// emu.apiversion() is 0 with an explicit note to bump on the first
+			// BREAKING change. Nothing here is breaking while both spellings
+			// resolve.
+			//
+			// When the adapter does move, feature-detect rather than assume:
+			// that is what emu.supports() is for.
 
 			.beginNamespace("savestate")
 				.addFunction("save", std::function<void(int)>([](int index) {

@@ -146,9 +146,14 @@ netplay convenience, not a law. The fix is to record that they were on.
 `determinism::auditClassification()`, called from `Emulator::init()`. Verified
 on a real boot:
 
+`[MEASURED 2026-09-06]` on the video-recording base:
+
 ```
 determinism.cpp:291 N[COMMON]: determinism: 24 sync-critical, 153 unclassified, 0 stale
 ```
+
+`[MEASURED 2026-09-07]` on dojo7, after the classification was reworked for
+this base: **23 sync-critical, 127 unclassified, 0 stale**.
 
 **`0 stale` is the result that matters**: all 24 classified keys resolve to real
 registered options, so the classification has no typos and the key format is
@@ -242,10 +247,18 @@ changes, exactly as upstream does for the SH4 clock in `setNetworkState`.
 
 Verified by flipping the flag mid-session from Lua:
 
+`[MEASURED 2026-09-07]`, by flipping `flycast.config.dojo.RecordMatches` from
+Lua mid-session:
+
 ```
 determinism.cpp:73  determinism: mode -> on,  resetting the block cache
 determinism.cpp:73  determinism: mode -> off, resetting the block cache
 ```
+
+That test first reported a FALSE PASS. `flycast.config.dojo` bound only
+`ShowTrainingGameOverlay`, so the Lua write went nowhere and the *absence* of a
+log looked like the guard failing. **An absent binding and a broken guard are
+indistinguishable from the outside** - which is why the flag is now bound.
 
 `config::RecordMatches` and `config::Replay` are now bound as
 `flycast.config.dojo.*`, because the mode was otherwise reachable only by
