@@ -185,12 +185,41 @@ version-controlled thing, and `install.sh` renders it.
 
 ---
 
-## 5. Start a session by reading the backlog
+## 5. Know which layer you are in
 
-Two running lists, both kept current:
+Three layers, and most bad additions are not wrong — they are in the wrong one.
+
+| layer | maps | portable across |
+|---|---|---|
+| the tool | concepts → workflows | emulators AND games |
+| a game profile | machine bytes → fighting-game concepts | emulators, per game |
+| `emuapi` | emulator → abstract machine | emulators |
+
+**The tool never reads a memory address.** It asks the profile; the profile
+reads addresses; the profile calls emuapi. The moment the tool knows a number it
+is welded to one game, and the value of the whole arrangement — N profiles plus
+one tool, instead of a trainer per game per emulator — is gone.
+
+> `[MEASURED 2026-09-05]` The conformance suite, which is supposed to be
+> neutral, was poking `0x8C010000`. An SH4 address. It passed everywhere it had
+> ever run because it had only ever run on a Dreamcast. **A neutral layer with
+> one host's facts inside it looks exactly like a neutral layer until a second
+> host arrives.**
+
+The reasoning, the four-way classification of what belongs where, and the test
+for a new idea are in `emuapi/ARCHITECTURE.md`. Read it before adding surface.
+
+---
+
+## 6. Start a session by reading the backlog
+
+Three documents, all kept current:
 
 - `TODOS.md` — the branch's work: capture, rollback, Windows verification.
-- `LUA_TODO.md` — the cross-emulator Lua interface and the fbneo-rr port.
+- `LUA_TODO.md` — the cross-emulator Lua interface and the port backlog.
+- `emuapi/ARCHITECTURE.md` — what the interface is FOR and where a new idea
+  belongs. Read this one first; it is the only document that can tell you an
+  addition is in the wrong layer, which is the most common way to be wrong here.
 
 Both mark what is **verified**, what is **reasoned**, and what was **never
 run**. The three unverified items have stayed explicitly unverified across many
@@ -203,7 +232,7 @@ exists to prevent.
 
 ---
 
-## 6. Traps already paid for
+## 7. Traps already paid for
 
 `emuapi/INTEGRATION.md` is the running list for the Lua interface —
 adapters must be idempotent to load, error propagation differs between wrapped

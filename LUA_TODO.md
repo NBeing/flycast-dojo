@@ -361,6 +361,65 @@ transcripts and the timeline as spec surface.
 
 ---
 
+## Part 1b — What the interface still needs, re-derived from the goal
+
+`[SCOPED 2026-09-06]` The survey's sixteen recommendations were ranked against
+the interface as it stood. Once the goal was stated properly — **fighting-game
+trainers AND TAS, written once** — the ordering changed, and most of what was
+open turned out to be furniture.
+
+The reasoning is in `emuapi/ARCHITECTURE.md`. The short version: a trainer is a
+TAS that does not rewind, both are built from four verbs (step, save/restore,
+press, look), and the design constraint is *expose exactly what a game profile
+needs in order to be writable, and nothing else.*
+
+### Four additions, in this order
+
+1. **Time, declared.** A host must be able to say what its counter counts. A
+   trainer reporting frame advantage in drawn frames is **confidently wrong** on
+   a game that computes 1-2 logic ticks per drawn frame — nbneo measured the
+   same slide as 23 in one run and 24 in another. Filed originally as a cheap
+   nicety (survey rec 15); for trainers it is a correctness property, and this
+   entry records the re-rank rather than quietly performing it.
+2. **State identity.** An equality-only generation stamp (survey rec 4). Not a
+   clock. It is what lets a recorded position stay meaningful, what lets a
+   branch know its siblings, and what lets a host pool and dedupe states
+   invisibly. Needs C++ on flycast: rollback restores via `ggpo.cpp` and
+   `load_mem` calls `dc_deserialize` directly, neither firing an event, and a
+   *failed* load still fires `Event::LoadState`.
+3. **Imperative `emu.step(n)`.** The interface has only the observer posture -
+   `frameadvance` is a coroutine yield, which requires something else to own the
+   loop. Exploration needs the driver posture, where the script owns the loop
+   and the emulator is a function it calls.
+4. **Determinism, declared.** Comparing outcomes is meaningless unless the same
+   state and inputs give the same result. A host that cannot promise it must say
+   so, or a script doing search produces noise that looks like data.
+
+With `memory.registerexec` already re-opened as capability-gated behind them.
+
+### Blocked on capabilities nobody has finished
+
+Rewind, search, branching, bisection and record-and-loop all depend on **cheap
+states** (deltas and dedupe) and **halt-and-resume** (break, inspect,
+single-step, continue). Neither exists in any project in this family. The twenty
+portable primitives are nearly done; these two are the centre of gravity.
+
+### Demoted to furniture
+
+Survey recs 5, 11, 12, 13 and 16. Each adds a claim about what emulators do,
+validated against one emulator. Not wrong, not next.
+
+### Corrected
+
+The census reading that `movie.*` has **zero call sites across 583 files** was
+used here as an argument against specifying it. That is too strong. The census
+measured the *existing fbneo-lineage* movie API, which nobody calls; the case
+for a **re-record model** - an edit funnel, inputs as a last-write-wins map,
+timeline identity - is about a shape that does not exist yet and which the TAS
+fork has working. Both readings are true, and only the first was being quoted.
+
+---
+
 ## Part 2 — Port work, in dependency order
 
 ### [P] Tier 1 — unlocks the most script functionality
