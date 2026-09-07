@@ -26,9 +26,20 @@ DATA="${XDG_DATA_HOME:-$HOME/.local/share}/flycast-dojo/replays"
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}/flycast-dojo"
 [ -n "$FLYR" ] || { echo "usage: $0 <bin> <rom> <existing .flyr>"; exit 1; }
 
+# WORK ON A COPY. Opening a clip is not read-only: tas_clip reconciles and
+# REWRITES clip.json next to the movie, so pointing this at the in-repo fixture
+# leaves scripts/fixtures/clip.json modified in the working tree every run.
+WORK=$(mktemp -d)
+cp "$FLYR" "$WORK/" 2>/dev/null
+[ -f "$(dirname "$FLYR")/clip.json" ] && cp "$(dirname "$FLYR")/clip.json" "$WORK/" 2>/dev/null
+FLYR="$WORK/$(basename "$FLYR")"
+
 SAVED=""
 if [ -f "$CFG/flycast.lua" ]; then SAVED=$(mktemp); cp "$CFG/flycast.lua" "$SAVED"; fi
-restore() { if [ -n "$SAVED" ]; then cp "$SAVED" "$CFG/flycast.lua"; rm -f "$SAVED"; else rm -f "$CFG/flycast.lua"; fi; }
+restore() {
+	if [ -n "$SAVED" ]; then cp "$SAVED" "$CFG/flycast.lua"; rm -f "$SAVED"; else rm -f "$CFG/flycast.lua"; fi
+	[ -n "${WORK:-}" ] && rm -rf "$WORK"
+}
 trap restore EXIT
 
 rm -f /tmp/rb-marker.txt
