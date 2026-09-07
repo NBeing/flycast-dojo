@@ -27,6 +27,9 @@
 #include "wsi/context.h"
 #include "input/gamepad_device.h"
 #include "gui_util.h"
+#ifndef LIBRETRO
+#include "video_recorder.h"
+#endif
 #include "game_scanner.h"
 #include "version.h"
 #include "oslib/oslib.h"
@@ -783,6 +786,32 @@ static void gui_display_commands()
 	}
 
 	}
+
+#ifndef LIBRETRO
+	// Capture toggle, IN THE PAUSE MENU.
+	//
+	// The video-recording branch put this only in the game-library toolbar
+	// (gui_display_content), which is reachable exactly once - before a game is
+	// running. That is the wrong screen for a capture workflow: you cannot start
+	// or stop a recording while playing, and cannot see whether one is running.
+	// The library button is still there; this is the one that matters.
+	{
+		char rec_txt[64];
+		const bool rec_on = videorec::isRecording();
+		sprintf(rec_txt, "%s  %s", rec_on ? ICON_FA_CIRCLE_STOP : ICON_FA_VIDEO,
+				rec_on ? "Stop Recording" : "Record Video");
+		if (rec_on)
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+		if (ImGui::Button(rec_txt, ScaledVec2(200, 40)))
+			videorec::toggle();
+		if (rec_on)
+			ImGui::PopStyleColor();
+		if (rec_on && ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", videorec::status().c_str());
+		displayed_button_count++;
+		ImGui::NextColumn();
+	}
+#endif
 
 	char resume_txt[64];
 	sprintf(resume_txt, "%s  Resume", ICON_FA_PLAY);
@@ -3469,9 +3498,27 @@ static void gui_display_content()
 	char settings_txt[64];
 	sprintf(settings_txt, "%s ", ICON_FA_WRENCH);
 
+	// Video capture toggle. The icon IS the state readout: a camera when idle,
+	// a stop button while running, so the toolbar never disagrees with reality.
+	//
+	// NOTE ON THE PORT: the video-recording branch placed this by threading a
+	// `record_extra` term through seven hand-tuned width expressions, because
+	// its toolbar carried question/lan/replays/help buttons too. dojo-7 moved
+	// all of those into dojo_gui.cpp tabs, so that arithmetic describes a row
+	// that does not exist here and was re-implemented rather than merged.
+#ifndef LIBRETRO
+	char record_txt[64];
+	const bool recording = videorec::isRecording();
+	sprintf(record_txt, "%s ", recording ? ICON_FA_CIRCLE_STOP : ICON_FA_VIDEO);
+	const float record_extra = ImGui::CalcTextSize(record_txt).x
+			+ ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+#else
+	const float record_extra = 0.0f;
+#endif
+
 #if !defined(__ANDROID__) && !defined(TARGET_IPHONE) && !defined(TARGET_UWP) && !defined(__SWITCH__)
 	//ImGui::SameLine(0, 32 * settings.display.uiScale);
-	filter.Draw("##Filter", ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(settings_txt).x - ImGui::GetStyle().FramePadding.x * 3.0f);
+	filter.Draw("##Filter", ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(settings_txt).x - record_extra - ImGui::GetStyle().FramePadding.x * 3.0f);
 #endif
     if (gui_state != GuiState::SelectDisk)
     {
@@ -3489,7 +3536,20 @@ static void gui_display_content()
 			dc_exit();
 		ImGui::SameLine();
 #else
-		ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(settings_txt).x - ImGui::GetStyle().FramePadding.x * 2.0f);
+		ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(settings_txt).x - record_extra - ImGui::GetStyle().FramePadding.x * 2.0f);
+#endif
+
+#ifndef LIBRETRO
+		// Red while running, so a capture left on is hard to miss.
+		if (recording)
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+		if (ImGui::Button(record_txt))
+			videorec::toggle();
+		if (recording)
+			ImGui::PopStyleColor();
+		// status() carries the live frame and drop counts while recording.
+		gameTooltip(recording ? videorec::status() : std::string("Start video recording"));
+		ImGui::SameLine();
 #endif
 
         if (ImGui::Button(settings_txt))
