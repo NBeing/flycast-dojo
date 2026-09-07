@@ -812,6 +812,37 @@ static void uiSameLine()
 	ImGui::SameLine();
 }
 
+// SameLine WITH A COLUMN POSITION - the primitive a grid actually needs.
+//
+// Without it a caller can only say "next to the last thing", so the width of
+// every preceding widget decides where this one lands. In a proportional font
+// that means a row of one-character cells never lines up with its header. With
+// an offset the caller places each column at a known x and the font stops
+// mattering.
+//
+// ImGui::SameLine(0.0f) is exactly the old no-arg behaviour (0 means "default
+// spacing"), so an existing script that calls SameLine() is unaffected.
+static int uiSameLineAt(lua_State *L)
+{
+	checkDrawContextL(L, "SameLine");
+	if (!config::ShowTrainingGameOverlay)
+		return 0;
+	ImGui::SameLine((float)luaL_optnumber(L, 1, 0.0));
+	return 0;
+}
+
+// How wide a string will actually be, in the current font. The escape hatch
+// from guessing: a caller that can MEASURE does not need a monospace font to
+// align anything. Returns width, height.
+static int uiCalcTextSize(lua_State *L)
+{
+	checkDrawContextL(L, "CalcTextSize");
+	const ImVec2 sz = ImGui::CalcTextSize(luaL_checkstring(L, 1));
+	lua_pushnumber(L, sz.x);
+	lua_pushnumber(L, sz.y);
+	return 2;
+}
+
 static void uiSameLinePlaceholder(const std::string& text)
 {
 	checkDrawContext("uiSameLinePlaceholder");
@@ -1164,7 +1195,13 @@ static int uiSelectable(lua_State *L)
 	checkDrawContextL(L, "Selectable");
 	const char *label = luaL_checkstring(L, 1);
 	const bool selected = lua_toboolean(L, 2) != 0;
-	lua_pushboolean(L, ImGui::Selectable(label, selected));
+	// OPTIONAL SIZE. A zero-width Selectable spans the remaining content width,
+	// so only one ever fits on a row - which is right for a list and useless
+	// for a grid of cells. ImVec2(0,0) is the default, so omitting the size is
+	// exactly the old behaviour.
+	const ImVec2 size((float)luaL_optnumber(L, 3, 0.0),
+			(float)luaL_optnumber(L, 4, 0.0));
+	lua_pushboolean(L, ImGui::Selectable(label, selected, 0, size));
 	return 1;
 }
 
@@ -1811,7 +1848,8 @@ static void luaRegister(lua_State *L)
 				.addFunction("Text", uiText)
 				.addFunction("TextColored", uiTextColor)
 				.addFunction("Button", uiButton)
-				.addFunction("SameLine", uiSameLine)
+				.addFunction("SameLine", uiSameLineAt)
+				.addFunction("CalcTextSize", uiCalcTextSize)
 				.addFunction("Checkbox", uiCheckbox)
 				.addFunction("Selectable", uiSelectable)
 				.addFunction("SliderFloat", uiSliderFloat)
