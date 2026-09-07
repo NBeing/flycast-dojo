@@ -319,12 +319,32 @@ the machine - loading there races the running emulation thread - and stopping
 first fails for a *separate*, still-unidentified reason. Two tangled problems,
 not one.
 
-What `gui_loadState` does differently from that point is the open question. It
-takes `guiMutex`, requires `gui_state == GuiState::Closed`, and goes through the
-slot/file path rather than `dc_loadstate(Deserializer&)` directly. One of those
-is load-bearing. **Next probe: call `gui_loadState()` itself from a deferred
-action.** If that works, the difference is in the path, not the place, and it
-can be bisected from there.
+`[MEASURED 2026-09-07]` **It is the PLACE, not the path.** `gui_loadState()`
+itself - the emulator's own load, the one the auto-seek block calls from this
+very function - also wedges when posted to the deferred queue. The engine logs
+`Loaded state ver ...` and the emulator then spins.
+
+And it is **not a deadlock**. `/proc/<pid>/task/*/stat` shows the same two
+threads RUNNING and accumulating CPU at the same rate before and after, with
+every other thread asleep. So the guest is executing and never reaching vblank -
+a guest-level spin caused by the load, not a host lock. (gdb could not attach:
+`ptrace_scope=1` blocks a sibling, so the process must be launched under gdb to
+get stacks.)
+
+**Leading hypothesis, untested: the state being loaded is TORN.** The probe
+saves its slot with `flycast.savestate.save(0)` from a `vblank` callback, i.e.
+on the emulation thread. `luaSavestateSlot` takes `pausing::Scoped(MODAL)`
+unconditionally, and a stop requested from the emulation thread cannot join that
+thread - so the machine may not actually be stopped while `dc_savestate` reads
+it. A state captured mid-frame would load into a machine that spins, which is
+exactly the symptom. Note this predates the arbiter: the ritual it replaced
+called `gui_open_settings()` from the same place, which also stops.
+
+**Next probe:** save the slot from somewhere that is NOT the emulation thread
+(or verify the saved state with `dojo:VerifyState=yes`, which re-serializes
+after load and names the first differing offset) before concluding anything
+about the deferred point. If the state is torn, every result in this section
+about the deferred load is measuring a bad fixture rather than a bad place.
 
 The hook itself is kept - it is sound, it runs actions between frames, and
 `flycast.test.quit(code)` in the test-tooling proposal needs exactly it. The Lua

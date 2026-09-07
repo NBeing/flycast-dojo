@@ -1898,6 +1898,18 @@ static void luaRegister(lua_State *L)
 				.addFunction("tostring", saveStateToString)
 				.addFunction("fromstring", loadStateFromString)
 				.addFunction("hash", hashState)
+				// DIAGNOSTIC (pool wedge, 2026-09-07): call gui_loadState()
+				// ITSELF from the deferred point. It is the one load known to
+				// work from there - the auto-seek block in mainui_rend_frame
+				// calls it - so if this works the difference is the PATH (slot
+				// file, guiMutex, the GuiState::Closed check) and not the
+				// PLACE, and the bisect continues inside gui_loadState. If it
+				// wedges too, the place is not safe after all and gui_loadState
+				// only ever worked because it runs once, early, before the
+				// pipeline is full.
+				.addFunction("loadSlotLater", std::function<void()>([]() {
+					deferred::post([]() { gui_loadState(); });
+				}))
 				// NO savestate.loadLater HERE - IT DID NOT WORK, and shipping
 				// a binding that wedges the emulator would be worse than not
 				// shipping one. What was tried, all from deferred::drain() at
