@@ -1,7 +1,8 @@
 # SPIKE — a machine pool in flycast?
 
-`[2026-09-07]` Feasibility only. No code was written for this; the numbers are
-measured on `dojo7` at `24a334e98`.
+`[2026-09-07]` Started as feasibility only, then turned into work: SERMAP and
+two savestate round-trip fixes landed out of it. Numbers measured on `dojo7`,
+starting at `24a334e98`.
 
 The concept is nbneo-rr's, stated by you there on 2026-09-04:
 
@@ -167,7 +168,12 @@ any of the other ten would land here.
 
 ## What this spike did NOT do
 
-No code. No timing. The 1,252 figure is a raw symbol count, **not** a
+`[CORRECTED 2026-09-07]` This section opened "No code. No timing." Both became
+false within the hour: the spike grew into porting SERMAP and two savestate
+fixes, and the primitives are timed above. What remains true is the caveat
+below.
+
+The 1,252 figure is a raw symbol count, **not** a
 machine-tier count — comparing it to nbneo's 320 flatters flycast's problem or
 overstates it depending on how the tiering lands, and I did not do the tiering.
 Treat it as an order of magnitude, not a worklist.
