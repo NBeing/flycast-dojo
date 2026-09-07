@@ -290,3 +290,16 @@ and raw bindings, colour packing is rarely what you assume. Every entry there
 is something that actually went wrong, not a precaution.
 
 Add to it rather than re-learning.
+
+## The emulator's stdout is NOT a text file — use `grep -a`
+
+`flycast` writes NUL bytes into its output, so a redirected log is `data` to
+`file(1)` and **plain `grep` silently prints nothing** — no matches, no "binary
+file matches", no error, exit status 1. `sed`, `tail` and `cat` all show the
+text fine, which makes it look like the line you are grepping for was never
+logged.
+
+[MEASURED 2026-09-07] This produced two confidently wrong conclusions in one
+session: "the NOTICE_LOG never fired" (it had, 10 times) and "no COMMON channel
+output" (there was). Always `grep -a` a captured flycast log, and distrust a
+zero-match result you have not confirmed with `sed`/`tail`.

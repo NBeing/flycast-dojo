@@ -1,4 +1,5 @@
 #include "dojo.h"
+#include "pause.h"
 #include "tasmacro.h"
 #include "tas_auto.h"
 #include "rend/video_recorder.h"
@@ -2847,7 +2848,11 @@ void Dojo::Reset()
 
 	stepping = false;
 	buffering = false;
-	manual_pause = false;
+	// Forget EVERY reason, not just the user's. This is session teardown, and a
+	// reason that outlives the machine it referred to would stop the next one -
+	// a script that paused and never resumed before the game was closed would
+	// otherwise hand its pause to the following session.
+	pausing::resetAll();
 	target_step_frame = 0;
 	replay_bootload = false;
 	macro_fullload = false;	// an aborted Play Macro Full load (quit mid-boot) must not leak its deferred State-0 arm

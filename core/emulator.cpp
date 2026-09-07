@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "emulator.h"
+#include "pause.h"
 #include "determinism.h"
 #include "types.h"
 #include "stdclass.h"
@@ -643,6 +644,10 @@ void Emulator::runInternal()
 
 void Emulator::unloadGame()
 {
+	// Engine-level teardown: drop every pause reason. resetAll has no side
+	// effects on purpose - it must not try to restart a machine that is going
+	// away.
+	pausing::resetAll();
 	try {
 		stop();
 	} catch (...) { }

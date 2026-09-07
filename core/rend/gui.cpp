@@ -39,6 +39,7 @@
 #include "emulator.h"
 #include "rend/mainui.h"
 #include "lua/lua.h"
+#include "pause.h"
 #include "gui_chat.h"
 #include "imgui_driver.h"
 #if FC_PROFILER
@@ -533,7 +534,13 @@ void gui_open_settings()
 		if (cfgLoadBool("dojo", "Training", false) && config::EnableTrainingLua)
 			lua::releasePressedButtons();
 
-		if (dojo.manual_pause || dojo.buffering || dojo.stepping)
+		// buffering and stepping stay as themselves ON PURPOSE. They are not
+		// pause REASONS, they are state machines that imply a stop: stepping
+		// carries target_step_frame and drives the scrub, buffering carries the
+		// netplay `frame_number == session_inputs.size()` test. Folding those
+		// into bits would throw the information away. The user's own pause WAS
+		// purely a reason, so it is one now.
+		if (pausing::active(pausing::USER) || dojo.buffering || dojo.stepping)
 		{
 			gui_state = GuiState::Paused;
 		}
@@ -4679,8 +4686,8 @@ void gui_open_step()
 
 	dojo.target_step_frame = dojo.frame_number + 1;
 
-	if (dojo.manual_pause)
-		dojo.manual_pause = false;
+	if (pausing::active(pausing::USER))
+		pausing::clear(pausing::USER);
 
 	if (cfgLoadBool("dojo", "Training", false) || dojo.play_match)
 	{
@@ -4702,10 +4709,18 @@ void gui_open_pause()
 	{
 		if (gui_state == GuiState::Closed)
 		{
-			dojo.manual_pause = true;
 			try {
 				emu.stop();
 				gui_setState(GuiState::Paused);
+				// TAKEN AFTER THE STOP, NOT BEFORE. This machine owns the stop;
+				// the arbiter must find it already stopped so it records the
+				// reason and leaves emu alone (it only restarts what it stopped).
+				// Setting it first made the arbiter stop a running machine that
+				// the very next line was about to stop as well - two owners, two
+				// stops, and two emu.start()s on the way out. The trace said so
+				// plainly: `mask 00 -> 01 (arbiter owns the stop)` immediately
+				// before this stop.
+				pausing::set(pausing::USER);
 			} catch (const FlycastException& e) {
 				gui_stop_game(e.what());
 			}
@@ -4715,10 +4730,13 @@ void gui_open_pause()
 			if (dojo.buffering && dojo.frame_number == dojo.session_inputs.size())
 				return;
 			dojo.buffering = false;
-			dojo.manual_pause = false;
 			gui_setState(GuiState::Closed);
 			GamepadDevice::load_system_mappings();
 			emu.start();
+			// Dropped AFTER the restart, mirroring the take above: releasing it
+			// first would let the arbiter restart the machine a line before this
+			// one does.
+			pausing::clear(pausing::USER);
 		}
 	}
 }

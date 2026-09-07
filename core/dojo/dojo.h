@@ -288,7 +288,6 @@ public:
 
 	bool stepping = false;
 	bool buffering = false;
-	bool manual_pause = false;
 	u32 target_step_frame = 0;
 	bool step_held = false;			// STEP key currently held (hold-to-frame-advance)
 	double next_step_time = 0;		// os_GetSeconds() deadline of the next held-scrub step (accumulator pacing)

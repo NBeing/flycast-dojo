@@ -30,6 +30,7 @@
 #include "network/ggpo.h"
 #include "cfg/option.h"
 #include "emulator.h"
+#include "pause.h"
 #include "input/gamepad_device.h"
 #include "input/mouse.h"
 #include "hw/maple/maple_devs.h"
@@ -460,6 +461,27 @@ static LuaRef getButtonTable(int player, lua_State *L)
 
 // Present and true presses, present and false releases, absent leaves the
 // button alone - so a script can drive one button without disturbing the rest.
+// ONE savestate path, four call sites (emulator.saveState/loadState and the
+// neutral savestate.save/load aliases). Each carried its own copy of the
+// stop-and-restore ritual: open the settings menu if the machine was running,
+// do the savestate, then re-call gui_open_settings() to undo it.
+//
+// That is wrong twice over. It restores by re-calling a TOGGLE, so anything
+// that changed gui_state in between gets clobbered; and it stopped the machine
+// by opening the MENU, so saving a state changed what was on screen as a side
+// effect, and any Lua overlay went dark for the duration. pausing::Scoped stops
+// the machine where it stands and restarts only what it stopped.
+static void luaSavestateSlot(int index, bool load)
+{
+	if (index < 0 || index > 9)
+		throw std::runtime_error("savestate slot must be between 0 and 9");
+	pausing::Scoped guard(pausing::MODAL);
+	if (load)
+		dc_loadstate(index);
+	else
+		dc_savestate(index);
+}
+
 static void setButtonTable(int player, LuaRef buttons, lua_State *L)
 {
 	checkPlayerNum(L, player);
@@ -1313,11 +1335,26 @@ static void luaRegister(lua_State *L)
 						NOTICE_LOG(COMMON, "lua: pause -> Commands (menu); no movie or"
 								" training, so the overlay-visible pause is unavailable");
 					}
+					// ORDER MATTERS, and getting it wrong is not cosmetic. The
+					// reason is taken AFTER the gui_state machine has stopped
+					// the machine, so the arbiter finds it already stopped and
+					// records the reason without touching emu. Setting it FIRST
+					// made the arbiter stop a running machine that gui_open_pause
+					// was about to stop as well - a double stop, and two owners
+					// both calling emu.start() on the way out. Measured in the
+					// trace as `mask 00 -> 04 (arbiter owns the stop)` immediately
+					// followed by gui's own stop.
+					pausing::set(pausing::LUA);
 				}))
 				// Symmetric with pause(): undo whichever stop actually happened.
 				// Resuming from the wrong state is how a paused emulator gets
 				// stuck - the old version only knew how to leave Commands.
 				.addFunction("resume", std::function<void()>([]() {
+					// Dropped FIRST here, for the mirror-image reason: the gui
+					// call below restarts the machine, so the reason must be gone
+					// before it does or the arbiter is left holding a reason for
+					// a machine that is running again.
+					pausing::clear(pausing::LUA);
 					if (gui_state == GuiState::Paused)
 						gui_open_pause();		// the toggle's other half
 					else if (gui_state == GuiState::Commands)
@@ -1327,30 +1364,8 @@ static void luaRegister(lua_State *L)
 				// players are 1-based. The neutral savestate.* alias is
 				// 1-based per the spec; this one keeps its existing base so
 				// current scripts are not silently shifted by one.
-				.addFunction("saveState", std::function<void(int)>([](int index) {
-					if (index < 0 || index > 9)
-						throw std::runtime_error("savestate slot must be between 0 and 9");
-					bool restart = false;
-					if (gui_state == GuiState::Closed) {
-						gui_open_settings();
-						restart = true;
-					}
-					dc_savestate(index);
-					if (restart)
-						gui_open_settings();
-				}))
-				.addFunction("loadState", std::function<void(int)>([](int index) {
-					if (index < 0 || index > 9)
-						throw std::runtime_error("savestate slot must be between 0 and 9");
-					bool restart = false;
-					if (gui_state == GuiState::Closed) {
-						gui_open_settings();
-						restart = true;
-					}
-					dc_loadstate(index);
-					if (restart)
-						gui_open_settings();
-				}))
+				.addFunction("saveState", std::function<void(int)>([](int index) { luaSavestateSlot(index, false); }))
+				.addFunction("loadState", std::function<void(int)>([](int index) { luaSavestateSlot(index, true); }))
 				.addFunction("exit", dc_exit)
 				.addFunction("isOnline", std::function<bool()>([]() {
 					return settings.network.online;
@@ -1729,30 +1744,8 @@ static void luaRegister(lua_State *L)
 			// that is what emu.supports() is for.
 
 			.beginNamespace("savestate")
-				.addFunction("save", std::function<void(int)>([](int index) {
-					if (index < 0 || index > 9)
-						throw std::runtime_error("savestate slot must be between 0 and 9");
-					bool restart = false;
-					if (gui_state == GuiState::Closed) {
-						gui_open_settings();
-						restart = true;
-					}
-					dc_savestate(index);
-					if (restart)
-						gui_open_settings();
-				}))
-				.addFunction("load", std::function<void(int)>([](int index) {
-					if (index < 0 || index > 9)
-						throw std::runtime_error("savestate slot must be between 0 and 9");
-					bool restart = false;
-					if (gui_state == GuiState::Closed) {
-						gui_open_settings();
-						restart = true;
-					}
-					dc_loadstate(index);
-					if (restart)
-						gui_open_settings();
-				}))
+				.addFunction("save", std::function<void(int)>([](int index) { luaSavestateSlot(index, false); }))
+				.addFunction("load", std::function<void(int)>([](int index) { luaSavestateSlot(index, true); }))
 				.addFunction("tostring", saveStateToString)
 				.addFunction("fromstring", loadStateFromString)
 				.addFunction("hash", hashState)
