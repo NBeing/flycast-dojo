@@ -213,10 +213,23 @@ the first differing byte, then SERMAP names it:
   `gdb ptype /o Sh4Context` gives as **`cycle_counter`**: the SH4's position
   within its timeslice. A phase difference, not a value difference.
 
-**Leading remaining candidate:** `dojo.frame_number`. It is not restored by a
-savestate and climbs 461 / 762 / 1063 across restores — the only thing found so
-far that is a clean function of restore ordinal. Ruled out as an *input* source
-(recording off changes nothing) but not as a timing input.
+**`dojo.frame_number` is EXONERATED.** `[MEASURED 2026-09-07]` It was the
+leading candidate — it is not restored by an in-memory savestate and climbed
+461 / 762 / 1063 across three restores, the only thing found that was a clean
+function of restore ordinal. That was a real bug and it is fixed (the movie
+position now travels in the state blob; all three members start at 460 and run
+to 760). **The drift did not change.** The members still end at
+`4215541059 / 399580219 / 665769862` — byte-identical to the pre-fix run, and
+to the ThreadedRendering and null-audio runs. Two bugs, not one.
+
+With that gone the candidate list is thin, and the pattern to explain is
+specific: the drift is *deterministic*, *accumulates per restore*, and *is
+cleared by a fresh process*. What remains untested is state living outside the
+serialized set — ARM7/AICA residue, PVR/TA, and host-side allocator or
+scheduler ordering that a process teardown resets. A promising next probe is to
+restore the SAME blob twice in a row with zero frames run in between and hash
+immediately: if H0 is stable but the machines still diverge later, the
+difference is in something the hash does not cover.
 
 ## Three options
 
