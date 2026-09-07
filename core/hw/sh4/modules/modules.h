@@ -140,7 +140,7 @@ private:
 	void setStatusBit(StatusBit bit);
 	bool isTDFE() const;
 	bool isRDF() const;
-	void updateBaudRate();
+	void updateBaudRate(bool reschedule = true);
 	void setBreak(bool on);
 	void sendBreak();
 	bool txDone();

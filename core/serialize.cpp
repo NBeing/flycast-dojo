@@ -15,41 +15,52 @@
 #include "hw/naomi/naomi_cart.h"
 #include "hw/bba/bba.h"
 #include "cfg/option.h"
+#include "cfg/cfg.h"
 #include "imgread/common.h"
 
 void dc_serialize(Serializer& ser)
 {
+	// TAS desync harness: with -config dojo:VerifyState=yes, log each subsystem's start offset so the
+	// idempotency probe's "first diff at offset N" maps to the exact culprit subsystem. Grep "SERMAP".
+	// SERMAP is a DEBUGGING firehose (every subsystem offset, on every save AND load), so it has
+	// its own key rather than riding on VerifyState, which is now always on.
+	const bool mapLog = cfgLoadBool("dojo", "StateMapLog", false);
+
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u aica",       (u32)ser.size());
 	aica::serialize(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u sb",         (u32)ser.size());
 	sb_serialize(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u nvmem",      (u32)ser.size());
 	nvmem::serialize(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u gdrom",      (u32)ser.size());
 	gdrom::serialize(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u maple",      (u32)ser.size());
 	mcfg_SerializeDevices(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u pvr",        (u32)ser.size());
 	pvr::serialize(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u sh4",        (u32)ser.size());
 	sh4::serialize(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u bba_modem",  (u32)ser.size());
 	ser << config::EmulateBBA.get();
 	if (config::EmulateBBA)
 		bba_Serialize(ser);
 	ModemSerialize(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u sh4_2",      (u32)ser.size());
 	sh4::serialize2(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u libGDR",     (u32)ser.size());
 	libGDR_serialize(ser);
-
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u naomi",      (u32)ser.size());
 	naomi_Serialize(ser);
 
 	ser << config::Broadcast.get();
 	ser << config::Cable.get();
 	ser << config::Region.get();
 
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u naomi_cart", (u32)ser.size());
 	naomi_cart_serialize(ser);
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u gd_hle",     (u32)ser.size());
 	gd_hle_state.Serialize(ser);
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP %10u END",        (u32)ser.size());
 
 	DEBUG_LOG(SAVESTATE, "Saved %d bytes", (u32)ser.size());
 }

@@ -128,14 +128,20 @@ void SCIFSerialPort::rxSched()
 	}
 }
 
-void SCIFSerialPort::updateBaudRate()
+void SCIFSerialPort::updateBaudRate(bool reschedule)
 {
 	// 1 start bit, 7 or 8 data bits, optional parity bit, 1 or 2 stop bits
 	frameSize = 1 + 8 - SCIF_SCSMR2.CHR + SCIF_SCSMR2.PE + 1 + SCIF_SCSMR2.STOP;
 	int bauds = SH4_MAIN_CLOCK / 4 / (SCIF_SCBRR2 + 1) / 32 / (1 << (SCIF_SCSMR2.CKS * 2));
 	cyclesPerBit = SH4_MAIN_CLOCK / bauds;
 	INFO_LOG(SH4, "SCIF: Frame size %d cycles/bit %d (%d bauds) pipe %p", frameSize, cyclesPerBit, bauds, pipe);
-	sh4_sched_request(schedId, frameSize * cyclesPerBit);
+	// reschedule=false on savestate load: the exact sched entry was just deserialized, and
+	// re-requesting it from "now" would overwrite the restored start/end with values computed at
+	// load time - shifting the serial timer's phase vs the recorded timeline. That made
+	// save->load->save non-idempotent (first diff = this sched entry) and desynced TAS replays
+	// seeded from a savestate.
+	if (reschedule)
+		sh4_sched_request(schedId, frameSize * cyclesPerBit);
 }
 
 // SCIF SCFTDR2 - Transmit FIFO Data Register
@@ -439,7 +445,10 @@ void SCIFSerialPort::deserialize(Deserializer& deser)
 		statusLastRead = 0;
 		transmitting = false;
 	}
-	updateBaudRate();
+	// Recompute the derived frameSize/cyclesPerBit from the (already restored) SCIF registers, but
+	// keep the deserialized schedule for V43+ states - rescheduling from "now" desyncs (see
+	// updateBaudRate). Pre-V43 states have no saved schedule, so reschedule as before.
+	updateBaudRate(deser.version() < Deserializer::V43);
 }
 
 struct PTYPipe : public SerialPort::Pipe

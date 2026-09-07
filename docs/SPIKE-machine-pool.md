@@ -107,13 +107,60 @@ parallel", it does not.
 
 ---
 
+## `[MEASURED 2026-09-07]` The pool primitives, timed
+
+MvC2 on this machine, median of 5, from Lua via `savestate.tostring` /
+`fromstring` / `hash` — the in-memory path a pool would actually use:
+
+```
+blob           27,797,723 bytes
+serialize          79.0 ms      checkout
+deserialize         7.7 ms      restore
+hash               56.0 ms      fingerprint
+checkout+restore   86.6 ms  ->  11.5 machines/sec sequential
+```
+
+**Restore is 10x cheaper than checkout**, which decides the shape of any pool
+here: snapshot once, fan out many. Restoring from an existing blob runs at
+~130/sec; snapshotting fresh each time caps you near 12/sec.
+
+Note this corrects a figure carried from the TAS fork's notes, which describe a
+state load as "~500 ms". That is the **disk** path — open, decompress,
+deserialize. In memory it is 7.7 ms, some 65x faster, and a pool would never
+touch disk.
+
+Hashing every checkout would roughly double the cost (56 ms on top of 7.7 ms),
+so verification wants to be sampled rather than universal.
+
+## `[MEASURED 2026-09-07]` The blocker, localized — and two of three fixed
+
+SERMAP is ported, and it named the culprit on its first run.
+
+| | first diff at | subsystem | fix |
+|---|---|---|---|
+| before | 2,130,953 | **AICA** (`aica @ 8` .. `sb @ 2,137,629`) | ported David's `sgc_if.cpp` `RestoreAegState`/`RestoreFegState` — the EG step handlers were being re-seeded on load, overwriting just-restored values |
+| after that | 11,076,198 | **SH4**, early | ported David's `serial.cpp` SCIF fix — `updateBaudRate(reschedule=false)` on load, so a restored sched entry is not recomputed from "now" |
+| now | 27,884,792 | **SH4 tail**, ~280 bytes before `bba_modem` | **UNFIXED, and not fixed in either fork** |
+
+Both ported fixes moved the needle, which is itself evidence they were real.
+
+The remaining one is **new**. Diffing every `core/hw` and `core/oslib` file
+against the TAS fork turns up only `Renderer_if.h` and `mem_watch.h`, neither
+savestate-related — so David never hit this or never chased it.
+
+**Hypothesis, and it is a good one:** the sh4 block ends with
+`interrupts_serialize`, `sq_buffer`, `cntx`, then `sh4_sched_serialize`
+(`sh4_mmr.cpp:678-692`). That last one writes `ffb` plus ten scheduler entries —
+aica, rtc, gdrom, maple, aica dma, `tmu_sched[3]`, render_end, vblank — as
+`tag/start/end` each, which is about the right size for a 280-byte tail. David's
+SCIF fix was exactly this bug for **one** scheduler client; the same shape for
+any of the other ten would land here.
+
 ## What I would do, in order
 
-1. **Fix idempotency.** Nothing else is meaningful until save→load→save is
-   byte-stable. Port SERMAP first so the offset names a subsystem.
-2. **Then measure the real cost of option 2** — time a serialize, a
-   deserialize, and a `savestate.hash` on this hardware. All three primitives
-   exist; none has been timed.
+1. ~~Fix idempotency. Port SERMAP first.~~ **Done for two of three.** The third
+   is localized to the sh4 tail with a named hypothesis above.
+2. ~~Measure the cost of option 2.~~ **Done**, see the table.
 3. **Only then** consider whether the in-process pool is worth 1,252 globals.
    nbneo is the place that question is being answered properly, and flycast can
    watch that result rather than pay for it twice.

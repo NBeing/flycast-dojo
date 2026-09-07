@@ -650,6 +650,19 @@ struct ChannelEx
 		}
 	}
 
+	// Savestate-load variants: restore the EG step handlers for the already-deserialized states
+	// WITHOUT the gameplay side effects of SetAegState/SetFegState (KYONB cleared on Release, FEG
+	// value/prev re-seeded on Attack). Those side effects overwrote just-restored values, making
+	// save->load->save non-idempotent and desyncing replays seeded from a savestate.
+	void RestoreAegState()
+	{
+		StepAEG = AEG_STEP_LUT[AEG.state];
+	}
+	void RestoreFegState()
+	{
+		StepFEG = FEG_STEP_LUT[FEG.state];
+	}
+
 	void KEY_ON()
 	{
 		if (AEG.state != EG_Release)
@@ -1603,13 +1616,13 @@ void deserialize(Deserializer& deser)
 
 		deser >> channel.AEG.val;
 		deser >> channel.AEG.state;
-		channel.SetAegState(channel.AEG.state);
+		channel.RestoreAegState();	// not SetAegState: that would clear KYONB when state==Release
 		channel.UpdateAEG();
 		deser >> channel.FEG.value;
 		deser >> channel.FEG.state;
 		deser >> channel.FEG.prev1;
 		deser >> channel.FEG.prev2;
-		channel.SetFegState(channel.FEG.state);
+		channel.RestoreFegState();	// not SetFegState: that would re-seed value/prev when state==Attack
 		channel.UpdateFEG();
 		channel.UpdateStreamStep();
 
