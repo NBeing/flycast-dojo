@@ -213,6 +213,66 @@ the first differing byte, then SERMAP names it:
   `gdb ptype /o Sh4Context` gives as **`cycle_counter`**: the SH4's position
   within its timeslice. A phase difference, not a value difference.
 
+## `[SOLVED 2026-09-07]` IN-PROCESS POOLING WORKS — save AND load between frames
+
+The whole investigation below chased a divergence that turned out to be caused
+by *where* the savestate calls were made, not by anything missing from the
+state. Both halves must happen at the **deferred point** — `deferred::drain()`
+at the top of `mainui_rend_frame`, outside the ImGui frame and outside the
+emulation loop:
+
+```
+POOL: fixture saved at frame 480
+POOL: member  1 gap= 5 frame=465 hash=1609759635
+POOL: member  2 gap= 5 frame=465 hash=1609759635
+POOL: member  3 gap= 9 frame=469 hash=4084178429
+POOL: member  4 gap= 5 frame=465 hash=1609759635
+POOL: member  5 gap=12 frame=472 hash=1030524056
+POOL: member  6 gap= 5 frame=465 hash=1609759635
+POOL: member  7 gap= 7 frame=467 hash=386607465
+POOL: member  8 gap= 5 frame=465 hash=1609759635
+POOL: member  9 gap=20 frame=480 hash=2382786004
+POOL: member 10 gap= 5 frame=465 hash=1609759635
+POOL: members with the SAME gap agree? true
+```
+
+Ten restores of one state in ONE process. The six that ran 5 frames are
+byte-identical; each other gap gives its own hash and its own frame. **The
+machine is a pure function of (state, frames run)** — which is the pool
+guarantee. The gaps were deliberately interleaved, because varying cadence is
+exactly what destroyed determinism with the old method; now it is irrelevant.
+
+`STATE VERIFY: idempotent OK (27890707 bytes round-trip)` on every load.
+
+### Why the old method failed, in one line each
+
+* **Restoring from a `vblank` callback** runs inside the emulation loop, so the
+  restored machine inherits the loop's in-flight slice — the carried phase the
+  gap experiment isolated, visible first as a 448-cycle offset in the PVR's
+  `clc_pvr_scanline` and as `sh4.cntx` `cycle_counter`.
+* **Saving from a `vblank` callback can TEAR the state.** A stop requested from
+  the emulation thread cannot join that thread, so `dc_savestate` may read a
+  machine that is still running. Loading such a state spins the guest — which is
+  what every "the deferred point wedges" result below was actually measuring. A
+  fixture saved at the deferred point loads cleanly, ten times running.
+
+### What this needs from the host
+
+`core/deferred.{h,cpp}` plus the drain call in `mainui_rend_frame`, and save/load
+entry points that post there. The probe used `savestate.saveSlotLater()` /
+`loadSlotLater()`, which post `gui_saveState()` / `gui_loadState()` — the
+emulator's own slot-based calls, unchanged. **No change to the machine, the
+serializer or the scheduler was needed.**
+
+### Still to do
+
+The blob-based `savestate.tostring`/`fromstring` pair still restores in place and
+therefore still drifts. It should grow deferred counterparts so a pool can hold
+states in memory instead of in slot files. That is now a small, well-understood
+piece of work rather than an open question.
+
+---
+
 ### `[MEASURED 2026-09-07]` LOCALIZED: the drift is TIMESLICE PHASE, in the PVR's raster clock
 
 Bisecting in time rather than at 300 frames changed the picture completely.

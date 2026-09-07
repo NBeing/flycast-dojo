@@ -1910,6 +1910,15 @@ static void luaRegister(lua_State *L)
 				.addFunction("loadSlotLater", std::function<void()>([]() {
 					deferred::post([]() { gui_loadState(); });
 				}))
+				// The other half of the torn-fixture probe: SAVE from the same
+				// safe place. The probe's fixture was saved from a `vblank`
+				// callback, i.e. the emulation thread, where a requested stop
+				// cannot join that thread - so dc_savestate may have read a
+				// machine that was still running. If a fixture saved HERE loads
+				// without wedging, the wedge was a bad state, not a bad place.
+				.addFunction("saveSlotLater", std::function<void()>([]() {
+					deferred::post([]() { gui_saveState(); });
+				}))
 				// NO savestate.loadLater HERE - IT DID NOT WORK, and shipping
 				// a binding that wedges the emulator would be worse than not
 				// shipping one. What was tried, all from deferred::drain() at
