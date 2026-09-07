@@ -1319,29 +1319,72 @@ static float uiGetScale()
 	return settings.display.uiScale;
 }
 
+//! THE OVERLAY TOGGLE, IN ONE PLACE.
+//!
+//! `Training Overlay On/Off` (gui.cpp) hides the Lua overlay. It was enforced
+//! by 15 separate `if (!config::ShowTrainingGameOverlay) return;` guards spread
+//! through the ui bindings - and they covered HALF the namespace. The gated set
+//! was the original lowercase dojo primitives (text, rect, line, bargraph); the
+//! ImGui baseline profile added later (Begin, Checkbox, Selectable, Slider...)
+//! was not gated, even though the capital names REUSE the gated
+//! implementations - ui.Text and ui.text are one function.
+//!
+//! So with the overlay off a script still opened windows and drew widgets, but
+//! every label, button, rectangle and layout call vanished. [MEASURED
+//! 2026-09-07] components/pianoroll.lua rendered as a window of unlabelled
+//! clickable cells collapsed onto one line: half a tool, with no error and no
+//! way to tell why.
+//!
+//! Off now means OFF, coherently. Begin returns false so a well-formed script
+//! skips its body - which is ImGui's own contract and what the binding already
+//! documented - and the widgets return their input unchanged rather than a
+//! plausible-looking default.
+//!
+//! CALLBACKS STILL RUN. This is a DISPLAY toggle, so it hides drawing; it does
+//! not stop a script. Gating the dispatch instead would have been one line and
+//! would silently stop any bookkeeping a script does from its draw callback -
+//! which, since that callback is the only one that runs while paused, is a
+//! worse silent failure than the one being fixed. Queries (GetMousePos,
+//! IsMouse*, CalcTextSize, GetScale) stay live for the same reason: they read,
+//! they do not draw.
+static bool overlayVisible()
+{
+	return config::ShowTrainingGameOverlay;
+}
+
 static int uiBegin(lua_State *L)
 {
 	checkDrawContextL(L, "Begin");
 	const char *name = luaL_checkstring(L, 1);
 	// Returns whether the window is expanded, matching ImGui: skip the body
-	// when it is false.
+	// when it is false. With the overlay hidden that is false and NO window is
+	// opened, so End must not close one either - see uiEnd.
+	if (!overlayVisible())
+	{
+		lua_pushboolean(L, false);
+		return 1;
+	}
 	lua_pushboolean(L, ImGui::Begin(name));
 	return 1;
 }
 
-static void uiEnd()          { checkDrawContext("End"); ImGui::End(); }
-static void uiSeparator()    { checkDrawContext("Separator"); ImGui::Separator(); }
-static void uiSpacing()      { checkDrawContext("Spacing"); ImGui::Spacing(); }
+static void uiEnd()          { checkDrawContext("End"); if (overlayVisible()) ImGui::End(); }
+static void uiSeparator()    { checkDrawContext("Separator"); if (overlayVisible()) ImGui::Separator(); }
+static void uiSpacing()      { checkDrawContext("Spacing"); if (overlayVisible()) ImGui::Spacing(); }
 
 static void uiSetNextWindowPos(float x, float y)
 {
 	checkDrawContext("SetNextWindowPos");
+	if (!overlayVisible())
+		return;		// would otherwise leak onto the next window that IS drawn
 	ImGui::SetNextWindowPos(ImVec2(x, y));
 }
 
 static void uiSetNextWindowSize(float w, float h)
 {
 	checkDrawContext("SetNextWindowSize");
+	if (!overlayVisible())
+		return;
 	ImGui::SetNextWindowSize(ImVec2(w, h));
 }
 
@@ -1350,7 +1393,9 @@ static int uiCheckbox(lua_State *L)
 	checkDrawContextL(L, "Checkbox");
 	const char *label = luaL_checkstring(L, 1);
 	bool v = lua_toboolean(L, 2) != 0;
-	const bool changed = ImGui::Checkbox(label, &v);
+	// UNCHANGED, not false: a hidden checkbox must not appear to have been
+	// unticked by the user.
+	const bool changed = overlayVisible() ? ImGui::Checkbox(label, &v) : false;
 	lua_pushboolean(L, v);
 	lua_pushboolean(L, changed);
 	return 2;
@@ -1367,7 +1412,7 @@ static int uiSelectable(lua_State *L)
 	// exactly the old behaviour.
 	const ImVec2 size((float)luaL_optnumber(L, 3, 0.0),
 			(float)luaL_optnumber(L, 4, 0.0));
-	lua_pushboolean(L, ImGui::Selectable(label, selected, 0, size));
+	lua_pushboolean(L, overlayVisible() && ImGui::Selectable(label, selected, 0, size));
 	return 1;
 }
 
@@ -1391,7 +1436,7 @@ static int uiSliderInt(lua_State *L)
 	int v = (int)luaL_checkinteger(L, 2);
 	const int lo = (int)luaL_checkinteger(L, 3);
 	const int hi = (int)luaL_checkinteger(L, 4);
-	const bool changed = ImGui::SliderInt(label, &v, lo, hi);
+	const bool changed = overlayVisible() ? ImGui::SliderInt(label, &v, lo, hi) : false;
 	lua_pushinteger(L, v);
 	lua_pushboolean(L, changed);
 	return 2;
