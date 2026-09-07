@@ -81,17 +81,45 @@ counters, `ui.*`.
   `video_recorder` (GL/Vulkan/DX11/DX9, async) is the better one and its hooks
   need re-placing against dojo-7's restructured WSI layer.
 
-## Caveats
+## Submodules and Vulkan — FIXED
 
-Built with `-DUSE_VULKAN=OFF`. dojo-7 pins a newer VulkanMemoryAllocator that
-exports a CMake target; the submodules here were copied from the older base
-rather than checked out at dojo-7's pinned commits. **Fix the submodules before
-trusting this build for anything but compilation** — they are the older fork's
-versions throughout, which is fine for a syntax and link check and not fine for
-a release.
+Originally built `-DUSE_VULKAN=OFF` against submodules copied from the older
+base. Both are now correct.
 
-Submodule `.git` pointers were removed, so `git submodule` does not work here.
-They are listed in `.git/info/exclude`.
+Every submodule is checked out at **dojo-7's own pinned commit**:
+
+```
+f461d91cd  core/deps/SDL
+85c2334e9  core/deps/Vulkan-Headers
+6eb62e151  core/deps/VulkanMemoryAllocator
+1ab24bcc8  core/deps/breakpad
+7239eab39  core/deps/libchdr
+c19931b48  core/deps/luabridge
+```
+
+Spout (Windows), Syphon (macOS), oboe (Android) and libzip (optional) are left
+uninitialised; CMake configures without them on Linux.
+
+**A real bug was fixed doing this.** dojo-7 does **not** have glslang as a
+submodule — it *vendors* it as 2,796 regular tracked files, which is what its
+HEAD commit ("add cstdint for gcc 15 support, glslang") is about. Copying the
+older fork's glslang over it had clobbered vendored source. Restored with
+`git checkout -- core/deps/glslang`; the tree is now pristine there.
+
+Rebuilt with `-DUSE_VULKAN=ON`: **ninja exit 0, zero errors**, 12 Vulkan
+objects linked. Verified selecting Vulkan at runtime, not merely linking:
+
+```
+$ ./build/flycast -config config:pvr.rend=4 NoBGM_VMU.cdi
+rend/vulkan/vulkan_context.cpp:237  Vulkan API 1.1. Device NVIDIA GeForce RTX 2060
+rend/vulkan/vulkan_renderer.cpp:30  VulkanRenderer::Init
+emulator.cpp:57                     Game ID is [T1212N]
+```
+
+Note the `-config` syntax is `section:key=value`; `pvr.rend=4` without the
+`config:` prefix is silently ignored and you get OpenGL.
+
+Submodule `.git` pointers are real now, so `git submodule status` works.
 
 ## Suggested next steps
 
