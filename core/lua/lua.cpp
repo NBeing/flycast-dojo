@@ -1058,14 +1058,48 @@ static void setRegister(const std::string& name, u32 value, lua_State *L)
  * buffer is exact. rollback=false, so this is a whole state including memory -
  * expect megabytes, and do not call it every frame.
  */
+// THE MOVIE POSITION HAS TO TRAVEL WITH AN IN-MEMORY STATE.
+//
+// dc_serialize captures the MACHINE. dojo.frame_number is not part of it - it
+// is the emulator's position in the movie - and the FILE savestate path carries
+// it in a `.frame` sidecar written beside the state (nullDC.cpp, via
+// Dojo::SaveStateFrame/LoadStateFrame). A STRING has no file to sit beside, so
+// this path had no way to carry it and simply did not.
+//
+// That is not cosmetic bookkeeping. frame_number SELECTS THE INPUTS: the movie
+// is applied as session_inputs[frame_number + Delay] (PollRecordAction), so a
+// machine restored from a string came back with the right memory and the WRONG
+// movie position, and then fed itself somebody else's inputs. [MEASURED
+// 2026-09-07] across three restores of ONE blob in one process the counter read
+// 461 / 762 / 1063 instead of the value it was saved at, and the three restored
+// machines diverged - the same shape as the pool experiment's drift.
+//
+// The trailer is APPENDED after the machine bytes behind a magic, so a blob
+// written before this change still loads: no trailer found, frame_number is
+// left alone, which is exactly the old behaviour.
+//
+// DELIBERATELY NOT REPLICATED HERE: the TAS-editor bookkeeping the file path
+// does around a seek (tas_wave::onStateLoad, load_seq, the divergence re-arm,
+// the stale-tail marking). Those describe a USER seeking within a recording
+// session. This is a machine-as-value API - restore the machine and its clock,
+// and leave the editor's history alone.
+static const char DOJO_STATE_TRAILER[8] = { 'D','O','J','O','F','R','M','1' };
+
 static int saveStateToString(lua_State *L)
 {
 	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), false);
 	dc_serialize(sizer);
-	std::vector<u8> buf(sizer.size());
+	const size_t trailer = sizeof(DOJO_STATE_TRAILER) + sizeof(u32);
+	std::vector<u8> buf(sizer.size() + trailer);
 	Serializer ser(buf.data(), buf.size(), false);
 	dc_serialize(ser);
-	lua_pushlstring(L, (const char *)buf.data(), ser.size());
+	size_t off = ser.size();
+	memcpy(buf.data() + off, DOJO_STATE_TRAILER, sizeof(DOJO_STATE_TRAILER));
+	off += sizeof(DOJO_STATE_TRAILER);
+	const u32 fn = dojo.frame_number.load();
+	memcpy(buf.data() + off, &fn, sizeof(fn));
+	off += sizeof(fn);
+	lua_pushlstring(L, (const char *)buf.data(), off);
 	return 1;
 }
 
@@ -1077,6 +1111,15 @@ static int loadStateFromString(lua_State *L)
 		return luaL_error(L, "empty savestate string");
 	Deserializer deser(data, len, false);
 	dc_deserialize(deser);
+	const size_t off = deser.size();
+	const size_t trailer = sizeof(DOJO_STATE_TRAILER) + sizeof(u32);
+	if (len >= off + trailer
+			&& memcmp(data + off, DOJO_STATE_TRAILER, sizeof(DOJO_STATE_TRAILER)) == 0)
+	{
+		u32 fn = 0;
+		memcpy(&fn, data + off + sizeof(DOJO_STATE_TRAILER), sizeof(fn));
+		dojo.frame_number = fn;
+	}
 	return 0;
 }
 
