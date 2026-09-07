@@ -123,9 +123,13 @@ Submodule `.git` pointers are real now, so `git submodule status` works.
 
 ## Suggested next steps
 
-1. Check out dojo-7's real submodule commits, rebuild with Vulkan on.
-2. Re-apply the determinism branch here, adding the `Sh4Clock` pin.
-3. Re-place the video capture hooks against dojo-7's WSI layer.
+1. ~~Check out dojo-7's real submodule commits, rebuild with Vulkan on.~~ **Done.**
+2. Re-apply the determinism branch here, adding the `Sh4Clock` pin — dojo-7
+   inherits flyinghead's overclock slider and its GGPO-only guard
+   (`f8d5517b8`), so the pin that was unnecessary on the older base is
+   necessary on this one.
+3. Re-place the video capture hooks against dojo-7's WSI layer, then unguard
+   `flycast.video.*`.
 4. Then, and only then, look at `dojo_gui.cpp` — with the engine already
    running, the GUI can be rebuilt panel by panel on emuapi `ui.*` rather than
    ported wholesale.
