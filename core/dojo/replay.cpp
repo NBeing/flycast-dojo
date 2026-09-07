@@ -48,7 +48,13 @@ void Replay::Init()
 	// Requesting this early is safe by design: requestStart() only stashes the
 	// path, and the renderer opens the encoder on the first frame it composites,
 	// because that is the only place the framebuffer size is known.
-	if (cfgLoadBool("dojo", "AutoCapture", false))
+	// If AutoSeekState is configured, the capture is armed AFTER the seek
+	// instead (mainui.cpp), so the recording starts at the seek target rather
+	// than carrying the boot and the pre-seek stretch. Arming in both places
+	// would start it here and then no-op there, silently capturing the wrong
+	// span.
+	if (cfgLoadBool("dojo", "AutoCapture", false)
+			&& cfgLoadInt("dojo", "AutoSeekState", -1) < 0)
 	{
 		const std::string stem = ghc::filesystem::path(filename).stem().string();
 		const std::string out = hostfs::getSavestatePath(0, false).empty()

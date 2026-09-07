@@ -153,6 +153,11 @@ void dc_savestate(int index)
 #endif
 
 	free(data);
+	// TAS: record the movie frame this state was made at, as a .frame sidecar.
+	// Without it a state has no position in the movie and a seek has nothing to
+	// land on. SaveStateFrame/LoadStateFrame came across in dojo.cpp but their
+	// only callers live here, so they sat defined and unreachable.
+	dojo.SaveStateFrame(filename);
 	NOTICE_LOG(SAVESTATE, "Saved state to %s size %d", filename.c_str(), (int)ser.size());
 	gui_display_notification("State saved", 1000);
 }
@@ -290,6 +295,10 @@ void dc_loadstate(int index, std::string filename)
 	try {
 		Deserializer deser(data, total_size);
 		dc_loadstate(deser);
+		// TAS: seek the movie to this state's frame (read-only replay). The
+		// other half of the .frame sidecar written in dc_savestate. Before the
+		// verify probe, so a failed seek is visible ahead of a hash mismatch.
+		dojo.LoadStateFrame(filename);
 		// Never breaking sync is the point, so this defaults on wherever the
 		// run has to be reproducible rather than being something to remember.
 		if (cfgLoadBool("dojo", "VerifyState", determinism::isDeterministicRun()))

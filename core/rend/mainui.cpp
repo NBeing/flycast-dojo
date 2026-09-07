@@ -18,6 +18,8 @@
 */
 
 #include "mainui.h"
+#include "cfg/cfg.h"
+#include "dojo/dojo.h"
 #include "hw/pvr/Renderer_if.h"
 #include "gui.h"
 #include "oslib/oslib.h"
@@ -86,6 +88,38 @@ bool mainui_rend_frame()
 
 	os_DoEvents();
 	UpdateInputState();
+
+	// TAS test harness: -config dojo:AutoSeekState=N automates the
+	// "Play a Movie -> F3" step. Once playback is actually running (~2 s in),
+	// load state slot N exactly once; the movie then seeks to that state's
+	// frame, exactly as pressing F3 would. This is what lets a harness drive
+	// the full seek-and-play loop headlessly. Unset (-1) means never.
+	//
+	// Ported from the TAS fork. It is pure engine - no piano roll, no States
+	// window - which is why it can come across while the rest of that UI
+	// cannot.
+	static bool autoSeekDone = false;
+	if (!autoSeekDone && dojo.play_match && gui_state == GuiState::Closed && dojo.frame_number > 120)
+	{
+		autoSeekDone = true;	// one-shot either way, which also stops the per-frame cfg poll
+		const int autoSlot = cfgLoadInt("dojo", "AutoSeekState", -1);
+		if (autoSlot >= 0)
+		{
+			config::SavestateSlot.set(hostfs::clampSavestateSlot(autoSlot));
+			NOTICE_LOG(NETWORK, "TAS TEST: auto-seek -> loading state slot %d", (int)config::SavestateSlot);
+			gui_loadState();
+
+			// Auto-capture starts HERE rather than at Replay::Init when a seek
+			// is configured, so the recording begins at the seek target instead
+			// of carrying the boot and the pre-seek stretch. Replay::Init skips
+			// arming for exactly this case; see the comment there.
+			if (cfgLoadBool("dojo", "AutoCapture", false) && !videorec::isRecording())
+			{
+				NOTICE_LOG(NETWORK, "TAS TEST: auto-capture -> starting recorder after the seek");
+				videorec::requestStart("");
+			}
+		}
+	}
 
 	if (gui_is_open() || gui_state == GuiState::VJoyEdit)
 	{
