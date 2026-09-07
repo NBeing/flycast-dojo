@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+#
+# integration-tests -- run the things unit checks cannot.
+#
+#   RUN:    shell/linux/integration-tests
+#           shell/linux/integration-tests --fast     (only what needs no ROM)
+#           shell/linux/integration-tests --list
+#   PASS:   exit 0, and every case prints "ok".
+#   FAIL:   exit 1, naming the case and what it saw.
+#   SKIP:   exit 2. A skipped case is NOT a pass and does not exit 0, because
+#           a suite that goes green when its prerequisites are missing is
+#           reporting on the machine rather than on the code.
+#
+#   FLYCAST_ROM=/path/to.chd   the game to boot (default: first .chd under
+#                              ~/ROMs/dc). Needed by everything except --fast.
+#   FLYCAST_BIN=/path/to/bin   default: artifact/bin/flycast-dojo
+#
+# WHY THIS EXISTS
+#
+# The conformance suite checks the interface's contract. It cannot check that
+# the emulator boots, that a script loads once the launcher rather than a
+# terminal starts it, or that the video file has pictures in it. Every one of
+# those has been broken on this branch, and every one was caught by a person
+# looking at something rather than by a test:
+#
+#   [MEASURED 2026-08-09] a well-formed 8.7-second AVI, correct dimensions,
+#   frame count, duration and container - entirely black. Every structural
+#   check passed. Only decoding a frame and LOOKING at it found the bug.
+#
+#   [MEASURED 2026-09-04] a script that loaded nothing and reported nothing,
+#   because dofile resolved against the working directory and the launcher
+#   never sets one.
+#
+#   [MEASURED 2026-09-05] the first fresh clone of the emuapi package could not
+#   run its own suite: the runner assumed the checkout was NAMED emuapi. The
+#   in-tree copy had passed all day.
+#
+# So the cases below decode pixels, run from a directory with a deliberately
+# wrong name, and start the emulator the way a desktop menu does - from a
+# working directory that has nothing to do with the config.
+#
+# ON EXIT CODES: every emulator run captures its status directly, never through
+# a pipe. `cmd | tail` reports tail's status, which once made five failing
+# cases all print exit=0.
+
+set -uo pipefail
+
+SELF="$(realpath "${BASH_SOURCE[0]}")"
+ROOT="$(dirname "$(dirname "$(dirname "$SELF")")")"
+BIN="${FLYCAST_BIN:-$ROOT/artifact/bin/flycast-dojo}"
+PKG="$ROOT/emuapi"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/flycast-it.XXXXXX")"
+DISPLAY_NUM=71
+BOOT_SECONDS="${FLYCAST_BOOT_SECONDS:-22}"
+
+pass=0; fail=0; skipped=0
+declare -a failures=()
+
+ok()   { pass=$((pass+1));    printf '  ok    %s\n' "$1"; }
+bad()  { fail=$((fail+1));    failures+=("$1: $2"); printf '  FAIL  %s\n        %s\n' "$1" "$2"; }
+skip() { skipped=$((skipped+1)); printf '  skip  %s\n        %s\n' "$1" "$2"; }
+
+cleanup() {
+    pkill -x flycast-dojo 2>/dev/null
+    pkill -f "^/usr/bin/Xvfb :$DISPLAY_NUM\b" 2>/dev/null
+    [ -n "${KEEP_WORK:-}" ] || rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+find_rom() {
+    if [ -n "${FLYCAST_ROM:-}" ]; then printf '%s\n' "$FLYCAST_ROM"; return; fi
+    find "$HOME/ROMs/dc" -maxdepth 1 -name '*.chd' 2>/dev/null | sort | head -1
+}
+
+start_x() {
+    local geom="${1:-800x600x24}"
+    pkill -f "^/usr/bin/Xvfb :$DISPLAY_NUM\b" 2>/dev/null
+    rm -f "/tmp/.X$DISPLAY_NUM-lock"
+    Xvfb ":$DISPLAY_NUM" -screen 0 "$geom" >/dev/null 2>&1 &
+    local i
+    for i in $(seq 1 40); do
+        DISPLAY=":$DISPLAY_NUM" xdpyinfo >/dev/null 2>&1 && return 0
+        sleep 0.25
+    done
+    return 1
+}
+
+# Boot the emulator from a working directory that is NOT the config directory,
+# which is how a desktop launcher starts it and how the path bug hid.
+run_emulator() {
+    local root="$1" seconds="$2" log="$3"
+    ( cd / && FLYCAST_ROOT="$root" DISPLAY=":$DISPLAY_NUM" \
+        stdbuf -oL "$BIN" "$ROM" >"$log" 2>&1 & echo $! >"$WORK/pid" )
+    local pid; pid="$(cat "$WORK/pid")"
+    sleep "$seconds"
+    kill -TERM "$pid" 2>/dev/null
+    pkill -x flycast-dojo 2>/dev/null
+    # WAIT FOR IT TO ACTUALLY GO. The exit report is written from the
+    # Terminate handler, so reading the log immediately after sending the
+    # signal races the thing being tested: the first run of this harness
+    # reported "the suite never reported" against a log that said CONFORMS.
+    local i
+    for i in $(seq 1 40); do
+        pgrep -x flycast-dojo >/dev/null 2>&1 || return 0
+        sleep 0.5
+    done
+    pkill -KILL -x flycast-dojo 2>/dev/null
+    sleep 1
+    return 0
+}
+
+# --- case 1: the package runs with no emulator -----------------------------
+case_mock() {
+    local name="mock conformance (no emulator)"
+    command -v lua >/dev/null || { skip "$name" "lua is not installed"; return; }
+    [ -r "$PKG/run-conformance.lua" ] || { skip "$name" "no $PKG/run-conformance.lua"; return; }
+    local out; out="$(cd "$ROOT" && lua "$PKG/run-conformance.lua" 2>&1)"
+    local line; line="$(printf '%s' "$out" | grep -E '^pass=' | tail -1)"
+    if printf '%s' "$out" | grep -q '^RESULT: CONFORMS'; then
+        # Non-vacuity: a suite that ran no checks also prints no failures.
+        local n; n="$(printf '%s' "$line" | sed -n 's/^pass=\([0-9]*\).*/\1/p')"
+        if [ "${n:-0}" -gt 50 ]; then ok "$name ($line)"
+        else bad "$name" "only ${n:-0} checks ran; expected the whole suite"; fi
+    else
+        bad "$name" "${line:-no verdict printed}"
+    fi
+}
+
+# --- case 2: the package does not depend on its directory name -------------
+# The bug this reproduces shipped and was found by cloning, not by testing.
+case_dirname() {
+    local name="package runs from a wrongly-named directory"
+    command -v lua >/dev/null || { skip "$name" "lua is not installed"; return; }
+    local d="$WORK/definitely-not-called-emuapi"
+    cp -r "$PKG" "$d" || { bad "$name" "could not copy the package"; return; }
+    local out; out="$(cd "$d" && lua run-conformance.lua 2>&1)"
+    if printf '%s' "$out" | grep -q '^RESULT: CONFORMS'; then ok "$name"
+    else bad "$name" "$(printf '%s' "$out" | tail -1)"; fi
+}
+
+# --- case 3: conformance inside the emulator -------------------------------
+case_emulator_conformance() {
+    local name="conformance inside the emulator"
+    [ -x "$BIN" ] || { skip "$name" "no emulator at $BIN"; return; }
+    [ -n "$ROM" ] || { skip "$name" "no ROM; set FLYCAST_ROM"; return; }
+    start_x || { skip "$name" "could not start Xvfb"; return; }
+    local root="$WORK/conf"; mkdir -p "$root"
+    cp -r "$PKG" "$root/emuapi"
+    printf 'require("emuapi.conformance")\n' >"$root/flycast.lua"
+    run_emulator "$root" "$((BOOT_SECONDS + 4))" "$WORK/conf.log"
+    local line; line="$(grep -E '^pass=' "$WORK/conf.log" | tail -1)"
+    if grep -q '^RESULT: CONFORMS' "$WORK/conf.log"; then ok "$name ($line)"
+    elif [ -z "$line" ]; then bad "$name" "no verdict; the suite never reported"
+    else bad "$name" "$line"; fi
+}
+
+# --- case 4: a script loads when nothing sets the working directory ---------
+case_script_loads() {
+    local name="script loads with an unrelated working directory"
+    [ -x "$BIN" ] || { skip "$name" "no emulator at $BIN"; return; }
+    [ -n "$ROM" ] || { skip "$name" "no ROM; set FLYCAST_ROM"; return; }
+    start_x || { skip "$name" "could not start Xvfb"; return; }
+    local root="$WORK/tour"; mkdir -p "$root"
+    cp -r "$PKG" "$root/emuapi"
+    printf 'require("emuapi.examples.tour")\n' >"$root/flycast.lua"
+    run_emulator "$root" "$BOOT_SECONDS" "$WORK/tour.log"
+    local lualog="$root/flycast-lua.log"
+    if [ ! -r "$lualog" ]; then
+        bad "$name" "no flycast-lua.log was written"
+    elif grep -q '^!' "$lualog"; then
+        bad "$name" "$(grep '^!' "$lualog" | head -1)"
+    elif grep -q 'loaded ' "$lualog"; then
+        ok "$name"
+    else
+        bad "$name" "log exists but records no load: $(tail -1 "$lualog")"
+    fi
+}
+
+# --- case 5: captured video has pictures in it -----------------------------
+# The one that matters most, and the one a structural check cannot make.
+case_capture() {
+    local name="captured video is not blank"
+    [ -x "$BIN" ] || { skip "$name" "no emulator at $BIN"; return; }
+    [ -n "$ROM" ] || { skip "$name" "no ROM; set FLYCAST_ROM"; return; }
+    command -v ffprobe >/dev/null && command -v ffmpeg >/dev/null \
+        || { skip "$name" "ffmpeg/ffprobe not installed"; return; }
+    start_x || { skip "$name" "could not start Xvfb"; return; }
+
+    local root="$WORK/rec"; mkdir -p "$root"
+    local out="$root/capture.avi"
+    cat >"$root/flycast.lua" <<LUA
+-- Record a fixed span, then stop, so the file is finalised before we look.
+local started, stopped, n = false, false, 0
+flycast_callbacks = flycast_callbacks or {}
+flycast_callbacks.vblank = function()
+    n = n + 1
+    -- START WELL AFTER BOOT. Recording from frame 60 captured 3 packets and
+    -- stopped: the resolution changes as REIOS hands over to the game, and a
+    -- resize ends a capture cleanly rather than corrupting it (TODOS.md, "[F]
+    -- Survive window resize instead of stopping"). Beginning at frame 900 puts
+    -- the span entirely inside the game.
+    if n == 900 and not started then
+        started = true
+        flycast.video.startRecording("$out")
+    elseif n == 1200 and not stopped then
+        stopped = true
+        flycast.video.stopRecording()
+    end
+end
+LUA
+    run_emulator "$root" "$((BOOT_SECONDS + 14))" "$WORK/rec.log"
+
+    if [ ! -s "$out" ]; then bad "$name" "no capture file was written"; return; fi
+
+    local frames; frames="$(ffprobe -v error -select_streams v:0 \
+        -count_packets -show_entries stream=nb_read_packets \
+        -of csv=p=0 "$out" 2>/dev/null)"
+    if [ -z "$frames" ] || [ "$frames" -lt 60 ]; then
+        bad "$name" "only ${frames:-0} video packets; expected the recorded span"
+        return
+    fi
+
+    # THE CHECK THAT ACTUALLY MATTERS: decode pictures and measure them.
+    #
+    # The first version of this parsed YSTDEV out of ffmpeg's signalstats. That
+    # key does not exist - the filter emits YMIN/YLOW/YAVG/YHIGH/YMAX and no
+    # standard deviation - so the grep matched nothing, the value defaulted to
+    # zero, and a perfectly good 3.3 MB capture was reported as blank. A check
+    # that fails when the thing works is worse than no check, so this decodes
+    # frames to PNG and asks ImageMagick, where an empty result is an error
+    # rather than a zero.
+    if ! command -v convert >/dev/null; then
+        skip "$name" "ImageMagick is not installed"
+        return
+    fi
+    local shots="$WORK/shots"; mkdir -p "$shots"
+    ffmpeg -v error -i "$out" -vf "select='not(mod(n\,20))'" -vsync 0 \
+        "$shots/f%03d.png" >/dev/null 2>&1
+    local n_shots; n_shots="$(find "$shots" -name 'f*.png' | wc -l)"
+    if [ "$n_shots" -eq 0 ]; then
+        bad "$name" "the file has $frames packets but no frame could be decoded"
+        return
+    fi
+    local best=0 dev f
+    for f in "$shots"/f*.png; do
+        dev="$(convert "$f" -colorspace Gray -format "%[fx:standard_deviation*255]" info: 2>/dev/null)"
+        [ -n "$dev" ] || continue
+        awk -v a="$dev" -v b="$best" 'BEGIN{exit !(a>b)}' && best="$dev"
+    done
+    # A black, white or single-colour frame has a standard deviation of zero
+    # and satisfies every structural check above this one. That exact file -
+    # correct dimensions, frame count, duration and container, entirely black -
+    # is why this case exists.
+    if awk -v d="$best" 'BEGIN{exit !(d > 3.0)}'; then
+        ok "$name ($frames packets, $n_shots frames decoded, peak stddev ${best})"
+    else
+        bad "$name" "decoded $n_shots frames and the most varied has stddev ${best}; the picture is blank"
+    fi
+}
+
+usage() {
+    cat <<EOF
+cases:
+  mock        conformance with no emulator
+  dirname     package runs from a wrongly-named directory
+  conformance conformance inside the emulator
+  script      a script loads with an unrelated working directory
+  capture     captured video is not blank
+EOF
+}
+
+FAST=0
+for a in "$@"; do
+    case "$a" in
+        --fast) FAST=1 ;;
+        --list) usage; exit 0 ;;
+        -h|--help) sed -n '2,30p' "$SELF"; exit 0 ;;
+        *) printf 'unknown option: %s\n' "$a" >&2; exit 1 ;;
+    esac
+done
+
+ROM="$(find_rom)"
+printf 'flycast-dojo integration tests\n'
+printf '  binary: %s\n' "$BIN"
+printf '  rom:    %s\n' "${ROM:-<none>}"
+printf '  work:   %s\n\n' "$WORK"
+
+case_mock
+case_dirname
+if [ "$FAST" -eq 0 ]; then
+    case_emulator_conformance
+    case_script_loads
+    case_capture
+else
+    skip "emulator cases" "--fast was given"
+fi
+
+printf '\npass=%d fail=%d skip=%d\n' "$pass" "$fail" "$skipped"
+if [ "$fail" -gt 0 ]; then
+    printf 'FAILED:\n'
+    for f in "${failures[@]}"; do printf '  %s\n' "$f"; done
+    exit 1
+fi
+# A skip is not a pass. Exiting 0 here would let a machine with no ROM report
+# success for cases that never ran.
+[ "$skipped" -gt 0 ] && { printf 'incomplete: %d case(s) skipped\n' "$skipped"; exit 2; }
+printf 'all cases passed\n'
+exit 0

@@ -1,0 +1,39 @@
+[Desktop Entry]
+# GENERATED FROM THIS TEMPLATE BY install.sh -- @EXEC@ becomes an absolute path.
+#
+# The template is what is version-controlled and the generated file is not. The
+# only thing that differs between two checkouts is a path, and a committed
+# .desktop would carry ONE person's path as if it were a fact about the
+# project. The path is known at install time and nowhere else.
+#
+# X-FlycastDojo-Managed IS A SAFETY MARKER, NOT DECORATION. install.sh refuses
+# to overwrite or remove any file without it, so a hand-written entry of the
+# same name is never silently clobbered.
+X-FlycastDojo-Managed=true
+Type=Application
+Version=1.0
+Name=Flycast Dojo
+GenericName=Dreamcast / NAOMI emulator
+Comment=Pick a game and an action, then launch Flycast Dojo
+Exec=@EXEC@
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;
+Keywords=dreamcast;naomi;emulator;flycast;dojo;rollback;netplay;
+StartupNotify=false
+Actions=Play;Record;Conformance;
+
+# Quick paths for when you already know what you want. `rofi -show drun
+# -drun-show-actions` surfaces these as their own rows; launchers without
+# action support ignore the block and the main entry still works.
+[Desktop Action Play]
+Name=Play the default game
+Exec=@EXEC@ --play
+
+[Desktop Action Record]
+Name=Play and record video
+Exec=@EXEC@ --record
+
+[Desktop Action Conformance]
+Name=Run the Lua conformance suite
+Exec=@EXEC@ --conformance
