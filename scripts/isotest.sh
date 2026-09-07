@@ -76,7 +76,11 @@ assert_isolated() {
 # A window manager on the offscreen display. Without one nothing takes focus,
 # so SDL discards every key and a UI test silently proves nothing.
 ensure_wm() {
-	if iso xdotool search --class . >/dev/null 2>&1 && iso wmctrl -m >/dev/null 2>&1; then
+	# A running WM sets _NET_SUPPORTING_WM_CHECK on the root window. That is the
+	# EWMH-defined probe and needs no wmctrl (not installed here); the previous
+	# check used a malformed `xdotool search --class .` that printed a usage
+	# error every run and never detected anything.
+	if iso xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id"; then
 		return
 	fi
 	# A MINIMAL CONFIG IS MANDATORY, not a nicety.
