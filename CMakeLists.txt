@@ -1007,6 +1007,24 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/deps/filesystem.hpp
 		core/dojo/deps/picosha2.h
 		core/dojo/deps/UUID.hpp
+		core/dojo/avi_dump.cpp
+		core/dojo/avi_dump.h
+		core/dojo/mvc2.cpp
+		core/dojo/mvc2.h
+		core/dojo/tas_auto.cpp
+		core/dojo/tas_auto.h
+		core/dojo/tas_clip.cpp
+		core/dojo/tas_clip.h
+		core/dojo/tas_ruler.cpp
+		core/dojo/tas_ruler.h
+		core/dojo/tas_wave.cpp
+		core/dojo/tas_wave.h
+		core/dojo/tasmacro.cpp
+		core/dojo/tasmacro.h
+		core/dojo/tastext.cpp
+		core/dojo/tastext.h
+		core/dojo/tasva2.cpp
+		core/dojo/tasva2.h
 		core/dojo/dojo.cpp
 		core/dojo/dojo.h
 		core/dojo/dojo_file.cpp

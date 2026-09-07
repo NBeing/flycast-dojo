@@ -4648,3 +4648,11 @@ void gui_open_pause()
 		}
 	}
 }
+
+
+// See gui.h - stub until the piano roll is ported. Empty means nothing is
+// locked, so every edit is permitted, which is the pre-piano-roll behaviour.
+void gui_locked_ranges(std::vector<std::pair<u32, u32>>& out)
+{
+	out.clear();
+}

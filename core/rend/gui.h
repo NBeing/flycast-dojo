@@ -17,6 +17,8 @@
     along with reicast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #pragma once
+#include <vector>
+#include <utility>
 #include "types.h"
 #include "dojo/kenney_icon_font_extended.h"
 #include "dojo/IconsFontAwesome6.h"
@@ -28,6 +30,15 @@ void gui_init();
 void gui_initFonts();
 void gui_open_settings();
 void gui_display_ui();
+// Frame ranges the user has LOCKED against edits in the piano roll.
+//
+// STUB on this branch. The re-record pipeline (dojo.cpp) consults this before
+// applying an edit, but the piano roll that populates it lives in the TAS
+// fork's dojo_gui.cpp, which is not ported. Returning an empty list means
+// "nothing is locked", which is the correct answer when there is no piano roll
+// to lock anything - not a fudge. Replace when the editor lands.
+void gui_locked_ranges(std::vector<std::pair<u32, u32>>& out);
+
 void gui_display_notification(const char *msg, int duration);
 void gui_display_osd();
 void gui_display_profiler();

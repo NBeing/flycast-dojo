@@ -22,6 +22,10 @@
 #include "cfg/option.h"
 #include "nowide/fstream.hpp"
 #include "storage.h"
+#include "dojo/deps/filesystem.hpp"	// directory scan for savestate slots
+#include <algorithm>
+#include <fstream>
+#include <iterator>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -102,21 +106,238 @@ std::string findNaomiBios(const std::string& name)
 	return "";
 }
 
+std::string savestateFolderOverride;
+
+int clampSavestateSlot(int slot)
+{
+	if (slot < 0)
+		return 0;
+	return slot >= MAX_SAVESTATE_SLOTS ? MAX_SAVESTATE_SLOTS - 1 : slot;
+}
+
+int currentSavestateSlot()
+{
+	return clampSavestateSlot((int)config::SavestateSlot);
+}
+
+int savestateCycleCount()
+{
+	int n = cfgLoadInt("dojo", "SlotCycleCount", MAX_SAVESTATE_SLOTS);
+	if (n < 2)
+		n = 2;
+	return n > MAX_SAVESTATE_SLOTS ? MAX_SAVESTATE_SLOTS : n;
+}
+
+// The folder savestates are read/written in right now: a movie clip's own directory while a
+// recording or replay is active, otherwise the shared data path.
+static std::string savestateDir()
+{
+	if (!savestateFolderOverride.empty())
+		return savestateFolderOverride;
+	if (settings.content.fileName.empty())
+		return std::string();
+	std::string p = get_writable_data_path(get_file_basename(settings.content.fileName) + ".state");
+	size_t slash = p.find_last_of("/\\");
+	return slash == std::string::npos ? std::string() : p.substr(0, slash);
+}
+
+// <base>.state = slot 0 (BASE has NO suffix); <base>_N.state = slot N. -1 = not a state file.
+static int slotFromStateName(const std::string& name, const std::string& base)
+{
+	if (name.rfind(base, 0) != 0 || name.size() < base.size() + 6)
+		return -1;
+	std::string rest = name.substr(base.size());
+	if (rest == ".state")
+		return 0;
+	if (rest.size() < 8 || rest[0] != '_' || rest.compare(rest.size() - 6, 6, ".state") != 0)
+		return -1;
+	std::string digits = rest.substr(1, rest.size() - 7);
+	if (digits.empty() || digits.find_first_not_of("0123456789") != std::string::npos)
+		return -1;
+	int slot = atoi(digits.c_str());
+	return (slot > 0 && slot < MAX_SAVESTATE_SLOTS) ? slot : -1;
+}
+
+// One directory read instead of one file open per slot: cheaper than the old 10-slot probe even
+// at 100 slots, and it can never drift out of sync with the slot count.
+std::vector<bool> scanSavestateSlots()
+{
+	std::vector<bool> used(MAX_SAVESTATE_SLOTS, false);
+	const std::string dir = savestateDir();
+	if (dir.empty())
+		return used;
+	const std::string base = get_file_basename(settings.content.fileName);
+	std::error_code ec;
+	for (const auto& f : ghc::filesystem::directory_iterator(dir, ec))
+	{
+		if (f.is_directory(ec))
+			continue;
+		int slot = slotFromStateName(f.path().filename().string(), base);
+		if (slot >= 0)
+			used[slot] = true;
+	}
+	return used;
+}
+
+std::vector<SavestateInfo> scanSavestateInfo()
+{
+	std::vector<SavestateInfo> info(MAX_SAVESTATE_SLOTS);
+	const std::string dir = savestateDir();
+	if (dir.empty())
+		return info;
+	const std::string base = get_file_basename(settings.content.fileName);
+	std::error_code ec;
+	for (const auto& f : ghc::filesystem::directory_iterator(dir, ec))
+	{
+		if (f.is_directory(ec))
+			continue;
+		const std::string fname = f.path().filename().string();
+		if (fname.size() > 4 && fname.compare(fname.size() - 4, 4, ".png") == 0)
+		{	// <state>.png thumbnail: its size / mtime ride along so the States window never stats a card per frame (review)
+			const int ps = slotFromStateName(fname.substr(0, fname.size() - 4), base);
+			if (ps >= 0)
+			{
+				std::error_code pec;
+				info[ps].hasPng = true;
+				info[ps].pngSize = (u64)f.file_size(pec);
+				auto pt = f.last_write_time(pec);
+				if (!pec)
+					info[ps].pngMtime = (s64)decltype(pt)::clock::to_time_t(pt);
+			}
+			continue;
+		}
+		int slot = slotFromStateName(fname, base);
+		if (slot < 0)
+			continue;
+		SavestateInfo& si = info[slot];
+		si.exists = true;
+		std::error_code sec;
+		si.size = (u64)ghc::filesystem::file_size(f.path(), sec);
+		auto ft = ghc::filesystem::last_write_time(f.path(), sec);
+		if (!sec)
+			si.mtime = (s64)decltype(ft)::clock::to_time_t(ft);
+	}
+	// Sidecars only for slots that actually exist - at most 100 four-byte reads.
+	for (int i = 0; i < MAX_SAVESTATE_SLOTS; i++)
+	{
+		if (!info[i].exists)
+			continue;
+		const std::string path = getSavestatePath(i, false);
+		std::ifstream fr(path + ".frame", std::ios::binary);
+		u32 fn = 0;
+		if (fr.good() && fr.read((char *)&fn, sizeof(fn)))
+		{
+			info[i].movieFrame = fn;
+			u32 seq = 0;		// sidecar v2 second field; absent in old 4-byte files
+			if (fr.read((char *)&seq, sizeof(seq)))
+			{
+				info[i].rerecordSeq = seq;
+				info[i].haveSeq = true;
+				u32 mlen = 0;		// v2 third field, not needed here
+				if (fr.read((char *)&mlen, sizeof(mlen)))
+				{
+					u64 ph = 0;		// sidecar v3: prefix hash (content revalidation)
+					if (fr.read((char *)&ph, sizeof(ph)))
+						info[i].prefixHash = ph;
+				}
+			}
+		}
+		info[i].label = loadSavestateLabel(i);
+	}
+	return info;
+}
+
+std::string loadSavestateLabel(int index)
+{
+	std::ifstream f(getSavestatePath(index, false) + ".label", std::ios::binary);
+	if (!f.good())
+		return std::string();
+	std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+	// One line, bounded: it renders on a thumbnail card, not in a text editor.
+	s.erase(std::remove(s.begin(), s.end(), '\r'), s.end());
+	size_t nl = s.find('\n');
+	if (nl != std::string::npos)
+		s.resize(nl);
+	if (s.size() > 64)
+		s.resize(64);
+	return s;
+}
+
+void saveSavestateLabel(int index, const std::string& label)
+{
+	const std::string path = getSavestatePath(index, true) + ".label";
+	if (label.empty())
+	{
+		std::error_code ec;
+		ghc::filesystem::remove(path, ec);		// no label = no sidecar, not an empty file
+		return;
+	}
+	std::ofstream f(path, std::ios::binary | std::ios::trunc);
+	if (f.good())
+		f << label.substr(0, 64);
+}
+
 std::string getSavestatePath(int index, bool writable)
 {
 	std::string state_file = get_file_basename(settings.content.fileName);
 
-	char index_str[4] = "";
+	char index_str[8] = "";
 	if (index > 0) // When index is 0, use same name before multiple states is added
-		sprintf(index_str, "_%d", std::min(99, index));
+		sprintf(index_str, "_%d", clampSavestateSlot(index));
 
 	state_file = state_file + index_str + ".state";
 	if (index == -1)
 		state_file += ".net";
+	// TAS: keep a clip's savestates next to its .flyr while a movie folder is active.
+	if (!savestateFolderOverride.empty())
+		return savestateFolderOverride + "/" + state_file;
 	if (writable)
 		return get_writable_data_path(state_file);
 	else
 		return get_readonly_data_path(state_file);
+}
+
+void wipeScratchSavestates()
+{
+	if (settings.content.fileName.empty())
+		return;
+	std::string base = get_file_basename(settings.content.fileName);
+	int removed = 0;
+	for (int i = 0; i < MAX_SAVESTATE_SLOTS; i++)
+	{
+		char idx[8] = "";
+		if (i > 0)
+			snprintf(idx, sizeof(idx), "_%d", i);
+		std::string state = get_writable_data_path(base + idx + ".state");
+		if (std::remove(state.c_str()) == 0)
+			removed++;
+		std::remove((state + ".frame").c_str());
+		std::remove((state + ".png").c_str());		// thumbnail sidecar (when present)
+		std::remove((state + ".label").c_str());	// slot label sidecar (when present)
+		std::remove((state + ".wave").c_str());	// TAS waveform snapshot sidecar (when present)
+	}
+	if (removed > 0)
+		NOTICE_LOG(SAVESTATE, "TAS: wiped %d scratch savestate(s) from the shared data folder", removed);
+}
+
+// TAS: erase ONE savestate slot from disk - the .state file plus its .frame/.png/.label sidecars.
+// Models gui_purge_stale_tick's per-slot removal (rend/gui.cpp) and wipeScratchSavestates' sidecar
+// set, for a single index. Uses the WRITABLE path so it removes the real file whether the slot lives
+// in a clip's folder (savestateFolderOverride active) or the shared data path. Returns true if a
+// .state file was removed. The UI-side follow-up (bump dojo.savestate_epoch to rescan, clear any
+// lock on the slot, toast) is the caller's job - oslib stays free of dojo/gui deps.
+bool deleteSavestate(int index)
+{
+	const std::string base = getSavestatePath(index, true);
+	std::error_code ec;
+	const bool removed = ghc::filesystem::remove(base, ec) && !ec;
+	ghc::filesystem::remove(base + ".frame", ec);	// movie-frame sidecar
+	ghc::filesystem::remove(base + ".png", ec);		// thumbnail sidecar
+	ghc::filesystem::remove(base + ".label", ec);	// slot-label sidecar
+	ghc::filesystem::remove(base + ".wave", ec);	// waveform snapshot sidecar
+	if (removed)
+		NOTICE_LOG(SAVESTATE, "TAS: deleted savestate slot %d (%s + sidecars)", index, base.c_str());
+	return removed;
 }
 
 std::string getShaderCachePath(const std::string& filename)

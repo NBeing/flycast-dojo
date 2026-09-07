@@ -1,10 +1,114 @@
 #include "dojo.h"
+#include "tastext.h"
+#include "oslib/oslib.h"
+#include "json.hpp"
+#include "tas_clip.h"
 
 void Replay::Init()
 {
-	filename = config::ReplayFilename.get();
+	// Read the LIVE cfg value, not the config::ReplayFilename Option: the Option caches the value
+	// loaded at startup and only refreshes on Settings::load(), which runs AFTER this. The replay
+	// browser sets ReplayFilename via cfgSetVirtual just before boot, so the cached Option still
+	// held the PREVIOUS session's persisted path - picking any clip silently played the most
+	// recently recorded one instead (and pointed F3 at the wrong folder).
+	filename = cfgLoadStr("dojo", "ReplayFilename", "");
 	if (!LoadReplayFile(filename))
+	{
+		WARN_LOG(NETWORK, "TAS: replay init FAILED for '%s' - not entering playback", filename.c_str());
 		return;
+	}
+
+	// TAS: point savestates at this clip's folder so F3/state-0 loads its BASE state and seeks here.
+	hostfs::savestateFolderOverride = ghc::filesystem::path(filename).parent_path().string();
+	NOTICE_LOG(NETWORK, "TAS: savestate folder -> %s (replay clip)", hostfs::savestateFolderOverride.c_str());
+	// Always open a clip on BASE. config::SavestateSlot persists in emu.cfg across sessions and
+	// games, so loading a movie would otherwise inherit whatever slot was last used - and F3 on an
+	// inherited slot can land on a state that belongs to a different clip, or on one saved at/after
+	// this movie's end, which dead-ends playback the instant you seek to it. Slot 0 is the one
+	// state a clip is guaranteed to have a sensible meaning for.
+	config::SavestateSlot.set(0);
+	// The .set alone is NOT enough: Emulator::loadGame re-runs Settings::load(true) mid-boot,
+	// which re-reads the Option from cfg and stomped this back to whatever emu.cfg held (the
+	// "replay opened on slot 1" regression). Virtual entries win cfg reads, so the reload now
+	// re-reads 0.
+	cfgSetVirtual("config", "Dreamcast.SavestateSlot", "0");
+	NOTICE_LOG(NETWORK, "TAS: savestate slot reset to 0 (BASE) for this clip");
+	dojo.BeginClipStats();
+
+	// T6 (dojo:TextApply): if a hand-edited text movie sits next to the .flyr, import it and push
+	// it through THE FUNNEL - ApplyEdit diffs, applies, appends to the .flyr, and logs the
+	// timeline event so states above the edit go stale exactly as they would for a rewind.
+	if (cfgLoadBool("dojo", "TextApply", false))
+	{
+		const std::string editPath = hostfs::savestateFolderOverride + "/movie.edit.tas.txt";
+		std::ifstream probe(editPath);
+		if (probe.good())
+		{
+			probe.close();
+			std::map<u32, std::vector<u8>> edited;
+			std::string err;
+			if (tas_text::ImportText(editPath, edited, err))
+				dojo.ApplyEdit(edited, "movie.edit.tas.txt");
+			else
+				NOTICE_LOG(NETWORK, "TAS EDIT: import FAILED - %s", err.c_str());
+		}
+	}
+
+	// PR3 self-test (dojo:ResizeProbe=lo-hi): delete frames [lo, hi] through the RESIZE
+	// funnel right after load - the tail pulls down, the .flyr is rewritten shorter, the
+	// guard event lands at lo. Harness: resizeguard.ps1 asserts length, shift, persistence.
+	// (Delimiter is '-', NOT ',': the -config CLI splits entries on commas.)
+	// One-shot: Init runs twice per session, and a relative delete is NOT idempotent -
+	// unguarded it fired twice and took 2N frames (resizeguard caught it).
+	{
+		static bool resizeProbed = false;
+		std::string rp = resizeProbed ? "" : cfgLoadStr("dojo", "ResizeProbe", "");
+		resizeProbed = true;
+		size_t dash = rp.find('-');
+		if (dash != std::string::npos)
+		{
+			const u32 lo = (u32)atoi(rp.substr(0, dash).c_str());
+			const u32 hi = (u32)atoi(rp.substr(dash + 1).c_str());
+			if (hi >= lo)
+			{
+				const u32 n = hi - lo + 1;
+				std::map<u32, std::vector<u8>> edited;
+				for (const auto& kv : dojo.session_inputs)
+				{
+					if (kv.first >= lo && kv.first <= hi)
+						continue;
+					edited[kv.first < lo ? kv.first : kv.first - n] = kv.second;
+				}
+				NOTICE_LOG(NETWORK, "TAS RESIZE PROBE: deleting [%u, %u] (%u of %u frames)",
+						lo, hi, n, (u32)dojo.session_inputs.size());
+				dojo.ApplyEditResize(edited, "resize probe");
+				NOTICE_LOG(NETWORK, "TAS RESIZE PROBE: movie now %u frames",
+						(u32)dojo.session_inputs.size());
+			}
+		}
+	}
+
+	// T5 self-test (dojo:TextRoundTrip): the freshly loaded movie -> text -> back, byte-compared.
+	// Runs here because session_inputs is complete and the clip folder is known; the .tas.txt
+	// stays next to the .flyr for inspection either way.
+	if (cfgLoadBool("dojo", "TextRoundTrip", false))
+	{
+		std::string game = get_file_basename(settings.content.fileName);
+		if (game.empty())	// Init runs before content is set on a cold boot
+			game = get_file_basename(cfgLoadStr("dojo", "LastRomPath", ""));
+		tas_text::RoundTripSelfTest(dojo.session_inputs, hostfs::savestateFolderOverride, game);
+	}
+
+	// A replay session is strictly READ-ONLY: force auto-record off so a shadow recording can't
+	// start when play_match goes false (R press / replay end). That shadow CreateReplayFile made a
+	// new clip folder and re-pointed savestateFolderOverride at it - so F1/F3 silently used the NEW
+	// folder's states instead of the clip's own ("F3 loads today's state" bug). Re-recording will be
+	// an explicit feature, not a side effect.
+	cfgSetVirtual("dojo", "RecordMatches", "no");
+	cfgSetVirtual("dojo", "Transmitting", "no");
+
+	// Stale "Just Play" scratch states in the shared folder must not shadow this clip's states.
+	hostfs::wipeScratchSavestates();
 
 	dojo.play_match = true;
 
@@ -17,6 +121,16 @@ void Replay::Init()
 	{
 		config::GGPOEnable = false;
 		dojo.frame_number = 0;
+	}
+	// Replay boot pause (David, 2026-09-04: "try seeking replays to state0 first then freeze"): arm the OSD step-hold so the
+	// boot freezes at power-on; the handoff (gui.cpp) then seeks State 0 if the clip has one, and announces the clip in the
+	// States window. Not for a spectate / GGPO stream (the stream drives the frames).
+	if (!ggpo_session && !cfgLoadBool("dojo", "Receiving", false))
+	{
+		dojo.stepping = true;
+		dojo.target_step_frame = 0;
+		dojo.replay_bootload = true;
+		dojo.boot_ready_arm = true;
 	}
 }
 
@@ -34,6 +148,86 @@ void Replay::StartRecording()
 	}
 
 	dojo.recording_started = true;
+}
+
+void Replay::AppendEditedFrames(const std::vector<std::pair<u32, std::vector<u8>>>& frames)
+{
+	if (filename.empty() || frames.empty())
+		return;
+	// One self-contained batch in the normal .flyr shape (same as FlushReplay writes), appended.
+	// The parser is last-write-wins per frame, so these records override the originals on the
+	// next load while the file keeps its full history - edits never rewrite the movie in place.
+	MessageWriter mw;
+	mw.AppendHeader(0, MAPLE_BUFFER);
+	mw.AppendInt(MAPLE_FRAME_SIZE);
+	for (const auto& fr : frames)
+	{
+		unsigned char rec[MAPLE_FRAME_SIZE] = { 0 };
+		memcpy(rec, &fr.first, sizeof(u32));
+		memcpy(rec + 4, fr.second.data(),
+				std::min(fr.second.size(), (size_t)(MAPLE_FRAME_SIZE - 4)));
+		mw.AppendContinuousData((const char *)rec, MAPLE_FRAME_SIZE);
+	}
+	std::vector<unsigned char> message = mw.Msg();
+	std::ofstream fout(filename, std::ios::out | std::ios::binary | std::ios_base::app);
+	fout.write((const char *)message.data(), message.size());
+	fout.close();
+	NOTICE_LOG(NETWORK, "TAS EDIT: appended %u frame record(s) to %s", (u32)frames.size(), filename.c_str());
+}
+
+bool Replay::RewriteReplayFile()
+{
+	if (filename.empty())
+		return false;
+	std::ofstream fout(filename, std::ios::out | std::ios::binary | std::ios::trunc);
+	if (!fout)
+		return false;
+	if (!file_header.empty())
+		fout.write((const char *)file_header.data(), file_header.size());
+	else
+	{
+		// no captured header (shouldn't happen for an attached file) - regenerate
+		std::vector<u8> header = GenHeader(GetRomNamePrefix());
+		fout.write((const char *)header.data(), header.size());
+	}
+	MessageWriter mw;
+	u32 inBatch = 0;
+	auto openBatch = [&]()
+	{
+		mw = MessageWriter();
+		mw.AppendHeader(0, MAPLE_BUFFER);
+		mw.AppendInt(MAPLE_FRAME_SIZE);
+		inBatch = 0;
+	};
+	openBatch();
+	u32 total = 0;
+	for (const auto& kv : dojo.session_inputs)
+	{
+		unsigned char rec[MAPLE_FRAME_SIZE] = { 0 };
+		memcpy(rec, &kv.first, sizeof(u32));
+		memcpy(rec + 4, kv.second.data(),
+				std::min(kv.second.size(), (size_t)(MAPLE_FRAME_SIZE - 4)));
+		mw.AppendContinuousData((const char *)rec, MAPLE_FRAME_SIZE);
+		total++;
+		if (++inBatch == FRAME_BATCH)
+		{
+			std::vector<unsigned char> msg = mw.Msg();
+			fout.write((const char *)msg.data(), msg.size());
+			openBatch();
+		}
+	}
+	if (inBatch > 0)
+	{
+		std::vector<unsigned char> msg = mw.Msg();
+		fout.write((const char *)msg.data(), msg.size());
+	}
+	fout.close();
+	// streaming writer state: the next recorded frame starts a clean batch
+	replay_msg = MessageWriter();
+	replay_frame_count = 0;
+	NOTICE_LOG(NETWORK, "TAS EDIT: rewrote %s from scratch (%u frames) - length change persisted",
+			filename.c_str(), total);
+	return true;
 }
 
 void Replay::AppendToReplay(std::string frame, int version)
@@ -57,7 +251,11 @@ void Replay::AppendToReplay(std::string frame, int version)
 				std::vector<unsigned char> message = replay_msg.Msg();
 				std::string msg((const char *)&message[0], message.size());
 
-				if (config::RecordMatches)
+				// "a file is attached" - not RecordMatches: replay sessions run with
+				// RecordMatches=no, and R only flips play_match, so hand-recorded frames
+				// in a replay-turned-write session batched here and were thrown away
+				// (user lost a character-setup section to exactly this).
+				if (!filename.empty())
 				{
 					std::ofstream fout(filename,
 									   std::ios::out | std::ios::binary | std::ios_base::app);
@@ -81,7 +279,7 @@ void Replay::AppendToReplay(std::string frame, int version)
 					std::vector<unsigned char> message = replay_msg.Msg();
 					std::string msg((const char *)message.data(), message.size());
 
-					if (config::RecordMatches)
+					if (!filename.empty())	// attached file, not the mode flag
 					{
 						std::ofstream fout(filename,
 										   std::ios::out | std::ios::binary | std::ios_base::app);
@@ -95,6 +293,35 @@ void Replay::AppendToReplay(std::string frame, int version)
 			}
 		}
 	}
+}
+
+// Frames are written to the .flyr in batches of FRAME_BATCH (120). The only partial-flush path in
+// AppendToReplay is guarded by a memcmp against the ASCII string "0000000000000000", which a real
+// frame (it starts with a little-endian frame number) can never equal - so every recording ended
+// up truncated on a 120-frame boundary, silently losing up to 119 frames (~2 s) off the tail.
+// This flushes whatever is pending; call it when the recording session ends.
+void Replay::FlushReplay()
+{
+	if (filename.empty() || replay_frame_count == 0 || (replay_frame_count % FRAME_BATCH) == 0)
+		return;
+	u32 pending = replay_frame_count % FRAME_BATCH;
+	std::vector<unsigned char> message = replay_msg.Msg();
+	std::string msg((const char *)message.data(), message.size());
+
+	if (!filename.empty())	// attached file, not the mode flag (see AppendToReplay)
+	{
+		std::ofstream fout(filename, std::ios::out | std::ios::binary | std::ios_base::app);
+		fout.write(msg.data(), msg.size());
+		fout.close();
+	}
+	if (config::Transmitting)
+		dojo.tcp_client.outgoing_msgs.push(msg);
+
+	replay_msg = MessageWriter();
+	replay_msg.AppendHeader(0, MAPLE_BUFFER);
+	replay_msg.AppendInt(MAPLE_FRAME_SIZE);
+	replay_frame_count = 0;
+	NOTICE_LOG(NETWORK, "TAS: flushed %u trailing frame(s) to the replay", pending);
 }
 
 std::string currentISO8601TimeUTC()
@@ -149,12 +376,14 @@ std::string Replay::CreateReplayFile(std::string rom_name, int version)
 	auto replays_dir = ghc::filesystem::path(get_writable_data_path("replays"));
 	auto game_replays_dir = replays_dir / get_game_name();
 
-	if (!ghc::filesystem::exists(game_replays_dir))
-		ghc::filesystem::create_directories(game_replays_dir);
-
 	// create timestamp string, iso8601 format
 	std::string timestamp = currentISO8601TimeUTC();
 	std::replace(timestamp.begin(), timestamp.end(), ':', '_');
+
+	// TAS: one timestamped folder per recording, so the movie and its savestates live together.
+	auto clip_dir = game_replays_dir / timestamp;
+	if (!ghc::filesystem::exists(clip_dir))
+		ghc::filesystem::create_directories(clip_dir);
 
 	std::string replay_name = rom_name + "__" +
 							  timestamp + "__" +
@@ -166,8 +395,7 @@ std::string Replay::CreateReplayFile(std::string rom_name, int version)
 	else if (version >= 1)
 		replay_name.append(".flyr");
 
-	ghc::filesystem::path replay_path =
-		ghc::filesystem::path(game_replays_dir) / replay_name;
+	ghc::filesystem::path replay_path = clip_dir / replay_name;
 
 	// create replay file itself
 	std::ofstream file;
@@ -175,6 +403,29 @@ std::string Replay::CreateReplayFile(std::string rom_name, int version)
 
 	filename = replay_path.string();
 	cfgSaveStr("dojo", "ReplayFilename", replay_path.string());
+
+	// TAS: point F1/F3 savestates into this clip folder so they sit next to the .flyr.
+	hostfs::savestateFolderOverride = clip_dir.string();
+	NOTICE_LOG(NETWORK, "TAS: savestate folder -> %s (new recording)", hostfs::savestateFolderOverride.c_str());
+	// Same reason as playback: a fresh clip has no states at all, so the slot inherited from the
+	// last session points at nothing. Start every clip on BASE.
+	config::SavestateSlot.set(0);
+	// The .set alone is NOT enough: Emulator::loadGame re-runs Settings::load(true) mid-boot,
+	// which re-reads the Option from cfg and stomped this back to whatever emu.cfg held (the
+	// "replay opened on slot 1" regression). Virtual entries win cfg reads, so the reload now
+	// re-reads 0.
+	cfgSetVirtual("config", "Dreamcast.SavestateSlot", "0");
+	NOTICE_LOG(NETWORK, "TAS: savestate slot reset to 0 (BASE) for this clip");
+	dojo.BeginClipStats();
+
+	// TAS: per-clip metadata seed. The startup prompt may have staged tags/notes for this
+	// session (dojo:PendingTags/PendingNotes, virtual); they land here and are then cleared.
+	// The file lives IN the clip folder so it travels/dies with the clip - no central index.
+	tas_clip::seed(clip_dir.string(), rom_name, timestamp, cfgLoadStr("dojo", "PendingTags", ""), cfgLoadStr("dojo", "PendingNotes", ""));	// P2: one writer
+	cfgSetVirtual("dojo", "PendingTags", "");
+	cfgSetVirtual("dojo", "PendingNotes", "");
+	// Stale "Just Play" scratch states in the shared folder must not shadow this clip's states.
+	hostfs::wipeScratchSavestates();
 
 	if (version > 0)
 		AppendHeaderToReplay(rom_name);
@@ -232,6 +483,7 @@ std::vector<u8> Replay::GenHeader(std::string rom_name)
 void Replay::AppendHeaderToReplay(std::string rom_name)
 {
 	std::vector<u8> message = GenHeader(rom_name);
+	file_header = message;		// a later rewrite must reproduce these exact bytes
 	std::string msg((const char *)message.data(), message.size());
 
 	if (config::RecordMatches)
@@ -297,6 +549,13 @@ void Replay::LoadReplayFileV1(std::string path)
 		fin.read((char *)body_buf.data(), body_size);
 
 		offset = 0;
+
+		if (cmd == SPECTATE_START)
+		{
+			// keep the raw header message for RewriteReplayFile (see file_header)
+			file_header.assign(header_buf, header_buf + HEADER_LEN);
+			file_header.insert(file_header.end(), body_buf.begin(), body_buf.end());
+		}
 
 		// NOTICE_LOG(NETWORK, "PROCESS BODY");
 		dojo.ProcessBody(cmd, body_size, (const char *)body_buf.data(), &offset);
