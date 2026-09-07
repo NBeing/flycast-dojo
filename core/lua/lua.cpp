@@ -1277,12 +1277,50 @@ static void luaRegister(lua_State *L)
 	  		.beginNamespace("emulator")
 				.addFunction("startGame", gui_start_game)	// FIXME threading!
 				.addFunction("stopGame", std::function<void()>([]() { gui_stop_game(""); }))
+				// PAUSE MEANS "STOP THE MACHINE WHERE TOOLS CAN SEE IT".
+				//
+				// This used to be gui_open_settings() unconditionally, which
+				// stops emulation but lands in GuiState::Commands - the in-game
+				// MENU. Game overlays do not draw there, so a Lua tool went
+				// invisible at the exact moment it became legal to use: the
+				// movie may only be edited while stopped. A piano roll found
+				// this by disappearing when it paused itself.
+				//
+				// GuiState::Paused is the state that keeps the game view and
+				// its overlays up, so prefer it - but only where it actually
+				// works. gui_open_pause() is a no-op unless a movie is playing
+				// or Training is on, and it fails SILENTLY, so the fallback is
+				// not optional: without it a plain session would "pause" and
+				// keep running.
+				//
+				// IDEMPOTENT ON PURPOSE. gui_open_pause() is a TOGGLE, so a
+				// bare forward would make pause() called twice RESUME - the
+				// opposite of what it says. Both branches are gated on the
+				// state they transition out of.
 				.addFunction("pause", std::function<void()>([]() {
-					if (gui_state == GuiState::Closed)
+					if (gui_state != GuiState::Closed)
+						return;			// already stopped; do not toggle back
+					const bool toolsVisible = dojo.play_match
+							|| cfgLoadBool("dojo", "Training", false);
+					if (toolsVisible)
+					{
+						gui_open_pause();
+						NOTICE_LOG(COMMON, "lua: pause -> Paused (overlays draw)");
+					}
+					else
+					{
 						gui_open_settings();
+						NOTICE_LOG(COMMON, "lua: pause -> Commands (menu); no movie or"
+								" training, so the overlay-visible pause is unavailable");
+					}
 				}))
+				// Symmetric with pause(): undo whichever stop actually happened.
+				// Resuming from the wrong state is how a paused emulator gets
+				// stuck - the old version only knew how to leave Commands.
 				.addFunction("resume", std::function<void()>([]() {
-					if (gui_state == GuiState::Commands)
+					if (gui_state == GuiState::Paused)
+						gui_open_pause();		// the toggle's other half
+					else if (gui_state == GuiState::Commands)
 						gui_open_settings();
 				}))
 				// Slots are 0..9 here, matching config::SavestateSlot, while
