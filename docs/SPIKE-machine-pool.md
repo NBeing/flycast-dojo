@@ -93,6 +93,49 @@ now that number is unactionable.
 
 ---
 
+## `[MEASURED 2026-09-07]` DO WE HAVE POOL CAPABILITY? No — and idempotency was not the last gate
+
+Fixing the three round-trip bugs made the **snapshot** faithful. It did not make
+the **machine** a pure function of it, and those are different claims.
+
+`scripts/lua/pool-determinism.lua` runs the guarantee a pool actually needs:
+restore three members from one blob, run each forward 300 frames, compare.
+
+```
+member A -> 1041975443
+member B -> 1159361126
+member C ->  803446832
+VERDICT DIVERGED
+```
+
+Three restores, three answers, and the drift **accumulates per restore** —
+member B reproduced exactly across separate processes, so it is deterministic
+drift, not noise. Plain forward execution without any restore is reproducible
+across processes too (`2608417142` twice). **It is restoring that perturbs.**
+
+Ruled out: the `sh4_sched_ffts()` call the third fix adds to serialize. It does
+mutate the machine, and `hash()` serializes, so it was the obvious suspect —
+but disabling it and re-running still diverges, with different absolute hashes
+and the same three-way disagreement.
+
+**What this means.** Idempotency proves `serialize(load(blob)) == blob` — the
+blob round-trips. Divergence here means something affecting execution is
+**not in the blob at all**, so it is invisible to both the probe and the
+comparison. Candidates, untested: the recompiler's block cache and
+`smc_hotspots`, ARM7/AICA state outside the serialized set, host-side scheduler
+residue.
+
+That is precisely nbneo's problem class — machine state living outside the
+machine — arrived at from the opposite direction. They found it by censusing
+statics; this found it by testing the behaviour. **The 1,252 globals are back
+on the table**, but now with a cheap oracle to bisect them: flip a candidate to
+per-instance, re-run this script, see if the three members agree.
+
+**Methodological caveat:** the members are compared by `savestate.hash()` after
+300 vblanks each. If a restore lands at a different sub-frame phase, the windows
+are not identical and some drift would be measurement rather than machine. I did
+not rule that out.
+
 ## Three options
 
 | | what it is | verdict |
