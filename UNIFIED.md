@@ -67,6 +67,27 @@ one that admits it is absent — emuapi's own failure tier 3.
 Everything emuapi actually binds is intact: memory, input, savestates, frame
 counters, `ui.*`.
 
+## Video capture — ported and verified
+
+`flycast.video.*` is live. Driven from Lua during MvC2 attract mode:
+
+```
+mjpeg      1679 frames        -> 27.983 s
+pcm_s16le  1,233,920 samples  -> 27.983 s     exact, to the sample
+mean_volume -32.9 dB   max_volume -12.0 dB    real dynamic range
+```
+
+An extracted mid-capture frame shows a hyper combo with correct colours and
+orientation - no channel swizzle, no vertical flip.
+
+An earlier boot-window capture recorded digital silence (-91 dB), which was the
+ROM being a NoBGM build during REIOS boot rather than a broken tap. The
+gameplay capture settles it: **the audio tap works**, relocated unchanged from
+`core/oslib/audiostream.cpp` to dojo-7's `core/audio/audiostream.cpp`.
+
+Not ported: the **toolbar camera button**. It is entangled with dojo-7's
+different toolbar layout maths and capture is fully reachable without it.
+
 ## What is NOT here
 
 - **The determinism work.** It lives on `~/dev/flycast-sync-draft`
