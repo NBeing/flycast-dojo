@@ -264,12 +264,37 @@ entry points that post there. The probe used `savestate.saveSlotLater()` /
 emulator's own slot-based calls, unchanged. **No change to the machine, the
 serializer or the scheduler was needed.**
 
-### Still to do
+### `[MEASURED 2026-09-07]` The in-memory pool works too, and agrees exactly
 
-The blob-based `savestate.tostring`/`fromstring` pair still restores in place and
-therefore still drifts. It should grow deferred counterparts so a pool can hold
-states in memory instead of in slot files. That is now a small, well-understood
-piece of work rather than an open question.
+`savestate.snapshotLater()` / `takeSnapshot()` / `restoreLater(blob)` do the same
+thing without slot files, so a pool can hold its members in memory:
+
+```
+STR: snapshot 27890719 bytes at frame 461
+STR: second takeSnapshot is empty? true
+STR: member 1 gap= 5 frame=465 hash=1609759635
+STR: member 2 gap= 5 frame=465 hash=1609759635
+STR: member 3 gap=11 frame=471 hash=3737484956
+STR: member 4 gap= 5 frame=465 hash=1609759635
+STR: member 5 gap= 8 frame=468 hash=4090813491
+STR: member 6 gap= 5 frame=465 hash=1609759635
+STR: member 7 gap=17 frame=477 hash=1894566177
+STR: member 8 gap= 5 frame=465 hash=1609759635
+STR: member 9 gap= 5 frame=465 hash=1609759635
+STR: the five gap=5 members all identical? true
+```
+
+**And it agrees with the slot path exactly** - `hash=1609759635` at frame 465 is
+the same value the slot-file run produced for a 5-frame member. Two independent
+routes landing on the same number is a much stronger result than either alone.
+
+`takeSnapshot()` HANDS the state over rather than copying it: a second call
+answers empty (verified above). A caller that keeps asking therefore cannot
+silently re-read a stale state and believe it took a new one.
+
+The old in-place `tostring`/`fromstring` pair is kept for scripts that use it,
+but it runs inside whatever callback calls it and still drifts when that is a
+frame callback. Prefer the deferred pair for anything that must be reproducible.
 
 ---
 

@@ -48,6 +48,7 @@
 #include "rend/transform_matrix.h"
 #include <stdexcept>
 #include <optional>
+#include <mutex>
 
 namespace lua
 {
@@ -1087,6 +1088,78 @@ static void setRegister(const std::string& name, u32 value, lua_State *L)
 // and leave the editor's history alone.
 static const char DOJO_STATE_TRAILER[8] = { 'D','O','J','O','F','R','M','1' };
 
+// ---- states as strings, taken and restored BETWEEN FRAMES ------------------
+//
+// The in-place tostring/fromstring pair below is kept (scripts use it), but it
+// runs inside whatever callback calls it, and doing either half from a `vblank`
+// callback is what made repeated in-process restores diverge: a restore there
+// inherits the emulation loop's in-flight slice, and a SAVE there can tear,
+// because a stop requested from the emulation thread cannot join that thread.
+//
+// These post to deferred::drain() instead - the top of mainui_rend_frame,
+// outside the ImGui frame and outside the emulation loop - and each mirrors the
+// emulator's own proven shape (gui_saveState / gui_loadState): stop, do it,
+// start. [MEASURED 2026-09-07] Ten restores of one state in one process, with
+// deliberately varied cadence, produced identical hashes for every member that
+// ran the same number of frames. See docs/SPIKE-machine-pool.md.
+static std::mutex snapshotMutex;
+static std::string pendingSnapshot;
+static bool snapshotReady = false;
+
+static void snapshotNow()
+{
+	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), false);
+	dc_serialize(sizer);
+	const size_t trailer = sizeof(DOJO_STATE_TRAILER) + sizeof(u32);
+	std::vector<u8> buf(sizer.size() + trailer);
+	Serializer ser(buf.data(), buf.size(), false);
+	dc_serialize(ser);
+	size_t off = ser.size();
+	memcpy(buf.data() + off, DOJO_STATE_TRAILER, sizeof(DOJO_STATE_TRAILER));
+	off += sizeof(DOJO_STATE_TRAILER);
+	const u32 fn = dojo.frame_number.load();
+	memcpy(buf.data() + off, &fn, sizeof(fn));
+	off += sizeof(fn);
+	const std::lock_guard<std::mutex> lock(snapshotMutex);
+	pendingSnapshot.assign((const char *)buf.data(), off);
+	snapshotReady = true;
+}
+
+static void restoreNow(const std::string& blob)
+{
+	Deserializer deser(blob.data(), blob.size(), false);
+	dc_loadstate(deser);
+	const size_t off = deser.size();
+	const size_t trailer = sizeof(DOJO_STATE_TRAILER) + sizeof(u32);
+	if (blob.size() >= off + trailer
+			&& memcmp(blob.data() + off, DOJO_STATE_TRAILER, sizeof(DOJO_STATE_TRAILER)) == 0)
+	{
+		u32 fn = 0;
+		memcpy(&fn, blob.data() + off + sizeof(DOJO_STATE_TRAILER), sizeof(fn));
+		dojo.frame_number = fn;
+	}
+	EventManager::event(Event::LoadState);
+}
+
+// The stop/start pair, with the restart guaranteed on the way out however the
+// body leaves - gui_saveState's own try/catch exists for the same reason.
+static void aroundStopped(const std::function<void()>& body)
+{
+	const bool wasRunning = emu.running();
+	try {
+		if (wasRunning)
+			emu.stop();
+		body();
+	} catch (const std::exception& e) {
+		ERROR_LOG(SAVESTATE, "deferred savestate: %s", e.what());
+	}
+	if (wasRunning)
+	{
+		try { emu.start(); }
+		catch (const std::exception& e) { ERROR_LOG(SAVESTATE, "restart: %s", e.what()); }
+	}
+}
+
 static int saveStateToString(lua_State *L)
 {
 	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), false);
@@ -1897,6 +1970,33 @@ static void luaRegister(lua_State *L)
 				.addFunction("load", std::function<void(int)>([](int index) { luaSavestateSlot(index, true); }))
 				.addFunction("tostring", saveStateToString)
 				.addFunction("fromstring", loadStateFromString)
+				// Take a snapshot BETWEEN FRAMES. Returns immediately; the state
+				// is not taken yet. Collect it with takeSnapshot(), which
+				// answers nil until it is ready.
+				.addFunction("snapshotLater", std::function<void()>([]() {
+					deferred::post([]() { aroundStopped(snapshotNow); });
+				}))
+				// The snapshot, once taken, and it is HANDED OVER rather than
+				// copied: a second call answers nil. A caller that keeps asking
+				// therefore cannot silently re-read a stale state and believe it
+				// took a new one.
+				.addFunction("takeSnapshot", std::function<std::string()>([]() {
+					const std::lock_guard<std::mutex> lock(snapshotMutex);
+					if (!snapshotReady)
+						return std::string();
+					snapshotReady = false;
+					return std::move(pendingSnapshot);
+				}))
+				// Restore BETWEEN FRAMES. Returns before the restore happens; a
+				// caller that needs to know waits for the machine to come back,
+				// e.g. by watching frame.count().
+				.addFunction("restoreLater", std::function<void(std::string)>([](std::string blob) {
+					if (blob.empty())
+						throw std::runtime_error("empty savestate string");
+					deferred::post([blob]() {
+						aroundStopped([&blob]() { restoreNow(blob); });
+					});
+				}))
 				.addFunction("hash", hashState)
 				// DIAGNOSTIC (pool wedge, 2026-09-07): call gui_loadState()
 				// ITSELF from the deferred point. It is the one load known to
