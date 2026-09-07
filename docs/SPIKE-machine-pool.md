@@ -253,11 +253,39 @@ residue is not part of the savestate. Restores two vblanks apart therefore
 alternate — and a fresh process starts at a clean phase, which is exactly why
 process-per-machine pooling agrees and in-process pooling does not.
 
-**Next experiment**, and it is cheap: vary the gap between restores (2, 3, 2, 3
-vblanks). If the outcome tracks the GAP rather than the member index, the loop
-phase is confirmed as the carrier and the fix is to quantise the restore to a
-block boundary (or to serialize the residue). If it stays period-2 regardless,
-something intrinsic alternates and the hunt continues.
+`[MEASURED 2026-09-07]` **THE GAP EXPERIMENT: cadence decides the outcome, so
+the loop's phase is the carrier.** Both cadences were run in ONE session, same
+blob, same process, so a changed pattern cannot be run-to-run noise. Each member
+restores, runs exactly one frame, and is hashed; only the idle between restores
+differs.
+
+```
+gap=0  (members  1-6):  A B A B A B     perfect alternation
+gap=1  (members  7-12): C A A A B A     alternation DESTROYED
+gap=0  (members 13-16): A C A B         and it does not snap back
+```
+
+Inserting a single idle vblank destroys the alternation, and returning to the
+original cadence does not restore it. The outcome therefore depends on the
+emulation history between restores, not on the restore count — which is the
+definition of a carried phase. A third outcome (`C`) appears too, so the
+divergence is a small set of states, not a toggle.
+
+**The mechanism this implicates:** these restores run from a `vblank` callback,
+which executes ON the emulation thread from inside the emulation loop. The
+restore swaps the machine, but the loop's in-flight plan — how many cycles it
+intended to run in the current slice — is a local of the loop, not part of the
+savestate, so it survives. A fresh process has no such residue, which is exactly
+why process-per-machine agrees.
+
+**The obvious fix does not work yet.** Restoring while the emulator is STOPPED
+(pause from the render thread, restore, resume) *hangs*: the pause/restore/
+resume sequence completes in the trace (`mask 00->01`, restore, `01->05->01->
+00`) and the emulator then runs no further frames. Two things learned trying:
+pausing from a `vblank` callback deadlocks outright (`emu.stop()` joins the
+thread the callback is running on), and even done correctly from the render
+thread, a restore across a pause boundary does not resume cleanly. That is the
+next thing to fix, and it is a prerequisite for in-process pooling.
 
 **`dojo.frame_number` is EXONERATED.** `[MEASURED 2026-09-07]` It was the
 leading candidate — it is not restored by an in-memory savestate and climbed
