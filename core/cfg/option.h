@@ -36,6 +36,12 @@ public:
 	virtual void save() const = 0;
 	virtual void load() = 0;
 	virtual void reset() = 0;
+
+	// "section.name" - the cfg address of this option. Used by the determinism
+	// sync-manifest audit to find options nobody has classified as either
+	// sync-critical or cosmetic. Non-pure so option_lr.h and any other
+	// BaseOption implementation keep compiling untouched.
+	virtual std::string optionKey() const { return std::string(); }
 };
 
 #ifdef LIBRETRO
@@ -91,6 +97,11 @@ public:
 		static Settings *_instance = new Settings();
 		return *_instance;
 	}
+
+	// Read-only view of every registered option. Each Option adds itself in its
+	// constructor, so this cannot drift the way a hand-kept list would - the
+	// same reason emuapi derives emu.supports() instead of declaring it.
+	const std::vector<BaseOption *>& allOptions() const { return options; }
 
 private:
 	std::vector<BaseOption *> options;
@@ -150,6 +161,8 @@ public:
 		else
 			doSave(section, name);
 	}
+
+	std::string optionKey() const override { return section + "." + name; }
 
 	T& get() { return value; }
 	void set(T v) { value = v; }

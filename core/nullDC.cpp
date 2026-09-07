@@ -14,6 +14,8 @@
 #include "lua/lua.h"
 #include "stdclass.h"
 #include "serialize.h"
+#include "determinism.h"
+#include "cfg/cfg.h"
 
 #include <filesystem>
 #include "dojo/dojo.h"
@@ -165,6 +167,57 @@ void dc_loadstate(std::string filename)
 	dc_loadstate(0, filename);
 }
 
+// Verify a just-loaded savestate round-trips: re-serialize the machine and
+// compare against the blob it was loaded from. If deserialize is the exact
+// inverse of serialize the two are byte-identical, and the first differing
+// offset names the subsystem whose state did not survive.
+//
+// This is the bug class that makes a savestate-seek replay drift while
+// play-from-frame-0 stays correct, so it hides from the obvious test. Two real
+// desyncs were found this way in the TAS fork - a SCIF timer reschedule and
+// AICA envelope side-effects clobbering restored state on load.
+//
+// It is also the PREREQUISITE for any state fingerprint: until save->load->save
+// is byte-stable, a hash compares noise and every anchor assertion built on it
+// is meaningless.
+//
+// Only reads the machine, so it does not perturb the state it just loaded.
+// Force with -config dojo:VerifyState=yes|no.
+static void verifyLoadedStateIdempotent(const void *blobA, size_t sizeA)
+{
+	// The sizing pass over-reserves (TA contexts reserve their maximum), so the
+	// comparison uses the REAL byte count the second pass writes, never this.
+	Serializer sizer;
+	dc_serialize(sizer);
+	const size_t bufSize = sizer.size();
+
+	std::vector<u8> reser(bufSize);
+	Serializer ser(reser.data(), bufSize);
+	dc_serialize(ser);
+	const size_t sizeB = ser.size();
+
+	const size_t n = sizeA < sizeB ? sizeA : sizeB;
+	size_t off = 0;
+	while (off < n && ((const u8 *)blobA)[off] == reser[off])
+		off++;
+
+	if (sizeA == sizeB && off == n)
+	{
+		NOTICE_LOG(SAVESTATE, "STATE VERIFY: idempotent OK (%llu bytes round-trip)",
+				(unsigned long long)sizeA);
+	}
+	else
+	{
+		WARN_LOG(SAVESTATE, "STATE VERIFY: NOT idempotent - first diff at offset %llu "
+				"(re-serialized %llu vs loaded %llu bytes)",
+				(unsigned long long)off, (unsigned long long)sizeB, (unsigned long long)sizeA);
+		char msg[96];
+		snprintf(msg, sizeof(msg), "State verify FAIL: differs at byte %llu",
+				(unsigned long long)off);
+		gui_display_notification(msg, 5000);
+	}
+}
+
 void dc_loadstate(int index, std::string filename)
 {
 	u32 total_size = 0;
@@ -237,6 +290,10 @@ void dc_loadstate(int index, std::string filename)
 	try {
 		Deserializer deser(data, total_size);
 		dc_loadstate(deser);
+		// Never breaking sync is the point, so this defaults on wherever the
+		// run has to be reproducible rather than being something to remember.
+		if (cfgLoadBool("dojo", "VerifyState", determinism::isDeterministicRun()))
+			verifyLoadedStateIdempotent(data, total_size);
 	    NOTICE_LOG(SAVESTATE, "Loaded state ver %d from %s size %d", deser.version(), filename.c_str(), total_size);
 		if (deser.size() != total_size)
 			WARN_LOG(SAVESTATE, "Savestate size %d but only %d bytes used", total_size, (int)deser.size());

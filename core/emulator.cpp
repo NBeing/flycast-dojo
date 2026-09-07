@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "emulator.h"
+#include "determinism.h"
 #include "types.h"
 #include "stdclass.h"
 #include "cfg/option.h"
@@ -413,6 +414,9 @@ void Emulator::init()
 	// Default platform
 	setPlatform(DC_PLATFORM_DREAMCAST);
 
+	// Report any option nobody has classified as sync-critical or cosmetic.
+	determinism::auditClassification();
+
 	libGDR_init();
 	pvr::init();
 	aica::init();
@@ -747,8 +751,26 @@ void loadGameSpecificSettings()
 	// Reload per-game settings
 	config::Settings::instance().load(true);
 
-	if (config::GGPOEnable)
+	// Overclocking rescales every recompiled block's guest_cycles
+	// (sh4/dyna/decoder.cpp), so the guest gets a different amount of work done
+	// per frame. Record at 200 MHz and replay at 250 and the run diverges.
+	//
+	// Upstream pinned this for rollback netplay only (f8d5517b8, "Disable
+	// overclocking for ggpo and online games"). Local record/replay is the same
+	// problem under a different name, so it uses the predicate.
+	//
+	// Placed here deliberately: this is immediately after Settings::load(true),
+	// so it wins over any per-game section that set a different clock.
+	if (determinism::isDeterministicRun())
+	{
+		// Log when it actually bites. A silent pin is indistinguishable from an
+		// absent one, and this is the class of guard that is only ever noticed
+		// by the desync it failed to prevent.
+		if (config::Sh4Clock != 200)
+			NOTICE_LOG(COMMON, "determinism: pinning SH4 clock %d -> 200 MHz (%s run)",
+					(int)config::Sh4Clock, determinism::runKind());
 		config::Sh4Clock.override(200);
+	}
 }
 
 void Emulator::step()
@@ -895,8 +917,12 @@ void Emulator::start()
 	verify(state == Loaded);
 	state = Running;
 	SetMemoryHandlers();
-	if (config::GGPOEnable && config::ThreadedRendering)
-		// Not supported with GGPO
+	if (determinism::isDeterministicRun() && config::ThreadedRendering)
+		// Full framebuffer emulation races the render thread, so upstream
+		// disabled it for rollback (51758b965). A local recording needs the
+		// same guarantee: recorded with it on, replayed with it off - or on a
+		// machine where the race lands differently - and the run diverges.
+		// Widened from config::GGPOEnable to the predicate.
 		config::EmulateFramebuffer.override(false);
 #if FEAT_SHREC != DYNAREC_NONE
 	if (config::DynarecEnabled)

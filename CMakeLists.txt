@@ -1251,6 +1251,8 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/build.h
 		core/cheats.cpp
 		core/cheats.h
+		core/determinism.cpp
+		core/determinism.h
 		core/emulator.h
 		core/nullDC.cpp
 		core/serialize.cpp
