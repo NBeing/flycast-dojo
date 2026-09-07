@@ -1,4 +1,5 @@
 #include "dojo.h"
+#include "rend/video_recorder.h"
 #include "tastext.h"
 #include "oslib/oslib.h"
 #include "json.hpp"
@@ -34,6 +35,28 @@ void Replay::Init()
 	cfgSetVirtual("config", "Dreamcast.SavestateSlot", "0");
 	NOTICE_LOG(NETWORK, "TAS: savestate slot reset to 0 (BASE) for this clip");
 	dojo.BeginClipStats();
+
+	// HEADLESS AUTO-CAPTURE, start side. dojo.cpp stops it when the movie ends;
+	// without this it stopped something that never began.
+	//
+	// The TAS fork starts it in mainui.cpp right after the AutoSeekState seek.
+	// That path is not on this branch (AutoSeekState is part of the unported UI
+	// layer), so the trigger here is simply "a replay opened" - which is the
+	// same intent for a clip played from frame 0, and is the only mode this
+	// branch has.
+	//
+	// Requesting this early is safe by design: requestStart() only stashes the
+	// path, and the renderer opens the encoder on the first frame it composites,
+	// because that is the only place the framebuffer size is known.
+	if (cfgLoadBool("dojo", "AutoCapture", false))
+	{
+		const std::string stem = ghc::filesystem::path(filename).stem().string();
+		const std::string out = hostfs::getSavestatePath(0, false).empty()
+				? stem + ".avi"
+				: (ghc::filesystem::path(hostfs::savestateFolderOverride) / (stem + ".avi")).string();
+		videorec::requestStart(out);
+		NOTICE_LOG(NETWORK, "TAS: auto-capture armed -> %s", out.c_str());
+	}
 
 	// T6 (dojo:TextApply): if a hand-edited text movie sits next to the .flyr, import it and push
 	// it through THE FUNNEL - ApplyEdit diffs, applies, appends to the .flyr, and logs the

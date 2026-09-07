@@ -1,7 +1,7 @@
 #include "dojo.h"
 #include "tasmacro.h"
 #include "tas_auto.h"
-#include "avi_dump.h"
+#include "rend/video_recorder.h"
 #include "oslib/oslib.h"	// hostfs::savestateFolderOverride (generation archive)
 #include <ctime>			// macro autosave stamp (wall clock)
 #include "json.hpp"
@@ -1949,8 +1949,8 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 			NOTICE_LOG(NETWORK, "TAS: replay end at frame %u (movie exhausted)", dojo.frame_number.load());
 			dojo.ReleaseTasHolds();
 			dojo.VerifyInputsReport();
-			if (cfgLoadBool("dojo", "AutoCapture", false) && avi_dump.isRecording())
-				avi_toggle_recording();	// headless capture: stop + mux when the movie ends
+			if (cfgLoadBool("dojo", "AutoCapture", false) && videorec::isRecording())
+				videorec::requestStop();	// headless capture: stop + mux when the movie ends
 		}
 		gui_setState(GuiState::ReplayEnd);
 	}
@@ -1979,8 +1979,8 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 				NOTICE_LOG(NETWORK, "TAS: replay end at frame %u (no frame data)", dojo.frame_number.load());
 				dojo.ReleaseTasHolds();
 				dojo.VerifyInputsReport();
-				if (cfgLoadBool("dojo", "AutoCapture", false) && avi_dump.isRecording())
-					avi_toggle_recording();	// headless capture: stop + mux when the movie ends
+				if (cfgLoadBool("dojo", "AutoCapture", false) && videorec::isRecording())
+					videorec::requestStop();	// headless capture: stop + mux when the movie ends
 			}
 			gui_setState(GuiState::ReplayEnd);
 			return;

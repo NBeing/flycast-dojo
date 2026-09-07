@@ -52,22 +52,48 @@ flags for hotkeys that do not exist here. It is an inert belt for absent braces.
 
 These are decisions still to make, not bugs to fix.
 
-### 1. Two capture stacks, both live
+### 1. Two capture stacks — RESOLVED
 
-| | origin | hooks | backends |
-|---|---|---|---|
-| `core/dojo/avi_dump.cpp` | TAS fork | `dojo.cpp:1953,1983` — stop+mux at movie end | DX9, DX11 |
-| `core/rend/video_recorder.cpp` | video-recording | all 4 renderers, audio, gui, Lua | GL, Vulkan, DX11, DX9 |
+The first description of this was wrong and is corrected here rather than
+quietly edited. It said "two live stacks racing". They were not racing:
 
-They are independent and neither knows about the other. **On Windows both would
-be live at once**: a replay's headless auto-capture would drive `avi_dump` while
-the toolbar button and `flycast.video.*` drive `videorec`. On Linux `avi_dump`
-is inert (no DX), which is the only reason this has not bitten yet.
+- `avi_dump`'s **start** lives in the TAS fork's `mainui.cpp:209-212`, tied to
+  the `AutoSeekState` seek — part of the unported UI layer.
+- So on this branch `avi_dump` could never start. Its only two references
+  (`dojo.cpp:1952,1982`) were `isRecording()` guards that were permanently
+  false, in front of a stop that could never fire.
 
-They are also different products — `avi_dump` captures the clean pre-OSD image
-for editing; `video_recorder` captures what the user sees, overlays included.
-Both are wanted. The decision is whether they become two *modes* of one recorder
-or stay two stacks with one clearly owning the headless path.
+It was ~1,050 lines of unreachable code behind a call site that read as live.
+And `dojo:AutoCapture=yes` silently did nothing, because the stop was ported
+and the start was not.
+
+**Fixed:**
+
+1. Both stop sites now call `videorec::requestStop()` — the recorder that is
+   actually wired into the renderers, audio, gui and Lua on this branch.
+2. The missing **start** is in `Replay::Init` (`replay.cpp`). The TAS fork hangs
+   it off the `AutoSeekState` seek; that does not exist here, so the trigger is
+   "a replay opened", which is the same intent for a clip played from frame 0 —
+   the only mode this branch has. Requesting early is safe: `requestStart()`
+   only stashes the path, and the renderer opens the encoder on the first frame
+   it composites, since that is where the framebuffer size is known.
+3. `avi_dump` is **removed from the build** (0 occurrences in `build.ninja`, 0
+   symbols in the binary). The sources stay in the tree as reference for their
+   ProRes/CineForm recipe, which is the part worth salvaging.
+
+**Verified end to end**, headless, offscreen:
+
+```
+replay.cpp:58  TAS: auto-capture armed -> .../<clip>.avi
+-> 64 MB, mjpeg, 2210 frames, 36.8 s, written into the clip folder
+```
+
+What is still genuinely wanted from `avi_dump` is its **clean pre-OSD capture**
+and its ProRes/CineForm encoders — as a *mode* of `video_recorder`, not as a
+second stack. `video_recorder` reads the presented buffer (overlays included);
+a clean-plate mode needs an earlier readback point per backend. That is the
+real remaining work, and it is now one decision inside one recorder rather than
+a collision between two.
 
 ### 2. Two frame counters
 

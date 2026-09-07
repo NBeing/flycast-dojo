@@ -1007,8 +1007,6 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/dojo/deps/filesystem.hpp
 		core/dojo/deps/picosha2.h
 		core/dojo/deps/UUID.hpp
-		core/dojo/avi_dump.cpp
-		core/dojo/avi_dump.h
 		core/dojo/mvc2.cpp
 		core/dojo/mvc2.h
 		core/dojo/tas_auto.cpp
