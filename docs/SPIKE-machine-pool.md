@@ -131,10 +131,42 @@ statics; this found it by testing the behaviour. **The 1,252 globals are back
 on the table**, but now with a cheap oracle to bisect them: flip a candidate to
 per-instance, re-run this script, see if the three members agree.
 
-**Methodological caveat:** the members are compared by `savestate.hash()` after
-300 vblanks each. If a restore lands at a different sub-frame phase, the windows
-are not identical and some drift would be measurement rather than machine. I did
-not rule that out.
+**`[MEASURED 2026-09-07]` The ruler is ruled out.** The script now carries two
+controls: it hashes each member **immediately after restore**, before any frames
+run, and reads the machine's own movie-frame counter at both ends so it can
+prove each member ran the same number of GUEST frames rather than host vblanks.
+
+```
+member 1  H0=2966399345  frames 461->761 (300)  HN=4215541059
+member 2  H0=2966399345  frames 762->1062 (300)  HN=399580219
+member 3  H0=2966399345  frames 1063->1363 (300)  HN=665769862
+
+start states identical? true
+same guest frames run?  true
+end states identical?   false
+```
+
+Identical start, identical frame count, different end. **The divergence is the
+machine, not the measurement.**
+
+Two further eliminations, from re-running with recording OFF:
+
+- **Not the movie input stream.** `dojo.frame_number` is NOT restored by a
+  savestate — it climbs 461 / 762 / 1063 across restores — and under recording
+  it indexes `session_inputs`, so each member looked like it was being fed a
+  different slice of inputs. But with recording off the three `HN` values are
+  **byte-identical** to the recording run. Not the cause.
+- **Not the RTC.** It is pinned in the recording run and live in the other. Same
+  three hashes. Not the cause.
+
+So the leak is deterministic, internal, and a function of *how many restores
+have happened* — which is the signature of something accumulating outside the
+serialized set. The recompiler's block cache and `smc_hotspots` are the leading
+untested candidates.
+
+Note `dojo.frame_number` not being restored is a real defect in its own right,
+independent of this: it is why the TAS fork needs a `.frame` sidecar beside every
+savestate.
 
 ## Three options
 

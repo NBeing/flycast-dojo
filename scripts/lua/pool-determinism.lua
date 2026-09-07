@@ -1,31 +1,41 @@
--- THE ACTUAL POOL GUARANTEE: two machines restored from the same blob, each
--- run forward the same number of frames, must agree. (Comparing a restored
--- machine against a never-restored one is a different, stronger claim.)
-local n, blob, h = 0, nil, {}
-local RUN, phase = 300, 0
+-- Rule out the ruler. Two controls added to the pool test:
+--   H0  = hash IMMEDIATELY after restore, before any frames run.
+--         If H0 differs, the restore itself is non-deterministic and the
+--         300-frame window is irrelevant.
+--   fc  = the MACHINE's own movie-frame counter at start and end, so we can
+--         prove each member executed the same number of guest frames rather
+--         than the same number of host vblanks.
+local n, blob, phase = 0, nil, 0
+local RUN = 300
+local H0, HN, FC0, FC1 = {}, {}, {}, {}
+local member = 0
 flycast_callbacks = {}
 flycast_callbacks.vblank = function()
     n = n + 1
     if phase == 0 and n == 600 then
         blob = flycast.savestate.tostring()
-        flycast.savestate.fromstring(blob)
-        print("FWD3: snapshot + restore #1")
+        print("FWD5: snapshot "..#blob.." bytes")
         phase, n = 1, 0
-    elseif phase == 1 and n == RUN then
-        h[1] = flycast.savestate.hash()
-        print("FWD3: member A -> "..tostring(h[1]))
+    elseif phase == 1 then
+        member = member + 1
         flycast.savestate.fromstring(blob)
+        H0[member]  = flycast.savestate.hash()
+        FC0[member] = flycast.frame.count()
         phase, n = 2, 0
     elseif phase == 2 and n == RUN then
-        h[2] = flycast.savestate.hash()
-        print("FWD3: member B -> "..tostring(h[2]))
-        flycast.savestate.fromstring(blob)
-        phase, n = 3, 0
-    elseif phase == 3 and n == RUN then
-        h[3] = flycast.savestate.hash()
-        print("FWD3: member C -> "..tostring(h[3]))
-        print("FWD3: VERDICT " .. ((h[1] == h[2] and h[2] == h[3])
-              and "POOL-SAFE (all restores agree)" or "DIVERGED"))
-        phase = 4
+        HN[member]  = flycast.savestate.hash()
+        FC1[member] = flycast.frame.count()
+        print(string.format("FWD5: member %d  H0=%s  frames %d->%d (%d)  HN=%s",
+              member, tostring(H0[member]), FC0[member], FC1[member],
+              FC1[member]-FC0[member], tostring(HN[member])))
+        if member < 3 then phase, n = 1, 0 else
+            local h0same = (H0[1]==H0[2] and H0[2]==H0[3])
+            local fcsame = ((FC1[1]-FC0[1])==(FC1[2]-FC0[2]) and (FC1[2]-FC0[2])==(FC1[3]-FC0[3]))
+            local hnsame = (HN[1]==HN[2] and HN[2]==HN[3])
+            print("FWD5: start states identical? "..tostring(h0same))
+            print("FWD5: same guest frames run?  "..tostring(fcsame))
+            print("FWD5: end states identical?   "..tostring(hnsame))
+            phase = 3
+        end
     end
 end
