@@ -10,6 +10,13 @@
 > The rules below still hold; the ones about `core/oslib/audiostream.cpp`,
 > `gui_settings.cpp` and `core/wsi/{wgl,xgl}.cpp` describe the OLD base and are
 > stale here (dojo-7 moved or deleted all three).
+>
+> The TAS fork's own docs and harnesses live under `docs/tas-fork/` and
+> `scripts/tas-fork/`, carried unedited. **`docs/tas-fork/PORTING_NOTES.md`
+> says which half of them is true on this branch** — the engine came across,
+> the UI layer did not, and the originals do not separate the two. It also
+> lists the open architectural collisions: two capture stacks, two frame
+> counters, a half-converted determinism predicate.
 
 Workflow rules adapted from `nbneo-rr/CLAUDE.md`. Its architecture sections are
 not reproduced — that project's `step / render / observe / present` model is a

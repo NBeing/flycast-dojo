@@ -1,0 +1,294 @@
+<title>VA2 Notation Grammar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --bg:#e8e4d9; --surface:#f2eee4; --surface-2:#eae5d8; --raise:#faf7ef;
+  --ink:#211f18; --muted:#5c584b; --faint:#8a8573;
+  --line:#d3cebe; --line-2:#bbb5a1;
+  --accent:#356b45; --accent-ink:#295436; --accent-2:#4d8a5e;
+  --amber:#946012; --amber-ink:#7a4f0c;
+  --danger:#a2392f; --danger-bg:#efdcd6;
+  --ok-bg:#dfe8da;
+  --shadow:0 1px 2px rgba(30,28,18,.07),0 9px 26px -18px rgba(30,28,18,.28);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#14150f; --surface:#1b1d15; --surface-2:#21241a; --raise:#24271c;
+    --ink:#e9e6d9; --muted:#97927f; --faint:#6a6756;
+    --line:#2b2d21; --line-2:#3d4030;
+    --accent:#6db684; --accent-ink:#8ed2a1; --accent-2:#7cc793;
+    --amber:#d99a3f; --amber-ink:#e6b164;
+    --danger:#df6a5f; --danger-bg:#2c1c18;
+    --ok-bg:#1c261c;
+    --shadow:0 1px 2px rgba(0,0,0,.32),0 13px 34px -22px rgba(0,0,0,.72);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14150f; --surface:#1b1d15; --surface-2:#21241a; --raise:#24271c;
+  --ink:#e9e6d9; --muted:#97927f; --faint:#6a6756;
+  --line:#2b2d21; --line-2:#3d4030;
+  --accent:#6db684; --accent-ink:#8ed2a1; --accent-2:#7cc793;
+  --amber:#d99a3f; --amber-ink:#e6b164;
+  --danger:#df6a5f; --danger-bg:#2c1c18;
+  --ok-bg:#1c261c;
+  --shadow:0 1px 2px rgba(0,0,0,.32),0 13px 34px -22px rgba(0,0,0,.72);
+}
+*{box-sizing:border-box}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Archivo",system-ui,sans-serif;font-size:15.5px;line-height:1.58;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto;padding:0 clamp(18px,4vw,40px)}
+a{color:var(--accent-ink);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+code{font-size:.86em;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:.08em .32em}
+p{max-width:72ch}
+
+header{padding:clamp(36px,6vw,60px) 0 8px}
+.eyebrow{font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-ink);display:flex;align-items:center;gap:9px}
+.eyebrow .dot{width:7px;height:7px;border-radius:2px;background:var(--accent)}
+h1{font-family:"Archivo",sans-serif;font-weight:800;font-size:clamp(30px,5.6vw,52px);line-height:1;letter-spacing:-.015em;margin:16px 0 10px}
+.sub{color:var(--muted);font-size:15.5px;max-width:70ch;margin:0 0 16px}
+.statrow{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 4px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:9px 14px;box-shadow:var(--shadow)}
+.stat .n{font-family:"Archivo",sans-serif;font-weight:800;font-size:20px;font-variant-numeric:tabular-nums}
+.stat .l{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:2px}
+.provenance{margin-top:14px;padding:12px 16px;border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface));border-radius:0 8px 8px 0;font-size:13.5px;color:var(--muted);max-width:76ch}
+.provenance b{color:var(--ink)}
+
+section{padding:30px 0;border-top:1px solid var(--line)}
+.sec-h{display:flex;align-items:baseline;gap:12px;margin:0 0 6px}
+.sec-h .num{font-family:"JetBrains Mono",monospace;font-size:12.5px;font-weight:700;color:var(--accent)}
+h2{font-family:"Archivo",sans-serif;font-weight:700;font-size:clamp(21px,3vw,28px);margin:0}
+h3{font-weight:700;font-size:17px;margin:22px 0 8px}
+.section-intro{color:var(--muted);font-size:14.5px;max-width:72ch;margin:2px 0 10px}
+
+.tbl-scroll{overflow-x:auto;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600;white-space:nowrap}
+td code{white-space:nowrap}
+tr.res td{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+
+.badge{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:5px;white-space:nowrap}
+.badge.resolved{color:var(--accent-ink);background:var(--ok-bg);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line))}
+.badge.blocker{color:var(--danger);background:var(--danger-bg);border:1px solid color-mix(in srgb,var(--danger) 40%,var(--line))}
+.badge.default{color:var(--amber-ink);background:color-mix(in srgb,var(--amber) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--amber) 40%,var(--line))}
+.badge.cosmetic{color:var(--muted);background:var(--surface-2);border:1px solid var(--line-2)}
+.badge.deferred{color:var(--muted);background:var(--surface-2);border:1px dashed var(--line-2)}
+
+.callout{margin:14px 0;display:flex;gap:11px;align-items:flex-start;font-size:14px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:9px;padding:12px 15px}
+.callout.red{border-left-color:var(--danger)}
+.callout .tag{font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:var(--surface-2);color:var(--muted);white-space:nowrap;flex:none;margin-top:2px}
+
+pre.block{background:var(--raise);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;font-family:"JetBrains Mono",monospace;font-size:12.5px;line-height:1.65;margin:14px 0;box-shadow:var(--shadow)}
+pre.block .cm{color:var(--faint)}
+pre.block .kw{color:var(--accent-ink);font-weight:700}
+
+.rules{counter-reset:r;list-style:none;margin:12px 0;padding:0;display:grid;gap:9px}
+.rules li{counter-increment:r;display:grid;grid-template-columns:26px 1fr;gap:11px;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:11px 14px;font-size:14px}
+.rules li::before{content:counter(r);font-family:"Archivo",sans-serif;font-weight:800;color:var(--accent);font-size:15px;text-align:center}
+.rules li b{color:var(--ink)}
+.rules li{color:var(--muted)}
+
+.footer{border-top:1px solid var(--line);margin-top:16px;padding:22px 0 40px;font-size:12.5px;color:var(--faint)}
+.footer b{color:var(--muted)}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow"><span class="dot"></span>ASCII Pad V PRO · 2009 combo-transcript dialect · codec spec (flycast-rr F3 / T2.2)</div>
+  <h1>VA2 Notation Grammar</h1>
+  <p class="sub">The complete, corpus-derived grammar of the hand-written ASCII-pad combo notation — <code>n</code> = neutral, <code>pp</code> = LP+HP, numpad directions, RLE durations — formalized for the bidirectional PPAD codec. Every rule below is backed by exact counts from the real archive.</p>
+  <div class="statrow">
+    <div class="stat"><div class="n">50</div><div class="l">combos</div></div>
+    <div class="stat"><div class="n">2,694</div><div class="l">step tokens</div></div>
+    <div class="stat"><div class="n">824</div><div class="l">distinct forms</div></div>
+    <div class="stat"><div class="n">20</div><div class="l">flags · most resolved</div></div>
+  </div>
+  <p class="provenance"><b>Provenance & status.</b> Derived from the author's <code>Variable.Atmosphere.2</code> spreadsheet (rows R002–R051), token-by-token, reconciled against the live flycast-rr parser <code>tasParseMash</code> (<code>core/dojo/dojo_gui.cpp:2942</code>) and the canon-bit vocabulary (<code>tasmacro.h:42</code>). The author subsequently ruled on the major ambiguities — those rulings are layered in and marked <span class="badge resolved">resolved</span>; the flag table's status column is authoritative. Multi-row combos (R049→R050) are stitched in a pre-parse assembly pass using the <code>&lt;1-10&gt;</code> chunk labels, with a user notice on any inconsistency.</p>
+</header>
+
+<!-- 01 -->
+<section>
+  <div class="sec-h"><span class="num">01</span><h2>Reconciliation with the engine parser</h2></div>
+  <p class="section-intro">The dialect is a <b>near-superset</b> of <code>tasParseMash</code> — same canon bits, same numpad table (<code>np[10]</code>, dojo_gui.cpp:2970), same button names, same <code>+</code> joiner. It adds RLE durations, motions, <code>n</code>, the <code>-</code>/<code>_</code> hold-separator, named assists, and repeat-groups — and conflicts on exactly one token.</p>
+  <div class="tbl-scroll"><table>
+    <thead><tr><th>Aspect</th><th>tasParseMash (engine)</th><th>2009 dialect</th><th>Relationship</th></tr></thead>
+    <tbody>
+      <tr><td><code>/</code></td><td>frame advance</td><td><b>step</b> advance (a step = 1+ frames)</td><td>compatible, different granularity</td></tr>
+      <tr><td><code>+</code></td><td>intra-frame joiner</td><td>intra-step joiner (same frame)</td><td><b>identical — reuse as-is</b></td></tr>
+      <tr><td>whitespace</td><td>intra-frame joiner (= <code>+</code>)</td><td><b>step separator</b> (line-wrap)</td><td><b>HARD CONFLICT — normalize to <code>/</code> in pre-assembly</b></td></tr>
+      <tr><td><code>,</code></td><td>intra-frame joiner</td><td>not used in corpus</td><td>comma stays a joiner (author-confirmed)</td></tr>
+      <tr><td>single digit 1–9</td><td>numpad direction, 1 frame</td><td>numpad direction, 1 frame</td><td>identical</td></tr>
+      <tr><td>multi-digit <code>236</code></td><td>error</td><td>motion: 1 frame per digit</td><td>superset</td></tr>
+      <tr><td>trailing number <code>hk140</code></td><td>error</td><td>RLE hold duration (frames)</td><td>superset</td></tr>
+      <tr><td><code>-</code> / <code>_</code></td><td>not handled</td><td>hold-separator / duration-forcer</td><td>superset</td></tr>
+      <tr><td><code>n</code>, <code>n65</code></td><td>not handled (empty token = neutral)</td><td>explicit neutral frame(s)</td><td>superset</td></tr>
+      <tr><td>assists</td><td><code>A1 A2 ST</code> only</td><td><code>a1/a2/assist1/assist2</code> + <b>named</b> (<code>Magneto-B</code>)</td><td>superset + flagged extension</td></tr>
+      <tr><td><code>[x/y]*N</code></td><td>not handled</td><td>repeat-group</td><td>superset</td></tr>
+      <tr><td>annotations</td><td>none</td><td><code>tag-in</code>, <code>THC</code>, <code>taunt</code></td><td>out-of-band → flags</td></tr>
+    </tbody>
+  </table></div>
+  <p class="section-intro">Implementation reuse: the atom→canon-bits mapping in <code>flushInput</code> (dojo_gui.cpp:2948) works unchanged for a single atom; the codec layers step-splitting, motion expansion, duration RLE, <code>n</code>, and assist resolution on top.</p>
+</section>
+
+<!-- 02 -->
+<section>
+  <div class="sec-h"><span class="num">02</span><h2>Token catalog</h2></div>
+  <p class="section-intro">Every distinct form found, grouped, with exact corpus counts. All parsing is case-insensitive (<code>HK == hk</code>; the data is lowercase).</p>
+  <div class="tbl-scroll"><table>
+    <thead><tr><th>Group</th><th>Shape</th><th>Corpus</th><th>Examples (count)</th></tr></thead>
+    <tbody>
+      <tr><td>Neutral</td><td><code>n</code> + optional frames</td><td>81 forms / 462 occ</td><td><code>n</code> (265) · <code>n255</code> (13 — the pad's per-step ceiling, chained for long waits) · <code>n8</code> (9) · range n2–n255</td></tr>
+      <tr><td>Direction, 1 frame</td><td>single digit</td><td>9 / 514</td><td><code>2</code> (290) · <code>6</code> (45) · <code>7</code> (41) · <code>5</code> (2 — explicit neutral direction)</td></tr>
+      <tr><td>Direction, held</td><td><code>DIGIT(-|_)NUM</code></td><td>179 / 384</td><td><code>8-3</code> (42) · <code>4-130</code> (3) · <code>6-255</code> (2) · <code>1-190</code> — note <code>_</code> appears 0×, <code>-</code> 430×</td></tr>
+      <tr><td>Motion, bare</td><td><code>DIGIT{2,}</code></td><td>—</td><td><code>41236</code> (HCF) · <code>214</code> · <code>2369-4</code> (motion, final direction held 4f)</td></tr>
+      <tr><td>Buttons ± duration</td><td><code>BTN NUM?</code></td><td>155 / 524</td><td><code>pp15</code> (31) · <code>pp</code> (22) · <code>lp10</code> (21) · <code>hk15</code> (17) · <code>hp255</code> · <code>lk255</code></td></tr>
+      <tr><td>Dir + buttons ± dur</td><td><code>DIGIT BTN NUM?</code></td><td>260 / 570</td><td><code>2pp</code> (26) · <code>2hk7</code> (16) · <code>6pp11</code> (13) · <code>2hk29</code> (2) · <code>9pp2</code> · <code>6hp110</code></td></tr>
+      <tr><td>Motion + buttons</td><td><code>DIGIT{2,} BTN NUM?</code></td><td>53 / 134</td><td><code>214kk</code> (20) · <code>236pp</code> (10) · <code>623hp</code> (3, DP) · <code>63214hk96</code> · <code>12369874kk</code> (720° grab)</td></tr>
+      <tr><td>Assists, generic</td><td>slot references</td><td>deterministic</td><td><code>236+assist1</code> → A1 · <code>+a2</code> · inline no-plus: <code>6a1</code>, <code>214a2</code>, <code>6a1hk</code></td></tr>
+      <tr><td>Assists, <b>named</b></td><td><code>Name-A/B/Y</code></td><td>21 character forms</td><td><code>4+Magneto-B</code> · <code>632+Spiral-Y</code> · standalone <code>Cable-B</code>, <code>Dan-Y</code> · multi-word <code>Ruby Heart-B</code>, <code>Captain Commando-Y</code> (internal space!) · <code>Gambit-A+hp</code> (assist before button)</td></tr>
+      <tr><td>Custom pairs / Start</td><td>via <code>+</code></td><td>—</td><td><code>6lp+lk77</code> · <code>6hp+hk255</code> · <code>lk+start15</code> · <code>4+lp+lk+start37</code> · <code>start19</code></td></tr>
+      <tr><td>Repeat-group</td><td><code>[steps]*N</code></td><td>1 occ</td><td><code>[lp/hp]*360</code> (R032) — the only <code>[ ] *</code> in the corpus</td></tr>
+      <tr><td>Annotations</td><td>out-of-band</td><td>flags</td><td><code>tag-in magneto85</code> · <code>tag-sentinel</code> · <code>THC</code> · <code>taunt</code></td></tr>
+      <tr><td>Typos (glued steps)</td><td>missing <code>/</code></td><td>6+ cases</td><td><code>6hp23lp10</code> · <code>236hkn22</code> · <code>214lpn27</code> · <code>7n8</code> · <code>6hk-60</code> · <code>6rubypp2</code> · <code>kkk</code> · empty <code>//</code> (6×)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 03 -->
+<section>
+  <div class="sec-h"><span class="num">03</span><h2>Formal grammar</h2></div>
+  <pre class="block"><span class="cm"># PEG-style; ordered choice; all keywords case-insensitive.</span>
+<span class="cm"># Pre-pass: stitch multi-row combos; protect multi-word assist names; normalize WS + '//' to '/'.</span>
+
+<span class="kw">Sequence</span>   &lt;- Step (StepSep Step)* StepSep?          <span class="cm"># trailing sep tolerated</span>
+<span class="kw">StepSep</span>    &lt;- ('/' / WS)+                             <span class="cm"># '/' OR whitespace end a step; runs = empty steps</span>
+
+<span class="kw">Step</span>       &lt;- RepeatGrp / EmptyStep / Annotation / InputStep
+<span class="kw">EmptyStep</span>  &lt;- &amp;(StepSep / EOF)                        <span class="cm"># yields 1 neutral frame</span>
+<span class="kw">RepeatGrp</span>  &lt;- '[' Sequence ']' '*' NUM                <span class="cm"># repeat the expanded group N times (resolved)</span>
+
+<span class="kw">InputStep</span>  &lt;- Neutral / Atoms
+<span class="kw">Neutral</span>    &lt;- 'n' NUM?                                <span class="cm"># n = 1 frame · n65 = 65 frames</span>
+
+<span class="kw">Atoms</span>      &lt;- Atom ('+' Atom)*                        <span class="cm"># '+' fuses atoms onto the same frame(s)</span>
+<span class="kw">Atom</span>       &lt;- MotionAtom / DirBtnAtom / BtnAtom / AssistAtom / Start
+<span class="kw">MotionAtom</span> &lt;- DIGIT DIGIT+ Buttons? Assist? Dur?      <span class="cm"># ≥2 digits: 1 frame/digit; last carries the rest</span>
+<span class="kw">DirBtnAtom</span> &lt;- DIGIT Buttons Assist? Dur?              <span class="cm"># 6pp18 = dir + buttons, held</span>
+            / DIGIT Assist Dur?                        <span class="cm"># 6a1</span>
+            / DIGIT Hold                               <span class="cm"># 6-29 = held direction</span>
+            / DIGIT                                    <span class="cm"># 1 frame</span>
+<span class="kw">BtnAtom</span>    &lt;- Buttons Assist? Dur?                    <span class="cm"># pp / hk140</span>
+<span class="kw">Start</span>      &lt;- 'start' NUM?
+
+<span class="kw">Buttons</span>    &lt;- ('pp' / 'kk' / 'lp' / 'hp' / 'lk' / 'hk')+   <span class="cm"># pp = LP+HP · kk = LK+HK</span>
+<span class="kw">Assist</span>     &lt;- 'assist'('1'/'2') / 'a'('1'/'2')        <span class="cm"># deterministic → A1/A2</span>
+            / 'assist-'('a'/'b') / 'assistb'           <span class="cm"># slot-vs-type ambiguous → DEFERRED (F2)</span>
+            / NAME '-' ('a'/'b'/'y') / KnownCharName   <span class="cm"># named → NEEDS USER (F1/F12)</span>
+<span class="kw">Hold</span>       &lt;- ('-' / '_') NUM
+<span class="kw">Dur</span>        &lt;- NUM                                     <span class="cm"># only after buttons, or via Hold</span>
+<span class="kw">DIGIT</span>      &lt;- [1-9]                                   <span class="cm"># standard numpad · 5 = neutral · 9 = UP-RIGHT (resolved)</span></pre>
+
+  <h3>The normative disambiguations</h3>
+  <ol class="rules">
+    <li><div><b>Motion vs held direction — the <code>-</code>/<code>_</code> is the switch.</b> A bare run of ≥2 digits is a motion (1 frame per digit); a separator before a number forces it to be a <em>duration</em>. <code>236</code> = 3-frame QCF; <code>6-29</code> = right held 29f; <code>2369-4</code> = motion with the final direction held 4f.</div></li>
+    <li><div><b>The <code>-</code> never collides with names.</b> <code>&lt;digit&gt;-&lt;number&gt;</code> = hold; <code>&lt;letters&gt;-&lt;a|b|y&gt;</code> = named assist. Decide by what flanks the dash.</div></li>
+    <li><div><b>A button after the first digit locks it as a direction.</b> <code>6pp18</code> = dir 6 + PP held 18f — never <code>6</code> then <code>pp18</code>. A motion needs ≥2 consecutive digits <em>before</em> any button.</div></li>
+    <li><div><b>Trailing-number binding.</b> The final integer is the duration of the atom's last frame — after buttons (<code>2hk29</code>, <code>236hk12</code>), or after a bare direction/motion only via <code>-</code>/<code>_</code>. A number with no preceding button and no separator is motion digits, never a duration.</div></li>
+    <li><div><b>Whitespace separates steps</b> (line-wrap artifact) — the one divergence from the engine. Exception: the space <em>inside</em> a multi-word assist name (<code>Ruby Heart-B</code>) — protect via a longest-match character-name table in the pre-pass.</div></li>
+    <li><div><b><code>+</code> fuses onto the same frame(s).</b> <code>4+lp+lk+start37</code> = LEFT+LP+LK+START held 37f. A mid-step duration binds to the button it trails: <code>pp10+Cammy-A</code> = PP held 10f, with the assist on that step.</div></li>
+  </ol>
+</section>
+
+<!-- 04 -->
+<section>
+  <div class="sec-h"><span class="num">04</span><h2>Per-token → per-frame expansion</h2></div>
+  <p class="section-intro">Output model: a list of frames, each a canon mask (<code>CANON_*</code>, tasmacro.h). Frame-count identity: a motion contributes (digits − 1) + the final element's duration (default 1); everything else contributes its trailing duration (default 1).</p>
+  <div class="tbl-scroll"><table>
+    <thead><tr><th>Form</th><th>Example</th><th>Expansion</th></tr></thead>
+    <tbody>
+      <tr><td>neutral</td><td><code>n65</code></td><td>NEUTRAL ×65 (chained <code>n255</code> blocks simply sum — the 255 cap was the pad's per-step ceiling)</td></tr>
+      <tr><td>direction</td><td><code>6</code> / <code>6-29</code></td><td>RIGHT ×1 / RIGHT ×29</td></tr>
+      <tr><td>motion</td><td><code>236</code></td><td>DOWN ×1 · DOWN|RIGHT ×1 · RIGHT ×1</td></tr>
+      <tr><td>motion, final held</td><td><code>2369-4</code></td><td>DOWN · DOWN|RIGHT · RIGHT · UP|RIGHT ×4</td></tr>
+      <tr><td>buttons</td><td><code>pp</code> / <code>hk140</code></td><td>LP|HP ×1 / HK ×140</td></tr>
+      <tr><td>dir + buttons</td><td><code>2hk29</code> / <code>9pp2</code></td><td>DOWN|HK ×29 / UP|RIGHT|LP|HP ×2</td></tr>
+      <tr><td>motion + buttons</td><td><code>236pp</code></td><td>DOWN · DOWN|RIGHT · RIGHT|LP|HP ×1</td></tr>
+      <tr><td>motion + btn + dur</td><td><code>236hk12</code></td><td>DOWN · DOWN|RIGHT · RIGHT|HK ×12 — duration on the <b>final</b> frame only <span class="badge default">default · confirm</span></td></tr>
+      <tr><td>assist</td><td><code>236+assist1</code></td><td>DOWN · DOWN|RIGHT · RIGHT|A1 ×1 (assist rides the last motion frame)</td></tr>
+      <tr><td>custom pair</td><td><code>6hp+hk82</code></td><td>RIGHT|HP|HK ×82</td></tr>
+      <tr><td>start</td><td><code>4+lp+lk+start37</code></td><td>LEFT|LP|LK|START ×37</td></tr>
+      <tr><td>repeat-group</td><td><code>[lp/hp]*360</code></td><td>LP ×1, HP ×1 — the group — repeated <b>360 times</b> = 720 frames <span class="badge resolved">resolved</span>. Also valid on a bare token: <code>lp*3</code> = <code>lp/lp/lp</code>. A repeat, never a hold.</td></tr>
+      <tr><td>named assist</td><td><code>4+Magneto-B</code></td><td>LEFT | A? — <b>slot unknowable → halt, needs user</b> <span class="badge blocker">needs user</span></td></tr>
+      <tr><td>tag / THC</td><td><code>tag-in magneto85</code> / <code>THC</code></td><td>tag = LP+LK <em>or</em> HP+HK held 85f, by slot → needs user · <b>THC = A1+A2</b> ×1 <span class="badge resolved">THC resolved</span></td></tr>
+      <tr><td>empty step</td><td><code>//</code>, boundary <code>/</code></td><td>NEUTRAL ×1 each</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 05 -->
+<section>
+  <div class="sec-h"><span class="num">05</span><h2>Flag table — with author rulings</h2></div>
+  <p class="section-intro">The analysis raised 20 flags; the author has since ruled on the majors. <b>This status column is the authority</b> — it supersedes the recommendations inside the original analysis where they differ (notably F1: the Assist-column-ordering auto-resolution was <em>rejected</em>).</p>
+  <div class="tbl-scroll"><table>
+    <thead><tr><th>#</th><th>Issue</th><th>Status</th><th>Ruling / handling</th></tr></thead>
+    <tbody>
+      <tr class="res"><td>F1</td><td>Named assist → A1 vs A2 (<code>Magneto-B</code>, 21 forms)</td><td><span class="badge resolved">resolved</span></td><td><b>Not auto-resolvable</b> — the slot at record time is unknowable from the token (author rejected column-ordering inference). Always halt with "Needs User Intervention."</td></tr>
+      <tr><td>F2</td><td><code>assist-a</code>/<code>assist-b</code>/<code>AssistB</code> — slot or type?</td><td><span class="badge deferred">deferred</span></td><td>Parked by the author for the implementing agent; only numeric <code>a1/a2/assist1/assist2</code> are deterministic. Do not guess.</td></tr>
+      <tr class="res"><td>F3</td><td>Numpad orientation</td><td><span class="badge resolved">resolved</span></td><td><b>Standard — 9 = up-right</b>, author-confirmed; the corpus motions (<code>623</code>, <code>421</code>, <code>236</code>, <code>41236</code>, <code>12369874</code>) are only coherent standard, matching the engine <code>np[]</code>.</td></tr>
+      <tr class="res"><td>F4</td><td>Whitespace = step separator (engine conflict)</td><td><span class="badge resolved">resolved</span></td><td>Normalize WS runs to <code>/</code> in pre-assembly; never reuse the engine's space-as-joiner here. <code>/</code> is canonical; comma stays a joiner.</td></tr>
+      <tr><td>F5</td><td>Space inside multi-word names (<code>Ruby Heart-B</code>)</td><td><span class="badge default">default</span></td><td>Longest-match MvC2 character-name table protects the internal space pre-split; else flag the token.</td></tr>
+      <tr class="res"><td>F6</td><td><code>[lp/hp]*360</code> — count or frames?</td><td><span class="badge resolved">resolved</span></td><td><b><code>*N</code> = repeat count</b>: the bracketed per-frame group repeated N times (720 frames here); bracket notation = "inputs meant to be looped." Residual note: R032's Steps=368 doesn't reconcile — treat that one row's total as suspect, not the semantics.</td></tr>
+      <tr><td>F7</td><td><code>236hk12</code> — what does the 12 hold?</td><td><span class="badge default">default · confirm</span></td><td>Duration applies to the <b>final</b> (button) frame only; intermediates stay 1f. Matches the author's <code>236+assist1</code> = 3 frames rule. Awaiting explicit confirmation.</td></tr>
+      <tr class="res"><td>F8</td><td><code>//</code> / boundary slashes</td><td><span class="badge resolved">resolved</span></td><td>Each empty step = 1 neutral frame; normalized in pre-assembly with a notice.</td></tr>
+      <tr class="res"><td>F9</td><td>Glued-step typos (<code>6hp23lp10</code>, <code>236hkn22</code>…)</td><td><span class="badge resolved">resolved</span></td><td>Author ruling: <b>best-guess split + the user must confirm</b> — never silent auto-repair, never hard-fail without offering the guess.</td></tr>
+      <tr><td>F10</td><td><code>6hk-60</code> — dash after buttons</td><td><span class="badge default">default</span></td><td>Invalid position; interpret as <code>6hk60</code> under the F9 best-guess+confirm policy.</td></tr>
+      <tr><td>F11</td><td><code>kkk</code> (no third kick exists)</td><td><span class="badge default">default</span></td><td>Best-guess <code>kk</code> + confirm (F9 policy).</td></tr>
+      <tr class="res"><td>F12</td><td>Bare named assists (<code>Cable-B</code>, <code>Strider</code>, <code>ruby</code>)</td><td><span class="badge resolved">resolved</span></td><td>Same as F1 — needs user. <code>6rubypp2</code> additionally needs the F9 split.</td></tr>
+      <tr class="res"><td>F13</td><td><code>tag-in</code> / <code>tag-sentinel</code> / <code>THC</code></td><td><span class="badge resolved">resolved</span></td><td>Author ruling: <b>THC = A1+A2</b>. <b><code>tag-*NN</code> = LP+LK held NN (tag assist-1) <em>or</em> HP+HK held NN (tag assist-2)</b> — which pair depends on the unknowable slot → needs user, same bucket as F1.</td></tr>
+      <tr><td>F14</td><td><code>taunt</code></td><td><span class="badge default">default</span></td><td>MvC2 taunt = Start → <code>CANON_START</code> ×1 + note.</td></tr>
+      <tr><td>F15</td><td>Case variance (<code>Dhalsim-a</code>, <code>magneto-b</code>)</td><td><span class="badge cosmetic">cosmetic</span></td><td>Case-insensitive throughout.</td></tr>
+      <tr><td>F16</td><td><code>_</code> separator unused (0× vs 430× <code>-</code>)</td><td><span class="badge cosmetic">cosmetic</span></td><td>Accept per author rule; untested by data.</td></tr>
+      <tr><td>F17</td><td><code>5</code> = neutral direction</td><td><span class="badge cosmetic">cosmetic</span></td><td>Zero direction bits (<code>np[5]=0</code>).</td></tr>
+      <tr class="res"><td>F18</td><td>The recurring 255</td><td><span class="badge resolved">resolved</span></td><td>Author-confirmed: the pad's <b>per-step duration ceiling was 255</b> — long waits were authored as chained 255-blocks (e.g. 65,535 frames in 255-chunks). Merge on import; the codec's internal durations are u16+.</td></tr>
+      <tr><td>F19</td><td>Assist rides the last motion frame</td><td><span class="badge cosmetic">rule</span></td><td>Per the author's <code>236+assist1</code> spec.</td></tr>
+      <tr><td>F20</td><td>Date-column tokenizer leak</td><td><span class="badge cosmetic">cosmetic</span></td><td>Ingest by column header, never by "most slashes."</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 06 -->
+<section>
+  <div class="sec-h"><span class="num">06</span><h2>Round-trip contract</h2></div>
+  <div class="tbl-scroll"><table>
+    <thead><tr><th>Category</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><b>Lossless</b></td><td>Durations/RLE (<code>2hk29</code> ⇄ 29×(DOWN|HK)) · neutrals (<code>nN</code> ⇄ mask-0 runs, modulo 255-chunk merging) · the whole digital canon-bit domain (8-way + 6 buttons + START + A1/A2).</td></tr>
+      <tr><td><b>Canonical-choice on export</b></td><td>Motion vs per-frame text (<code>236</code> vs <code>2/3/6</code>) — both re-expand identically; exporter policy: emit motion notation only on a strong known-motion match, else explicit RLE steps.</td></tr>
+      <tr><td><b>Lossy by construction</b></td><td>Named-assist character identity (export always emits <code>a1</code>/<code>a2</code>; names are not part of the per-frame model) · annotations, repeat-groups and typos resolve at import and never regenerate · analog fidelity is out of scope (the dialect is digital-only).</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><span class="tag">invariant</span><div>For codec-<b>generated</b> text T: <code>expand(parse(T)) == frames</code> — per-frame canon-mask equality, frame count included (mirror <code>tas_macro::Probe</code>, tasmacro.h:64). For <b>imported</b> hand-authored text: every step must parse to a definite mask+count with <b>zero unresolved needs-user flags</b> — surface every flag rather than silently emitting bits. Round-trip equality is guaranteed on export, not import.</div></div>
+</section>
+
+<!-- 07 -->
+<section>
+  <div class="sec-h"><span class="num">07</span><h2>Still open</h2></div>
+  <ol class="rules">
+    <li><div><b>F7 confirm</b> — <code>236hk12</code>: the 12 holds only the final button frame (the default here). One word from the author locks it.</div></li>
+    <li><div><b>F2 deferred</b> — <code>assist-a/b</code> slot-vs-type, parked by the author for the implementing agent's pass.</div></li>
+    <li><div><b>F5 name table</b> — ship the fixed longest-match MvC2 character-name list to protect multi-word names' internal spaces (recommended), or adopt a delimiter convention.</div></li>
+    <li><div><b>R032 residue</b> — the one repeat-group row's Steps=368 doesn't reconcile with the resolved <code>*N</code> semantics; verify that row's total against a real replay when the codec lands.</div></li>
+  </ol>
+</section>
+
+<div class="footer">
+  <p><b>VA2 Notation Grammar</b> — the complete dialect spec for the PPAD codec (Combo Workbench <b>F3</b> / Backlog task <b>T2.2</b>). Corpus: the author's 2009 <code>Variable.Atmosphere.2</code> archive, 50 combos. Sibling of the <a href="https://claude.ai/code/artifact/ee6fcce7-d1df-45a1-b570-e69defd25d81">ASCII Pad V PRO reference</a> and the <a href="https://claude.ai/code/artifact/f07ffe8c-772c-4c51-9fcf-dd023b55caa9">Combo Workbench spec</a>. Engine file:line references are against the <code>tas-tools</code> tree at analysis time — re-verify before implementing.</p>
+</div>
+</div>
