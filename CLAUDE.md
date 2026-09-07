@@ -86,6 +86,18 @@ you trust it.** A check that cannot fail reads exactly like a passing one.
 > pass. A measurement whose failure mode is *silently empty* must be built so
 > that empty is an error, not a zero.
 
+> `[MEASURED 2026-09-07]` A negative test asserted that `startRecording` is
+> refused during playback, and judged it by "no clip folder was created". That
+> is ALSO what "the Lua script never ran" looks like, and the script had not
+> run. It reported PASS. The fix is the general one: **every test's first
+> assertion is that it is running in the state it claims to test** — the script
+> now writes a marker BEFORE the call it is testing, so "did not run" and
+> "refused" cannot produce the same evidence. Three more of the same family the
+> same day: a probe whose callback never fired because flycast's
+> `IsMouseClicked` is 1-based and threw on 0; a "still paused?" check that was
+> equally consistent with the guard never being reached; and a report printed
+> before the event it was reporting on.
+
 > `[MEASURED 2026-09-05]` `conformance.lua` contained
 > `ok(not present or true, ...)` — a constant. The entire "denied" half of the
 > capability loop had never been able to fail, so a rename leaving a stub behind

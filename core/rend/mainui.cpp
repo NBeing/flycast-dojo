@@ -18,6 +18,7 @@
 */
 
 #include "mainui.h"
+#include "deferred.h"
 #include "cfg/cfg.h"
 #include "dojo/dojo.h"
 #include "hw/pvr/Renderer_if.h"
@@ -88,6 +89,12 @@ bool mainui_rend_frame()
 
 	os_DoEvents();
 	UpdateInputState();
+
+	// Actions that must run outside the ImGui frame and outside the emulation
+	// loop. This is the same point gui_loadState() is called from by the
+	// auto-seek block below, which is the evidence that stopping the emulator
+	// here is safe - see core/deferred.h for what is not.
+	deferred::drain();
 
 	// TAS test harness: -config dojo:AutoSeekState=N automates the
 	// "Play a Movie -> F3" step. Once playback is actually running (~2 s in),

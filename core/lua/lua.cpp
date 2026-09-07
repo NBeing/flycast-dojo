@@ -31,6 +31,7 @@
 #include "cfg/option.h"
 #include "emulator.h"
 #include "pause.h"
+#include "deferred.h"
 #include "input/gamepad_device.h"
 #include "input/mouse.h"
 #include "hw/maple/maple_devs.h"
@@ -1111,26 +1112,26 @@ static int loadStateFromString(lua_State *L)
 	if (len == 0)
 		return luaL_error(L, "empty savestate string");
 	Deserializer deser(data, len, false);
-	// NO STOP AROUND THE LOAD, AND THAT IS A MEASURED DECISION.
+	// STOP THE MACHINE AROUND THE LOAD - but only from the one place that can.
 	//
-	// gui_loadState (gui.cpp:4436) is the supported shape - emu.stop();
-	// dc_loadstate(); emu.start(); entirely within GuiState::Closed - and the
-	// obvious move is to express it here with pausing::Scoped. It does not
-	// work, in either direction:
+	// gui_loadState (gui.cpp) is the supported shape: emu.stop();
+	// dc_loadstate(); emu.start(); and it works because the hotkey path calls
+	// it from OUTSIDE any ImGui frame. Neither Lua callback is such a place:
 	//
-	//   * from a `vblank` callback we ARE the emulation thread, and emu.stop()
-	//     joins the thread it is called on. Deadlock.
-	//   * from a draw callback we are on the render thread but INSIDE an ImGui
-	//     frame, and stopping there wedges too: the MODAL reason is taken
-	//     (mask 00 -> 08 in the trace) and no frame is ever presented again.
-	//     gui_loadState escapes this only because the hotkey path calls it from
-	//     OUTSIDE any frame.
+	//   * `vblank` runs ON the emulation thread inside the emulation loop, and
+	//     emu.stop() joins the thread it is called from - deadlock;
+	//   * a draw callback is the render thread but INSIDE an ImGui frame, and
+	//     stopping there wedges - the stop is taken and no frame is ever
+	//     presented again.
 	//
-	// So an in-place load it is. That is safe from `vblank`, which already runs
-	// between frames with the loop between slices, and it is what every working
-	// caller does today. A restore that genuinely quiesces the loop needs a
-	// hook that is outside BOTH the ImGui frame and the emulation loop, and no
-	// such hook exists yet - see docs/SPIKE-machine-pool.md.
+	// [MEASURED 2026-09-07] Both, repeatedly. So the stop happens only when
+	// this runs from flycast.later(), which drains at the top of
+	// mainui_rend_frame - outside the frame and outside the loop, the same
+	// point gui_loadState() is already called from. Everywhere else the load
+	// happens in place, which is what every working caller does today.
+	std::optional<pausing::Scoped> guard;
+	if (deferred::inDrain() && emu.running())
+		guard.emplace(pausing::MODAL);
 	// dc_loadstate(), NOT dc_deserialize(). dc_deserialize only refills the
 	// machine's memory; dc_loadstate wraps it in the invalidation every load
 	// needs (emulator.cpp:797): flush the ARM7 recompiler, flush the MMU table,
@@ -1539,7 +1540,20 @@ static void luaRegister(lua_State *L)
 				.addFunction("loadStateString", loadStateFromString)
 				.addFunction("hashState", hashState)
 				.addFunction("displayNotification", gui_display_notification)
+				.addFunction("displayNotification", gui_display_notification)
 			.endNamespace()
+
+			// NO GENERAL-PURPOSE `later(fn)`, DELIBERATELY.
+			//
+			// The first version of this took a Lua function and ran it at the
+			// drain point. That is a footgun: the drain runs on the MAIN thread
+			// while the emulation thread is simultaneously running `vblank`
+			// callbacks, so it puts two threads inside one Lua state. It hung
+			// the emulator on the first try. [MEASURED 2026-09-07]
+			//
+			// The queue is therefore C++-only, and Lua gets specific deferred
+			// OPERATIONS instead - see savestate.loadLater. Each posts a C++
+			// action that touches no Lua at all.
 
 // flycast.video.* is LIVE on this base: video_recorder and its GL/Vulkan/DX
 // hooks are ported. flycast.replay.* below is still guarded - see its comment.
@@ -1884,6 +1898,26 @@ static void luaRegister(lua_State *L)
 				.addFunction("tostring", saveStateToString)
 				.addFunction("fromstring", loadStateFromString)
 				.addFunction("hash", hashState)
+				// NO savestate.loadLater HERE - IT DID NOT WORK, and shipping
+				// a binding that wedges the emulator would be worse than not
+				// shipping one. What was tried, all from deferred::drain() at
+				// the top of mainui_rend_frame - the same point gui_loadState()
+				// is called from by the auto-seek block, i.e. the one place
+				// known to be safe: [MEASURED 2026-09-07]
+				//
+				//   dc_loadstate + pausing::Scoped(MODAL)      wedges
+				//   dc_loadstate + explicit emu.stop()/start() wedges
+				//   the same, with rend.ThreadedRendering=no   wedges
+				//   dc_loadstate with NO stop at all           wedges
+				//
+				// The last one is the informative one: the load alone wedges
+				// from the main thread while the identical call from a `vblank`
+				// callback is fine. So the deferred point is not automatically
+				// safe for this - loading there races the running emulation
+				// thread, and stopping first fails for a separate reason not yet
+				// identified. Two problems, tangled. See
+				// docs/SPIKE-machine-pool.md.
+
 			.endNamespace()
 
 			.beginNamespace("session")

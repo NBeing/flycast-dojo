@@ -300,12 +300,36 @@ emulation loop, and the draw callback runs on the render thread inside the frame
 Stopping from either wedges, in opposite ways.
 
 **So the blocker is not the restore - it is that there is nowhere safe to stop
-from.** A restore that genuinely quiesces the loop needs a hook outside BOTH the
-ImGui frame and the emulation loop, and no such hook exists today. That is the
-concrete prerequisite for in-process pooling, and it is a small, well-defined
-piece of work: a deferred-action queue drained by `mainui_rend_frame` between
-frames would do it (`flycast.test.quit(code)` in the test-tooling proposal wants
-exactly the same hook, for the same reason).
+from.** `[MEASURED 2026-09-07]` The deferred hook was built to provide that
+place - `core/deferred.{h,cpp}`, drained at the top of `mainui_rend_frame`, the
+same point `gui_loadState()` is already called from by the auto-seek block. **It
+did not solve it.** Four variants, all from that point:
+
+| attempt | result |
+|---|---|
+| `dc_loadstate` + `pausing::Scoped(MODAL)` | wedges |
+| `dc_loadstate` + explicit `emu.stop()`/`emu.start()` | wedges |
+| same, with `rend.ThreadedRendering=no` | wedges |
+| `dc_loadstate` with **no stop at all** | wedges |
+
+The last row is the informative one and it changes the diagnosis again: the load
+ALONE wedges from the main thread, while the identical call from a `vblank`
+callback is fine. So the deferred point is not automatically safe for mutating
+the machine - loading there races the running emulation thread - and stopping
+first fails for a *separate*, still-unidentified reason. Two tangled problems,
+not one.
+
+What `gui_loadState` does differently from that point is the open question. It
+takes `guiMutex`, requires `gui_state == GuiState::Closed`, and goes through the
+slot/file path rather than `dc_loadstate(Deserializer&)` directly. One of those
+is load-bearing. **Next probe: call `gui_loadState()` itself from a deferred
+action.** If that works, the difference is in the path, not the place, and it
+can be bisected from there.
+
+The hook itself is kept - it is sound, it runs actions between frames, and
+`flycast.test.quit(code)` in the test-tooling proposal needs exactly it. The Lua
+binding that used it (`savestate.loadLater`) was REMOVED rather than shipped
+wedging.
 
 Meanwhile a separate real bug was found and fixed on the way: `loadStateFromString`
 called `dc_deserialize` rather than `dc_loadstate`, skipping the whole load-time
