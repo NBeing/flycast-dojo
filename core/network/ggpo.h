@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
 #pragma once
+#include "types.h"
 #include <future>
 #include <string>
 
@@ -37,6 +38,16 @@ void displayStats();
 void endOfFrame();
 void sendChatMessage(int playerNum, const std::string& msg);
 void receiveChatMessages(void (*callback)(int playerNum, const std::string& msg));
+
+// Frames the emulator has run forward for the first time, ignoring rollback
+// re-simulation. Unlike dojo.FrameNumber this does not drift.
+u32 confirmedFrame();
+//! Called once per delivered VBlank, i.e. not for re-simulated frames.
+void countConfirmedFrame();
+//! Called once per VBlank that IS a re-simulation.
+void countResimulatedFrame();
+//! Cumulative re-simulated frames this session.
+u32 resimSteps();
 
 static inline bool rollbacking() {
 	extern bool inRollback;

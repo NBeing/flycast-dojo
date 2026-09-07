@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include "ggpo.h"
+#include <limits>
 #include "hw/maple/maple_cfg.h"
 #include "hw/maple/maple_devs.h"
 #include "input/gamepad_device.h"
@@ -33,6 +34,16 @@ namespace ggpo
 {
 
 bool inRollback;
+//! Frames observers have been told about: incremented once per delivered
+//! VBlank, which excludes re-simulated frames by construction. Deriving it
+//! from dojo.FrameNumber instead looked tidier - same scale - but that counter
+//! advances on the dojo session's schedule rather than per frame, so offline it
+//! stalled and jumped, and a script asking "what frame is it" got neither a
+//! monotonic count nor a 1:1 one.
+static u32 confirmedFrames;
+//! Frames re-simulated by rollback, cumulative for the session. Useful as a
+//! connection-quality readout: it rises when prediction is failing.
+static u32 resimulatedFrames;
 
 static void getLocalInput(MapleInputState inputState[4])
 {
@@ -311,14 +322,14 @@ static bool load_game_state(unsigned char *buffer, int len)
 	for (int f = lastSavedFrame - 1; f >= frame; f--)
 	{
 		const MemPages& pages = deltaStates[f];
-		for (const auto& pair : pages.ram)
-			memcpy(memwatch::ramWatcher.getMemPage(pair.first), &pair.second.data[0], PAGE_SIZE);
-		for (const auto& pair : pages.vram)
-			memcpy(memwatch::vramWatcher.getMemPage(pair.first), &pair.second.data[0], PAGE_SIZE);
-		for (const auto& pair : pages.aram)
-			memcpy(memwatch::aramWatcher.getMemPage(pair.first), &pair.second.data[0], PAGE_SIZE);
-		for (const auto& pair : pages.elanram)
-			memcpy(memwatch::elanWatcher.getMemPage(pair.first), &pair.second.data[0], PAGE_SIZE);
+		for (u32 i = 0; i < pages.ram.size(); i++)
+			memcpy(memwatch::ramWatcher.getMemPage(pages.ram.offsetAt(i)), pages.ram.dataAt(i), PAGE_SIZE);
+		for (u32 i = 0; i < pages.vram.size(); i++)
+			memcpy(memwatch::vramWatcher.getMemPage(pages.vram.offsetAt(i)), pages.vram.dataAt(i), PAGE_SIZE);
+		for (u32 i = 0; i < pages.aram.size(); i++)
+			memcpy(memwatch::aramWatcher.getMemPage(pages.aram.offsetAt(i)), pages.aram.dataAt(i), PAGE_SIZE);
+		for (u32 i = 0; i < pages.elanram.size(); i++)
+			memcpy(memwatch::elanWatcher.getMemPage(pages.elanram.offsetAt(i)), pages.elanram.dataAt(i), PAGE_SIZE);
 		DEBUG_LOG(NETWORK, "Restored frame %d pages: %d ram, %d vram, %d eram, %d aica ram", f, (u32)pages.ram.size(),
 					(u32)pages.vram.size(), (u32)pages.elanram.size(), (u32)pages.aram.size());
 	}
@@ -344,8 +355,28 @@ static bool save_game_state(unsigned char **buffer, int *len, int *checksum, int
 {
 	verify(!sh4_cpu.IsCpuRunning());
 	lastSavedFrame = frame;
-	// TODO this is way too much memory
-	size_t allocSize = settings.platform.isNaomi() ? 20_MB : 10_MB;
+
+	// Size the buffer from a dry pass rather than reserving a worst case. A
+	// rollback snapshot excludes bulk memory - RAM, VRAM, ARAM and elan RAM are
+	// carried by the page deltas below - so the old fixed 10/20 MB reservation
+	// over-allocated by an order of magnitude, once per frame in the rollback
+	// window.
+	//
+	// The dry pass copies nothing (Serializer only writes when it has a buffer)
+	// and the CPU is stopped across both passes, verified above, so the second
+	// pass sees identical state. Sizing exactly also matters because
+	// doSerialize does not bounds-check: under-allocating would corrupt memory
+	// rather than fail.
+	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), true);
+	sizer << frame;
+	dc_serialize(sizer);
+	// A margin, because doSerialize does not bounds-check: if any serializer
+	// turned out not to report an identical size on both passes, under-
+	// allocating would corrupt memory rather than fail. The mismatch is logged
+	// so it is diagnosable instead of silent.
+	constexpr size_t SizingMargin = 64 * 1024;
+	const size_t allocSize = sizer.size() + SizingMargin;
+
 	*buffer = (unsigned char *)malloc(allocSize);
 	if (*buffer == nullptr)
 	{
@@ -356,7 +387,17 @@ static bool save_game_state(unsigned char **buffer, int *len, int *checksum, int
 	Serializer ser(*buffer, allocSize, true);
 	ser << frame;
 	dc_serialize(ser);
-	verify(ser.size() < allocSize);
+	verify(ser.size() <= allocSize);
+	if (ser.size() != sizer.size())
+	{
+		static bool reported;
+		if (!reported)
+		{
+			reported = true;
+			WARN_LOG(NETWORK, "[rollback] snapshot sizing differs: dry %d, actual %d",
+					(int)sizer.size(), (int)ser.size());
+		}
+	}
 	*len = ser.size();
 #ifdef SYNC_TEST
 	*checksum = XXH3_64bits(*buffer, usedSize, 7);
@@ -484,6 +525,9 @@ static void on_message(u8 *msg, int len)
 
 void startSession(int localPort, int localPlayerNum)
 {
+	// Frame numbering restarts with the session.
+	confirmedFrames = 0;
+	resimulatedFrames = 0;
 	GGPOSessionCallbacks cb{};
 	cb.begin_game      = begin_game;
 	cb.advance_frame   = advance_frame;
@@ -969,6 +1013,25 @@ void endOfFrame()
 	}
 }
 
+void countConfirmedFrame()
+{
+	confirmedFrames++;
+}
+
+void countResimulatedFrame()
+{
+	resimulatedFrames++;
+}
+
+u32 resimSteps()
+{
+	return resimulatedFrames;
+}
+
+u32 confirmedFrame()
+{
+	return confirmedFrames;
+}
 void sendChatMessage(int playerNum, const std::string& msg) {
 	if (!active())
 		return;
@@ -1016,6 +1079,20 @@ void displayStats() {
 }
 
 void endOfFrame() {
+}
+
+void countConfirmedFrame() {
+}
+
+void countResimulatedFrame() {
+}
+
+u32 resimSteps() {
+	return 0;
+}
+
+u32 confirmedFrame() {
+	return dojo.frame_number;
 }
 
 void sendChatMessage(int playerNum, const std::string& msg) {
