@@ -1286,32 +1286,75 @@ static void luaRegister(lua_State *L)
 			.endNamespace()
 
 			// Input-replay recording, independent of the video capture above.
-#if 0	// flycast.replay.* is NOT ported to this base.
-	  		//
-	  		// It calls dojo.StartReplayRecording / StopReplayRecording /
-	  		// IsRecordingReplay / replay_filename. dojo-7 restructured replay
-	  		// into a Replay member class (core/dojo/replay.h) with
-	  		// StartRecording(), CreateReplayFile() and LoadReplayFile(), and has
-	  		// no equivalent of IsRecordingReplay or replay_filename on Dojo.
-	  		//
-	  		// Guarded rather than half-adapted: a binding that misreports
-	  		// recording state is worse than one that admits it is absent, and
-	  		// emu.supports() answering false is a legitimate answer.
+			// [CORRECTED 2026-09-07] This block was #if 0'd with the note that dojo-7
+			// "has no equivalent of IsRecordingReplay or replay_filename". True when
+			// written, false now: Replay grew filename and HasAppendTarget(). The
+			// bindings below adapt to that class rather than to DojoSession.
 	  		.beginNamespace("replay")
+				// REFUSES DURING PLAYBACK, on purpose. CreateReplayFile is not a
+				// file-open: it creates a clip folder, re-points
+				// hostfs::savestateFolderOverride, resets the savestate slot to BASE
+				// and wipes scratch states. dojo.replay.cpp:130 records that exact call
+				// firing inside a replay session as a shipped, user-reported bug
+				// ("F3 loads today's state") and forces RecordMatches=no to prevent
+				// it. A Lua script must not be able to re-create it from the other
+				// side. Returns false rather than throwing or silently doing
+				// nothing - emuapi failure tier 3: report inability, never fake
+				// success.
 				.addFunction("startRecording", std::function<bool(std::string)>([](std::string name) {
-					return dojo.StartReplayRecording(name);
+					if (dojo.play_match || dojo.replay.replay_loaded)
+						return false;
+					if (dojo.recording_started && dojo.replay.HasAppendTarget())
+						return false;	// already recording; not a no-op "success"
+					// BOTH stores, per the Option-cache gotcha: Option objects cache
+					// the value read at startup, so cfgSetVirtual alone would not
+					// reach config::RecordMatches until the next Settings::load(),
+					// while sites that read cfg live would not see a bare .set().
+					config::RecordMatches = true;
+					cfgSetVirtual("dojo", "RecordMatches", "yes");
+					dojo.replay.CreateReplayFile(name.empty() ? dojo.replay.GetRomNamePrefix() : name);
+					// [MEASURED 2026-09-07] A movie started from Lua mid-session does
+					// NOT begin at power-on, and the fork's replay model assumes it
+					// does ("Movies record from power-on (frame 0); savestate-seek is
+					// a bookmark into that timeline"). Playing such a clip from the
+					// top logs "replay end at frame 0 (no frame data)" and stops
+					// immediately, because session_inputs has no frame 0. It is only
+					// useful paired with a savestate at its first frame. Say so
+					// rather than let a script author discover it from an empty
+					// playback.
+					if (dojo.frame_number != 0)
+						NOTICE_LOG(NETWORK, "TAS: Lua started recording at frame %u, not power-on"
+							" - this clip needs a savestate to be replayable", dojo.frame_number.load());
+					dojo.play_match = false;
+					dojo.recording_started = true;
+					return dojo.replay.HasAppendTarget();
 				}))
+				// The flush is NOT optional. AppendToReplay only writes in batches of
+				// FRAME_BATCH (120, dojo.h:42); stopping without FlushReplay silently
+				// discards up to 119 already-recorded frames.
 				.addFunction("stopRecording", std::function<void()>([]() {
-					dojo.StopReplayRecording();
+					if (!dojo.recording_started && !dojo.replay.HasAppendTarget())
+						return;
+					dojo.replay.FlushReplay();
+					config::RecordMatches = false;
+					cfgSetVirtual("dojo", "RecordMatches", "no");
+					dojo.replay.DetachFile();
+					dojo.recording_started = false;
 				}))
+				// dojo.cpp:2129 verbatim - the engine's OWN condition for "this frame
+				// gets appended". Bound rather than restated: a paraphrase drifts the
+				// next time that line changes, and HasAppendTarget() alone would
+				// report true during read-only playback (it is true for loaded
+				// replays too - see its comment in dojo.replay.h).
 				.addFunction("isRecording", std::function<bool()>([]() {
-					return dojo.IsRecordingReplay();
+					return !config::GGPOEnable && !dojo.play_match
+						&& (config::RecordMatches || config::Transmitting
+							|| dojo.replay.HasAppendTarget());
 				}))
 				.addFunction("currentPath", std::function<std::string()>([]() {
-					return dojo.replay_filename;
+					return dojo.replay.filename;
 				}))
 			.endNamespace()
-#endif
 #endif
 
 	  		.beginNamespace("config")

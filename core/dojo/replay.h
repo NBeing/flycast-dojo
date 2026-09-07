@@ -52,4 +52,9 @@ public:
     std::string remote_replay_json = "";
 };
 
-extern Replay replay;
+// NOTE: there is deliberately NO `extern Replay replay;` here. The instance is a
+// MEMBER of DojoSession (dojo.h:95, `Replay replay;`), which is why dojo.cpp can
+// say `replay.Foo()` unqualified. A file-scope extern used to sit here with no
+// definition anywhere: it compiled fine and failed only at LINK time, for any TU
+// outside dojo.cpp that included this header and trusted it. Reach it as
+// `dojo.replay`.
