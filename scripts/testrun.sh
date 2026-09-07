@@ -64,16 +64,23 @@ elif [ ${#TESTS[@]} -eq 0 ]; then
 	TESTS=("$ROOT"/scripts/tests/*.lua)
 fi
 
-[ -x "$BIN" ] || { echo "testrun: no binary at $BIN" >&2; exit 2; }
-[ -f "$ROM" ] || { echo "testrun: no ROM at $ROM" >&2; exit 2; }
-command -v Xvfb >/dev/null || { echo "testrun: Xvfb not installed" >&2; exit 2; }
+# 77 IS "COULD NOT RUN", AND IT IS NOT A FAILURE OR A PASS.
+#
+# ctest's SKIP_RETURN_CODE. A missing ROM or no Xvfb means this machine cannot
+# answer the question - reporting that as a failure trains people to ignore red,
+# and reporting it as a pass is the vacuous pass this whole harness exists to
+# prevent. Three outcomes, because there are three.
+SKIP=77
+[ -x "$BIN" ] || { echo "testrun: SKIP - no binary at $BIN" >&2; exit $SKIP; }
+[ -f "$ROM" ] || { echo "testrun: SKIP - no ROM at $ROM" >&2; exit $SKIP; }
+command -v Xvfb >/dev/null || { echo "testrun: SKIP - Xvfb not installed" >&2; exit $SKIP; }
 
 # A clip to replay. Tests want a movie running; without one the emulator sits in
 # attract mode and anything asserting on playback is vacuous.
 if [ -z "$CLIP" ]; then
 	CLIP=$(ls -1t "${XDG_DATA_HOME:-$HOME/.local/share}"/flycast-dojo/replays/*/*/*.flyr 2>/dev/null | head -1)
 fi
-[ -n "$CLIP" ] && [ -f "$CLIP" ] || { echo "testrun: no .flyr clip found; pass --clip" >&2; exit 2; }
+[ -n "$CLIP" ] && [ -f "$CLIP" ] || { echo "testrun: SKIP - no .flyr clip found; pass --clip" >&2; exit $SKIP; }
 
 mkdir -p "$OUT"
 rm -f "$OUT"/*.log "$OUT"/*.verdict 2>/dev/null

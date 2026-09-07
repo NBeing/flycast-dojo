@@ -1869,3 +1869,43 @@ if(${CMAKE_GENERATOR} MATCHES "^Xcode.*|^Visual Studio.*")
 	file(GLOB_RECURSE SRC_FILES *.h *.cpp *.c *.cc *.mm)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SRC_FILES})
 endif()
+
+# ---------------------------------------------------------------------------
+# Lua integration tests, and the twin that proves the harness can report failure
+#
+# `grep add_test CMakeLists.txt` returned ZERO before this, while CLAUDE.md
+# carried six testing rules. Written doctrine with no mechanism behind it decays
+# into decoration - docs/CROSS-PROJECT-LESSONS.md makes the comparison: nbneo-rr
+# has 119 add_test, 54 of them *_can_fail twins.
+#
+# ORDER IS LOAD-BEARING. flycast.harness_can_fail runs FIRST and is a ctest
+# FIXTURE the real suite requires. It runs four deliberately-broken tests and
+# checks the runner reports the right KIND of failure for each. If it does not,
+# the suite is NOT RUN at all - because a green result from a harness that has
+# never reported a failure means nothing, and reporting it would be worse than
+# reporting nothing.
+#
+# Both SKIP (77) rather than fail where the prerequisites are absent - no Xvfb,
+# no ROM, no clip. This machine cannot answer the question; that is neither a
+# pass nor a failure.
+#
+# Registered unconditionally, NOT under ENABLE_CTEST: that option builds the
+# bit-rotted gtest target (see CLAUDE.md), and a test you must remember to
+# enable is the thing this block exists to stop.
+enable_testing()
+
+add_test(NAME flycast.harness_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/testrun.sh --self-test --timeout 45 -j 2)
+set_tests_properties(flycast.harness_can_fail PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 900
+	FIXTURES_SETUP FLYCAST_HARNESS_TRUSTED
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
+add_test(NAME flycast.lua
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/testrun.sh --timeout 120)
+set_tests_properties(flycast.lua PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 1800
+	FIXTURES_REQUIRED FLYCAST_HARNESS_TRUSTED
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
