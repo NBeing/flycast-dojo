@@ -15,6 +15,7 @@
 #include "stdclass.h"
 #include "serialize.h"
 #include "determinism.h"
+#include <algorithm>
 #include "cfg/cfg.h"
 
 #include <filesystem>
@@ -190,6 +191,13 @@ void dc_loadstate(std::string filename)
 // Force with -config dojo:VerifyState=yes|no.
 static void verifyLoadedStateIdempotent(const void *blobA, size_t sizeA)
 {
+	// Is the machine actually STOPPED? dojo-7's dc_loadstate does not call
+	// emu.stop() (the older base did), so a re-serialize here can be racing a
+	// running emulator - in which case a "difference" is the machine advancing,
+	// not a restore bug. Report it rather than let it masquerade.
+	if (emu.running())
+		WARN_LOG(SAVESTATE, "STATE VERIFY: emulator is RUNNING during the probe - "
+				"any diff below may be the machine advancing, not a restore bug");
 	// The sizing pass over-reserves (TA contexts reserve their maximum), so the
 	// comparison uses the REAL byte count the second pass writes, never this.
 	Serializer sizer;
@@ -216,6 +224,29 @@ static void verifyLoadedStateIdempotent(const void *blobA, size_t sizeA)
 		WARN_LOG(SAVESTATE, "STATE VERIFY: NOT idempotent - first diff at offset %llu "
 				"(re-serialized %llu vs loaded %llu bytes)",
 				(unsigned long long)off, (unsigned long long)sizeB, (unsigned long long)sizeA);
+		// Dump the neighbourhood of the first difference. "Offset N" alone
+		// only narrows it to a subsystem (that is what SERMAP is for); the
+		// BYTES say which field, and whether the delta looks like a counter,
+		// a pointer or a timestamp.
+		{
+			const size_t from = off > 32 ? off - 32 : 0;
+			const size_t to   = std::min(off + 48, n);
+			std::string a, b, d;
+			char t[8];
+			for (size_t i = from; i < to; i++)
+			{
+				snprintf(t, sizeof(t), "%02x", ((const u8 *)blobA)[i]);   a += t;
+				snprintf(t, sizeof(t), "%02x", reser[i]);                 b += t;
+				d += (((const u8 *)blobA)[i] == reser[i]) ? ".." : "^^";
+				if ((i - from) % 4 == 3) { a += ' '; b += ' '; d += ' '; }
+			}
+			WARN_LOG(SAVESTATE, "STATE VERIFY: window [%llu..%llu), first diff at +%llu",
+					(unsigned long long)from, (unsigned long long)to,
+					(unsigned long long)(off - from));
+			WARN_LOG(SAVESTATE, "STATE VERIFY:  loaded %s", a.c_str());
+			WARN_LOG(SAVESTATE, "STATE VERIFY:  reser  %s", b.c_str());
+			WARN_LOG(SAVESTATE, "STATE VERIFY:  diff   %s", d.c_str());
+		}
 		char msg[96];
 		snprintf(msg, sizeof(msg), "State verify FAIL: differs at byte %llu",
 				(unsigned long long)off);

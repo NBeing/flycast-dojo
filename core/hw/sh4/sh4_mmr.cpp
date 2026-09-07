@@ -10,6 +10,7 @@
 #include "modules/modules.h"
 #include "sh4_cache.h"
 #include "serialize.h"
+#include "cfg/cfg.h"
 #include "sh4_interrupts.h"
 #include "sh4_sched.h"
 #include "sh4_interpreter.h"
@@ -683,13 +684,35 @@ void serialize(Serializer& ser)
 	if (!ser.rollback())
 		mem_b.serialize(ser);
 
+	// SERMAP, one level deeper. The sh4 block is ~16.8 MB and the top-level map
+	// only says "somewhere in sh4"; these name the field.
+	const bool mapLog = cfgLoadBool("dojo", "StateMapLog", false);
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.interrupts", (u32)ser.size());
 	interrupts_serialize(ser);
 
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.sq_buffer", (u32)ser.size());
 	ser << (*p_sh4rcb).sq_buffer;
 
+	// Sh4Context::sh4_sched_next is DERIVED - cycles until the next scheduled
+	// event, recomputed by sh4_sched_ffts() from the scheduler list. Nothing
+	// refreshes it before a save, so a stale figure gets written; on load the
+	// scheduler recomputes it, so the machine is right but the BLOB disagrees
+	// with a re-serialize of that same machine. That is the idempotency defect.
+	//
+	// `[MEASURED 2026-09-07]` byte 296 of cntx, per gdb `ptype /o Sh4Context`:
+	// loaded 0xFFFFFFE9 (-23, stale) vs re-serialized (recomputed).
+	//
+	// Recompute BEFORE the cntx write, not inside sh4_sched_serialize: cntx is
+	// written first, so canonicalising there is too late for the copy that
+	// actually differs. ffts() adjusts sh4_sched_ffb by the same delta so both
+	// stay consistent, and it is a no-op when the value is already current.
+	sh4_sched_ffts();
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.cntx", (u32)ser.size());
 	ser << (*p_sh4rcb).cntx;
 
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.sched", (u32)ser.size());
 	sh4_sched_serialize(ser);
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.END", (u32)ser.size());
 }
 
 template<typename T>

@@ -61,6 +61,13 @@ constantly, and the determinism work has been hardening exactly it.
 
 ---
 
+## THE BLOCKER — CLEARED `[2026-09-07]`
+
+`[CORRECTED 2026-09-07]` The section below says the machine "is not a value
+today". **It is now.** Three round-trip defects were found and fixed; the probe
+reports `idempotent OK`. The original text is kept because the reasoning about
+why it mattered still stands.
+
 ## THE BLOCKER, and it is not the statics
 
 `[MEASURED 2026-09-07]`, the first real use of the ported idempotency probe:
@@ -141,7 +148,8 @@ SERMAP is ported, and it named the culprit on its first run.
 |---|---|---|---|
 | before | 2,130,953 | **AICA** (`aica @ 8` .. `sb @ 2,137,629`) | ported David's `sgc_if.cpp` `RestoreAegState`/`RestoreFegState` — the EG step handlers were being re-seeded on load, overwriting just-restored values |
 | after that | 11,076,198 | **SH4**, early | ported David's `serial.cpp` SCIF fix — `updateBaudRate(reschedule=false)` on load, so a restored sched entry is not recomputed from "now" |
-| now | 27,884,792 | **SH4 tail**, ~280 bytes before `bba_modem` | **UNFIXED, and not fixed in either fork** |
+| then | 27,884,792 | **`Sh4Context::sh4_sched_next`**, byte 296 of cntx | **new — unfixed in either fork.** `sh4_sched_ffts()` before the cntx write |
+| now | — | — | **`STATE VERIFY: idempotent OK (27,793,819 bytes round-trip)`** |
 
 Both ported fixes moved the needle, which is itself evidence they were real.
 
