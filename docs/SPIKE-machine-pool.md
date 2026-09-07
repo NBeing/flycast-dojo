@@ -168,13 +168,63 @@ Note `dojo.frame_number` not being restored is a real defect in its own right,
 independent of this: it is why the TAS fork needs a `.frame` sidecar beside every
 savestate.
 
+## `[MEASURED 2026-09-07]` PROCESS-PER-MACHINE POOLING IS SAFE TODAY
+
+The in-process result above is not the whole answer. Same state file, three
+**separate processes**, each restoring once and running 300 frames:
+
+```
+process 1: HN=537135945  fc=760
+process 2: HN=537135945  fc=760
+process 3: HN=537135945  fc=760
+```
+
+Identical. So the leak is **intra-process accumulation**, and a fresh process
+clears it. **Option 3 is verified working; option 2 is not, within one process.**
+
+Practically: a pool of flycast processes, each holding one machine restored from
+a shared blob, is sound right now — restore is 7.7 ms plus process cost, and
+members agree. Checking out N variations of one moment in parallel works today.
+
+### What was eliminated getting here
+
+Each of these was tested by re-running `scripts/lua/pool-determinism.lua` under
+the named condition. Every one produced **byte-identical** member hashes
+(`4215541059 / 399580219 / 665769862`), which is itself the finding: the drift
+is deterministic and independent of all of them.
+
+| candidate | test | verdict |
+|---|---|---|
+| the measurement window | hash immediately after restore + compare guest-frame counts | **not it** — starts identical, frame counts identical |
+| movie input stream | recording on vs off | **not it** — identical hashes |
+| RTC | pinned vs live (same two runs) | **not it** |
+| recompiler block cache, `smc_hotspots` | `Dynarec.Enabled=no` (interpreter) | **not it** — still diverges |
+| threaded rendering | `rend.ThreadedRendering=no` | **not it** |
+| audio backend pacing | `audio:backend=null`, `aica.LimitFPS=no` | **not it** |
+
+### Where the divergence first appears
+
+`scripts/lua/pool-bisect.lua` keeps each member's final blob and binary-searches
+the first differing byte, then SERMAP names it:
+
+- members 1v2 at **12,677,792** — inside `sh4`, within main RAM. A *downstream*
+  effect: the game computed different values.
+- members 2v3 at **27,791,852** — inside `sh4.cntx` at offset **308**, which
+  `gdb ptype /o Sh4Context` gives as **`cycle_counter`**: the SH4's position
+  within its timeslice. A phase difference, not a value difference.
+
+**Leading remaining candidate:** `dojo.frame_number`. It is not restored by a
+savestate and climbs 461 / 762 / 1063 across restores — the only thing found so
+far that is a clean function of restore ordinal. Ruled out as an *input* source
+(recording off changes nothing) but not as a timing input.
+
 ## Three options
 
 | | what it is | verdict |
 |---|---|---|
 | **1. In-process instances** | tier and move 1,252 globals into a machine object, nbneo-style | **months.** 4x their population, plus a JIT with its own caches. Not now. |
 | **2. Serialize as the pool primitive** | machines are 27 MB blobs; "instantiate" = deserialize | **works today**, once idempotency is fixed. Cost is ~27 MB and a state load per checkout. |
-| **3. Process-per-machine** | N headless flycast processes, one machine each | **works today**, and most of the harness exists (`scripts/isotest.sh`, headless replay, `AutoSeekState`, `savestate.hash`) |
+| **3. Process-per-machine** | N headless flycast processes, one machine each | **works today, and now VERIFIED** — three processes restoring one blob agree exactly |
 
 **2 and 3 compose**: a pool of processes, each holding a machine, checked out
 and restored by blob. That is not the same object as nbneo's in-process pool —
