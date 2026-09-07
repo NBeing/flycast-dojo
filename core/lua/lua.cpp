@@ -1256,6 +1256,27 @@ static void luaRegister(lua_State *L)
 				.addFunction("recordingPath", std::function<std::string()>([]() {
 					return videorec::outputPath();
 				}))
+
+				// Preferred spelling. The namespace already says what is being
+				// recorded, so the verb does not need to repeat it - and
+				// "startRecording" meant two unrelated things while
+				// flycast.replay carried the same name for MOVIE recording.
+				// The *Recording names above remain as aliases; nothing breaks.
+				.addFunction("start", std::function<void(std::string)>([](std::string path) {
+					videorec::requestStart(path);
+				}))
+				.addFunction("stop", std::function<void()>([]() {
+					videorec::requestStop();
+				}))
+				.addFunction("toggle", std::function<void()>([]() {
+					videorec::toggle();
+				}))
+				.addFunction("active", std::function<bool()>([]() {
+					return videorec::isRecording();
+				}))
+				.addFunction("path", std::function<std::string()>([]() {
+					return videorec::outputPath();
+				}))
 			.endNamespace()
 
 			// Input-replay recording, independent of the video capture above.
@@ -1448,6 +1469,102 @@ static void luaRegister(lua_State *L)
 					.addProperty("height", &settings.display.height, false)
 				.endNamespace()
 				.addFunction("getFrameNumber", getFrameNumber)
+			.endNamespace()
+
+			// ---- NOMENCLATURE ----------------------------------------------
+			// Three namespaces below are the preferred spellings. Everything
+			// they expose is ALSO still reachable at its old address, so no
+			// script, doc or adapter breaks; emu.apiversion() stays 0 because
+			// nothing was removed.
+			//
+			// Why they exist:
+			//
+			//   flycast.state.*  does NOT mean savestate. It means session and
+			//   runtime info - gameId, media, display size, viewport, frame
+			//   numbers - while saveState/loadState live under
+			//   flycast.emulator. Anyone reading `state` guesses wrong, and it
+			//   is the guess that costs debugging time. Split into
+			//   flycast.session.* (what is loaded, how big is it) and
+			//   flycast.frame.* (which frame is it).
+			//
+			//   flycast.savestate.* gathers the save/load/hash group that was
+			//   scattered across flycast.emulator, and matches emuapi's
+			//   `savestate` namespace so the adapter stops translating.
+			//
+			// Slot bases are deliberately NOT changed here: these are the same
+			// 0..9 host functions under a better address. emuapi's neutral
+			// savestate.* is 1-based per the spec and the adapter still does
+			// that shift.
+			//
+			// THE ADAPTER IS DELIBERATELY NOT MOVED to these names yet.
+			// emuapi/adapters/flycast.lua must keep working against the
+			// video-recording branch, which has only the old spellings. So the
+			// aliases are load-bearing, not politeness. Move the adapter once
+			// both branches carry the new names - or feature-detect, which is
+			// what emu.supports() is for.
+
+			.beginNamespace("savestate")
+				.addFunction("save", std::function<void(int)>([](int index) {
+					if (index < 0 || index > 9)
+						throw std::runtime_error("savestate slot must be between 0 and 9");
+					bool restart = false;
+					if (gui_state == GuiState::Closed) {
+						gui_open_settings();
+						restart = true;
+					}
+					dc_savestate(index);
+					if (restart)
+						gui_open_settings();
+				}))
+				.addFunction("load", std::function<void(int)>([](int index) {
+					if (index < 0 || index > 9)
+						throw std::runtime_error("savestate slot must be between 0 and 9");
+					bool restart = false;
+					if (gui_state == GuiState::Closed) {
+						gui_open_settings();
+						restart = true;
+					}
+					dc_loadstate(index);
+					if (restart)
+						gui_open_settings();
+				}))
+				.addFunction("tostring", saveStateToString)
+				.addFunction("fromstring", loadStateFromString)
+				.addFunction("hash", hashState)
+			.endNamespace()
+
+			.beginNamespace("session")
+				.addProperty("system", &settings.platform.system, false)
+				.addProperty("media", &settings.content.path, false)
+				.addProperty("gameId", &settings.content.gameId, false)
+				.beginNamespace("display")
+					.addProperty("width", &settings.display.width, false)
+					.addProperty("height", &settings.display.height, false)
+				.endNamespace()
+				.addFunction("getGameViewport", getGameViewport)
+				.addFunction("getGameResolution", getGameResolution)
+			.endNamespace()
+
+			.beginNamespace("frame")
+				// count() is the MOVIE index: it starts late (measured 142
+				// frames behind at boot, because it does not tick until the
+				// game starts polling maple), resets to 0 when a movie opens,
+				// and counts re-simulated frames again under rollback. Use it
+				// for "where are we in the movie".
+				.addFunction("count", getFrameNumber)
+				// confirmed() is the CLOCK: once per delivered frame,
+				// monotonic, rollback-excluded. Measured 600/600 with zero
+				// breaks and zero backward steps. Use it for "has a frame
+				// passed".
+				.addFunction("confirmed", std::function<int()>([]() {
+					return (int)ggpo::confirmedFrame();
+				}))
+				.addFunction("resimSteps", std::function<int()>([]() {
+					return (int)ggpo::resimSteps();
+				}))
+				.addFunction("isRollback", std::function<bool()>([]() {
+					return ggpo::rollbacking();
+				}))
 			.endNamespace()
 
 			// ImGui baseline profile, under ImGui's own names. See

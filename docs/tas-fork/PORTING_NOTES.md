@@ -95,11 +95,35 @@ a clean-plate mode needs an earlier readback point per backend. That is the
 real remaining work, and it is now one decision inside one recorder rather than
 a collision between two.
 
-### 2. Two frame counters
+### 2. Two frame counters — NOT a collision; resolved by design
 
-`dojo.frame_number` (advances on the netplay session's schedule; stalls and
-jumps offline) and the delivered-frame counter behind `ggpo::confirmedFrame()`
-that the Lua surface uses. `tas_wave` and `tas_ruler` key off the former.
+Listed here in error. There are two counters because there are two questions,
+and the spec already says so: `frame.count()` is tagged **`(MAY drift)`** and
+`frame.confirmed()` is the rollback-safe one.
+
+- `dojo.frame_number` is the **movie index** - "which row of the movie". It is
+  a wire format (`session_inputs[frame_number]`, and the `.flyr` records), so
+  it must not be redefined.
+- `ggpo::confirmedFrame()` is the **clock** - one tick per delivered frame.
+
+They cannot double-count: `ggpo::endOfFrame()` only increments
+`if (active())`, so netplay drives one and the offline/TAS path drives the
+other.
+
+Measured on this branch, 45 s from boot with no movie:
+
+```
+600 vblanks -> confirmed=600   breaks=0  backwards=0
+600 vblanks -> movie=458
+```
+
+So `confirmed` is exactly 1:1 and monotonic, and `count` sits 142 frames back
+because it does not tick until the game starts polling maple. That is the
+documented drift, now with a number on it.
+
+**Use `confirmed` for "has a frame passed"; use `count` for "where are we in
+the movie".** Both are exposed under better names since the nomenclature pass -
+`flycast.frame.confirmed()` and `flycast.frame.count()`.
 
 ### 3. Determinism is half-converted
 
