@@ -1,5 +1,6 @@
 #include <array>
 #include "spg.h"
+#include "cfg/cfg.h"
 #include "hw/holly/holly_intc.h"
 #include "hw/holly/sb.h"
 #include "hw/sh4/sh4_sched.h"
@@ -300,6 +301,11 @@ void scheduleRenderDone(TA_context *cntx)
 
 void spg_Serialize(Serializer& ser)
 {
+	if (cfgLoadBool("dojo", "SpgTrace", false))
+		NOTICE_LOG(SAVESTATE, "SPGTRACE save:    clc_pvr_scanline=%u prv_cur_scanline=%u"
+				" Line_Cycles=%u Frame_Cycles=%u maple_int_pending=%d",
+				clc_pvr_scanline, prv_cur_scanline, Line_Cycles, Frame_Cycles,
+				(int)maple_int_pending);
 	ser << clc_pvr_scanline;
 	ser << maple_int_pending;
 	ser << pvr_numscanlines;
@@ -329,4 +335,15 @@ void spg_Deserialize(Deserializer& deser)
 	}
 	if (deser.version() < Deserializer::V14)
 		CalculateSync();
+	// TEMPORARY DIAGNOSTIC (pool drift hunt, 2026-09-07): the first byte to
+	// differ between two restores of ONE blob is the first byte of the spg
+	// block, i.e. clc_pvr_scanline, and the difference ALTERNATES with restore
+	// parity (members 1,3,5 agree; 2,4 agree and differ from them). Print the
+	// SPG's whole phase on every restore so the alternation can be attributed
+	// to a value rather than inferred from a hash.
+	if (cfgLoadBool("dojo", "SpgTrace", false))
+		NOTICE_LOG(SAVESTATE, "SPGTRACE restore: clc_pvr_scanline=%u prv_cur_scanline=%u"
+				" numscanlines=%u Line_Cycles=%u Frame_Cycles=%u maple_int_pending=%d",
+				clc_pvr_scanline, prv_cur_scanline, pvr_numscanlines,
+				Line_Cycles, Frame_Cycles, (int)maple_int_pending);
 }

@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "pvr.h"
+#include "cfg/cfg.h"
 #include "spg.h"
 #include "pvr_regs.h"
 #include "Renderer_if.h"
@@ -67,24 +68,41 @@ void term()
 	elan::term();
 }
 
+// Sub-SERMAP, same purpose as the sh4 one in serialize.cpp: `pvr` is 8.4 MB in
+// one block, so "the states differ somewhere in pvr" names a haystack. These
+// lines turn a byte offset into a field. Off by default with the rest of
+// StateMapLog - it is a firehose.
+#define PVR_SERMAP(name) \
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u pvr." name, (u32)ser.size())
+
 void serialize(Serializer& ser)
 {
+	const bool mapLog = cfgLoadBool("dojo", "StateMapLog", false);
+	PVR_SERMAP("yuv");
 	YUV_serialize(ser);
 
+	PVR_SERMAP("regs");
 	ser << pvr_regs;
 
+	PVR_SERMAP("spg");
 	spg_Serialize(ser);
+	PVR_SERMAP("rend");
 	rend_serialize(ser);
 
+	PVR_SERMAP("ta_fsm");
 	ser << ta_fsm[2048];
 	ser << ta_fsm_cl;
 	ser << taRenderPass;
 
+	PVR_SERMAP("ta_context");
 	SerializeTAContext(ser);
 
+	PVR_SERMAP("vram");
 	if (!ser.rollback())
 		vram.serialize(ser);
+	PVR_SERMAP("elan");
 	elan::serialize(ser);
+	PVR_SERMAP("END");
 }
 
 void deserialize(Deserializer& deser)

@@ -213,6 +213,52 @@ the first differing byte, then SERMAP names it:
   `gdb ptype /o Sh4Context` gives as **`cycle_counter`**: the SH4's position
   within its timeslice. A phase difference, not a value difference.
 
+### `[MEASURED 2026-09-07]` LOCALIZED: the drift is TIMESLICE PHASE, in the PVR's raster clock
+
+Bisecting in time rather than at 300 frames changed the picture completely.
+
+**It diverges after ONE frame**, and with five members the pattern is a perfect
+parity alternation, not an accumulation:
+
+```
+H0 (right after restore): 2966399345  x5   identical
+1 vs 2 -> differ    1 vs 3 -> IDENTICAL
+1 vs 4 -> differ    1 vs 5 -> IDENTICAL
+```
+
+The first differing byte is at **2,581,258**. A new per-field sub-SERMAP inside
+`pvr::serialize` (this commit) names it: `pvr.spg` starts at 2,581,257, so the
+very first byte of the SPG block — **`clc_pvr_scanline`**, the PVR's raster
+clock.
+
+Tracing the SPG across each restore (`dojo:SpgTrace=yes`) settles what it is:
+
+```
+restore: clc_pvr_scanline=399   prv_cur_scanline=0  Line_Cycles=6355   (identical, every restore)
+capture: clc_pvr_scanline=728 -> 280 -> 728 -> 280                     (after ONE frame)
+```
+
+Every restore begins at exactly 399 with every SPG field identical. One frame
+later the sub-scanline phase differs by **448 cycles**, alternating. So the
+machines ran slightly DIFFERENT NUMBERS OF CYCLES from an identical state.
+
+That is a **timeslice-phase** difference, not a missing subsystem. It converges
+with the earlier blob-diff, which put the 2-vs-3 difference at `sh4.cntx`
+offset 308 = `cycle_counter` — the SH4's own position within its slice. Both
+symptoms are the same cause seen from two sides.
+
+The emulation loop runs in blocks; a restore lands mid-block and inherits the
+LOOP's current phase rather than the phase the blob was saved at, because that
+residue is not part of the savestate. Restores two vblanks apart therefore
+alternate — and a fresh process starts at a clean phase, which is exactly why
+process-per-machine pooling agrees and in-process pooling does not.
+
+**Next experiment**, and it is cheap: vary the gap between restores (2, 3, 2, 3
+vblanks). If the outcome tracks the GAP rather than the member index, the loop
+phase is confirmed as the carrier and the fix is to quantise the restore to a
+block boundary (or to serialize the residue). If it stays period-2 regardless,
+something intrinsic alternates and the hunt continues.
+
 **`dojo.frame_number` is EXONERATED.** `[MEASURED 2026-09-07]` It was the
 leading candidate — it is not restored by an in-memory savestate and climbed
 461 / 762 / 1063 across three restores, the only thing found that was a clean
