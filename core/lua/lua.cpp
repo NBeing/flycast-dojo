@@ -571,10 +571,18 @@ static LuaRef getMovieButtons(int frame, int player, lua_State *L)
 // same contract as input.setButtonTable, so one mental model covers both the
 // live pad and the movie.
 //
-// Refuses while the emulator is RUNNING, and says so by returning false. The
-// emu thread owns session_inputs whenever it runs (dojo.h), so an edit from the
-// Lua thread mid-frame is a data race on the movie itself. Editing is a
-// paused-only operation in this fork's own UI for exactly that reason.
+// TAKES A PAUSE REASON FOR THE DURATION OF THE EDIT rather than refusing.
+//
+// The emu thread owns session_inputs whenever it runs (dojo.h), so an edit from
+// the Lua thread mid-frame is a data race on the movie. This used to push that
+// problem onto every caller - it returned false while running and each UI had
+// to pause first, remember whether IT had paused, and put things back. That is
+// the same save-and-restore ritual the arbiter exists to delete.
+//
+// pausing::Scoped(MODAL) stops the machine if it is running and restarts it on
+// the way out; if something else already stopped it (the user paused, a menu is
+// open) it records the reason and touches nothing, so an edit made while paused
+// does NOT resume the machine when it finishes. One code path, both cases.
 static bool setMovieButtons(int frame, int player, LuaRef buttons, lua_State *L)
 {
 	checkPlayerNum(L, player);
@@ -583,8 +591,7 @@ static bool setMovieButtons(int frame, int player, LuaRef buttons, lua_State *L)
 		luaL_argerror(L, 3, "expected a table of button names");
 		return false;
 	}
-	if (emu.running())
-		return false;
+	pausing::Scoped guard(pausing::MODAL);
 	auto it = dojo.session_inputs.find((u32)frame);
 	if (it == dojo.session_inputs.end())
 		return false;
@@ -611,15 +618,26 @@ static bool setMovieButtons(int frame, int player, LuaRef buttons, lua_State *L)
 			k &= ~m.bit;	// released
 	}
 	fi->kcode = k;
+
+	// A NO-OP EDIT IS SUCCESS, NOT REFUSAL. ApplyEdit returns -1 for BOTH "I
+	// refused this" and "nothing actually changed" (its `if (changed.empty())`
+	// path), so `>= 0` reported a perfectly good write-the-same-value edit as a
+	// failure - and a UI built on that showed "the host refused" over an edit
+	// that had plainly landed. Settle it here, where the old and new rows are
+	// both in hand, instead of trying to read two meanings out of one integer.
+	if (edited[(u32)frame] == it->second)
+		return true;
 	return dojo.ApplyEdit(edited, "lua") >= 0;
 }
 
-// Whether setButtons would be accepted right now, so a UI can grey a cell out
-// instead of offering an edit that silently fails. NOTE emulator.pause() is not
-// synchronous: the emu thread stops a moment later, so this can still answer
-// false on the very next line after a pause(). [MEASURED 2026-09-07] one
-// setButtons immediately after pause() returned false and an identical call
-// shortly after returned true.
+// "Is the machine stopped right now." INFORMATIONAL, no longer a gate:
+// setButtons takes its own pause reason, so an edit is accepted either way and
+// a UI does not have to pre-check. It remains worth showing, because editing
+// while running costs a stop/start per edit and a user is entitled to know
+// which mode they are in.
+//
+// NOTE it is not synchronous with emulator.pause(): the emu thread stops a
+// moment later, so this can still answer false on the line after a pause().
 static bool movieEditable()
 {
 	return !emu.running();
