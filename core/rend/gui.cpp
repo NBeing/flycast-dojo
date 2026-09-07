@@ -4185,6 +4185,20 @@ void gui_display_ui()
 		break;
 	case GuiState::Paused:
 		dojo_gui.show_pause();
+		// Lua overlays must draw while PAUSED too. lua::overlay() otherwise only
+		// runs from gui_display_osd(), which the RENDERERS call from their
+		// present - so it stops the moment the emulator does, and a Lua tool is
+		// invisible exactly when it is most useful. An input editor (piano roll)
+		// is the case that found this: the movie may only be edited while paused
+		// (the emu thread owns session_inputs while it runs), so the one state
+		// where the tool is legal was the one state where it could not be seen.
+		//
+		// Placed HERE, inside this stream's frame and after show_pause(), for
+		// the reasons in CLAUDE.md: the two ImGui frame streams each do their
+		// own NewFrame, and this case has already submitted the dockspace host.
+		// It cannot double-draw, because gui_display_osd() does not run while
+		// paused - that is the whole problem being fixed.
+		lua::overlay();
 		break;
 	case GuiState::StreamWait:
 		dojo_gui.gui_display_stream_wait();

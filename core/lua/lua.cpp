@@ -498,6 +498,118 @@ static void setButton(int player, const std::string& name, bool pressed, lua_Sta
 	luaL_argerror(L, 2, "unknown button name; see input.buttonNames()");
 }
 
+// ---- movie: the RECORDED input timeline, addressed by frame ---------------
+//
+// This is what a piano roll reads and writes. session_inputs is
+// map<frame, 24 bytes> where the 24 bytes are MAX_PLAYERS x FrameInputs (12
+// each, #pragma packed).
+//
+// THE MOVIE'S kcode IS INVERTED RELATIVE TO THE LIVE PAD, and getting this
+// backwards is silent. The live pad is active-LOW (getButtonTable: a held
+// button CLEARS its bit), but the recorder stores the complement -
+// dojo.cpp:547, `inputs.kcode = ~inputState[i].kcode` - so in a MOVIE a set bit
+// means HELD. An all-zero movie row therefore means "nothing was pressed",
+// which is the common case; reading it with the live-pad convention lights up
+// every button on every frame instead. [MEASURED 2026-09-07] That is exactly
+// what the first version of this code did.
+static FrameInputs *movieSlice(std::vector<u8>& row, int player)
+{
+	const size_t sz = sizeof(FrameInputs);
+	if ((size_t)player * sz > row.size())
+		return nullptr;
+	return (FrameInputs *)(row.data() + (size_t)(player - 1) * sz);
+}
+
+static int getMovieLength()
+{
+	return (int)dojo.MovieEnd();
+}
+
+// nil for a frame the movie does not hold - NOT an all-released table. "no data
+// here" and "nothing was pressed here" are different facts, and a piano roll
+// that cannot tell them apart draws a solid block of empty cells past the end
+// of the movie as though they were real.
+static LuaRef getMovieButtons(int frame, int player, lua_State *L)
+{
+	checkPlayerNum(L, player);
+	auto it = dojo.session_inputs.find((u32)frame);
+	if (it == dojo.session_inputs.end())
+		return LuaRef(L);
+	FrameInputs *fi = movieSlice(it->second, player);
+	if (fi == nullptr)
+		return LuaRef(L);
+	LuaRef t(L);
+	t = newTable(L);
+	for (const ButtonMapping& m : ButtonMappings)
+		t[m.name] = (fi->kcode & m.bit) != 0;	// movie is active-HIGH
+	return t;
+}
+
+// Present-and-true holds, present-and-false releases, ABSENT LEAVES ALONE - the
+// same contract as input.setButtonTable, so one mental model covers both the
+// live pad and the movie.
+//
+// Refuses while the emulator is RUNNING, and says so by returning false. The
+// emu thread owns session_inputs whenever it runs (dojo.h), so an edit from the
+// Lua thread mid-frame is a data race on the movie itself. Editing is a
+// paused-only operation in this fork's own UI for exactly that reason.
+static bool setMovieButtons(int frame, int player, LuaRef buttons, lua_State *L)
+{
+	checkPlayerNum(L, player);
+	if (!buttons.isTable())
+	{
+		luaL_argerror(L, 3, "expected a table of button names");
+		return false;
+	}
+	if (emu.running())
+		return false;
+	auto it = dojo.session_inputs.find((u32)frame);
+	if (it == dojo.session_inputs.end())
+		return false;
+
+	// ApplyEdit takes the WHOLE movie and refuses an edit that does not cover
+	// the original's frame range, so the copy is made HERE. Doing it in Lua
+	// would push every frame of the movie across the binding to change one
+	// cell. ApplyEdit is also the funnel that records undo history and marks
+	// the macro file stale - reusing it is why a scripted edit behaves like a
+	// hand-made one instead of quietly bypassing both.
+	std::map<u32, std::vector<u8>> edited = dojo.session_inputs;
+	FrameInputs *fi = movieSlice(edited[(u32)frame], player);
+	if (fi == nullptr)
+		return false;
+	u32 k = fi->kcode;
+	for (const ButtonMapping& m : ButtonMappings)
+	{
+		LuaRef v = buttons[m.name];
+		if (v.isNil())
+			continue;
+		if (v.cast<bool>())
+			k |= m.bit;		// held   (movie is active-HIGH; the live pad is not)
+		else
+			k &= ~m.bit;	// released
+	}
+	fi->kcode = k;
+	return dojo.ApplyEdit(edited, "lua") >= 0;
+}
+
+// Whether setButtons would be accepted right now, so a UI can grey a cell out
+// instead of offering an edit that silently fails. NOTE emulator.pause() is not
+// synchronous: the emu thread stops a moment later, so this can still answer
+// false on the very next line after a pause(). [MEASURED 2026-09-07] one
+// setButtons immediately after pause() returned false and an identical call
+// shortly after returned true.
+static bool movieEditable()
+{
+	return !emu.running();
+}
+
+// "Is this frame authored at all", without decoding it. A roll asks this once
+// per visible row, so it must not allocate a table to answer.
+static bool movieHasFrame(int frame)
+{
+	return dojo.session_inputs.find((u32)frame) != dojo.session_inputs.end();
+}
+
 static void pressButtons(int player, u32 buttons, lua_State *L)
 {
 	checkPlayerNum(L, player);
@@ -1290,6 +1402,16 @@ static void luaRegister(lua_State *L)
 			// "has no equivalent of IsRecordingReplay or replay_filename". True when
 			// written, false now: Replay grew filename and HasAppendTarget(). The
 			// bindings below adapt to that class rather than to DojoSession.
+	  		// The recorded input timeline. flycast.replay.* is the FILE (start,
+	  		// stop, where it lives); flycast.movie.* is its CONTENT, per frame.
+	  		.beginNamespace("movie")
+				.addFunction("length", getMovieLength)
+				.addFunction("has", movieHasFrame)
+				.addFunction("editable", movieEditable)
+				.addFunction("getButtons", getMovieButtons)
+				.addFunction("setButtons", setMovieButtons)
+			.endNamespace()
+
 	  		.beginNamespace("replay")
 				// REFUSES DURING PLAYBACK, on purpose. CreateReplayFile is not a
 				// file-open: it creates a clip folder, re-points
