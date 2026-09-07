@@ -24,7 +24,13 @@ ROM="${2:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
 FLYR="${3:-}"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}/flycast-dojo/replays"
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}/flycast-dojo"
-[ -n "$FLYR" ] || { echo "usage: $0 <bin> <rom> <existing .flyr>"; exit 1; }
+# 77 is ctest's SKIP_RETURN_CODE: "this machine cannot answer the question",
+# which is neither a pass nor a failure. Same convention as scripts/testrun.sh.
+SKIP=77
+[ -n "$FLYR" ] || { echo "SKIP: usage: $0 <bin> <rom> <existing .flyr>"; exit $SKIP; }
+[ -x "$BIN" ]  || { echo "SKIP: no binary at $BIN"; exit $SKIP; }
+[ -f "$ROM" ]  || { echo "SKIP: no ROM at $ROM"; exit $SKIP; }
+[ -f "$FLYR" ] || { echo "SKIP: no clip at $FLYR"; exit $SKIP; }
 
 # WORK ON A COPY. Opening a clip is not read-only: tas_clip reconciles and
 # REWRITES clip.json next to the movie, so pointing this at the in-repo fixture
@@ -80,4 +86,26 @@ case "$M" in *"startRecording=false"*) ;; *) echo "FAIL: recording started durin
 [ "$BEFORE" = "$AFTER" ] || { echo "FAIL: a clip folder was created during playback"; exit 1; }
 # currentPath non-empty + isRecording false proves play_match was true (GGPO is
 # off), i.e. the guard was exercised in the state it exists for - not skipped.
-case "$M" in *"isRecording_after=false"*"currentPath=/"*) echo "PASS: refused, and isRecording correctly false with a file attached";; *) echo "WARN: guard state unconfirmed";; esac
+# THE PRECONDITION, AND IT DECIDES THE VERDICT RATHER THAN DECORATING IT.
+#
+# currentPath non-empty together with isRecording false proves play_match was
+# true (GGPO is off), i.e. the refusal was exercised in the state it exists for.
+# Without that pair the run proves nothing: "startRecording returned false" is
+# also what a session that never entered playback would report.
+#
+# This used to print `WARN: guard state unconfirmed` and fall off the end of the
+# script, so the exit status was the case statement's - zero. A test that could
+# not confirm it had tested anything reported success, at the end of a script
+# whose entire preamble is about false passes.
+case "$M" in
+	*"isRecording_after=false"*"currentPath=/"*)
+		echo "PASS: refused, and isRecording correctly false with a file attached"
+		exit 0
+		;;
+	*)
+		echo "INCONCLUSIVE: the guard's precondition was not confirmed - the run"
+		echo "  cannot distinguish 'refused correctly' from 'never entered playback'."
+		echo "  marker was: $M"
+		exit $SKIP
+		;;
+esac

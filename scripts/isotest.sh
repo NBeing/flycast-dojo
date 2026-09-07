@@ -39,7 +39,21 @@ set -uo pipefail
 DISPLAY_NUM="${ISOTEST_DISPLAY:-:99}"
 GEOM="${ISOTEST_GEOM:-1280x1024x24}"
 OUT="${ISOTEST_OUT:-/tmp/flycast-isotest}"
-BIN="${ISOTEST_BIN:-$(dirname "$0")/../build/flycast}"
+# The build directory moved to build-dojo7; the old default silently produced
+# exit 127 ("command not found") from a backgrounded launch, which reads as
+# neither a pass nor a diagnosis. Try both, then say so.
+BIN="${ISOTEST_BIN:-}"
+if [ -z "$BIN" ]; then
+	for cand in "$(dirname "$0")/../build-dojo7/flycast" "$(dirname "$0")/../build/flycast"; do
+		[ -x "$cand" ] && { BIN="$cand"; break; }
+	done
+fi
+
+[ -n "$BIN" ] && [ -x "$BIN" ] || {
+	echo "isotest: SKIP - no flycast binary (looked in build-dojo7/ and build/;"
+	echo "  set ISOTEST_BIN to override)" >&2
+	exit 77
+}
 
 mkdir -p "$OUT"
 
@@ -56,7 +70,11 @@ ensure_display() {
 			sleep 0.5
 		done
 	fi
-	iso xdpyinfo >/dev/null 2>&1 || { echo "isotest: no display"; exit 1; }
+	# 77 = ctest's SKIP_RETURN_CODE. No Xvfb is "this machine cannot answer the
+	# question", not a failing test - reporting it as failure trains people to
+	# ignore red. The REFUSING paths below stay exit 1: those are misuse, and a
+	# refusal to touch the real desktop must be loud.
+	iso xdpyinfo >/dev/null 2>&1 || { echo "isotest: SKIP - no display on $DISPLAY_NUM"; exit 77; }
 }
 
 # POLICY, separate from mechanism - lemalta splits these deliberately
