@@ -171,9 +171,20 @@ key)
 		echo "isotest: no flycast window found - REFUSING to send a global key"
 		kill "$pid" 2>/dev/null; exit 1
 	fi
-	# A bare Xvfb has no WM, so nothing ever takes focus and SDL ignores keys.
-	# ensure_wm() starts one on the offscreen display; this is the piece that
-	# was missing, not the key-sending.
+	# MEASURED, after a long detour chasing the wrong cause: window-scoped
+	# XSendEvent DOES reach flycast/SDL. It opened the pause menu on the first
+	# try once the right key was used. Two earlier theories were both wrong -
+	# "SDL ignores synthetic events" and "the offscreen window never takes
+	# focus". Neither was the problem.
+	#
+	# The problem was the KEY. flycast's menu is TAB, not Escape:
+	#   core/input/keyboard_device.h:57  set_button(EMU_BTN_MENU, 43);  // TAB
+	# and the user's saved mapping agrees (bind6 = 43:btn_menu). A saved
+	# mapping overrides the compiled default, so read the mapping, not the
+	# header, before deciding a key "does not work".
+	#
+	# A WM is still wanted so the window is mapped and sized normally, but it
+	# was never what made keys land.
 	iso xdotool windowfocus --sync "$wid" 2>/dev/null
 	sleep 1
 	iso xdotool key --window "$wid" --clearmodifiers "$key"; sleep 3
