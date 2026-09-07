@@ -1118,12 +1118,23 @@ static std::mutex snapshotMutex;
 static std::string pendingSnapshot;
 static bool snapshotReady = false;
 
-static void snapshotNow()
+//! ONE DEFINITION OF "THE BYTES OF THIS STATE", so the producers cannot
+//! disagree.
+//!
+//! [MEASURED 2026-09-07] They did. saveStateToString appends the movie-position
+//! trailer; hashState(live) hashed dc_serialize's output WITHOUT it, so
+//! `hash(tostring()) ~= hash()` for one unchanged machine - two identities for
+//! the same thing, differing by twelve bytes. Caught by scripts/tests/tour.lua
+//! asserting the same-instant invariant.
+//!
+//! Both now go through here, which makes them agree by construction rather than
+//! by remembering to.
+static size_t serializeStateWithTrailer(std::vector<u8>& buf)
 {
 	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), false);
 	dc_serialize(sizer);
 	const size_t trailer = sizeof(DOJO_STATE_TRAILER) + sizeof(u32);
-	std::vector<u8> buf(sizer.size() + trailer);
+	buf.resize(sizer.size() + trailer);
 	Serializer ser(buf.data(), buf.size(), false);
 	dc_serialize(ser);
 	size_t off = ser.size();
@@ -1131,9 +1142,15 @@ static void snapshotNow()
 	off += sizeof(DOJO_STATE_TRAILER);
 	const u32 fn = dojo.frame_number.load();
 	memcpy(buf.data() + off, &fn, sizeof(fn));
-	off += sizeof(fn);
+	return off + sizeof(fn);
+}
+
+static void snapshotNow()
+{
+	std::vector<u8> buf;
+	const size_t len = serializeStateWithTrailer(buf);
 	const std::lock_guard<std::mutex> lock(snapshotMutex);
-	pendingSnapshot.assign((const char *)buf.data(), off);
+	pendingSnapshot.assign((const char *)buf.data(), len);
 	snapshotReady = true;
 }
 
@@ -1174,19 +1191,9 @@ static void aroundStopped(const std::function<void()>& body)
 
 static int saveStateToString(lua_State *L)
 {
-	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), false);
-	dc_serialize(sizer);
-	const size_t trailer = sizeof(DOJO_STATE_TRAILER) + sizeof(u32);
-	std::vector<u8> buf(sizer.size() + trailer);
-	Serializer ser(buf.data(), buf.size(), false);
-	dc_serialize(ser);
-	size_t off = ser.size();
-	memcpy(buf.data() + off, DOJO_STATE_TRAILER, sizeof(DOJO_STATE_TRAILER));
-	off += sizeof(DOJO_STATE_TRAILER);
-	const u32 fn = dojo.frame_number.load();
-	memcpy(buf.data() + off, &fn, sizeof(fn));
-	off += sizeof(fn);
-	lua_pushlstring(L, (const char *)buf.data(), off);
+	std::vector<u8> buf;
+	const size_t len = serializeStateWithTrailer(buf);
+	lua_pushlstring(L, (const char *)buf.data(), len);
 	return 1;
 }
 
@@ -1258,12 +1265,11 @@ static int hashState(lua_State *L)
 		lua_pushinteger(L, (lua_Integer)XXH32(data, len, 0));
 		return 1;
 	}
-	Serializer sizer(nullptr, std::numeric_limits<size_t>::max(), false);
-	dc_serialize(sizer);
-	std::vector<u8> buf(sizer.size());
-	Serializer ser(buf.data(), buf.size(), false);
-	dc_serialize(ser);
-	lua_pushinteger(L, (lua_Integer)XXH32(buf.data(), ser.size(), 0));
+	// The SAME bytes savestate.tostring() would hand back, so
+	// hash(tostring()) == hash() for one unchanged machine.
+	std::vector<u8> buf;
+	const size_t len = serializeStateWithTrailer(buf);
+	lua_pushinteger(L, (lua_Integer)XXH32(buf.data(), len, 0));
 	return 1;
 }
 
