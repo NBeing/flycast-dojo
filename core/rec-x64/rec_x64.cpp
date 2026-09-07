@@ -1,4 +1,5 @@
 #include "build.h"
+#include "determinism.h"
 
 #if FEAT_SHREC == DYNAREC_JIT && HOST_CPU == CPU_X64
 
@@ -446,7 +447,22 @@ public:
 					{
 						movss(rd, rs1);
 					}
-					if (cpu.has(Cpu::tFMA) && !config::GGPOEnable)
+					// FMA fuses the multiply and add, keeping full intermediate
+					// precision instead of rounding twice. That is MORE accurate
+					// and it is a DIFFERENT answer - so the same movie on an FMA
+					// host and a non-FMA host diverges, and neither is "wrong".
+					//
+					// Upstream already disables it for rollback netplay, where
+					// two machines must agree. A recorded movie has exactly the
+					// same requirement across time and across machines, so this
+					// uses the predicate rather than the GGPO flag.
+					//
+					// This is the one determinism leak a sync manifest cannot
+					// close: it is a property of the CPU, not of configuration.
+					// Disabling it costs a little speed and buys portability,
+					// which is the right trade for a movie meant to be replayed
+					// somewhere else.
+					if (cpu.has(Cpu::tFMA) && !determinism::isDeterministicRun())
 						vfmadd231ss(rd, rs2, rs3);
 					else
 					{

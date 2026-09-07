@@ -213,6 +213,62 @@ recording are used together.
 
 ---
 
+## FMA — fixed, and it was already half-solved upstream
+
+Earlier notes here called FMA unfixable: "a host CPU feature, not
+configuration". That was wrong, and upstream had already done the hard part:
+
+```c
+// core/rec-x64/rec_x64.cpp:449
+if (cpu.has(Cpu::tFMA) && !config::GGPOEnable)
+    vfmadd231ss(rd, rs2, rs3);
+```
+
+flyinghead disables FMA for rollback netplay, where two machines must agree.
+A recorded movie has the same requirement across time and across machines, so
+that guard now uses `determinism::isDeterministicRun()`.
+
+FMA fuses the multiply and add, keeping full intermediate precision instead of
+rounding twice. It is *more* accurate and a *different* answer - so the same
+movie on an FMA host and a non-FMA host diverges, and neither is wrong.
+
+**And a hole in that fix, closed.** The recompiler bakes the decision into
+compiled blocks, so flipping the mode is not enough on its own - blocks
+compiled while the answer was "no" keep their FMA. Reachable, not theoretical:
+`dojo_gui.cpp:833` offers a "Record All Sessions" checkbox.
+`determinism::refreshCodegen()` (called once per frame from `Emulator::vblank`)
+compares the mode to the last observed value and resets the block cache when it
+changes, exactly as upstream does for the SH4 clock in `setNetworkState`.
+
+Verified by flipping the flag mid-session from Lua:
+
+```
+determinism.cpp:73  determinism: mode -> on,  resetting the block cache
+determinism.cpp:73  determinism: mode -> off, resetting the block cache
+```
+
+`config::RecordMatches` and `config::Replay` are now bound as
+`flycast.config.dojo.*`, because the mode was otherwise reachable only by
+driving the UI - and emuapi wants `movie.record()` to be a call, not a
+checkbox.
+
+## The guard audit, corrected
+
+An earlier version of this file said "~20 `if (config::GGPOEnable)` sites still
+carry their own inline conditions", implying twenty conversions. **That was
+wrong.** Triaged one by one, almost all are netplay plumbing:
+
+| site | what it is | verdict |
+|---|---|---|
+| `rec_x64.cpp:449` | FMA | **converted** |
+| `nvmem.cpp`, `maple_jvs.cpp`, `maple_cfg.cpp`, `naomi_cart.cpp` | MD5 digests proving two peers loaded the same data | no change |
+| `mem_watch.h:293,312` | rollback page-dirty tracker | no change |
+| `emulator.cpp:195,695,730`, `maple_devs.cpp:1767` | handshake, analog-axis count, netplay roles | no change |
+| `nullDC.cpp:104` | savestates blocked online | already right - you want them while recording |
+| `cheats.cpp:604` | non-builtin cheats skipped online | **manifest work, not guard work** - record the cheat state rather than banning it mid-recording |
+
+So the real answer was **one** conversion, not twenty.
+
 ## What no manifest can fix
 
 - **FMA** (`879372cb7 rec-x64: use FMA when available`). A host CPU feature, not

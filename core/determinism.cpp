@@ -7,6 +7,7 @@
 #include "cfg/option.h"
 #include "log/Log.h"
 #include "emulator.h"
+#include "hw/sh4/sh4_if.h"
 
 #include <algorithm>
 #include <map>
@@ -53,6 +54,25 @@ const char *runKind()
 	if (config::Replay)			return "replay";
 	if (config::RecordMatches)	return "record";
 	return "off";
+}
+
+void refreshCodegen()
+{
+	static bool lastMode = false;
+	static bool primed = false;
+	const bool mode = isDeterministicRun();
+	if (!primed)
+	{
+		primed = true;
+		lastMode = mode;
+		return;
+	}
+	if (mode == lastMode)
+		return;
+	lastMode = mode;
+	NOTICE_LOG(COMMON, "determinism: mode -> %s, resetting the block cache "
+			"(compiled blocks carry the FMA decision)", mode ? "on" : "off");
+	sh4_cpu.ResetCache();
 }
 
 // ----------------------------------------------------- the classification

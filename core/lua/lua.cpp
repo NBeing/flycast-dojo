@@ -321,6 +321,12 @@ CONFIG_ACCESSORS(GGPOAnalogAxes)
 
 // Dojo
 CONFIG_ACCESSORS(ShowTrainingGameOverlay)
+// Movie recording, as a scriptable flag. It was reachable only from the
+// "Record All Sessions" checkbox (dojo_gui.cpp), which made the determinism
+// mode untestable without driving the UI - and emuapi wants movie.record()
+// to be a call, not a checkbox.
+CONFIG_ACCESSORS(RecordMatches)
+CONFIG_ACCESSORS(Replay)
 
 // Maple devices
 
@@ -1392,6 +1398,11 @@ static void luaRegister(lua_State *L)
 
 				.beginNamespace("dojo")
 					CONFIG_PROPERTY(ShowTrainingGameOverlay, bool)
+					// Writing either of these flips determinism mode, which
+					// resets the recompiler's block cache - see
+					// determinism::refreshCodegen().
+					CONFIG_PROPERTY(RecordMatches, bool)
+					CONFIG_PROPERTY(Replay, bool)
 				.endNamespace()
 			.endNamespace()
 

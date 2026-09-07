@@ -1030,6 +1030,10 @@ void Emulator::vblank()
 		ggpo::countConfirmedFrame();
 	else
 		ggpo::countResimulatedFrame();
+	// The recompiler bakes the FMA decision into blocks; if the mode changed
+	// (the "Record All Sessions" checkbox does that mid-session) the cache has
+	// to go, or already-compiled code keeps the old answer.
+	determinism::refreshCodegen();
 	EventManager::event(Event::VBlank);
 	// Time out if a frame hasn't been rendered for 50 ms
 	if (sh4_sched_now64() - startTime <= 10000000)

@@ -88,6 +88,21 @@ const char *runKind();
 // Caveat worth knowing: hashState uses XXH32, so it is a 32-bit fingerprint.
 // Fine for detecting divergence, not a cryptographic identity.
 
+// The recompiler BAKES determinism decisions into compiled blocks - notably
+// whether to emit FMA (rec_x64.cpp). A block compiled while the answer was
+// "no" keeps its FMA for the rest of the session, so flipping the mode is not
+// enough on its own.
+//
+// This compares the mode against the last observed value and, when it has
+// changed, resets the block cache so code is regenerated under the new answer.
+// Upstream does exactly this for the SH4 clock in Emulator::setNetworkState.
+//
+// Reachable, not hypothetical: dojo_gui.cpp:833 offers a "Record All Sessions"
+// checkbox that flips config::RecordMatches mid-session.
+//
+// Cheap enough to call every frame - a bool compare in the common case.
+void refreshCodegen();
+
 // ---- the sync manifest --------------------------------------------------
 
 struct SyncEntry
