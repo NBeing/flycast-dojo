@@ -278,14 +278,42 @@ intended to run in the current slice — is a local of the loop, not part of the
 savestate, so it survives. A fresh process has no such residue, which is exactly
 why process-per-machine agrees.
 
-**The obvious fix does not work yet.** Restoring while the emulator is STOPPED
-(pause from the render thread, restore, resume) *hangs*: the pause/restore/
-resume sequence completes in the trace (`mask 00->01`, restore, `01->05->01->
-00`) and the emulator then runs no further frames. Two things learned trying:
-pausing from a `vblank` callback deadlocks outright (`emu.stop()` joins the
-thread the callback is running on), and even done correctly from the render
-thread, a restore across a pause boundary does not resume cleanly. That is the
-next thing to fix, and it is a prerequisite for in-process pooling.
+### `[MEASURED 2026-09-07]` THE HANG: the emulator cannot be stopped from anywhere a script can reach
+
+Restoring with the loop quiesced is the obvious fix, and it does not work. What
+the hunt established, by bisection:
+
+| what | result |
+|---|---|
+| pause / resume, no savestate at all | **fine** - 5 cycles, frames 190 -> 310 |
+| restore while stopped, and do NOT resume | **fine** - drawing continued 30 frames past it |
+| restore while stopped, then resume via the pause toggle | **wedges** - resume returns, process spins (`RNl`), no frame presented again |
+| restore from a draw callback with a MODAL stop | **wedges** - the reason is taken (`mask 00 -> 08`) and nothing is presented again |
+| pause from a `vblank` callback | **deadlocks outright** - `emu.stop()` joins the thread it is called on |
+| restore in place from `vblank` | **fine** - this is what every pool probe uses |
+
+`gui_loadState` (gui.cpp:4436) is the supported shape and it is
+`emu.stop(); dc_loadstate(); emu.start();` entirely within `GuiState::Closed`.
+It works because the hotkey path calls it from **outside any ImGui frame**. Both
+Lua hooks are inside one: `vblank` runs on the emulation thread inside the
+emulation loop, and the draw callback runs on the render thread inside the frame.
+Stopping from either wedges, in opposite ways.
+
+**So the blocker is not the restore - it is that there is nowhere safe to stop
+from.** A restore that genuinely quiesces the loop needs a hook outside BOTH the
+ImGui frame and the emulation loop, and no such hook exists today. That is the
+concrete prerequisite for in-process pooling, and it is a small, well-defined
+piece of work: a deferred-action queue drained by `mainui_rend_frame` between
+frames would do it (`flycast.test.quit(code)` in the test-tooling proposal wants
+exactly the same hook, for the same reason).
+
+Meanwhile a separate real bug was found and fixed on the way: `loadStateFromString`
+called `dc_deserialize` rather than `dc_loadstate`, skipping the whole load-time
+invalidation - ARM7 recompiler flush, MMU table flush, `bm_Reset()`, memwatch
+reset, `sh4_cpu.ResetCache()`, `KillTex`. It restored memory behind compiled
+blocks and caches built against the old contents. Fixing it changed the absolute
+hashes (`1328393435 / 354582876`) and left the drift pattern **exactly** as it
+was - `A B A B A B` - so it is not the drift either.
 
 **`dojo.frame_number` is EXONERATED.** `[MEASURED 2026-09-07]` It was the
 leading candidate — it is not restored by an in-memory savestate and climbed

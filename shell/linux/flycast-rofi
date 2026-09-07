@@ -41,6 +41,33 @@ ROOT="${FLYCAST_ROOT_DIR:-$(dirname "$(dirname "$(dirname "$SELF")")")}"
 
 BUILD_DIR="${FLYCAST_BUILD_DIR:-$ROOT/artifact/bin}"
 BIN="$BUILD_DIR/flycast-dojo"
+
+# STALENESS: artifact/bin holds a COPY, and a copy goes out of date silently.
+#
+# [MEASURED 2026-09-07] It sat 15 hours behind the build tree while a day of
+# changes went in, and the only symptom was that none of them were there - the
+# launcher started, the game ran, and every new feature was simply absent. That
+# is the worst shape a staleness bug can take, so the launcher now says so
+# rather than letting the binary's age be invisible.
+#
+# Warn only; do NOT auto-copy. Which binary runs is the user's call, and a
+# launcher that silently swaps the thing it launches is worse than a stale one.
+stale_check() {
+    local newest="" b
+    for b in "$ROOT"/build*/flycast "$ROOT"/build*/flycast-dojo; do
+        [ -f "$b" ] || continue
+        [ -z "$newest" ] || [ "$b" -nt "$newest" ] && newest="$b"
+    done
+    [ -n "$newest" ] || return 0
+    [ -f "$BIN" ] || return 0
+    if [ "$newest" -nt "$BIN" ]; then
+        printf 'flycast-rofi: WARNING - %s is OLDER than %s\n' "$BIN" "$newest" >&2
+        printf 'flycast-rofi:   the launcher will run the older one. To update:\n' >&2
+        printf 'flycast-rofi:     cp %s %s\n' "$newest" "$BIN" >&2
+        printf 'flycast-rofi:   or set FLYCAST_BUILD_DIR=%s\n' "$(dirname "$newest")" >&2
+    fi
+}
+stale_check
 SCANNER="$ROOT/core/rend/game_scanner.h"
 # WHERE GAMES ARE, ASKED OF FLYCAST'S OWN CONFIG FIRST
 #

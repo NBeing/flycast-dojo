@@ -46,6 +46,7 @@
 #include "serialize.h"
 #include "rend/transform_matrix.h"
 #include <stdexcept>
+#include <optional>
 
 namespace lua
 {
@@ -1110,7 +1111,40 @@ static int loadStateFromString(lua_State *L)
 	if (len == 0)
 		return luaL_error(L, "empty savestate string");
 	Deserializer deser(data, len, false);
-	dc_deserialize(deser);
+	// NO STOP AROUND THE LOAD, AND THAT IS A MEASURED DECISION.
+	//
+	// gui_loadState (gui.cpp:4436) is the supported shape - emu.stop();
+	// dc_loadstate(); emu.start(); entirely within GuiState::Closed - and the
+	// obvious move is to express it here with pausing::Scoped. It does not
+	// work, in either direction:
+	//
+	//   * from a `vblank` callback we ARE the emulation thread, and emu.stop()
+	//     joins the thread it is called on. Deadlock.
+	//   * from a draw callback we are on the render thread but INSIDE an ImGui
+	//     frame, and stopping there wedges too: the MODAL reason is taken
+	//     (mask 00 -> 08 in the trace) and no frame is ever presented again.
+	//     gui_loadState escapes this only because the hotkey path calls it from
+	//     OUTSIDE any frame.
+	//
+	// So an in-place load it is. That is safe from `vblank`, which already runs
+	// between frames with the loop between slices, and it is what every working
+	// caller does today. A restore that genuinely quiesces the loop needs a
+	// hook that is outside BOTH the ImGui frame and the emulation loop, and no
+	// such hook exists yet - see docs/SPIKE-machine-pool.md.
+	// dc_loadstate(), NOT dc_deserialize(). dc_deserialize only refills the
+	// machine's memory; dc_loadstate wraps it in the invalidation every load
+	// needs (emulator.cpp:797): flush the ARM7 recompiler, flush the MMU table,
+	// bm_Reset() the SH4 block cache, reset memwatch, then mmu_set_state(),
+	// sh4_cpu.ResetCache() and KillTex afterwards.
+	//
+	// This path skipped all of it, so a state restored from a string came back
+	// with new memory behind COMPILED BLOCKS, MMU tables and caches built
+	// against the old contents. [MEASURED 2026-09-07] Restoring while the
+	// emulator was stopped and then resuming hung it dead - the pause, restore
+	// and resume all completed in the trace and not one frame ran afterwards.
+	// The in-loop case did not hang only because the stale blocks happened to
+	// still describe the same code.
+	dc_loadstate(deser);
 	const size_t off = deser.size();
 	const size_t trailer = sizeof(DOJO_STATE_TRAILER) + sizeof(u32);
 	if (len >= off + trailer
@@ -1120,6 +1154,9 @@ static int loadStateFromString(lua_State *L)
 		memcpy(&fn, data + off + sizeof(DOJO_STATE_TRAILER), sizeof(fn));
 		dojo.frame_number = fn;
 	}
+	// The file path fires this; a script that registers a loadState callback
+	// should not have to care which path the state came from.
+	EventManager::event(Event::LoadState);
 	return 0;
 }
 
