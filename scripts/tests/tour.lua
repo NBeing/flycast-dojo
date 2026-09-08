@@ -202,14 +202,17 @@ STAGES[6] = function()
 	report("gui.rgba packs green as 0xAABBGGRR (not RGBA)",
 		api.gui.rgba(0, 255, 0, 255) == 0xFF00FF00)
 	if uiResult.colorSpecOrder then
-		report("ui.TextColored takes the argument order the spec declares", true)
+		report("ui.TextColored takes the argument order AND range the spec declares", true)
 	else
 		--- documented, owned by emuapi's adapter, counted not hidden, and it
 		--- PASSES the day the adapter is fixed. A permanently red test teaches
 		--- people to ignore red.
 		t.limit("ui.TextColored argument order",
-			"spec says (r,g,b,a,s); host takes (text,r,g,b,a) - emuapi's to fix")
-		say("LIMIT ui.TextColored argument order (emuapi's to fix)")
+			"emuapi's adapter still forwards this name blind; the host takes "
+			.. "(text,r,g,b,a) with 0.0-1.0 channels and the spec says (r,g,b,a,s) "
+			.. "with 0-255. Fixed on emuapi's textcolored-order branch; this "
+			.. "clears when the submodule catches up")
+		say("LIMIT ui.TextColored argument order (emuapi adapter)")
 	end
 	return true
 end
@@ -387,7 +390,15 @@ api.gui.register(function(s)
 			measures = wide > thin,
 			detail = ("MMMMM=%.0fpx i=%.0fpx"):format(wide, thin),
 			gw = gw, gh = gh,
-			colorSpecOrder = pcall(function() flycast.ui.TextColored(1, 1, 1, 1, "x") end),
+			--- THE ADAPTER, NOT THE HOST. This probed flycast.ui.TextColored -
+			--- the raw host binding - and asked whether IT takes the spec's
+			--- argument order. That is the wrong question: the host is entitled
+			--- to its own convention (text first, channels 0.0-1.0), and
+			--- normalising it is exactly what an adapter is FOR. Probing the
+			--- host meant the limit could never clear no matter who fixed what.
+			--- api.ui is emuapi's surface, which is the thing that owes the
+			--- spec its signature.
+			colorSpecOrder = pcall(function() api.ui.TextColored(0, 255, 0, 255, "x") end),
 		}
 	end
 end)
