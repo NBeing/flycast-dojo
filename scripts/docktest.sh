@@ -65,6 +65,19 @@ trap cleanup EXIT
 
 Xvfb "$DISP" -screen 0 1400x900x24 >/dev/null 2>&1 &
 sleep 2
+# A WINDOW MANAGER, because keyboard focus does not exist without one.
+# [MEASURED 2026-09-08] with bare Xvfb, `xdotool key Escape` goes nowhere - SDL
+# never gets SDL_WINDOW_INPUT_FOCUS, so the menu phase below silently tested
+# nothing and PASSED with its fix deliberately removed. i3 in its own config-less
+# session is enough; it is not the user's i3 and touches no real display.
+if command -v i3 >/dev/null; then
+	printf 'default_border none\nfor_window [class=".*"] floating enable\n' > "$OUT/i3.conf"
+	DISPLAY="$DISP" i3 -c "$OUT/i3.conf" >/dev/null 2>&1 &
+	sleep 2
+	HAVE_WM=1
+else
+	HAVE_WM=0
+fi
 XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	$PANEL_CFG -config dojo:ViewportTrace=yes -config dojo:UiIni=no \
 	-config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
@@ -125,4 +138,67 @@ if [ "$ag" -ge "$bg" ]; then
 	echo "FAIL docktest - the node narrowed but the GAME did not follow ($bg -> $ag)"
 	echo "       that is the old bug: docked panels covering a full-window picture"; exit 1
 fi
-echo "PASS docktest - docking narrowed the game ($bg -> $ag px wide)"
+echo "  docked: the game narrowed $bg -> $ag px"
+
+# PHASE 2: THE PICTURE MUST NOT MOVE WHEN A MENU OPENS.
+#
+# Escape opens the in-game menu, which is a different GuiState with its own
+# ImGui frame. If that state does not submit the dockspace host and the game
+# panel, the renderer falls back to the full-window blit and the picture JUMPS
+# out of its dock -- and back again when the menu closes. The trace only logs on
+# CHANGE, so "the rect is the same after Escape" is the pass condition.
+# FOCUS FIRST. Xvfb has no window manager, so nothing ever gives the SDL window
+# keyboard focus and a bare `xdotool key` goes nowhere - which made the first
+# version of this phase PASS with the fix deliberately removed. windowactivate
+# plus an explicit --window target makes the key actually land. A phase that
+# cannot fail is not a phase.
+if [ "$HAVE_WM" = "0" ]; then
+	echo "  menu:   SKIPPED - no window manager on $DISP, so a key press cannot"
+	echo "          reach the emulator and this phase would pass without testing"
+	echo "PASS docktest - docking narrowed the game ($bg -> $ag px wide)"
+	echo "     (menu phase skipped, see above)"
+	exit 0
+fi
+wid=$(xdotool search --name "Flycast" | head -1)
+xdotool windowactivate --sync "$wid" 2>/dev/null
+sleep 0.5
+xdotool key --clearmodifiers Escape; sleep 2.5
+
+# DID A MENU ACTUALLY OPEN? Without this the phase cannot tell "the picture
+# stayed put" from "nothing happened", and those look identical in the trace.
+#
+# IT MUST BE A MENU STATE, not merely any state change. The first version
+# accepted any TAS GUISTATE line and so accepted the BOOT transition
+# (8 Loading -> 0 Closed), which every run has - so the gate passed on a run
+# where Escape had done nothing at all. Commands(1) and Settings(2) are the two
+# states Escape can produce.
+if ! grep -a "TAS GUISTATE" "$OUT/out.log" | grep -qE '\-> (1|2)$'; then
+	echo "  menu:   SKIPPED - Escape never changed the GUI state, so nothing was"
+	echo "          tested; not reporting a pass for a phase that did not run"
+	echo "PASS docktest - docking narrowed the game ($bg -> $ag px wide)"
+	echo "     (menu phase skipped, see above)"
+	exit 0
+fi
+echo "  state:  $(grep -a 'TAS GUISTATE' "$OUT/out.log" | tail -1 | sed 's/.*RENDERER\]: //')"
+menu=$(grep -a "TAS VIEWPORT" "$OUT/out.log" | tail -1)
+mg=$(gw "$menu")
+# The present's own mode, which is logged from a path that runs in EVERY state -
+# unlike TAS VIEWPORT, which a broken GuiState would simply never emit, leaving
+# the rectangle unchanged and this check passing for the wrong reason.
+mode=$(grep -a "TAS PRESENT" "$OUT/out.log" | tail -1)
+echo "  menu:   ${menu#*RENDERER]: }"
+echo "  present:${mode#*RENDERER]: }"
+case "$mode" in
+	*"blit full-window"*)
+		echo "FAIL docktest - opening the menu dropped the picture back to a"
+		echo "       full-window blit, so it jumps out of its dock and back"
+		exit 1 ;;
+	"") echo "FAIL docktest - no present-mode trace; the panel never engaged"; exit 1 ;;
+esac
+if [ "$mg" != "$ag" ]; then
+	echo "FAIL docktest - the picture MOVED when the menu opened ($ag -> $mg px wide)"
+	exit 1
+fi
+
+echo "PASS docktest - docking narrowed the game ($bg -> $ag px wide), and the"
+echo "     menu left it where it was"

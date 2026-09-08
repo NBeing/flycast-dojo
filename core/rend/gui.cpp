@@ -4344,6 +4344,34 @@ void gui_display_ui()
 	error_msg_shown = false;
 	bool gui_open = gui_is_open();
 
+	// THE PICTURE MUST NOT MOVE WHEN A MENU OPENS.
+	//
+	// These are the states that show the running game behind the UI. Each one
+	// draws its own windows over it, so each one needs the dockspace host and
+	// the game panel too - otherwise the panel stops being submitted, the
+	// renderer falls back to the full-window blit, and the picture JUMPS out of
+	// its dock the moment you press Escape and back when you leave.
+	//
+	// ENUMERATED, NOT DERIVED. "Is a game loaded" is not the question - Main
+	// and SelectDisk can both be reached with one loaded and neither shows it,
+	// and submitting a dockspace in a state that renders no tools only adds a
+	// stray node. The list is short and says which screens the game is visible
+	// under, which is worth reading.
+	switch (gui_state)
+	{
+	case GuiState::Settings:
+	case GuiState::Commands:
+	case GuiState::Cheats:
+	case GuiState::Paused:
+	case GuiState::ReplayEnd:
+	case GuiState::QuickMap:
+		submitDockspaceHost();		// inside the frame, before every dockable window
+		submitGamePanel();			// the picture is one of the windows
+		break;
+	default:
+		break;
+	}
+
 	switch (gui_state)
 	{
 	case GuiState::Settings:
@@ -4416,8 +4444,8 @@ void gui_display_ui()
 		dojo_gui.gui_display_delay_select();
 		break;
 	case GuiState::Paused:
-		submitDockspaceHost();		// same rule: inside the frame, before the windows
-		submitGamePanel();			// the picture is one of the windows
+		// host + game panel already submitted above, with the other states that
+		// show the running game behind their windows
 		dojo_gui.show_pause();
 		// Lua overlays must draw while PAUSED too. lua::overlay() otherwise only
 		// runs from gui_display_osd(), which the RENDERERS call from their
@@ -4694,6 +4722,14 @@ void gui_saveState()
 
 void gui_setState(GuiState newState)
 {
+	// Which screen is up, traced so a HARNESS can tell "the picture stayed put"
+	// apart from "nothing happened". docktest presses Escape and then checks the
+	// game did not jump out of its dock; without this line an Escape that never
+	// reached the emulator - which is what happens on an Xvfb with no window
+	// manager - looks exactly like a pass.
+	if (newState != gui_state && cfgLoadBool("dojo", "ViewportTrace", false))
+		NOTICE_LOG(RENDERER, "TAS GUISTATE: %d -> %d", (int)gui_state, (int)newState);
+
 	gui_state = newState;
 	if (newState == GuiState::Closed)
 	{

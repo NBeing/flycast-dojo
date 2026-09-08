@@ -1,6 +1,7 @@
 #include "glcache.h"
 #include "gles.h"
 #include "rend/game_viewport.h"
+#include "cfg/cfg.h"
 #include "rend/tileclip.h"
 #include "rend/osd.h"
 #include "naomi2.h"
@@ -773,6 +774,25 @@ bool OpenGLRenderer::renderLastFrame()
 	// and the underneath copy is exactly the "docked tools cover the game"
 	// symptom this replaced. All the present still owes is the ground the
 	// dockspace sits on.
+	// TRACED FROM THE PRESENT, WHICH ALWAYS RUNS.
+	//
+	// The TAS VIEWPORT trace is emitted by the dockspace host, so it is blind to
+	// exactly the failure worth catching: a GuiState that never submits the host
+	// logs nothing, and "the rectangle did not change" then reads as a pass when
+	// really nothing was measured. This one fires from the blit path, which runs
+	// every frame in every state, so a fall back to the full-window picture says
+	// so out loud.
+	if (cfgLoadBool("dojo", "ViewportTrace", false))
+	{
+		static int lastMode = -1;
+		const int mode = rend::gamePanelActive() ? 1 : 0;
+		if (mode != lastMode)
+		{
+			lastMode = mode;
+			NOTICE_LOG(RENDERER, "TAS PRESENT: %s", mode ? "panel" : "blit full-window");
+		}
+	}
+
 	if (rend::gamePanelActive())
 	{
 		glViewport(0, 0, settings.display.width, settings.display.height);
