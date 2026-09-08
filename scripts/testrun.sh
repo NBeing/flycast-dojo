@@ -106,6 +106,28 @@ fi
 [ -n "$CLIP" ] && [ -f "$CLIP" ] || { echo "testrun: SKIP - no .flyr clip found; pass --clip" >&2; exit $SKIP; }
 
 mkdir -p "$OUT"
+
+# ONE RUN AT A TIME, AND IT REFUSES RATHER THAN INTERLEAVES.
+#
+# $OUT is a fixed directory, so two concurrent runs write verdicts into the same
+# place and then read each other's. [MEASURED 2026-09-08] a --watch run and a
+# ctest run overlapped: the watch reported `FAIL fail_assertion` - a NEGATIVE
+# test's verdict, belonging to the other run - and ctest saw its harness fixture
+# "fail" and skipped the suite. Both verdicts were false and both looked exactly
+# like real ones. The gate built to catch an untrustworthy harness did its job
+# perfectly, on evidence that was itself corrupt.
+#
+# Refusing is the honest answer: a second run cannot produce a trustworthy
+# verdict, and a wrong verdict is worse than none. 77, not 1 - "cannot run now"
+# is not a failing test.
+exec 9>"$OUT/.lock"
+if ! flock -n 9; then
+	echo "testrun: SKIP - another testrun is already using $OUT" >&2
+	echo "testrun:   two runs share one verdict directory and would read each" >&2
+	echo "testrun:   other's results. Wait for it, or set FLYCAST_TEST_OUT." >&2
+	exit $SKIP
+fi
+
 rm -f "$OUT"/*.log "$OUT"/*.verdict 2>/dev/null
 
 run_one() {  # run_one <test.lua> <slot>

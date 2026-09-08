@@ -421,6 +421,29 @@ void gui_set_mouse_wheel(float delta)
 	mouseWheel += delta;
 }
 
+//! THE DOCKSPACE HOST. Without one, docking is half a feature: windows can be
+//! dragged into each other as floating nodes, but there is nothing to dock TO -
+//! no screen edges, no host to hold a layout. That is what "docking doesn't
+//! feel right" is.
+//!
+//! PassthruCentralNode leaves the middle transparent, so the game shows through
+//! instead of the host painting over it.
+//!
+//! THREE RULES, from docs/tas-fork/IMGUI_UPGRADE.md regression 3, which cost a
+//! silent state corruption there:
+//!   * INSIDE the ImGui frame - after NewFrame, never before. Release builds
+//!     compile ImGui's asserts out, so getting this wrong corrupts docking
+//!     state quietly rather than crashing.
+//!   * BEFORE every dockable window in that frame.
+//!   * In the SAME frame stream as the windows. This fork has two
+//!     (gui_display_ui and gui_display_osd, each with its own NewFrame), so the
+//!     host is submitted in both - and in NEITHER for states that render no
+//!     tools, where it would only add a stray node.
+static void submitDockspaceHost()
+{
+	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+}
+
 static void gui_newFrame()
 {
 	imguiDriver->newFrame();
@@ -4231,6 +4254,7 @@ void gui_display_ui()
 		dojo_gui.gui_display_delay_select();
 		break;
 	case GuiState::Paused:
+		submitDockspaceHost();		// same rule: inside the frame, before the windows
 		dojo_gui.show_pause();
 		// Lua overlays must draw while PAUSED too. lua::overlay() otherwise only
 		// runs from gui_display_osd(), which the RENDERERS call from their
@@ -4242,7 +4266,7 @@ void gui_display_ui()
 		//
 		// Placed HERE, inside this stream's frame and after show_pause(), for
 		// the reasons in CLAUDE.md: the two ImGui frame streams each do their
-		// own NewFrame, and this case has already submitted the dockspace host.
+		// own NewFrame, and this case submits the dockspace host above.
 		// It cannot double-draw, because gui_display_osd() does not run while
 		// paused - that is the whole problem being fixed.
 		lua::overlay();
@@ -4297,6 +4321,7 @@ void gui_display_osd()
 	{
 		gui_newFrame();
 		ImGui::NewFrame();
+		submitDockspaceHost();		// inside the frame, before every dockable window
 
 		if (!message.empty())
 		{
