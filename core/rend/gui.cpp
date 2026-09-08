@@ -24,6 +24,8 @@
 #include "imgui.h"
 #include "imgui_internal.h"	// DockBuilderGetCentralNode (game viewport)
 #include "rend/game_viewport.h"
+#include "hw/pvr/Renderer_if.h"	// Renderer::GetFrameTexture (the game panel)
+#include "rend/transform_matrix.h"	// getDCFramebufferAspectRatio
 #include "network/net_handshake.h"
 #include "network/ggpo.h"
 #include "wsi/context.h"
@@ -441,9 +443,19 @@ void gui_set_mouse_wheel(float delta)
 //!     (gui_display_ui and gui_display_osd, each with its own NewFrame), so the
 //!     host is submitted in both - and in NEITHER for states that render no
 //!     tools, where it would only add a stray node.
+static ImGuiID centralNodeId;
+
 static void submitDockspaceHost()
 {
 	const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
+	// A/B SWITCH, so a docking regression can be isolated WITHOUT a rebuild.
+	// `-config dojo:DockGameViewport=no` reverts to the pre-2026-09-07
+	// behaviour exactly: the picture letterboxes into the whole window and
+	// docked panels sit on top of it. If docking misbehaves with this on and
+	// behaves with it off, the fault is here; if it misbehaves either way, it
+	// is not, and that is worth more than an afternoon of reasoning about it.
+	const bool publish = cfgLoadBool("dojo", "DockGameViewport", true);
 
 	// Publish what the docked tools left for the game. The central node IS the
 	// unoccupied middle of the dockspace, so this is the whole window until
@@ -452,9 +464,128 @@ static void submitDockspaceHost()
 	// picture into it; see core/rend/game_viewport.h for the contract.
 	// A node with no split children still covers the whole viewport, so the
 	// undocked case publishes a full-window area and costs nothing.
-	if (const ImGuiDockNode *central = ImGui::DockBuilderGetCentralNode(dockspaceId))
+	const ImGuiDockNode *central = ImGui::DockBuilderGetCentralNode(dockspaceId);
+	centralNodeId = central != nullptr ? central->ID : 0;
+	if (central != nullptr && publish)
 		rend::setContentArea((int)central->Pos.x, (int)central->Pos.y,
 				(int)central->Size.x, (int)central->Size.y);
+
+	// TRACED IN BOTH MODES, DELIBERATELY. This used to sit after the `publish`
+	// early-return, so turning the publish off also turned the evidence off -
+	// and the control run that is supposed to prove the difference logged
+	// nothing at all. Found by the docktest self-test, which is exactly what a
+	// self-test is for.
+	// WHAT THE THREE RECTANGLES ACTUALLY ARE, logged only when one changes, so
+	// a drag produces a handful of lines rather than a firehose. The window and
+	// the central node SHOULD be identical until something is docked; if they
+	// are not, the publish is wrong and everything downstream inherits it.
+	if (cfgLoadBool("dojo", "ViewportTrace", false))
+	{
+		const rend::ViewportRect game = rend::gameViewport();
+		static int last[9] = { -1 };
+		const int now[9] = {
+			settings.display.width, settings.display.height,
+			central ? (int)central->Pos.x : -1, central ? (int)central->Pos.y : -1,
+			central ? (int)central->Size.x : -1, central ? (int)central->Size.y : -1,
+			game.x, game.w, game.h,
+		};
+		if (memcmp(last, now, sizeof(now)) != 0)
+		{
+			memcpy(last, now, sizeof(now));
+			NOTICE_LOG(RENDERER, "TAS VIEWPORT: window %dx%d  central %d,%d %dx%d  game %d,%d %dx%d",
+					now[0], now[1], now[2], now[3], now[4], now[5],
+					game.x, game.y, game.w, game.h);
+		}
+	}
+}
+
+//! THE GAME AS A DOCKABLE PANEL.
+//!
+//! Submitted like any other tool window, right after the dockspace host, so the
+//! picture is a node the dockspace lays out rather than a full-window blit that
+//! everything else has to be arranged around. Docking then behaves uniformly:
+//! the game can be split, tabbed and resized, and no code has to reason about
+//! "the area left over", because there is no left-over - there are only nodes.
+//!
+//! WHAT THIS REPLACES. The previous design let the renderer paint the picture
+//! behind a transparent central node and letterboxed it into that node's rect.
+//! It worked, but it made the game the one thing in the window that was not a
+//! window, and every question about layout had a special case for it.
+//!
+//! Falls back silently when the backend publishes no frame texture, so a
+//! renderer that has not implemented GetFrameTexture() keeps working.
+static void submitGamePanel()
+{
+	rend::setGamePanelActive(false);
+
+	// SAY WHY IT DID NOT DRAW, once per reason. A panel that silently does not
+	// appear is indistinguishable from one that appeared behind something, and
+	// there are four separate ways to get here with nothing on screen.
+	static int lastWhy = -1;
+	auto why = [](int code, const char *msg) {
+		if (lastWhy != code) { lastWhy = code; NOTICE_LOG(RENDERER, "TAS GAMEPANEL: %s", msg); }
+	};
+
+	const bool wanted = cfgLoadBool("dojo", "GamePanel", false);
+	rend::setGamePanelWanted(wanted);	// the renderer allocates on this, not on active
+	if (!wanted) { why(1, "off (dojo:GamePanel)"); return; }
+	if (renderer == nullptr)                      { why(2, "no renderer yet"); return; }
+
+	const Renderer::FrameTexture ft = renderer->GetFrameTexture();
+	if (ft.handle == 0) { why(3, "this backend publishes no frame texture - blitting instead"); return; }
+	why(0, "drawing the picture as a panel");
+
+	// PADDING IS NOT ZERO, AND THAT IS MEASURED, NOT CHOSen: ImGui clips the
+	// title text to the title bar inset by WindowPadding.x, so zero inset draws
+	// a window with a close button and no name - which in a dock full of tabs
+	// is a bug report waiting to happen. A few pixels cost nothing.
+	// DOCKED INTO THE CENTRAL NODE ON FIRST USE, so the picture starts where a
+	// player expects it - filling the window - and is a NODE from the first
+	// frame rather than a floating window they have to dock themselves. Left
+	// undocked it opens at ImGui's default auto-size, which is a thumbnail.
+	//
+	// FirstUseEver, never Always: this must lose to imgui.ini and to anything
+	// the user does afterwards. A per-frame dock id would drag the panel back
+	// every time they moved it, which is the same mistake as a per-frame
+	// SetNextWindowPos - that one defeated docking entirely once already.
+	if (centralNodeId != 0)
+		ImGui::SetNextWindowDockID(centralNodeId, ImGuiCond_FirstUseEver);
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2, 2));
+	const bool open = ImGui::Begin("Game");
+	ImGui::PopStyleVar();
+
+	if (open)
+	{
+		const ImVec2 avail = ImGui::GetContentRegionAvail();
+		if (avail.x >= 1 && avail.y >= 1)
+		{
+			// ONE COPY OF THE FIT. The panel's content box is the content area
+			// and rend::gameViewport() letterboxes into it - the same function
+			// the blit path uses, so the two modes cannot disagree about where
+			// the picture goes or how big it is.
+			rend::setContentArea(0, 0, (int)avail.x, (int)avail.y);
+			const rend::ViewportRect fit = rend::gameViewport(
+					ft.aspectRatio > 0 ? ft.aspectRatio : getDCFramebufferAspectRatio());
+
+			const ImVec2 origin = ImGui::GetCursorScreenPos();
+			ImGui::SetCursorScreenPos(ImVec2(origin.x + fit.x, origin.y + fit.y));
+			// v is flipped for a bottom-up texture; see Renderer::FrameTexture.
+			ImGui::Image((ImTextureID)ft.handle, ImVec2((float)fit.w, (float)fit.h),
+					ImVec2(0, ft.yUp ? 1.f : 0.f), ImVec2(1, ft.yUp ? 0.f : 1.f));
+
+			// PUBLISH WHERE THE PICTURE ACTUALLY LANDED, in window pixels, so
+			// content overlays (and the Lua display namespace) follow the panel
+			// wherever it is docked. Already aspect-correct, so gameViewport()
+			// letterboxes it again to a no-op.
+			const ImVec2 tl = ImGui::GetItemRectMin();
+			const ImVec2 br = ImGui::GetItemRectMax();
+			rend::setContentArea((int)tl.x, (int)tl.y,
+					(int)(br.x - tl.x), (int)(br.y - tl.y));
+			rend::setGamePanelActive(true);
+		}
+	}
+	ImGui::End();
 }
 
 static void gui_newFrame()
@@ -4286,6 +4417,7 @@ void gui_display_ui()
 		break;
 	case GuiState::Paused:
 		submitDockspaceHost();		// same rule: inside the frame, before the windows
+		submitGamePanel();			// the picture is one of the windows
 		dojo_gui.show_pause();
 		// Lua overlays must draw while PAUSED too. lua::overlay() otherwise only
 		// runs from gui_display_osd(), which the RENDERERS call from their
@@ -4353,6 +4485,7 @@ void gui_display_osd()
 		gui_newFrame();
 		ImGui::NewFrame();
 		submitDockspaceHost();		// inside the frame, before every dockable window
+		submitGamePanel();			// the picture is one of the windows
 
 		if (!message.empty())
 		{

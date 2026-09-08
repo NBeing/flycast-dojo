@@ -85,4 +85,19 @@ ViewportRect gameViewport()
 	return gameViewport(getDCFramebufferAspectRatio());
 }
 
+/*
+	Set by the UI each frame, read by the renderers when they present. Both run
+	on the render thread, but the UI writes it AFTER the present has already
+	read it for this frame - so a mode change lands one frame later, which is
+	invisible and much simpler than trying to order the two.
+*/
+static std::atomic<bool> panelActive{false};
+
+static std::atomic<bool> panelWanted{false};
+
+bool gamePanelActive()             { return panelActive.load(std::memory_order_relaxed); }
+void setGamePanelActive(bool a)    { panelActive.store(a, std::memory_order_relaxed); }
+bool gamePanelWanted()             { return panelWanted.load(std::memory_order_relaxed); }
+void setGamePanelWanted(bool w)    { panelWanted.store(w, std::memory_order_relaxed); }
+
 }	// namespace rend

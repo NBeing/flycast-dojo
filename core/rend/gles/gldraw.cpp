@@ -767,6 +767,21 @@ bool OpenGLRenderer::renderLastFrame()
 
 	glcache.Disable(GL_SCISSOR_TEST);
 
+	// THE PANEL OWNS THE PICTURE. When the game is a dockable window the frame
+	// is drawn by ImGui from this same texture, so blitting it here as well
+	// would paint it twice - once full-window underneath, once in the panel -
+	// and the underneath copy is exactly the "docked tools cover the game"
+	// symptom this replaced. All the present still owes is the ground the
+	// dockspace sits on.
+	if (rend::gamePanelActive())
+	{
+		glViewport(0, 0, settings.display.width, settings.display.height);
+		glBindFramebuffer(GL_FRAMEBUFFER, gl.ofbo.origFbo);
+		glcache.ClearColor(VO_BORDER_COL.red(), VO_BORDER_COL.green(), VO_BORDER_COL.blue(), 1.f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		return true;
+	}
+
 	// The picture goes wherever the UI left room for it, not wherever the window
 	// is: with tool windows docked that is the dockspace's central node. See
 	// core/rend/game_viewport.h. glY converts the rect's top-left origin to GL's

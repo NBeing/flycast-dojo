@@ -68,6 +68,30 @@ struct Renderer
 	virtual void DrawOSD(bool clear_screen) { }
 
 	virtual BaseTextureCacheData *GetTexture(TSP tsp, TCW tcw) { return nullptr; }
+
+	//! The last presented frame, as something the UI can draw.
+	//!
+	//! THE GAME IS A PANEL, NOT A HOLE. The frame is already a texture by the
+	//! time it reaches the screen - every backend renders into an offscreen
+	//! buffer and blits it last - so handing that texture to the UI lets the
+	//! picture be an ImGui window that docks, splits and resizes like any
+	//! other, instead of a full-window blit that docked panels have to be
+	//! letterboxed around. fbneo-rr's architecture review reached the same
+	//! conclusion: "the emulated frame is already a texture, so make ImGui the
+	//! whole frontend."
+	//!
+	//! `handle` is the NATIVE handle, widened rather than typed, so this header
+	//! does not have to include imgui.h - the UI layer casts it back to
+	//! ImTextureID, which is what it means on every backend ImGui supports.
+	//! A zero handle means this backend does not publish one yet, and the
+	//! caller must fall back to the blit.
+	struct FrameTexture
+	{
+		uintptr_t handle = 0;
+		float aspectRatio = 0.f;	//!< the picture's, for the fit
+		bool yUp = false;			//!< row 0 is the BOTTOM of the image (GL)
+	};
+	virtual FrameTexture GetFrameTexture() { return {}; }
 };
 
 extern Renderer* renderer;

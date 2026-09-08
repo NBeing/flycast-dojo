@@ -55,4 +55,26 @@ ViewportRect gameViewport(float pictureAspectRatio);
 //! the Lua API, overlays - and correct for all of them.
 ViewportRect gameViewport();
 
+//! Is the picture being drawn as a dockable PANEL rather than blitted behind
+//! the UI? Renderers ask before presenting: when this is true the panel owns
+//! the picture and the present only paints the ground under the dockspace.
+//!
+//! WHY THE TWO MODES COEXIST. The panel needs the backend to publish its frame
+//! as a texture (Renderer::GetFrameTexture), which not every backend does yet,
+//! so the blit stays as the fallback rather than as a legacy path to delete.
+//! `dojo:GamePanel` turns it on; a backend that publishes no texture falls back
+//! on its own, without the config having to know which backend is running.
+bool gamePanelActive();
+void setGamePanelActive(bool active);
+
+//! Does the USER want the game as a panel? Distinct from gamePanelActive(),
+//! and the distinction is load-bearing: the panel needs the backend's offscreen
+//! buffer to be a sampleable TEXTURE rather than a renderbuffer, and that
+//! decision is made when the buffer is allocated - before any panel could have
+//! drawn. Keying the allocation off "active" would deadlock: no texture, so no
+//! panel, so never active, so never a texture. This is the intent; the other is
+//! the outcome.
+bool gamePanelWanted();
+void setGamePanelWanted(bool wanted);
+
 }	// namespace rend

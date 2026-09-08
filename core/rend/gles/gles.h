@@ -511,6 +511,26 @@ struct OpenGLRenderer : Renderer
 
 	void RenderFramebuffer(const FramebufferInfo& info) override;
 
+	//! The offscreen buffer the present would otherwise blit. ofbo2 is the
+	//! newer of the two when it is ready, matching renderLastFrame()'s choice
+	//! so the panel and the blit can never show different frames.
+	FrameTexture GetFrameTexture() override
+	{
+		GlFramebuffer *fb = gl.ofbo2.ready ? gl.ofbo2.framebuffer.get() : gl.ofbo.framebuffer.get();
+		if (fb == nullptr || fb->getTexture() == 0)
+			return {};
+		// yUp IS FALSE HERE, AND THAT WAS MEASURED, NOT REASONED.
+		// The GL rule of thumb - row 0 is the bottom, so flip v - is wrong for
+		// this buffer: flycast renders into the offscreen FBO with an already
+		// flipped projection, so uv (0,0) is the picture's top-left and the
+		// DEFAULT uvs are correct. Flipping "because OpenGL" drew the game
+		// upside down, which is why the renderer REPORTS this instead of every
+		// caller remembering a rule that does not hold. Caught in one look at a
+		// screenshot; unreadable from the code, since the flip lives in the
+		// projection matrix rather than anywhere near the blit.
+		return { (uintptr_t)fb->getTexture(), gl.ofbo.aspectRatio, false };
+	}
+
 	bool RenderLastFrame() override
 	{
 		saveCurrentFramebuffer();

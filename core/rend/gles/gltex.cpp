@@ -1,5 +1,6 @@
 #include "glcache.h"
 #include "gles.h"
+#include "rend/game_viewport.h"
 #include "hw/pvr/pvr_mem.h"
 #include "rend/TexCache.h"
 
@@ -312,12 +313,25 @@ void glReadFramebuffer(const FramebufferInfo& info)
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gl.dcfb.width, gl.dcfb.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pb.data());
 }
 
+//! Must the offscreen frame be SAMPLEABLE, rather than merely blittable?
+//!
+//! Rotation has always needed this - a rotated present is drawQuad, not
+//! glBlitFramebuffer - and the game-as-a-panel needs the same thing for the
+//! same reason: ImGui::Image samples a texture. Two callers, one question, so
+//! it is asked once here instead of `config::Rotate90` growing an `||` in two
+//! places that must agree (they are the allocate and the reallocate, and if
+//! they ever disagreed the buffer would be rebuilt every single frame).
+static bool needsSampleableFrame()
+{
+	return config::Rotate90 || rend::gamePanelWanted();
+}
+
 GLuint init_output_framebuffer(int width, int height)
 {
 	if (gl.ofbo.framebuffer != nullptr
 			&& (width != gl.ofbo.framebuffer->getWidth() || height != gl.ofbo.framebuffer->getHeight()
 				// if the rotate90 setting has changed
-				|| (gl.gl_major >= 3 && (gl.ofbo.framebuffer->getTexture() == 0) == config::Rotate90)))
+				|| (gl.gl_major >= 3 && (gl.ofbo.framebuffer->getTexture() == 0) == needsSampleableFrame())))
 	{
 		gl.ofbo.framebuffer.reset();
 	}
@@ -325,7 +339,7 @@ GLuint init_output_framebuffer(int width, int height)
 	if (gl.ofbo.framebuffer == nullptr)
 	{
 		GLuint texture = 0;
-		if (config::Rotate90)
+		if (needsSampleableFrame())
 		{
 			// Create a texture for rendering to
 			texture = glcache.GenTexture();
