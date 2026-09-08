@@ -137,10 +137,30 @@ void gui_init()
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 
-	io.IniFilename = NULL;
+	// LAYOUT PERSISTENCE, now that there is a layout worth keeping. This was
+	// unconditionally NULL, which also made the `dojo:UiIni=no` flag every
+	// harness passes a no-op - it looked like protection and was not. The flag
+	// is real now: harnesses keep NULL so a headless run cannot save its
+	// never-docked default over the user's arrangement.
+	static std::string imguiIniPath;
+	if (cfgLoadBool("dojo", "UiIni", true))
+	{
+		imguiIniPath = get_writable_config_path("imgui.ini");
+		io.IniFilename = imguiIniPath.c_str();
+	}
+	else
+	{
+		io.IniFilename = NULL;
+	}
 
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+	// DOCKING. Vendored ImGui is the 1.90.4 DOCKING branch (same version as the
+	// master build it replaced, API superset), so tool windows can be dragged
+	// together, tabbed and split. Viewports are deliberately NOT enabled: the
+	// backends here carry heavy flycast customisation and are only
+	// version-tolerant against the docking core with viewports off.
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     EventManager::listen(Event::Resume, emuEventCallback);
     EventManager::listen(Event::Start, emuEventCallback);
@@ -353,6 +373,26 @@ void gui_keyboard_key(u8 keyCode, bool pressed)
 bool gui_keyboard_captured()
 {
 	ImGuiIO& io = ImGui::GetIO();
+	// TYPING ALWAYS CAPTURES, wherever it happens.
+	if (io.WantTextInput)
+		return true;
+	// THE DOCKING BRANCH CHANGED WHAT WantCaptureKeyboard MEANS. It is now
+	// raised whenever ANY window holds nav focus - a gameplay overlay included -
+	// where before it effectively meant "a real menu is up". Forwarding it
+	// verbatim after the swap means a focused tool window silently swallows
+	// every key the game should see, and keyboard_device.h consults this on the
+	// hot path (:106, :181).
+	//
+	// [SOURCE] docs/tas-fork/IMGUI_UPGRADE.md, regressions 1 and 4: "the moment
+	// the Shift-peek cheat sheet appeared, every TAS hotkey died", and "a
+	// focused tool window while paused ... every TAS hotkey blocked".
+	//
+	// So only the REAL menus capture. Closed is gameplay, and PAUSED IS
+	// GAMEPLAY TOO: tool windows float over the game there, and frame-advance
+	// has to keep working while one of them has focus - which is precisely when
+	// a TAS user is clicking on them.
+	if (gui_state == GuiState::Closed || gui_state == GuiState::Paused)
+		return false;
 	return io.WantCaptureKeyboard;
 }
 
