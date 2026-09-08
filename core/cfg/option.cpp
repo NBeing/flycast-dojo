@@ -164,9 +164,9 @@ Option<int> GGPORemotePort("GGPORemotePort", 19713, "network");
 
 // Dojo
 OptionString PlayerName("PlayerName", "Player", "dojo");
-Option<bool> PlayerNameOverlay("PlayerNameOverlay", true, "dojo");
+Option<bool> PlayerNameOverlay("PlayerNameOverlay", false, "dojo");	// TAS: a capture must be clean
 
-Option<bool> NetBeaconEnable("NetBeacon", true, "dojo");
+Option<bool> NetBeaconEnable("NetBeacon", false, "dojo");	// TAS: this fork is single-player; nothing to announce
 OptionString BeaconMulticastAddress("BeaconMulticastAddress", "224.1.10.1", "dojo");
 OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
 
@@ -175,12 +175,37 @@ Option<bool> StreamTxtOutput("StreamTxtOutput", false, "dojo");
 Option<bool> Training("Training", false, "dojo");
 Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
 Option<bool> EnableTrainingLua("EnableTrainingLua", true, "dojo");
-Option<bool> AutoLoadTrainingNetState("AutoLoadTrainingNetState", true, "dojo");
-Option<bool> AutoLoadNetState("AutoLoadNetState", true, "dojo");
+Option<bool> AutoLoadTrainingNetState("AutoLoadTrainingNetState", false, "dojo");	// TAS: netplay leftover
+Option<bool> AutoLoadNetState("AutoLoadNetState", false, "dojo");	// TAS: blocked headless boots
 OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
 OptionString DojoServerPort("ServerPort", "6000", "dojo");
 
-Option<bool> Transmitting("Transmitting", true, "dojo");
+/*
+	NETPLAY DEFAULTS ARE OFF IN THIS FORK, and each one is off because it caused
+	a real bug rather than as tidying:
+
+	  Transmitting              a SHADOW RECORDING. A second recorder starts
+	                            behind the one you asked for and re-points the
+	                            savestate folder, so F1 writes somewhere other
+	                            than the clip you are working in. Never breaking
+	                            record/replay sync is the northstar; a hidden
+	                            second writer is the worst thing on that axis.
+	  AutoLoadNetState          blocked headless boots - the harness hangs
+	                            waiting for a state that a single-player session
+	                            will never have.
+	  AutoLoadTrainingNetState  same family.
+	  NetBeacon                 announces a session to a lobby. There is no
+	                            lobby; this fork is single-player.
+
+	The harness passed `-config dojo:Transmitting=no -config dojo:AutoLoadNetState=no`
+	on every launch to work around exactly this. Those flags are now belt to
+	these braces rather than the only thing holding it together.
+
+	PlayerNameOverlay and ShowTrainingInputDisplay are off for a different
+	reason: a capture must be clean, and an overlay burned into a 4K ProRes file
+	cannot be taken out afterwards.
+*/
+Option<bool> Transmitting("Transmitting", false, "dojo");
 Option<bool> TransmitScore("TransmitScore", false, "dojo");
 
 Option<bool> Receiving("Receiving", false, "dojo");
@@ -200,7 +225,7 @@ Option<bool> HideRandomInputSlot("HideRandomInputSlot", true, "dojo");
 Option<bool> RecordOnFirstInput("RecordOnFirstInput", false, "dojo");
 Option<int, false> RecSlotFile("RecSlotFile");
 
-Option<bool> ShowTrainingInputDisplay("ShowTrainingInputDisplay", true, "dojo");
+Option<bool> ShowTrainingInputDisplay("ShowTrainingInputDisplay", false, "dojo");	// TAS: a capture must be clean
 Option<bool> ShowReplayInputDisplay("ShowReplayInputDisplay", false, "dojo");
 Option<bool> UseAnimeInputNotation("UseAnimeInputNotation", false, "dojo");
 
