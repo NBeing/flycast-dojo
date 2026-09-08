@@ -6,6 +6,7 @@
 #include "cfg/option.h"
 #include "log/LogManager.h"
 #include "rend/gui.h"
+#include "rend/panel.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
 #include "archive/rzip.h"
@@ -56,6 +57,10 @@ int flycast_init(int argc, char* argv[])
 		config::Settings::instance().load(false);
 	}
 	gui_init();
+	// AFTER config load (it reads a cfg flag) and BEFORE any frame, which is
+	// the window in which a registry is still safe to exercise: registration is
+	// additive and nothing has drawn yet.
+	panels::selfTest();
 	os_CreateWindow();
 	os_SetupInput();
 

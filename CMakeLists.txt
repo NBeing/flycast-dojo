@@ -1280,6 +1280,8 @@ if(NOT LIBRETRO)
 			core/rend/game_scanner.h
 			core/rend/imgui_driver.h
 			core/rend/game_viewport.cpp
+			core/rend/panel.cpp
+			core/rend/panel.h
 			core/rend/game_viewport.h
 			core/rend/gui.cpp
 			core/rend/video_recorder.cpp
