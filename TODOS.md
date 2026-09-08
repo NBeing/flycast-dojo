@@ -30,6 +30,39 @@ half is syntax-checked and its guards exercised.
 
 ---
 
+## The game panel — landed on GL, unfinished elsewhere
+
+`[2026-09-08]` The picture is now a dockable ImGui panel rather than a
+full-window blit, so it splits, tabs and resizes like any other node.
+`dojo:GamePanel=yes` turns it on; it is **off by default** while the two items
+below are open. `scripts/docktest.sh` is the regression test — it drives a real
+drag with xdotool on a private Xvfb and `--self-test` proves it can fail.
+
+### [F] DX9, DX11 and Vulkan publish no frame texture
+They fall back to the blit, so they behave exactly as before and nothing is
+broken — but the panel is GL-only until this lands, and **DX9 is the Windows
+capture path**, so this is what stands between the feature and the actual
+workflow.
+
+Both DX backends already hold the frame as a texture (`framebufferTexture` at
+`dx9/d3d_renderer.h:154`, `fbTextureView` at `dx11/dx11_renderer.h:114`), so
+`Renderer::GetFrameTexture()` is a few lines each. The hook alone is NOT enough:
+their present paths need the "do not blit" half too, or the picture draws twice
+— once full-window underneath and once in the panel. Cannot be compiled or
+tested from Linux; do it on the Windows box.
+
+### [V] The menu-open case is fixed but not covered
+Settings, Commands, Cheats, ReplayEnd and QuickMap now submit the dockspace host
+and the panel, so the picture no longer jumps out of its dock when a menu opens.
+Correct on inspection; **not proven by automation**. docktest's phase 2 SKIPS
+with its reason printed because Escape does not reach the emulator under the
+harness even with i3 running on the scratch display. Three earlier versions of
+that phase passed with the fix deliberately removed, for three different
+reasons — see the commit. Finish it or leave it skipping loudly; do not let it
+quietly start "passing".
+
+---
+
 ## Known bugs
 
 ### [x] Lua `vblank` double-fires during rollback — FIXED
