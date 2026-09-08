@@ -34,15 +34,17 @@ half is syntax-checked and its guards exercised.
 
 `[2026-09-08]` The picture is now a dockable ImGui panel rather than a
 full-window blit, so it splits, tabs and resizes like any other node.
-`dojo:GamePanel=yes` turns it on; it is **off by default** while the two items
-below are open. `scripts/docktest.sh` is the regression test — it drives a real
+**On by default** `[2026-09-08]`, once both halves below were understood: the
+fallback makes the non-GL backends bit-identical to before, so defaulting it
+changes only the renderer it was tested on. `dojo:GamePanel=no` reverts it. `scripts/docktest.sh` is the regression test — it drives a real
 drag with xdotool on a private Xvfb and `--self-test` proves it can fail.
 
 ### [F] DX9, DX11 and Vulkan publish no frame texture
 They fall back to the blit, so they behave exactly as before and nothing is
 broken — but the panel is GL-only until this lands, and **DX9 is the Windows
 capture path**, so this is what stands between the feature and the actual
-workflow.
+workflow. It is also why turning the default on was safe: the flag is on
+everywhere, the behaviour only changes where it has been tested.
 
 Both DX backends already hold the frame as a texture (`framebufferTexture` at
 `dx9/d3d_renderer.h:154`, `fbTextureView` at `dx11/dx11_renderer.h:114`), so

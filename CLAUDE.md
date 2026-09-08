@@ -376,10 +376,15 @@ Rules that cost something to learn:
 the user's display — and judges from the emulator's own traces. `--self-test`
 runs the same drag against the old behaviour and requires it to fail.
 
-Diagnostic flags, all off by default: `dojo:GamePanel` (the panel itself),
-`dojo:DockGameViewport=no` (revert to a full-window picture at runtime),
-`dojo:ViewportTrace` (window / central node / game rect, the present's mode, and
-GuiState transitions — logged only on change).
+`dojo:GamePanel` is **on by default** `[2026-09-08]`. Safe to default because a
+backend that publishes no frame texture falls back to the blit on its own, so
+DX9, DX11 and Vulkan behave exactly as they did and only GL — where this is
+tested — changes. `dojo:GamePanel=no` returns the picture to a full-window blit.
+
+Diagnostic flags, off by default: `dojo:DockGameViewport=no` (revert the
+content-area publish at runtime) and `dojo:ViewportTrace` (window / central node
+/ game rect, the present's mode, and GuiState transitions — logged only on
+change).
 
 ---
 

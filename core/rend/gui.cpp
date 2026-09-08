@@ -526,7 +526,11 @@ static void submitGamePanel()
 		if (lastWhy != code) { lastWhy = code; NOTICE_LOG(RENDERER, "TAS GAMEPANEL: %s", msg); }
 	};
 
-	const bool wanted = cfgLoadBool("dojo", "GamePanel", false);
+	// ON BY DEFAULT. Safe to default because a backend that publishes no frame
+	// texture falls back to the blit on its own - so DX9, DX11 and Vulkan
+	// behave exactly as they did, and only GL (where this is tested) changes.
+	// `dojo:GamePanel=no` returns the picture to a full-window blit.
+	const bool wanted = cfgLoadBool("dojo", "GamePanel", true);
 	rend::setGamePanelWanted(wanted);	// the renderer allocates on this, not on active
 	if (!wanted) { why(1, "off (dojo:GamePanel)"); return; }
 	if (renderer == nullptr)                      { why(2, "no renderer yet"); return; }
