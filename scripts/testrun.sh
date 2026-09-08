@@ -9,7 +9,8 @@
 #   scripts/testrun.sh --watch <test.lua>     run it on YOUR display, so you can
 #                                             see it. Config is still sandboxed.
 #   scripts/testrun.sh --watch --hold 60 ...  keep the window up 60s after the
-#                                             verdict (default 30; 0 = close now)
+#                                             verdict (default 30; 0 = close now;
+#                                             -1 = leave it open until YOU close it)
 #
 # Exit 0 only if every test PASSed. Requires Xvfb, except under --watch.
 #
@@ -204,7 +205,14 @@ run_one() {  # run_one <test.lua> <slot>
 	# which is right for a suite and exactly wrong for a mode whose entire
 	# purpose is that a person looks at it - the first --watch run finished
 	# before its user got to the screen.
-	if [ "$WATCH" -eq 1 ] && [ "$finished" -eq 1 ] && [ "$HOLD" -gt 0 ]; then
+	if [ "$WATCH" -eq 1 ] && [ "$HOLD" -lt 0 ]; then
+		# --hold -1: DO NOT KILL IT. The window stays until you close the
+		# emulator yourself. The verdict is already decided at this point - the
+		# `done` line has been seen - so the run is only still alive for you to
+		# poke at, which is the entire purpose of --watch.
+		echo "testrun: $name finished - LEAVING IT OPEN. Close the emulator when you are done."
+		wait "$pid" 2>/dev/null
+	elif [ "$WATCH" -eq 1 ] && [ "$finished" -eq 1 ] && [ "$HOLD" -gt 0 ]; then
 		echo "testrun: $name finished - holding the window ${HOLD}s so you can read it (Ctrl-C to close now)"
 		sleep "$HOLD"
 	fi
