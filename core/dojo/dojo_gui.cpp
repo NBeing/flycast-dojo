@@ -1030,13 +1030,15 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.000f, 0.186f, 0.022f, 1.000f));
 	// ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.557f, 0.268f, 0.965f, 1.f));
 
-	if (dojo.frame_number < dojo.session_inputs.size() ||
+	// MovieEnd(), not size() - see dojo.h:151. The counter is hidden early and
+	// its denominator is wrong for any movie not keyed from frame 0.
+	if (dojo.frame_number < dojo.MovieEnd() ||
 		cfgLoadBool("dojo", "Training", false))
 	{
 		char text_pos[30] = {0};
 
 		if (dojo.play_match)
-			sprintf(text_pos, "%u / %u  ", frame_num, dojo.session_inputs.size());
+			sprintf(text_pos, "%u / %u  ", frame_num, dojo.MovieEnd());
 		else if (cfgLoadBool("dojo", "Training", false))
 			sprintf(text_pos, "%u  ", frame_num);
 
@@ -1049,7 +1051,7 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 		ImGui::Begin("#pos", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs);
 
 		if (dojo.play_match)
-			ImGui::Text("%u / %u", frame_num, dojo.session_inputs.size());
+			ImGui::Text("%u / %u", frame_num, dojo.MovieEnd());
 		else if (cfgLoadBool("dojo", "Training", false))
 			ImGui::Text("%u", frame_num);
 

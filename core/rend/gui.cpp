@@ -4565,6 +4565,10 @@ void gui_display_osd()
 		{
 			if (cfgLoadBool("dojo", "Receiving", false))
 			{
+				// size() IS the right question here and stays: this is the
+				// netplay RECEIVE buffer asking "how many frames have arrived",
+				// not "where does the movie end". A received stream is dense
+				// from frame 0 by construction.
 				if (dojo.frame_number >= dojo.session_inputs.size() - 5)
 				{
 					settings.input.fastForwardMode = false;
@@ -4573,7 +4577,17 @@ void gui_display_osd()
 			}
 			else
 			{
-				if (dojo.frame_number == dojo.session_inputs.size())
+				// MovieEnd(), not size(). This is the SECOND end-of-movie
+				// detector - dojo.cpp:1985 is the other one, and it was already
+				// converted. Two implementations of one question, one of them
+				// modernised, is how they drift.
+				//
+				// dojo.h:151 states the rule and the symptom: size() undercounts
+				// a movie that is not keyed from 0, so "every frontier test
+				// fired early". Identical for dense movies, correct for sparse -
+				// and sparse is reachable today, since re-recording leaves gaps
+				// and a macro roll is keyed from its own first frame.
+				if (dojo.frame_number == dojo.MovieEnd())
 				{
 					settings.input.fastForwardMode = false;
 					gui_state = GuiState::ReplayEnd;
