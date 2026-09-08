@@ -261,14 +261,31 @@ STAGES[8] = function()
 	report("the viewport preserves the game's aspect ratio",
 		math.abs(want - got) < 0.02, ("want %.3f got %.3f"):format(want, got))
 
-	--- NOTHING IS DOCKED in a headless run, so the area is the whole window and
-	--- the picture must touch two opposite edges of it. This is the regression
-	--- test for the per-frame RESET: without it a stale reservation from an
-	--- earlier frame survives and the picture shrinks into a corner forever,
-	--- which no other assertion here would notice.
-	report("undocked, the picture spans the window on its long axis",
-		(vx == 0 and vw == ww) or (vy == 0 and vh == wh),
-		("x %d w %d / y %d h %d"):format(vx, vw, vy, vh))
+	--- THE LAST CHECK DEPENDS ON WHERE THE PICTURE LIVES, and asking is not a
+	--- dodge: a game drawn as a dockable PANEL is legitimately inset by that
+	--- panel's own chrome, so "spans the window" is false for a correct host.
+	--- [MEASURED 2026-09-08] this stage failed the first time the game became a
+	--- panel - 18,25 604x453 in 640x480 - and the failure was right about the
+	--- assertion and wrong about the emulator.
+	if flycast.session.isGamePanel() then
+		--- The picture is a window the user can drag. It must still be a real
+		--- picture rather than a collapsed sliver, which is the panel-mode
+		--- version of the same worry: something took space and never gave it
+		--- back. Half the window is a floor no correct layout crosses here,
+		--- since nothing else is docked.
+		report("as a panel, the picture still fills most of the window",
+			vw * 2 >= ww and vh * 2 >= wh,
+			("%dx%d of %dx%d"):format(vw, vh, ww, wh))
+	else
+		--- NOTHING IS DOCKED in a headless run, so the area is the whole window
+		--- and the picture must touch two opposite edges of it. This is the
+		--- regression test for the per-frame RESET: without it a stale
+		--- reservation from an earlier frame survives and the picture shrinks
+		--- into a corner forever, which no other assertion here would notice.
+		report("undocked, the picture spans the window on its long axis",
+			(vx == 0 and vw == ww) or (vy == 0 and vh == wh),
+			("x %d w %d / y %d h %d"):format(vx, vw, vy, vh))
+	end
 	return true
 end
 

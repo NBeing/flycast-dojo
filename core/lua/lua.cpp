@@ -1298,6 +1298,18 @@ static int getGameViewport(lua_State *L)
 	return 4;
 }
 
+//! Is the picture a PANEL the user can move, or the whole window?
+//!
+//! A tool that lays anything out in window coordinates needs to know: when the
+//! game is a dockable panel its rectangle is the panel's, and it moves whenever
+//! the user drags a tab. getGameViewport() already reports where it is; this
+//! reports whether it can move at all.
+static int isGamePanel(lua_State *L)
+{
+	lua_pushboolean(L, rend::gamePanelActive());
+	return 1;
+}
+
 //! The host window's drawable size in pixels. The picture is NOT this: it is
 //! getGameViewport(), which is this minus whatever the UI reserved (docked tool
 //! windows) and minus letterboxing. A tool that wants to know whether the host
@@ -1962,6 +1974,7 @@ static void luaRegister(lua_State *L)
 				.addFunction("getGameViewport", getGameViewport)
 				.addFunction("getGameResolution", getGameResolution)
 				.addFunction("getWindowSize", getWindowSize)
+				.addFunction("isGamePanel", isGamePanel)
 				.addFunction("isRollback", std::function<bool()>([]() {
 					return ggpo::rollbacking();
 				}))
@@ -2117,6 +2130,7 @@ static void luaRegister(lua_State *L)
 				.addFunction("getGameViewport", getGameViewport)
 				.addFunction("getGameResolution", getGameResolution)
 				.addFunction("getWindowSize", getWindowSize)
+				.addFunction("isGamePanel", isGamePanel)
 			.endNamespace()
 
 			.beginNamespace("frame")
