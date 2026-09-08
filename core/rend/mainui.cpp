@@ -124,9 +124,16 @@ bool mainui_rend_frame()
 	//
 	// Gated on a harness flag rather than on play_match alone: a human opening
 	// a replay should still get the paused-on-frame-0 behaviour they expect.
+	// `dojo:AutoPlay` says PLAY, and only that. AutoSeekState and AutoCapture
+	// both imply it, which was fine while every harness wanted one of them -
+	// but a record/replay round trip wants neither: its clip has no savestate
+	// to seek to and it is not capturing. `[MEASURED 2026-09-08]` without this
+	// the replay half sat on frame 0 for three minutes and logged nothing at
+	// all, because "paused" and "wedged" look identical from outside.
 	static bool autoPlayDone = false;
 	if (!autoPlayDone && dojo.play_match && gui_state == GuiState::Paused
-			&& (cfgLoadInt("dojo", "AutoSeekState", -1) >= 0
+			&& (cfgLoadBool("dojo", "AutoPlay", false)
+				|| cfgLoadInt("dojo", "AutoSeekState", -1) >= 0
 				|| cfgLoadBool("dojo", "AutoCapture", false)))
 	{
 		autoPlayDone = true;
@@ -134,8 +141,43 @@ bool mainui_rend_frame()
 		gui_open_pause();
 	}
 
+	// A MOVIE THAT DOES NOT START AT POWER-ON CANNOT BE REPLAYED HEADLESSLY,
+	// and this is where the attempt to support it was removed rather than left
+	// half-working. `[MEASURED 2026-09-08]` seeking such a movie before playback
+	// lands the state correctly and then never advances a frame; three separate
+	// patches here did not change that.
+	//
+	// It is not an oversight in the seek - it is the replay model. This engine
+	// records NETPLAY MATCHES: the .flyr header carries Player, Opponent, Quark
+	// and Relay Key, and at least six sites compare a frame number against
+	// session_inputs.size() because a match recording is dense from frame 0.
+	// core/rend/gui.cpp:769 names the assumption outright. A movie that starts
+	// at frame 9948 violates it everywhere at once.
+	//
+	// The studio never makes one: "Movies record from power-on (frame 0);
+	// savestate-seek is a bookmark into that timeline" (CLAUDE.md). Only Lua's
+	// replay.startRecording() can, and its own docstring already warns the clip
+	// "needs a savestate to be replayable". That gap is real and recorded in
+	// TODOS.md; it is not closed by pretending the seek path handles it.
 	static bool autoSeekDone = false;
-	if (!autoSeekDone && dojo.play_match && gui_state == GuiState::Closed && dojo.frame_number > 120)
+	if (!autoSeekDone && dojo.play_match
+			// PAUSED ONLY for the mid-session branch, and that is ordering, not
+			// taste: auto-play above fires on exactly the same condition and is
+			// checked first, so restricting to Paused guarantees the movie has
+			// been un-paused before it is seeked. `[MEASURED 2026-09-08]`
+			// allowing Closed here let the seek fire on an earlier pass than
+			// auto-play could, which set its one-shot, left the session paused
+			// forever, and produced a seek with no playback after it.
+			// ORDERED ON autoPlayDone, not on a GuiState, because the two are
+			// not the same question and the state cannot express this one.
+			// `[MEASURED 2026-09-08]` gui_open_pause() changes gui_state
+			// SYNCHRONOUSLY, so by the time this line is reached on the pass
+			// where auto-play fired, the state is already Closed - a
+			// Paused-only branch can never run after it, and a branch allowing
+			// Closed runs BEFORE it and leaves the session paused forever.
+			// Both failures look identical from outside: a seek with no
+			// playback, or playback with no seek.
+			&& gui_state == GuiState::Closed && dojo.frame_number > 120)
 	{
 		autoSeekDone = true;	// one-shot either way, which also stops the per-frame cfg poll
 		const int autoSlot = cfgLoadInt("dojo", "AutoSeekState", -1);

@@ -85,6 +85,39 @@ Only worth doing if David's studio port takes us into that tree anyway.
 
 ---
 
+## [B] A movie that does not start at power-on cannot be replayed
+
+`[2026-09-08]` `replay.startRecording()` from Lua produces a clip whose first
+frame is wherever the machine was — and nothing can play it back. Its own
+docstring already warns the clip "needs a savestate to be replayable"; what is
+newly measured is that pairing it with one is **not enough**. Seeking such a
+movie lands the state correctly and then never advances a frame.
+
+**It is the replay model, not the seek.** This engine records NETPLAY MATCHES:
+the `.flyr` header carries `Player`, `Opponent`, `Quark` and `Relay Key`, and at
+least six sites compare a frame number against `session_inputs.size()` because a
+match recording is dense from frame 0 — `core/rend/gui.cpp:769` names the
+assumption outright, and `:4568`, `:4576`, `:4950`, `:4999` and
+`core/dojo/dojo_gui.cpp:1033` all rest on it. A movie starting at frame 9948
+violates it everywhere at once.
+
+One of those six was a real bug and is fixed: the end-of-movie check used
+`session_inputs.size() - 1` as "the last frame", which is also wrong for any
+movie with a GAP — and gaps are reachable today, since re-recording leaves them.
+The other five are correct-for-netplay and should not be touched piecemeal; see
+`docs/MODULARIZATION.md`.
+
+The studio never produces such a movie ("Movies record from power-on (frame 0);
+savestate-seek is a bookmark into that timeline"), so this blocks nothing today.
+It will matter if scripted recording becomes part of the studio — which the
+port's own roadmap contemplates.
+
+An attempt to support it in `core/rend/mainui.cpp` was **removed rather than
+left half-working**: it made the seek fire before playback, which is necessary
+and not sufficient, and support that looks real is worse than a recorded gap.
+
+---
+
 ## Known bugs
 
 ### [x] Lua `vblank` double-fires during rollback — FIXED

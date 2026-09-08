@@ -60,7 +60,14 @@ end
 LUAEOF
 
 FC=0
-cleanup() { [ "$FC" -ne 0 ] && kill "$FC" 2>/dev/null; sleep 1; pkill -f "Xvfb $DISP" 2>/dev/null; return 0; }
+# KILL THE GROUP, NOT THE PID - the emulator is launched into its own process
+# group, so killing the pid we were handed orphans it and the next run competes
+# with it for the display. [MEASURED 2026-09-08] recordtest.sh had the same
+# defect and left three emulators running across one debugging session.
+cleanup() {
+	[ "$FC" -ne 0 ] && { kill -- -"$FC" 2>/dev/null || kill "$FC" 2>/dev/null; }
+	sleep 1; pkill -f "Xvfb $DISP" 2>/dev/null; return 0
+}
 trap cleanup EXIT
 
 Xvfb "$DISP" -screen 0 1400x900x24 >/dev/null 2>&1 &

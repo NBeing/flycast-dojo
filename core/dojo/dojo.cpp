@@ -796,7 +796,19 @@ void Dojo::LoadStateFrame(const std::string& stateFile)
 	if (play_match)
 	{
 		NOTICE_LOG(NETWORK, "TAS: replay seek to movie frame %u", fn);
-		const u32 last = session_inputs.empty() ? 0 : (u32)session_inputs.size() - 1;
+		// THE HIGHEST AUTHORED FRAME, not the frame COUNT. These are the same
+		// number only for a movie whose frames are 0..N-1 with no gaps, which
+		// is every movie recorded from power-on and therefore every movie that
+		// had ever been tested. `[MEASURED 2026-09-08]` a movie recorded from
+		// frame 9948 reported "state is at/after the movie end (9948 of 59)" -
+		// a frame number compared against a count, and the message says so if
+		// you read it. The same function gets this right six lines above, using
+		// rbegin()->first; this line is the one that drifted.
+		//
+		// It also repairs a latent case for movies WITH GAPS: an unauthored
+		// frame anywhere makes size()-1 smaller than the last frame number, so
+		// a state near the end was wrongly reported as past it.
+		const u32 last = session_inputs.empty() ? 0 : session_inputs.rbegin()->first;
 		char msg[112];
 		if (!session_inputs.empty() && fn >= last)
 		{
