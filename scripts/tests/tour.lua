@@ -34,6 +34,10 @@ local n, stage, sub, blob = 0, 1, 0, nil
 local hashes, target = {}, nil
 local uiResult, pauseSeen, pauseWant = nil, {}, nil
 local poolPre, poolBase = nil, nil
+local hasMovie = false
+--- A seek is expected when the clip carries a state. 1000 is comfortably past
+--- any boot-frame count and comfortably below a real in-game state.
+local seekTarget, sawSeek = 1000, false
 --- widget state the panel actually drives
 local wdg = { check = true, slide = 42, text = "edit me", clicks = 0, sel = 2 }
 
@@ -105,6 +109,15 @@ end
 
 --- 4. THE MOVIE IS DATA ---------------------------------------------------
 STAGES[4] = function()
+	--- CAPABILITY-GATED, not assumed. A session booted straight into a
+	--- savestate has no movie, and asserting on one that is not there would
+	--- fail for the wrong reason. emu.supports() answering false is a
+	--- legitimate answer; so is "this session has no movie".
+	if not hasMovie then
+		t.limit("movie-as-data checks", "no movie in this session")
+		say("LIMIT movie-as-data checks (no movie)")
+		return true
+	end
 	target = api.frame.count() + 240
 	report("a frame reads back as a button table",
 		type(api.movie.getframe(target, 1)) == "table")
@@ -220,10 +233,31 @@ flycast_callbacks = flycast_callbacks or {}
 flycast_callbacks.vblank = function()
 	if prevVblank then prevVblank() end
 	n = n + 1
-	if stage == 1 and n < 200 then return end
+	--- WAIT FOR THE SEEK, AND ASSERT IT. `dojo:AutoSeekState=0` jumps the movie
+	--- to state 0 once frame_number passes 120 - so a tour that starts working
+	--- immediately runs on the BOOT footage, and its own pool stage then keeps
+	--- restoring a snapshot taken back there, holding frame_number under the
+	--- threshold so the seek NEVER fires. The tour deadlocks its own fixture.
+	---
+	--- [MEASURED 2026-09-08] and it passed anyway, twice, because nothing
+	--- asserted WHERE in the movie we were. `ran()` proves the script ran; this
+	--- proves it ran on the footage it was set up for. Different claims.
 	if stage == 1 and sub == 0 then
-		t.ran({ ["a movie is playing"] = flycast.emulator.isReplay(),
-		        ["frames are advancing"] = api.frame.count() > 0 })
+		local f = api.frame.count()
+		if f > seekTarget then
+			sawSeek = true
+		elseif n < 900 then
+			return                       -- still waiting for the jump
+		end
+		t.ran({ ["frames are advancing"] = f > 0 })
+		if seekTarget > 0 then
+			report("the movie seeked to its savestate before testing began",
+				sawSeek, sawSeek and ("at frame " .. f)
+					or ("still at frame " .. f .. " after 900 - the seek never fired"))
+		end
+		hasMovie = api.movie.length() > 0
+		say(hasMovie and ("movie: " .. api.movie.length() .. " frames")
+			or "no movie in this session - movie stages will report as limits")
 		sub = 1
 	end
 	--- live readouts for the right-hand panel, refreshed every frame

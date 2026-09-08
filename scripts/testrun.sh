@@ -116,9 +116,20 @@ run_one() {  # run_one <test.lua> <slot>
 	[ "$WATCH" -eq 1 ] && disp="$DISPLAY"
 	local cfg="$work/config/flycast-dojo"
 	mkdir -p "$cfg"
-	# The clip is COPIED: opening one rewrites clip.json beside the movie, so a
-	# shared clip would be mutated by every test that touched it.
-	mkdir -p "$work/clip"; cp "$CLIP" "$work/clip/clip.flyr"
+	# A CLIP IS A FOLDER, NOT A FILE. The movie's savestates live beside it and
+	# `dojo:AutoSeekState=0` seeks to state 0 - so copying only the .flyr left
+	# the seek with nothing to find, and the replay silently played from
+	# power-on instead of from the state. [MEASURED 2026-09-08] the run passed
+	# while showing attract mode, which is the wrong thing passing.
+	#
+	# Copied rather than used in place, because opening a clip REWRITES its
+	# clip.json; a shared clip would be mutated by every test that touched it.
+	mkdir -p "$work/clip"
+	cp "$CLIP" "$work/clip/clip.flyr"
+	for sib in "$(dirname "$CLIP")"/*.state "$(dirname "$CLIP")"/*.state.* \
+	           "$(dirname "$CLIP")"/clip.json; do
+		[ -f "$sib" ] && cp "$sib" "$work/clip/" 2>/dev/null
+	done
 	cp "$test" "$cfg/flycast.lua"
 
 	local xpid=""
