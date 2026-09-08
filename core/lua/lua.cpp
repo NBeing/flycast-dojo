@@ -198,10 +198,24 @@ static void eventCallback(const char *tag)
  */
 static thread_local bool inDrawCallback;
 
+//! How many ui.Begin calls are currently open, so an unmatched ui.End can be
+//! REFUSED instead of corrupting ImGui.
+//!
+//! ImGui::End() without a matching Begin trips an assert - and this build
+//! compiles asserts out, so what actually happens is silent state corruption
+//! that surfaces somewhere else entirely, frames later. A script typo therefore
+//! looked like a renderer bug. `[MEASURED 2026-09-08]` emuapi's suite, run
+//! against this emulator for the first time, asked for exactly this: "End
+//! without a matching Begin raises rather than aborting".
+//!
+//! RESET PER CALLBACK, not merely decremented, so a script that leaks a Begin
+//! poisons only its own frame instead of every frame after it.
+static int uiWindowDepth = 0;
+
 struct DrawContextGuard
 {
-	DrawContextGuard() { inDrawCallback = true; }
-	~DrawContextGuard() { inDrawCallback = false; }
+	DrawContextGuard() { inDrawCallback = true; uiWindowDepth = 0; }
+	~DrawContextGuard() { inDrawCallback = false; uiWindowDepth = 0; }
 };
 
 static const char *DrawContextMessage =
@@ -897,15 +911,28 @@ static int uiButton(lua_State *L)
 	// callback killed the process rather than raising.
 	checkDrawContextL(L, "Button");
 	if (!config::ShowTrainingGameOverlay)
-		return 0;
+	{
+		lua_pushboolean(L, 0);	// same arity on every path - a caller unpacking
+		return 1;				// one value must not get zero when the overlay is off
+	}
 	const char *label = luaL_checkstring(L, 1);
-	if (ImGui::Button(label))
+	const bool clicked = ImGui::Button(label);
+	if (clicked)
 	{
 		LuaRef callback = LuaRef::fromStack(L, 2);
 		if (callback.isFunction())
 			callback();
 	}
-	return 0;
+	// RETURNS WHETHER IT WAS CLICKED, as well as running the callback. The
+	// callback form is how this fork's own overlays are written and keeps
+	// working untouched; the return is what a caller in the ImGui idiom expects
+	// - `if ui.Button("x") then ... end` - and without it there is no way to
+	// learn a button was pressed except by passing a closure.
+	// `[MEASURED 2026-09-08]` emuapi's conformance suite, run against this
+	// emulator for the first time, failed here: "ui: Button returns exactly 1
+	// value(s), got 0". Additive, so nothing that ignores the result changes.
+	lua_pushboolean(L, clicked ? 1 : 0);
+	return 1;
 }
 
 /*
@@ -1420,6 +1447,11 @@ static int uiBegin(lua_State *L)
 	// Returns whether the window is expanded, matching ImGui: skip the body
 	// when it is false. With the overlay hidden that is false and NO window is
 	// opened, so End must not close one either - see uiEnd.
+	// COUNTED ON BOTH PATHS. ImGui requires End for every Begin regardless of
+	// what Begin returned, and this binding keeps that contract even when the
+	// overlay is hidden and no real window is opened - so a script's Begin/End
+	// pairing means the same thing whether the overlay is on or off.
+	uiWindowDepth++;
 	if (!overlayVisible())
 	{
 		lua_pushboolean(L, false);
@@ -1429,7 +1461,17 @@ static int uiBegin(lua_State *L)
 	return 1;
 }
 
-static void uiEnd()          { checkDrawContext("End"); if (overlayVisible()) ImGui::End(); }
+static void uiEnd()
+{
+	checkDrawContext("End");
+	if (uiWindowDepth <= 0)
+		throw std::runtime_error("End: no window is open - every ui.End must"
+				" match a ui.Begin. Calling ImGui::End() here would corrupt the"
+				" frame rather than fail, because asserts are compiled out.");
+	uiWindowDepth--;
+	if (overlayVisible())
+		ImGui::End();
+}
 static void uiSeparator()    { checkDrawContext("Separator"); if (overlayVisible()) ImGui::Separator(); }
 static void uiSpacing()      { checkDrawContext("Spacing"); if (overlayVisible()) ImGui::Spacing(); }
 
@@ -1473,8 +1515,15 @@ static int uiSelectable(lua_State *L)
 	// exactly the old behaviour.
 	const ImVec2 size((float)luaL_optnumber(L, 3, 0.0),
 			(float)luaL_optnumber(L, 4, 0.0));
-	lua_pushboolean(L, overlayVisible() && ImGui::Selectable(label, selected, 0, size));
-	return 1;
+	// (VALUE, CHANGED), like every other widget here that owns a value - the
+	// convention this file already states a few lines above the baseline block.
+	// It used to answer only "was it clicked", which makes the caller compute
+	// the new value itself from the old one and gets the two out of step the
+	// moment anything else writes it.
+	const bool clicked = overlayVisible() && ImGui::Selectable(label, selected, 0, size);
+	lua_pushboolean(L, clicked ? !selected : selected);		// the value now
+	lua_pushboolean(L, clicked);							// did it change
+	return 2;
 }
 
 static int uiSliderFloat(lua_State *L)
