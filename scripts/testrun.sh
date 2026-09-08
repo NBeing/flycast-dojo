@@ -6,6 +6,9 @@
 #   scripts/testrun.sh scripts/tests/foo.lua  just this one
 #   scripts/testrun.sh --rom /path/to.cdi     override the ROM
 #   scripts/testrun.sh --self-test            prove the runner can report failure
+#   TESTRUN_EXTRA_CONFIG="-config dojo:GamePanel=yes" scripts/testrun.sh --watch ...
+#                                             extra -config flags, for trying a
+#                                             feature without editing this file
 #   scripts/testrun.sh --watch <test.lua>     run it on YOUR display, so you can
 #                                             see it. Config is still sandboxed.
 #   scripts/testrun.sh --watch --hold 60 ...  keep the window up 60s after the
@@ -211,6 +214,7 @@ run_one() {  # run_one <test.lua> <slot>
 			-config dojo:Replay=yes -config "dojo:ReplayFilename=$work/clip/clip.flyr" \
 			-config dojo:AutoSeekState=0 \
 			-config dojo:AutoLoadNetState=no -config dojo:Transmitting=no -config dojo:Receiving=no \
+			${TESTRUN_EXTRA_CONFIG:-} \
 			"$ROM" >"$work/stdout.log" 2>&1 &
 	local pid=$!
 	local lua="$work/config/flycast-dojo/flycast-lua.log"
