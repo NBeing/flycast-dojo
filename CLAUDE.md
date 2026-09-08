@@ -190,6 +190,44 @@ is not one of them.
 
 ---
 
+## `scripts/tests/conformance.lua` is not a duplicate — do not simplify it
+
+`[2026-09-08]` It runs **emuapi's own suite** inside this emulator, against real
+savestates, a real movie and real guest memory. It deliberately reproduces only
+`run-conformance.lua`'s bootstrap and then lets vblank drive, because a second
+copy of the suite would be a second definition of the word "conforms".
+
+**What it bought, the first time it ran:** `pass=197 fail=4` → `pass=234 fail=0`,
+nine defects, five of them in this repository. `ui.Button` returned nothing, so
+`if ui.Button("x") then` could not work. `ui.Selectable` answered "was it
+clicked" instead of `(value, changed)` — the convention `core/lua/lua.cpp`
+states a few lines above its own baseline block. And `ui.End` called
+`ImGui::End()` **unmatched**: asserts are compiled out here, so an unpaired
+`End` did not fail, it silently corrupted the frame and surfaced somewhere else
+entirely, which made a script typo look like a renderer bug.
+
+Three things learned that generalise past this file:
+
+- **A suite's first run on a new host reports the first LAYER of its bugs, not
+  their number.** Fixing the first four exposed four more that had been masked
+  behind them. "4 failures" was never the count.
+- **That effect is invisible on a host written for the suite.** It was invisible
+  on emuapi's mock and on agnes, because both were authored knowing the suite
+  existed. A second host you wrote still has the property, only less of it.
+- **A fake host is an instrument, not an approximation.** The `End` check came
+  from agnes — no window, no GPU, no user — and was cheap to write *because*
+  there is no window: Begin/End depth is a counter when nothing is drawn and is
+  buried under a renderer when something is. It found a live corruption path in
+  a shipping build that had thrown away the assert which would have reported it.
+
+**Why it must keep running.** flycast could only ever be "a host nobody wrote
+for that suite" once, and that is now spent. This test is what the property was
+converted into: every future change on either side is measured against a real
+emulator instead of asserted about one. Deleting it, or letting it drift into
+re-implementing the checks locally, throws that away and cannot be earned back.
+
+---
+
 ## 2. Provenance — a claim carries its mark
 
 `[MEASURED <date>]` for something observed, `[REASONED]` for something derived
