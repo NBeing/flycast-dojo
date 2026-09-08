@@ -497,8 +497,21 @@ static LuaRef getButtonTable(int player, lua_State *L)
 // the machine where it stands and restarts only what it stopped.
 static void luaSavestateSlot(int index, bool load)
 {
-	if (index < 0 || index > 9)
-		throw std::runtime_error("savestate slot must be between 0 and 9");
+	// THE BOUND COMES FROM THE CONSTANT, NOT A LITERAL, because a literal is
+	// how this went wrong. It read `index > 9` while slotCount() reported
+	// MAX_SAVESTATE_SLOTS (100) and savestateAnchor accepted the same 100 - so
+	// 90 slots were inspectable, addressable from the F4 States window, and
+	// refused to every script. `[MEASURED 2026-09-08]` nothing caught it
+	// because no test had ever saved to a slot at all; scripts/tests/slots.lua
+	// now ties the claim to whatever slotCount() answers, so the two cannot
+	// drift apart again.
+	//
+	// Nothing below Lua ever assumed ten: getSavestatePath() formats the index
+	// through clampSavestateSlot() -> [0, MAX-1], and the States window has
+	// always addressed all of them. The cap was a Lua-side invention.
+	if (index < 0 || index >= (int)hostfs::MAX_SAVESTATE_SLOTS)
+		throw std::runtime_error("savestate slot must be between 0 and "
+				+ std::to_string(hostfs::MAX_SAVESTATE_SLOTS - 1));
 	pausing::Scoped guard(pausing::MODAL);
 	if (load)
 		dc_loadstate(index);
