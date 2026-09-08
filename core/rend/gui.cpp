@@ -24,6 +24,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"	// DockBuilderGetCentralNode (game viewport)
 #include "rend/game_viewport.h"
+#include "rend/panel.h"
 #include "hw/pvr/Renderer_if.h"	// Renderer::GetFrameTexture (the game panel)
 #include "rend/transform_matrix.h"	// getDCFramebufferAspectRatio
 #include "network/net_handshake.h"
@@ -590,6 +591,57 @@ static void submitGamePanel()
 		}
 	}
 	ImGui::End();
+}
+
+/*
+	THE GAME IS A REGISTERED PANEL, AND THE ONE THAT IS DRAWN BY NAME.
+
+	It is registered for its identity - id, label, stream - so it is one entry
+	in one array like everything else, and so `find("game")` FAILS LOUDLY if the
+	id is ever changed. It is NOT drawn from `panels::drawStream()`, and there
+	are now TWO reasons rather than one:
+
+	  * it consumes the dockspace's central node and must run at a known point
+	    relative to the rest of the frame;
+	  * it needs SetNextWindowDockID and its own style vars BEFORE Begin, and
+	    the registry owns Begin for everything it draws. A panel that must
+	    configure its own window is a panel the loop cannot draw, which is a
+	    better definition of this exception than "ordering" was. nbneo keeps the same exception for the same reason
+	and checks it by id at startup rather than trusting an index.
+
+	`open` is a plain always-true bool and `persist` is FALSE, both deliberately.
+	Whether the picture is a panel at all is `dojo:GamePanel` - a renderer A/B
+	setting that launch flags and harnesses set, not a window the user closed.
+	Folding it into `Panel.game` would silently break `-config dojo:GamePanel=no`
+	and put two owners on one fact, which is the defect this registry exists to
+	remove.
+*/
+static bool gamePanelOpen = true;
+
+static void registerGamePanel()
+{
+	static bool done = false;
+	if (done)
+		return;
+	done = true;
+	panels::add({ "game", "Game", &gamePanelOpen, submitGamePanel,
+			panels::Both, /*persist*/ false });
+}
+
+//! Draw the game panel through the registry rather than by reaching for the
+//! function. The lookup is the point: it is the ordering exception written as a
+//! lookup that can fail, instead of a call that silently outlives its entry.
+static void drawGamePanel()
+{
+	registerGamePanel();
+	const panels::Panel *p = panels::find("game");
+	if (p == nullptr)
+	{
+		ERROR_LOG(RENDERER, "the 'game' panel is not registered - the picture will not draw");
+		return;
+	}
+	if (*p->open)
+		p->draw();
 }
 
 static void gui_newFrame()
@@ -4370,7 +4422,7 @@ void gui_display_ui()
 	case GuiState::ReplayEnd:
 	case GuiState::QuickMap:
 		submitDockspaceHost();		// inside the frame, before every dockable window
-		submitGamePanel();			// the picture is one of the windows
+		drawGamePanel();			// the picture is one of the windows
 		break;
 	default:
 		break;
@@ -4517,7 +4569,7 @@ void gui_display_osd()
 		gui_newFrame();
 		ImGui::NewFrame();
 		submitDockspaceHost();		// inside the frame, before every dockable window
-		submitGamePanel();			// the picture is one of the windows
+		drawGamePanel();			// the picture is one of the windows
 
 		if (!message.empty())
 		{

@@ -1,5 +1,7 @@
 #include "panel.h"
 #include "cfg/cfg.h"
+#include "imgui.h"
+#include <stdexcept>
 #include "log/LogManager.h"
 #include <cstring>
 
@@ -49,7 +51,20 @@ const Panel *find(const char *id)
 	return nullptr;
 }
 
-void drawStream(Stream s)
+void open(const char *id)
+{
+	const Panel *p = find(id);
+	if (p == nullptr)
+	{
+		// LOUD, because the alternative is a feature that silently never shows
+		// its window and a user who reports that the button does nothing.
+		ERROR_LOG(RENDERER, "panels::open('%s') - no such panel", id != nullptr ? id : "(null)");
+		return;
+	}
+	*p->open = true;
+}
+
+void visitStream(Stream s, void (*fn)(const Panel&))
 {
 	for (const Panel& p : registry)
 	{
@@ -57,8 +72,31 @@ void drawStream(Stream s)
 			continue;		// declared for the other stream
 		if (!*p.open)
 			continue;
-		p.draw();
+		fn(p);
 	}
+}
+
+void drawStream(Stream s)
+{
+	visitStream(s, [](const Panel& p) {
+		// Begin/End are the REGISTRY's, always paired, whatever the body does.
+		// `open` is handed to ImGui so the window's own close button writes
+		// straight into the one owner of that fact.
+		const bool expanded = ImGui::Begin(p.label, p.open);
+		if (expanded)
+		{
+			try {
+				p.draw();
+			} catch (const std::exception& e) {
+				// VISIBLE, not counted. A fault printed into the panel that
+				// caused it is a fault someone will fix; a fault added to a
+				// counter looks exactly like a tool that drew almost nothing.
+				ImGui::TextColored(ImVec4(1.f, 0.35f, 0.35f, 1.f), "panel '%s' raised:", p.id);
+				ImGui::TextWrapped("%s", e.what());
+			}
+		}
+		ImGui::End();		// unconditional, per ImGui's contract
+	});
 }
 
 /*
@@ -133,13 +171,16 @@ void selfTest()
 
 	// THE STREAM MASK IS THE FIELD THAT CAUSED TWO SHIPPED DEFECTS ELSEWHERE,
 	// so it gets the most checks: each stream draws its own and NOT the other.
+	// visitStream, not drawStream: this runs at startup, before any ImGui frame
+	// exists. It is the same selection code, not a copy of it.
+	static auto count = [](const Panel& p) { p.draw(); };
 	selfOsdDraws = selfMenuDraws = selfClosedDraws = 0;
-	drawStream(Osd);
+	visitStream(Osd, count);
 	claim("the Osd stream drew the Osd panel", selfOsdDraws == 1);
 	claim("the Osd stream did NOT draw the Menu panel", selfMenuDraws == 0);
 
 	selfOsdDraws = selfMenuDraws = 0;
-	drawStream(Menu);
+	visitStream(Menu, count);
 	claim("the Menu stream drew the Menu panel", selfMenuDraws == 1);
 	claim("the Menu stream did NOT draw the Osd panel", selfOsdDraws == 0);
 
@@ -152,8 +193,8 @@ void selfTest()
 	// nothing at all.
 	selfClosedOpen = true;
 	selfClosedDraws = 0;
-	drawStream(Osd);
-	drawStream(Menu);
+	visitStream(Osd, count);
+	visitStream(Menu, count);
 	claim("the same panel, opened, draws in BOTH streams it declared",
 			selfClosedDraws == 2);
 	selfClosedOpen = false;

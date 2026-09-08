@@ -147,6 +147,27 @@ if [ "$ag" -ge "$bg" ]; then
 fi
 echo "  docked: the game narrowed $bg -> $ag px"
 
+# AND THE PICTURE IS ACTUALLY BEING DRAWN THERE.
+#
+# [MEASURED 2026-09-08] this check was missing and the omission was found by
+# sabotage: breaking the game panel's registry id so NOTHING drew the picture
+# left this harness fully green. It reads the TAS VIEWPORT trace, which is
+# emitted by the dockspace host and computed by rend::gameViewport() - neither
+# of which cares whether anyone drew. So "docking narrowed the game" was a claim
+# about a RECTANGLE, not about the game.
+#
+# TAS PRESENT comes from the blit path, which runs every frame and reports which
+# mode won. "panel" means the picture went through the panel; "blit full-window"
+# means it did not.
+present=$(grep -a "TAS PRESENT" "$OUT/out.log" | tail -1)
+echo "  present:${present#*RENDERER]: }"
+case "$present" in
+	*"TAS PRESENT: panel"*) ;;
+	*) echo "FAIL docktest - the dock node narrowed but the picture was not drawn"
+	   echo "       as a panel, so the rectangle moved and nothing followed it"
+	   exit 1 ;;
+esac
+
 # PHASE 2: THE PICTURE MUST NOT MOVE WHEN A MENU OPENS.
 #
 # Escape opens the in-game menu, which is a different GuiState with its own

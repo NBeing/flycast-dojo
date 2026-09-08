@@ -66,7 +66,20 @@ struct Panel
 	//! is the shape that produced four mechanisms for one fact.
 	bool *open;
 
-	//! Called when the panel is open, inside whichever stream it declared.
+	//! FILLS THE BODY. It does NOT call Begin or End - the registry owns the
+	//! window, and that is not a convenience.
+	//!
+	//! A panel that opens its own window can mismatch the pair, and in this
+	//! build ImGui's asserts are compiled out, so an unmatched End does not
+	//! fail - it silently corrupts the frame and surfaces somewhere else
+	//! entirely. That exact bug shipped in this tree's Lua ui layer and was
+	//! found by someone else's conformance suite, not by us. Host-owned
+	//! Begin/End makes it unrepresentable rather than discouraged.
+	//!
+	//! The host also needs `open` for the window's own close button, so a panel
+	//! that opened its own window would have to pass the flag out and back.
+	//! And flags, docking and focus are furniture: a panel calling Begin is
+	//! choosing them.
 	void (*draw)();
 
 	u8 stream;
@@ -76,6 +89,27 @@ struct Panel
 	//! tool that reopens itself every launch is a bug report.
 	bool persist;
 };
+
+/*
+	ONE PANEL WITH TWO PRESENTATIONS IS STILL ONE PANEL.
+
+	Four of the eleven panels arriving from the fork are dual-mode: a single
+	draw function with two ImGui::Begin sites, chosen inside itself by
+	`tasStudioMode()` - a dockable window with the studio shell up, and a
+	pinned NoDecoration|NoInputs overlay with it down. The savestate HUD, the
+	input visualizer, the hotkey cheat sheet and the slot picker are all this.
+
+	DO NOT REGISTER THE OVERLAY ARM AS A SECOND PANEL. One feature would get two
+	ids, two menu rows and two persistence keys, and the user would be able to
+	close half of itself. The mode belongs inside draw(), where it already is;
+	the registry holds the feature, not each of its costumes.
+
+	NO `shortcut` FIELD, and that is a deliberate departure from nbneo's
+	descriptor. Their panels carry a literal key; ours are rebindable actions
+	resolved through the hotkey map, and only two of the eleven have a default
+	key at all. A field that is empty for nine entries and lies for the other
+	two is worse than a lookup.
+*/
 
 //! Register a panel. Call before the first frame; the registry does not own
 //! the descriptor's strings or its bool, so both must outlive the process.
@@ -89,9 +123,36 @@ const std::vector<Panel>& all();
 //! that silently points at whatever moved into its place.
 const Panel *find(const char *id);
 
-//! THE DRAW LOOP. Calls every open panel whose stream mask includes `s`.
-//! Panels that declared the other stream are skipped, not drawn twice.
+//! Open a panel from outside itself, by id.
+//!
+//! A FUNCTION RATHER THAN A FIELD, and the distinction is forced by a real
+//! case: David's Test Lab sets its own open flag from ABOVE its early return,
+//! so a session started while the window is closed would never be able to show
+//! it - `drawStream`'s `if (!*open) continue` runs first and the code that
+//! would open it never executes. Whatever starts a lab session calls this.
+//!
+//! DELIBERATELY NOT a `tick()` field for panels that want work while closed.
+//! Frame Skip Test runs a whole variant sweep with its window shut, and giving
+//! the registry a per-frame hook for that would make it a scheduler. A panel
+//! that needs to run while closed is not a panel with an extra field; it is a
+//! feature with a panel attached, and the feature keeps its own tick.
+void open(const char *id);
+
+//! THE DRAW LOOP. Opens a window for every open panel whose stream mask
+//! includes `s`, calls its body, and closes it. Panels that declared the other
+//! stream are skipped, not drawn twice.
+//!
+//! A BODY THAT THROWS DOES NOT TAKE THE WINDOW WITH IT. The error is caught and
+//! printed IN THE PANEL, in red, rather than counted somewhere nobody looks - a
+//! fault swallowed into a counter is indistinguishable from a tool that drew
+//! almost nothing, which is a lesson this package learned the expensive way.
 void drawStream(Stream s);
+
+//! The SELECTION half of drawStream, without any ImGui. Exists so the choice of
+//! which panels a stream draws can be exercised outside a frame - the self-test
+//! runs at startup, before any ImGui frame exists, and testing a copy of this
+//! logic would only prove the copy.
+void visitStream(Stream s, void (*fn)(const Panel&));
 
 //! Open state, for the panels that asked to persist it. Keyed on `id` under
 //! the `dojo` section as `Panel.<id>`, so the key is legible in emu.cfg and a
