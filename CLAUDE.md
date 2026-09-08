@@ -294,6 +294,57 @@ exists to prevent.
 
 ---
 
+## The game is a dockable panel, not a hole in the UI
+
+`[LANDED 2026-09-08]` The picture is an ImGui window like any other. It docks,
+splits, tabs and resizes, and the dockspace does all the layout arithmetic.
+
+    window  >=  content area  >=  game viewport
+
+The UI publishes the AREA, the renderer publishes the ASPECT, and the viewport
+is the product — derived on every read in `core/rend/game_viewport.{h,cpp}`,
+never stored. Before that module existed the same letterbox arithmetic was
+written out **twice**, in `gles/gldraw.cpp` and in `lua/lua.cpp`, both against
+the raw window size and kept in step by a comment promising they matched.
+Docking made both wrong at once.
+
+Rules that cost something to learn:
+
+- **`Renderer::GetFrameTexture()` returning 0 means "keep blitting."** GL
+  publishes a texture; DX9, DX11 and Vulkan do not yet, so they fall back and
+  behave exactly as before. Both DX backends already hold the frame as a texture
+  (`framebufferTexture`, `fbTextureView`), but the hook alone is not enough —
+  their present paths also need the "do not blit" half, and half of it draws the
+  picture **twice**.
+- **The offscreen buffer must be a TEXTURE, not a renderbuffer.** `Rotate90`
+  already needed this (a rotated present is `drawQuad`, not a blit), so
+  `needsSampleableFrame()` asks once for both. Get this wrong and the panel
+  silently falls back.
+- **`yUp` is reported, not assumed.** The GL rule of thumb — row 0 is the
+  bottom, flip v — is *wrong* for flycast's offscreen buffer, which is rendered
+  with an already-flipped projection. Flipping "because OpenGL" draws the game
+  upside down, and the flip lives in a projection matrix nowhere near the blit,
+  so the code cannot tell you. Found by looking at a screenshot.
+- **`SetNextWindowDockID` must be `FirstUseEver`, never `Always`.** A per-frame
+  dock id drags the panel back every time the user moves it — the same mistake
+  as a per-frame `SetNextWindowPos`, which defeated docking entirely once.
+- **Every GuiState that shows the running game must submit the host AND the
+  panel**, or the picture jumps out of its dock when that screen opens. The list
+  is enumerated in `gui_display_ui`, deliberately: "is a game loaded" is the
+  wrong question, since Main and SelectDisk can be reached with one loaded and
+  neither shows it.
+
+`scripts/docktest.sh` drives a REAL drag with xdotool on a private Xvfb — never
+the user's display — and judges from the emulator's own traces. `--self-test`
+runs the same drag against the old behaviour and requires it to fail.
+
+Diagnostic flags, all off by default: `dojo:GamePanel` (the panel itself),
+`dojo:DockGameViewport=no` (revert to a full-window picture at runtime),
+`dojo:ViewportTrace` (window / central node / game rect, the present's mode, and
+GuiState transitions — logged only on change).
+
+---
+
 ## 7. Traps already paid for
 
 `emuapi/INTEGRATION.md` is the running list for the Lua interface —
