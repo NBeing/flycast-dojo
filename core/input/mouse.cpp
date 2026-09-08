@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include "mouse.h"
+#include "cfg/cfg.h"
 #include "cfg/option.h"
 #include "rend/gui.h"
 
@@ -69,6 +70,16 @@ void Mouse::setButton(Button button, bool pressed)
 	if ((gui_is_open() || gui_mouse_captured()) && !is_detecting_input())
 		// Don't register mouse clicks as gamepad presses when gui is open
 		// This makes the gamepad presses to be handled first and the mouse position to be ignored
+		return;
+	// TAS: upstream maps left/right/middle to A/B/Start for lightgun and mouse games. In a
+	// re-recording workflow that is a hazard rather than a feature - clicking the game window
+	// while a movie is recording injects a face button into it, and the click that lands just
+	// outside an overlay is exactly the one you did not mean.
+	//
+	// It matters MORE here than in David's fork, because the game is now a dockable panel: you
+	// click on and around the picture constantly just to focus, drag and split windows, and every
+	// one of those clicks would land in the movie. Off unless dojo:MouseAsController=yes.
+	if (!cfgLoadBool("dojo", "MouseAsController", false) && !is_detecting_input())
 		return;
 	gamepad_btn_input(button, pressed);
 }

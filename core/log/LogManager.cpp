@@ -223,8 +223,20 @@ void LogManager::SetEnable(LogTypes::LOG_TYPE type, bool enable)
 
 bool LogManager::IsEnabled(LogTypes::LOG_TYPE type, LogTypes::LOG_LEVELS level) const
 {
-	return level <= LogTypes::LOG_LEVELS::LWARNING
-			|| (m_log[type].m_enable && GetLogLevel() >= level);
+	// TAS: channel toggles are a real mute now. Upstream short-circuited true for everything at
+	// or below WARNING, which includes NOTICE - and every TAS trace is NOTICE_LOG (INFO and DEBUG
+	// compile out of non-EnableLog builds), so neither the channel checkboxes nor the verbosity
+	// slider could ever silence them. The checkbox looked broken because it WAS.
+	//
+	// New contract, matching what the settings panel promises:
+	//   ERROR, WARNING  -> always print (you never mute a warning by accident)
+	//   NOTICE          -> prints only if its channel is enabled
+	//   INFO, DEBUG     -> channel enabled AND verbosity high enough
+	if (level == LogTypes::LOG_LEVELS::LERROR || level == LogTypes::LOG_LEVELS::LWARNING)
+		return true;
+	if (!m_log[type].m_enable)
+		return false;
+	return level <= LogTypes::LOG_LEVELS::LWARNING || GetLogLevel() >= level;
 }
 
 const char* LogManager::GetShortName(LogTypes::LOG_TYPE type) const
