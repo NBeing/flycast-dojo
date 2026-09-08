@@ -1341,9 +1341,9 @@ static int getGameViewport(lua_State *L)
 //! WHICH MOVIE FRAME A SAVED STATE BELONGS TO, and whether the movie below it
 //! still says what it said when the state was taken.
 //!
-//! Arguments: a 1-based slot. Returns nothing at all for an empty slot or a
-//! state with no sidecar - "there is no anchor" is absence, not a verdict.
-//! Otherwise `frame, verdict`.
+//! Arguments: a slot, 0-based like savestate.save/load. Returns nothing at all
+//! for an empty slot or a state with no sidecar - "there is no anchor" is
+//! absence, not a verdict. Otherwise `frame, verdict`.
 //!
 //! THE VERDICTS, and what separates them:
 //!   "clean"    no re-record rewrote the timeline below this state.
@@ -1362,10 +1362,15 @@ static int getGameViewport(lua_State *L)
 //! untouched, and the bytes below are the whole question.
 static int savestateAnchor(lua_State *L)
 {
-	const int slot = (int)luaL_checkinteger(L, 1) - 1;	// 1-based interface
+	// 0-BASED, LIKE EVERY OTHER SLOT IN THIS NAMESPACE. It was written 1-based
+	// to match the neutral interface, which put two conventions in one table:
+	// savestate.save(0) and savestate.anchor(1) meant the same slot. Shifting
+	// the base is an ADAPTER's job - flycast's own convention is 0-based, slot
+	// 0 is BASE, and the States window and config::SavestateSlot both agree.
+	const int slot = (int)luaL_checkinteger(L, 1);
 	if (slot < 0 || slot >= (int)hostfs::MAX_SAVESTATE_SLOTS)
-		return luaL_error(L, "savestate slot must be between 1 and %d",
-				(int)hostfs::MAX_SAVESTATE_SLOTS);
+		return luaL_error(L, "savestate slot must be between 0 and %d",
+				(int)hostfs::MAX_SAVESTATE_SLOTS - 1);
 
 	const std::vector<hostfs::SavestateInfo> info = hostfs::scanSavestateInfo();
 	if (slot >= (int)info.size() || !info[slot].exists || info[slot].movieFrame == 0)
@@ -1749,10 +1754,12 @@ static void luaRegister(lua_State *L)
 					else if (gui_state == GuiState::Commands)
 						gui_open_settings();
 				}))
-				// Slots are 0..9 here, matching config::SavestateSlot, while
-				// players are 1-based. The neutral savestate.* alias is
-				// 1-based per the spec; this one keeps its existing base so
-				// current scripts are not silently shifted by one.
+				// Slots are 0-based here and run to MAX_SAVESTATE_SLOTS-1,
+				// matching config::SavestateSlot; players are 1-based. The
+				// neutral savestate.* alias is 1-based per its own spec and its
+				// adapter does that shift - which is what an adapter is for.
+				// (This comment said "0..9" until 2026-09-08, when the cap that
+				// made that true turned out to be a Lua-side invention.)
 				.addFunction("saveState", std::function<void(int)>([](int index) { luaSavestateSlot(index, false); }))
 				.addFunction("loadState", std::function<void(int)>([](int index) { luaSavestateSlot(index, true); }))
 				.addFunction("exit", dc_exit)
@@ -2125,9 +2132,9 @@ static void luaRegister(lua_State *L)
 			//   `savestate` namespace so the adapter stops translating.
 			//
 			// Slot bases are deliberately NOT changed here: these are the same
-			// 0..9 host functions under a better address. emuapi's neutral
-			// savestate.* is 1-based per the spec and the adapter still does
-			// that shift.
+			// 0-based host functions under a better address. emuapi's neutral
+			// savestate.* is 1-based per its spec and the adapter does that
+			// shift.
 			//
 			// THE ADAPTER IS NOT MOVED to these names yet.
 			//

@@ -37,8 +37,15 @@ STAGES[1] = function()
 	--- refuse to touch a state that is sitting right there.
 	report("the count is the storage ceiling, not the hotkey cycle", count >= 100,
 		count .. " slots")
-	report("a slot above the count is refused", not pcall(ss.anchor, count + 1))
-	report("slot 0 is refused - this interface is 1-based", not pcall(ss.anchor, 0))
+	--- 0-BASED, like savestate.save/load and like flycast's own UI, where slot
+	--- 0 is BASE. `[CHANGED 2026-09-08]` this asserted the opposite - that slot
+	--- 0 is refused because "this interface is 1-based" - which was true of
+	--- anchor alone and of nothing else in the namespace. Shifting the base is
+	--- an adapter's job; a host table should have one convention.
+	report("a slot above the count is refused", not pcall(ss.anchor, count))
+	report("a negative slot is refused", not pcall(ss.anchor, -1))
+	report("slot 0 is VALID - it is BASE, not out of range",
+		pcall(ss.anchor, 0))
 	return true
 end
 
@@ -47,7 +54,7 @@ local anchored, anchoredFrame
 STAGES[2] = function()
 	local count = ss.slotCount()
 	local seen, verdicts = 0, {}
-	for s = 1, count do
+	for s = 0, count - 1 do
 		local frame, verdict = ss.anchor(s)
 		if frame ~= nil then
 			seen = seen + 1
