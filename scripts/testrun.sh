@@ -8,6 +8,8 @@
 #   scripts/testrun.sh --self-test            prove the runner can report failure
 #   scripts/testrun.sh --watch <test.lua>     run it on YOUR display, so you can
 #                                             see it. Config is still sandboxed.
+#   scripts/testrun.sh --watch --hold 60 ...  keep the window up 60s after the
+#                                             verdict (default 30; 0 = close now)
 #
 # Exit 0 only if every test PASSed. Requires Xvfb, except under --watch.
 #
@@ -44,6 +46,7 @@ OUT="${FLYCAST_TEST_OUT:-$ROOT/build-dojo7/testresults}"
 JOBS=1
 SELFTEST=0
 WATCH=0
+HOLD=30
 TIMEOUT="${FLYCAST_TEST_TIMEOUT:-120}"
 BASE_DISPLAY="${FLYCAST_TEST_DISPLAY_BASE:-90}"
 
@@ -56,6 +59,7 @@ while [ $# -gt 0 ]; do
 		--timeout) TIMEOUT="$2"; shift 2 ;;
 		--self-test) SELFTEST=1; shift ;;
 		--watch) WATCH=1; shift ;;
+		--hold) HOLD="$2"; shift 2 ;;
 		-h|--help) sed -n '2,12p' "$0"; exit 0 ;;
 		*) TESTS+=("$1"); shift ;;
 	esac
@@ -162,6 +166,15 @@ run_one() {  # run_one <test.lua> <slot>
 		kill -0 "$pid" 2>/dev/null || break      # died on its own
 		sleep 1; waited=$((waited + 1))
 	done
+
+	# HOLD THE WINDOW OPEN. A test closes itself the instant it prints `done`,
+	# which is right for a suite and exactly wrong for a mode whose entire
+	# purpose is that a person looks at it - the first --watch run finished
+	# before its user got to the screen.
+	if [ "$WATCH" -eq 1 ] && [ "$finished" -eq 1 ] && [ "$HOLD" -gt 0 ]; then
+		echo "testrun: $name finished - holding the window ${HOLD}s so you can read it (Ctrl-C to close now)"
+		sleep "$HOLD"
+	fi
 
 	# Evidence first, teardown second.
 	cp "$lua" "$OUT/$name.lua.log" 2>/dev/null
