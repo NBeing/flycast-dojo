@@ -1462,6 +1462,49 @@ graph TD
 
 ---
 
+## 6b. The first move is not "start porting"
+
+`[2026-09-08]` This section is method, not inventory, and it changes where §7
+begins.
+
+The gap here is one translation unit — `dojo_gui.cpp`, 21,877 lines, 351
+file-static functions and 235 file-static variables whose windows read each
+other's statics directly. The instinct is to read it and map the coupling. That
+does not work, and the reason is structural rather than a matter of effort:
+
+> **Every reach for a neighbour's static is self-consistent from inside that
+> file.** It compiles, it runs, it is locally sensible. There is nothing on the
+> page that says "this is coupling" — coupling is a fact about where the code
+> is, not about what it says. Re-reading cannot find it, in the same way
+> proofreading cannot find a mistake that is consistent with the frame that
+> produced it.
+
+`[MEASURED 2026-09-08]` The same property cost two real errors in the emuapi
+work tonight, and neither author found their own: a limit aimed at the host
+binding instead of the adapter, and a capability answered from the wrong host's
+point of view. Both were caught by *executing the other side*, not by review.
+
+**So the first move is to run a piece somewhere it has nothing to lean on, and
+let the failures enumerate the coupling.** That produces a LIST rather than an
+impression, and it costs a build instead of a reading of 21,877 lines. emuapi's
+capstone works for exactly this reason: a component that had been quietly
+leaning on a neighbour cannot pretend otherwise on a host that has no
+neighbours to offer.
+
+Concretely, before porting a studio component: lift it into a translation unit
+of its own, compile it, and take the undefined symbols as the dependency list.
+The link errors are the map. Do that first for whichever piece §7 puts at the
+front — it will either confirm the estimate there or correct it, and the
+correction is worth more than the estimate.
+
+`[EXAMPLE]` The dead-timeline guard UI was estimated at "205 self-contained
+lines, needs nothing from `dojo_gui.cpp`". Attempting it found `slotScan()` and
+`slotScanGen` — the States window's scan cache — which are not in our tree.
+That is one dependency found by looking; a link would have listed all of them
+at once.
+
+---
+
 ## 7. Recommended port order
 
 Cheapest first, and each step either unblocks something or turns an existing dead code path live.
