@@ -81,42 +81,68 @@ STAGES[2] = function()
 	return true
 end
 
---- 3. THE NEGATIVE CHECK: AN EDIT ABOVE THE ANCHOR MUST NOT STALE IT ------
---- This is the one a global dirty flag fails. It is only meaningful when the
---- movie is editable and there is an anchored state to protect, so it says so
---- rather than passing vacuously when it cannot run.
+--- 3. BOTH DIRECTIONS, AND THE ORDER MATTERS ------------------------------
+--- An edit at frame N invalidates states above N exactly as a rewind to N does
+--- (Dojo::ApplyEdit logs a timeline event at the first changed frame, on the
+--- same re-record clock the sidecars use). So both directions are reachable
+--- from a script, and BOTH are needed:
+---
+---   ABOVE the anchor -> must stay clean. A global dirty flag fails here, and
+---                       that is the whole reason this file exists.
+---   BELOW the anchor -> must go stale. Without this the check above is
+---                       vacuous: "nothing ever stales" passes it too.
+---
+--- Above first, because once a state is stale the first check cannot be made.
+local function editOneFrame(frame)
+	local row = flycast.movie.getButtons(frame, 1) or {}
+	local edited = {}
+	for k, v in pairs(row) do edited[k] = v end
+	edited.a = not row.a
+	return flycast.movie.setButtons(frame, 1, edited)
+end
+
 STAGES[3] = function()
 	if anchored == nil then
-		t.limit("edit above the anchor", "no anchored state in this clip to protect")
-		return true
-	end
-	if not flycast.movie or not flycast.movie.editable or not flycast.movie.editable() then
-		t.limit("edit above the anchor", "this session's movie is not editable (read-only playback)")
+		t.limit("timeline guard", "no anchored state in this clip to protect")
 		return true
 	end
 
-	local before = select(2, ss.anchor(anchored))
-	local target = anchoredFrame + 120		-- comfortably ABOVE the anchor
-	if not flycast.movie.has(target) then
-		t.limit("edit above the anchor", "frame " .. target .. " is past the end of this movie")
+	--- NOT GATED ON movie.editable(). That answers `not emu.running()`, which
+	--- from a vblank callback is always false - the emulator is, by definition,
+	--- running. [MEASURED 2026-09-08] gating on it made this stage report a
+	--- LIMIT saying "read-only playback", which was a misdiagnosis: setButtons
+	--- takes its own pausing::Scoped guard and edits fine during playback. The
+	--- honest gate is to attempt the edit and read the answer.
+	local above = anchoredFrame + 120
+	local below = math.max(1, math.floor(anchoredFrame / 2))
+	if not (flycast.movie.has(above) and flycast.movie.has(below)) then
+		t.limit("timeline guard", ("this movie has no authored frame at %d or %d"):format(above, below))
 		return true
 	end
 
-	local row = flycast.movie.getButtons(target, 1)
-	local ok = pcall(function()
-		local edited = {}
-		for k, v in pairs(row or {}) do edited[k] = v end
-		edited.a = not (row and row.a)
-		flycast.movie.setButtons(target, 1, edited)
-	end)
-	if not ok then
-		t.limit("edit above the anchor", "the host refused the edit")
+	local wasClean = select(2, ss.anchor(anchored))
+	if wasClean ~= "clean" then
+		t.limit("timeline guard", "slot " .. anchored .. " is already " .. tostring(wasClean)
+				.. ", so there is nothing left to invalidate")
 		return true
 	end
 
-	local after = select(2, ss.anchor(anchored))
-	report("an edit ABOVE the anchor does not stale it", before == after,
-		("frame %d edited; slot %d %s -> %s"):format(target, anchored, tostring(before), tostring(after)))
+	if not editOneFrame(above) then
+		t.limit("timeline guard", "the host refused an edit at frame " .. above)
+		return true
+	end
+	local afterAbove = select(2, ss.anchor(anchored))
+	report("an edit ABOVE the anchor does NOT stale it", afterAbove == "clean",
+		("edited %d; slot %d stayed %s"):format(above, anchored, tostring(afterAbove)))
+
+	--- THE CONTROL. If this does not fire, the check above proved nothing.
+    if not editOneFrame(below) then
+		t.limit("timeline guard control", "the host refused an edit at frame " .. below)
+		return true
+	end
+	local afterBelow = select(2, ss.anchor(anchored))
+	report("an edit BELOW the anchor DOES stale it", afterBelow == "stale",
+		("edited %d; slot %d -> %s"):format(below, anchored, tostring(afterBelow)))
 	return true
 end
 
