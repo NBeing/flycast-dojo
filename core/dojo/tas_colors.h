@@ -1,5 +1,5 @@
 /*
-	The TAS colour language - one canonical, reduced palette.
+	The TAS colour palette - the named colours every studio panel draws with.
 
 	PORTED VERBATIM from David's fork (`core/dojo/dojo_gui.cpp:133-165`), where
 	it is a file-static block inside a 21,877-line translation unit. It becomes

@@ -556,3 +556,46 @@ reset them — the same one-release asymmetry nbneo's post-mortem prescribes
 `States` is last of the easy set only because its bool lives in another TU behind
 an accessor pair — which is the case the registry is *best* at, since `open` is
 just a pointer.
+
+---
+
+## `[MEASURED 2026-09-08]` The Input Visualizer's real dependency list
+
+This section is the output of `docs/DAVIDS-TAS-STUDIO.md` §6b run for real:
+the function was lifted into its own translation unit, compiled in-tree, and the
+compiler's undefined symbols were taken as the answer. One build, no reading.
+
+**The estimate was 372 lines, "the cheapest and cleanest".** The correction is
+that it is 372 lines **plus nine shared helpers and three colour aliases**, and
+the helpers are the actual substrate:
+
+| symbol | lines | what it is |
+|---|---|---|
+| `tasStudioMode` | 4 | THE dual-mode switch - panel vs pinned overlay |
+| `tasGroupSep` | 6 | separator |
+| `tasInputCell` | 7 | draws one input cell - **shared with the piano roll** |
+| `tasPreviewGhostFlags` | 7 | piano-roll preview state |
+| `tasNotationEnsureLoaded` | 9 | notation tables, lazy |
+| `tasSharedGameState` | 18 | the MvC2 state cache |
+| `tasWindowUiZoom` | 19 | per-window zoom |
+| `tasDriverCol` | 26 | READ/WRITE driver-model colour |
+| `tasNotationFrame` | 63 | the notation switcher |
+| `ScaledVec2` | — | UI scaling helper, lives in `core/rend/gui.cpp` |
+| `TAS_NOTE_CE`, `TAS_P1_COL`, `TAS_P2_COL` | — | colour aliases missed by the first palette port |
+
+They live at nine different line numbers spread across `dojo_gui.cpp`
+(34, 174, 4338, 4453, 6696, 6751, 10076, 16915, 17107), which is the file-static
+sprawl §S1 describes, seen from the inside.
+
+**What this changes about the port order.** The Input Visualizer is not the
+cheapest first panel; the nine helpers are, and they are shared - `tasInputCell`
+alone is wanted by the piano roll too. They should land as one small shared unit
+before any panel, exactly as the colour palette did. `core/dojo/tas_colors.h`
+is the first third of that unit and is in.
+
+**Two dependencies were already ours, byte-identical** (`tasmacro.{h,cpp}`,
+`mvc2.{h,cpp}`, md5-verified), which is the survey's "the engine is already
+ours" holding up under a real attempt.
+
+The probe TU is kept out of the build deliberately: a file that does not compile
+is worse than a file that does not exist, and the map above is what it was for.
