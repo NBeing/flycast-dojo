@@ -5,8 +5,11 @@
 #   scripts/testrun.sh -j 4                   ... four at a time
 #   scripts/testrun.sh scripts/tests/foo.lua  just this one
 #   scripts/testrun.sh --rom /path/to.cdi     override the ROM
+#   scripts/testrun.sh --self-test            prove the runner can report failure
+#   scripts/testrun.sh --watch <test.lua>     run it on YOUR display, so you can
+#                                             see it. Config is still sandboxed.
 #
-# Exit 0 only if every test PASSed. Requires Xvfb.
+# Exit 0 only if every test PASSed. Requires Xvfb, except under --watch.
 #
 # WHY EACH PIECE IS HERE. None of this is defensive habit; each line is a
 # measured failure from this project or its siblings.
@@ -40,6 +43,7 @@ CLIP="${FLYCAST_TEST_CLIP:-}"
 OUT="${FLYCAST_TEST_OUT:-$ROOT/build-dojo7/testresults}"
 JOBS=1
 SELFTEST=0
+WATCH=0
 TIMEOUT="${FLYCAST_TEST_TIMEOUT:-120}"
 BASE_DISPLAY="${FLYCAST_TEST_DISPLAY_BASE:-90}"
 
@@ -51,6 +55,7 @@ while [ $# -gt 0 ]; do
 		--clip) CLIP="$2"; shift 2 ;;
 		--timeout) TIMEOUT="$2"; shift 2 ;;
 		--self-test) SELFTEST=1; shift ;;
+		--watch) WATCH=1; shift ;;
 		-h|--help) sed -n '2,12p' "$0"; exit 0 ;;
 		*) TESTS+=("$1"); shift ;;
 	esac
@@ -73,7 +78,21 @@ fi
 SKIP=77
 [ -x "$BIN" ] || { echo "testrun: SKIP - no binary at $BIN" >&2; exit $SKIP; }
 [ -f "$ROM" ] || { echo "testrun: SKIP - no ROM at $ROM" >&2; exit $SKIP; }
-command -v Xvfb >/dev/null || { echo "testrun: SKIP - Xvfb not installed" >&2; exit $SKIP; }
+if [ "$WATCH" -eq 1 ]; then
+	# --watch runs on YOUR display so you can see it, instead of provisioning an
+	# Xvfb you cannot. The config directory is still sandboxed, so it does not
+	# touch your flycast.lua, emu.cfg or input bindings - that is the friction
+	# this flag removes.
+	#
+	# It sends NO synthetic input. Watching is passive; the isotest contract
+	# forbids synthesising input on an attached display, and this does not
+	# relax it. Nothing here clicks, types or moves your pointer.
+	[ -n "${DISPLAY:-}" ] || { echo "testrun: SKIP - --watch needs DISPLAY set" >&2; exit $SKIP; }
+	[ "$JOBS" -eq 1 ] || echo "testrun: --watch forces -j 1 (one window at a time)" >&2
+	JOBS=1
+else
+	command -v Xvfb >/dev/null || { echo "testrun: SKIP - Xvfb not installed" >&2; exit $SKIP; }
+fi
 
 # A clip to replay. Tests want a movie running; without one the emulator sits in
 # attract mode and anything asserting on playback is vacuous.
@@ -90,6 +109,7 @@ run_one() {  # run_one <test.lua> <slot>
 	local name; name="$(basename "$test" .lua)"
 	local work; work="$(mktemp -d)"
 	local disp=":$((BASE_DISPLAY + slot))"
+	[ "$WATCH" -eq 1 ] && disp="$DISPLAY"
 	local cfg="$work/config/flycast-dojo"
 	mkdir -p "$cfg"
 	# The clip is COPIED: opening one rewrites clip.json beside the movie, so a
@@ -97,22 +117,33 @@ run_one() {  # run_one <test.lua> <slot>
 	mkdir -p "$work/clip"; cp "$CLIP" "$work/clip/clip.flyr"
 	cp "$test" "$cfg/flycast.lua"
 
-	nohup Xvfb "$disp" -screen 0 1280x1024x24 >"$work/xvfb.log" 2>&1 &
-	local xpid=$!
-	local ok=0
-	for _ in $(seq 1 20); do
-		DISPLAY="$disp" xdpyinfo >/dev/null 2>&1 && { ok=1; break; }
-		sleep 0.5
-	done
-	if [ "$ok" -ne 1 ]; then
-		echo "INCONCLUSIVE $name  (no display $disp)" > "$OUT/$name.verdict"
-		kill -9 "$xpid" 2>/dev/null; rm -rf "$work"; return
+	local xpid=""
+	if [ "$WATCH" -eq 1 ]; then
+		echo "testrun: watching $name on $disp - it will close itself; Ctrl-C to stop early"
+	else
+		nohup Xvfb "$disp" -screen 0 1280x1024x24 >"$work/xvfb.log" 2>&1 &
+		xpid=$!
+		local ok=0
+		for _ in $(seq 1 20); do
+			DISPLAY="$disp" xdpyinfo >/dev/null 2>&1 && { ok=1; break; }
+			sleep 0.5
+		done
+		if [ "$ok" -ne 1 ]; then
+			echo "INCONCLUSIVE $name  (no display $disp)" > "$OUT/$name.verdict"
+			kill -9 "$xpid" 2>/dev/null; rm -rf "$work"; return
+		fi
 	fi
 
 	# setsid: the emulator gets its own process GROUP, so teardown takes its
 	# children with it. Killing only the pid we were handed leaves whatever it
 	# spawned holding the display.
-	env -u I3SOCK -u SWAYSOCK -u WAYLAND_DISPLAY \
+	# I3SOCK/SWAYSOCK are stripped for a PROVISIONED display, where they would
+	# silently address the real WM instead (the hazard isotest.sh documents). On
+	# YOUR display that is exactly the wrong thing: the window should be managed
+	# normally, so it is left alone under --watch.
+	local strip=(env -u I3SOCK -u SWAYSOCK -u WAYLAND_DISPLAY)
+	[ "$WATCH" -eq 1 ] && strip=(env)
+	"${strip[@]}" \
 		DISPLAY="$disp" XDG_CONFIG_HOME="$work/config" FLYCAST_TESTLIB="$ROOT/scripts/lua/testlib.lua" \
 		setsid "$BIN" \
 			-config dojo:Replay=yes -config "dojo:ReplayFilename=$work/clip/clip.flyr" \
@@ -138,7 +169,7 @@ run_one() {  # run_one <test.lua> <slot>
 
 	kill -INT -"$pid" 2>/dev/null; sleep 1
 	kill -9 -"$pid" 2>/dev/null
-	kill -9 "$xpid" 2>/dev/null
+	[ -n "$xpid" ] && kill -9 "$xpid" 2>/dev/null
 	wait "$pid" 2>/dev/null
 
 	local summary; summary=$(grep -a -oE 'SUMMARY: [0-9]+ passed, [0-9]+ failed[^"]*' "$OUT/$name.lua.log" 2>/dev/null | tail -1)
