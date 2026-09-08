@@ -38,6 +38,10 @@ local hasMovie = false
 --- A seek is expected when the clip carries a state. 1000 is comfortably past
 --- any boot-frame count and comfortably below a real in-game state.
 local seekTarget, sawSeek = 1000, false
+--- Only for the first handful of paints: enough to place the windows on a fresh
+--- profile, and then never again, so neither a drag nor a layout restored from
+--- imgui.ini gets overridden.
+local placeFrames, placeOnce = 0, true
 --- widget state the panel actually drives
 local wdg = { check = true, slide = 42, text = "edit me", clicks = 0, sel = 2 }
 
@@ -310,6 +314,8 @@ end)
 
 flycast_callbacks.overlay = function()
 	if prevOverlay then prevOverlay() end   -- emuapi's painters, including gui.register
+	placeFrames = placeFrames + 1
+	placeOnce = placeFrames <= 3
 	if pauseWant == "pause" then
 		pauseWant = nil; flycast.emulator.pause()
 	elseif stage == 7 and sub == 1 and flycast.movie.editable() then
@@ -323,8 +329,19 @@ flycast_callbacks.overlay = function()
 	end
 
 	--- PANEL 1: the assertions
-	flycast.ui.SetNextWindowPos(6, 232)
-	flycast.ui.SetNextWindowSize(392, 242)
+	--- POSITIONED ONCE, NOT EVERY FRAME.
+	---
+	--- The Lua binding takes no ImGuiCond, so SetNextWindowPos is
+	--- ImGuiCond_Always: calling it per frame forces the window back to this
+	--- spot every frame. With docking on that silently defeats the whole
+	--- feature - you drag a window to an edge, ImGui docks it, and the next
+	--- frame drags it straight back out. [MEASURED 2026-09-08] the symptom is
+	--- exactly "it looks like it is about to dock and then doesn't", and it was
+	--- this tour doing it, not the docking.
+	if placeOnce then
+		flycast.ui.SetNextWindowPos(6, 232)
+		flycast.ui.SetNextWindowSize(392, 242)
+	end
 	if flycast.ui.Begin("tour - assertions") then
 		for _, l in ipairs(lines) do flycast.ui.Text(l) end
 		flycast.ui.Separator()
@@ -334,8 +351,10 @@ flycast_callbacks.overlay = function()
 	flycast.ui.End()
 
 	--- PANEL 2: live host state, and real widgets that actually work
-	flycast.ui.SetNextWindowPos(404, 232)
-	flycast.ui.SetNextWindowSize(230, 242)
+	if placeOnce then
+		flycast.ui.SetNextWindowPos(404, 232)
+		flycast.ui.SetNextWindowSize(230, 242)
+	end
 	if flycast.ui.Begin("live") then
 		flycast.ui.Text(("movie frame  %s"):format(live.frame or "-"))
 		flycast.ui.Text(("confirmed    %s"):format(live.conf or "-"))
