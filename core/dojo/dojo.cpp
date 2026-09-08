@@ -617,10 +617,37 @@ bool Dojo::IsStateStale(u32 stateFrame, u32 stateSeq) const
 	return false;
 }
 
-// FNV-1a over every packet strictly below `frame` - exactly the bytes that determined the
-// machine a savestate captured there. Same definition at save time and check time.
+// A 64-bit rolling hash of every packet STRICTLY BELOW `frame` - exactly the bytes that
+// determined the machine a savestate captured there. Same definition at save time and at
+// check time, which is the only property that matters (see below).
+//
+// WHAT IS COVERED, byte for byte, because a vaguer answer is how two implementations of
+// "the same" hash silently disagree:
+//   * frame `frame` itself is EXCLUDED - the state was captured before it was applied
+//   * each packet contributes its FRAME NUMBER and then its bytes, both players' rows
+//     together (session_inputs values are the full 24-byte pair)
+//   * an UNAUTHORED frame contributes NOTHING AT ALL, because session_inputs is sparse and
+//     has no entry for it. That is distinguishable from an authored-but-neutral frame only
+//     because the frame numbers of its neighbours are mixed in - which is why they are.
+//     Drop the index and a gap becomes indistinguishable from a run of empty packets.
+//
+// `[MEASURED 2026-09-08]` IT IS NOT FNV-1a, THOUGH IT WAS CALLED THAT HERE AND IN DAVID'S
+// TREE. The prime is FNV's (1099511628211 = 0x100000001b3) but the offset basis is the
+// standard's with its LAST DIGIT DROPPED: 1469598103934665603 against 14695981039346656037.
+// A typo, and functionally harmless - any odd basis hashes fine, and this value never leaves
+// the host that computed it: it is written into a .frame sidecar and compared only against
+// MoviePrefixHash() run on the same movie by the same build. There is no cross-host or
+// cross-version comparison to break.
+//
+// SO THE CONSTANT IS LEFT ALONE AND THE NAME IS FIXED, not the other way round. Correcting
+// the basis would change every existing sidecar's hash, so states that are already
+// seq-suspect would flip from clean to stale on clips the user has recorded - a real cost
+// for zero correctness gain. The lie worth removing is the WORD "FNV-1a": a second
+// implementation told that name would match the standard, produce different bytes, and
+// believe it had agreed.
 u64 Dojo::MoviePrefixHash(u32 frame) const
 {
+	// Not the FNV-1a basis - see above. Deliberately not corrected.
 	u64 h = 1469598103934665603ull;
 	auto mix = [&h](const void *p, size_t n)
 	{

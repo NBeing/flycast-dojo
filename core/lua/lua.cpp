@@ -1298,6 +1298,48 @@ static int getGameViewport(lua_State *L)
 	return 4;
 }
 
+//! WHICH MOVIE FRAME A SAVED STATE BELONGS TO, and whether the movie below it
+//! still says what it said when the state was taken.
+//!
+//! Arguments: a 1-based slot. Returns nothing at all for an empty slot or a
+//! state with no sidecar - "there is no anchor" is absence, not a verdict.
+//! Otherwise `frame, verdict`.
+//!
+//! THE VERDICTS, and what separates them:
+//!   "clean"    no re-record rewrote the timeline below this state.
+//!   "stale"    one did, AND the movie's bytes below the anchor no longer match
+//!              what they were when the state was saved.
+//!   "unknown"  the sidecar predates re-record sequencing, so the question
+//!              cannot be answered. Deliberately not folded into "clean": a
+//!              state that MIGHT be dead is not a state that is fine, and the
+//!              whole point of the anchor is to stop someone seeking into a
+//!              dead timeline.
+//!
+//! "clean" IS NOT MERELY "NO REWIND HAPPENED". A rewind followed by an undo
+//! nets to nothing, and the engine re-checks the actual bytes before condemning
+//! a state - so an edit that was taken back leaves its states valid. That is
+//! also why an edit ABOVE the anchor never stales it: the bytes below are
+//! untouched, and the bytes below are the whole question.
+static int savestateAnchor(lua_State *L)
+{
+	const int slot = (int)luaL_checkinteger(L, 1) - 1;	// 1-based interface
+	if (slot < 0 || slot >= (int)hostfs::MAX_SAVESTATE_SLOTS)
+		return luaL_error(L, "savestate slot must be between 1 and %d",
+				(int)hostfs::MAX_SAVESTATE_SLOTS);
+
+	const std::vector<hostfs::SavestateInfo> info = hostfs::scanSavestateInfo();
+	if (slot >= (int)info.size() || !info[slot].exists || info[slot].movieFrame == 0)
+		return 0;			// no state, or no anchor - absence, not a verdict
+
+	lua_pushinteger(L, (lua_Integer)info[slot].movieFrame);
+	if (!info[slot].haveSeq)
+		lua_pushstring(L, "unknown");
+	else
+		lua_pushstring(L, dojo.IsStateStale(info[slot].movieFrame, info[slot].rerecordSeq,
+				info[slot].prefixHash) ? "stale" : "clean");
+	return 2;
+}
+
 //! Is the picture a PANEL the user can move, or the whole window?
 //!
 //! A tool that lays anything out in window coordinates needs to know: when the
@@ -2056,6 +2098,23 @@ static void luaRegister(lua_State *L)
 				.addFunction("slotCount", std::function<int()>([]() {
 					return (int)hostfs::MAX_SAVESTATE_SLOTS;
 				}))
+				//! THE ANCHOR: which movie frame a saved state belongs to, and whether
+				//! the movie BELOW it still says what it said when the state was taken.
+				//!
+				//! Returns nothing for an empty slot, or for a state saved with no
+				//! sidecar. Otherwise: frame, verdict, where verdict is
+				//!   "clean"    the movie below the anchor is unchanged
+				//!   "stale"    a re-record rewrote the timeline below it, and the
+				//!              bytes below the anchor no longer match
+				//!   "unknown"  an old sidecar with no re-record sequence, so the
+				//!              question cannot be answered rather than answered "yes"
+				//!
+				//! WHY A VERDICT AND NOT A HASH. The hash never leaves this host - it
+				//! is written into the sidecar and compared only against the same
+				//! function run on the same movie by the same build - so handing it out
+				//! would invite a script to compare two hosts' hashes, which is
+				//! meaningless. What travels is the ANSWER.
+				.addFunction("anchor", savestateAnchor)
 				.addFunction("save", std::function<void(int)>([](int index) { luaSavestateSlot(index, false); }))
 				.addFunction("load", std::function<void(int)>([](int index) { luaSavestateSlot(index, true); }))
 				.addFunction("tostring", saveStateToString)
