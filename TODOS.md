@@ -63,6 +63,26 @@ quietly start "passing".
 
 ---
 
+## [F] fbneo has never been run either
+
+`[2026-09-08]` emuapi's `adapters/fbneo.lua` is now the only host in that
+package whose claims are entirely unmeasured — its 21 `ui.*` declarations and
+its whole unsupported table are read out of prose, and 16 of those names already
+exist in fbneo's own C++ (`lua_imgui.cpp`). Its value widgets also return
+`(changed, value)` against the spec's `(value, changed)`: reversed, so a script
+unpacking two values gets a silently wrong pair rather than an error.
+
+Running it is worth doing for the same reason running flycast was. That first
+run went `pass=197 fail=4` and ended at `pass=234 fail=0`, and fixing the first
+four exposed four MORE that had been masked behind them — a suite's first run on
+a new host reports the first LAYER of its bugs, not their number. fbneo's
+adapter has never been executed at all, where flycast's had at least been
+written against a host somebody could start, so expect at least as much.
+
+Only worth doing if David's studio port takes us into that tree anyway.
+
+---
+
 ## Known bugs
 
 ### [x] Lua `vblank` double-fires during rollback — FIXED
