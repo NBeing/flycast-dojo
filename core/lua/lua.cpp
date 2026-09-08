@@ -2044,6 +2044,18 @@ static void luaRegister(lua_State *L)
 			// that is what emu.supports() is for.
 
 			.beginNamespace("savestate")
+				//! HOW MANY SLOTS EXIST, so a script does not have to carry a number
+				//! that belongs to the host. This is the STORAGE ceiling - every one of
+				//! these is addressable and keeps whatever is in it.
+				//!
+				//! Deliberately NOT savestateCycleCount(). That is how many slots the
+				//! F2 hotkey walks before wrapping, a keyboard convenience the user can
+				//! set to 12; the states above it still exist and are still reachable
+				//! from the States window. A script told "12" would refuse to touch a
+				//! state that is sitting right there.
+				.addFunction("slotCount", std::function<int()>([]() {
+					return (int)hostfs::MAX_SAVESTATE_SLOTS;
+				}))
 				.addFunction("save", std::function<void(int)>([](int index) { luaSavestateSlot(index, false); }))
 				.addFunction("load", std::function<void(int)>([](int index) { luaSavestateSlot(index, true); }))
 				.addFunction("tostring", saveStateToString)
