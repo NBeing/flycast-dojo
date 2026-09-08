@@ -102,9 +102,33 @@ fi
 # A clip to replay. Tests want a movie running; without one the emulator sits in
 # attract mode and anything asserting on playback is vacuous.
 if [ -z "$CLIP" ]; then
-	CLIP=$(ls -1t "${XDG_DATA_HOME:-$HOME/.local/share}"/flycast-dojo/replays/*/*/*.flyr 2>/dev/null | head -1)
+	# NEWEST USABLE, not merely newest. A .flyr is 93 bytes of header plus 28
+	# per frame, so the frame count is arithmetic - and a movie that ends before
+	# a test has finished is not a fixture, it is a timeout with a plausible
+	# explanation.
+	#
+	# [MEASURED 2026-09-08] a 120-frame clip left behind by an aborted run
+	# became the newest, and BOTH tests timed out with "replay end at frame 119
+	# (movie exhausted)". The failure looked like the code change under test.
+	#
+	# Prefers a clip that has a savestate beside it, since AutoSeekState=0 seeks
+	# to one - a clip without it plays from power-on, which is attract mode.
+	MINFRAMES="${FLYCAST_TEST_MINFRAMES:-600}"
+	best=""; bestwithstate=""
+	for f in $(ls -1t "${XDG_DATA_HOME:-$HOME/.local/share}"/flycast-dojo/replays/*/*/*.flyr 2>/dev/null); do
+		frames=$(( ( $(stat -c%s "$f") - 93 ) / 28 ))
+		[ "$frames" -ge "$MINFRAMES" ] || continue
+		[ -z "$best" ] && best="$f"
+		if ls "$(dirname "$f")"/*.state >/dev/null 2>&1; then bestwithstate="$f"; break; fi
+	done
+	CLIP="${bestwithstate:-$best}"
+	[ -n "$CLIP" ] && echo "testrun: clip $(basename "$(dirname "$CLIP")")" \
+		"($(( ( $(stat -c%s "$CLIP") - 93 ) / 28 )) frames$(ls "$(dirname "$CLIP")"/*.state >/dev/null 2>&1 && echo ", has a savestate"))"
 fi
-[ -n "$CLIP" ] && [ -f "$CLIP" ] || { echo "testrun: SKIP - no .flyr clip found; pass --clip" >&2; exit $SKIP; }
+[ -n "$CLIP" ] && [ -f "$CLIP" ] || {
+	echo "testrun: SKIP - no usable .flyr clip (need >= ${MINFRAMES:-600} frames); pass --clip" >&2
+	exit $SKIP
+}
 
 mkdir -p "$OUT"
 

@@ -452,8 +452,18 @@ static void gui_newFrame()
 
 	ImGuiIO& io = ImGui::GetIO();
 
+	// A pointer outside the window is "nowhere", so nothing hovers while it is
+	// over another window. The SDL layer keeps mouseX/mouseY meaningful during a
+	// DRAG - see the global-position update in input_sdl_handle() - so an
+	// out-of-window drag arrives here as real out-of-range coordinates and is
+	// passed through, which is what ImGui needs to track a dock target.
 	if (mouseX < 0 || mouseX >= settings.display.width || mouseY < 0 || mouseY >= settings.display.height)
-		io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+	{
+		if ((mouseButtons & 0xF) == 0)
+			io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+		else
+			io.AddMousePosEvent(mouseX, mouseY);	// mid-drag: the real position
+	}
 	else
 		io.AddMousePosEvent(mouseX, mouseY);
 	static bool delayTouch;

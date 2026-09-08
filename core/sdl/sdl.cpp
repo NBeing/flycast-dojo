@@ -256,8 +256,43 @@ static std::shared_ptr<SDLMouse> getMouse(u64 mouseId)
 	return mouse;
 }
 
+// WHILE A BUTTON IS HELD, TRACK THE POINTER OUTSIDE THE WINDOW.
+//
+// flycast feeds ImGui from SDL_MOUSEMOTION only, so the position stops being
+// meaningful the moment the pointer leaves the window - and ImGui reads that as
+// the mouse vanishing and ABORTS an in-progress drag. Under a tiling WM the
+// window is small, so dragging a panel toward a screen edge leaves it almost
+// immediately: the dock preview appears and the drop never lands.
+//
+// [MEASURED 2026-09-08] docking a window to an edge worked with flycast
+// fullscreen and failed tiled, which is the normal case in i3.
+//
+// The fix is what ImGui's own SDL backend does: take the GLOBAL pointer
+// position and convert it to window coordinates. That backend gates this on
+// MouseCanUseGlobalState, a whitelist of video drivers that includes x11
+// [SOURCE] imgui_impl_sdl3.cpp:588-594, via nbneo-rr's
+// tools/imgui-input-probe.cpp, whose author had already measured this.
+//
+// Clamping to the window edge instead was tried first and is NOT enough: it
+// pins the reported position, so ImGui sees the drag stop moving.
+static void updateMousePositionWhileDragging()
+{
+	if (window == nullptr)
+		return;
+	int gx = 0, gy = 0;
+	const Uint32 buttons = SDL_GetGlobalMouseState(&gx, &gy);
+	if ((buttons & (SDL_BUTTON_LMASK | SDL_BUTTON_RMASK | SDL_BUTTON_MMASK)) == 0)
+		return;			// no drag in progress; ordinary motion events suffice
+	int wx = 0, wy = 0;
+	SDL_GetWindowPosition(window, &wx, &wy);
+	// Deliberately NOT clamped: ImGui wants the true position, negative or past
+	// the far edge, to work out which dock target the pointer is over.
+	gui_set_mouse_position(gx - wx, gy - wy);
+}
+
 void input_sdl_handle()
 {
+	updateMousePositionWhileDragging();
 	SDLGamepad::UpdateRumble();
 
 	SDL_Event event;
