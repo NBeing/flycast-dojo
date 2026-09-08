@@ -1,5 +1,6 @@
 #include "glcache.h"
 #include "gles.h"
+#include "rend/game_viewport.h"
 #include "rend/tileclip.h"
 #include "rend/osd.h"
 #include "naomi2.h"
@@ -765,19 +766,18 @@ bool OpenGLRenderer::renderLastFrame()
 		return false;
 
 	glcache.Disable(GL_SCISSOR_TEST);
-	float screenAR = (float)settings.display.width / settings.display.height;
-	float renderAR = gl.ofbo.aspectRatio;
 
-	int dx = 0;
-	int dy = 0;
-	if (renderAR > screenAR)
-		dy = (int)roundf(settings.display.height * (1 - screenAR / renderAR) / 2.f);
-	else
-		dx = (int)roundf(settings.display.width * (1 - renderAR / screenAR) / 2.f);
+	// The picture goes wherever the UI left room for it, not wherever the window
+	// is: with tool windows docked that is the dockspace's central node. See
+	// core/rend/game_viewport.h. glY converts the rect's top-left origin to GL's
+	// bottom-left one; the rest of this function is written in GL coordinates.
+	const rend::ViewportRect vp = rend::gameViewport(gl.ofbo.aspectRatio);
+	const int glX = vp.x;
+	const int glY = settings.display.height - (vp.y + vp.h);
 
 	if (gl.gl_major < 3 || config::Rotate90)
 	{
-		glViewport(dx, dy, settings.display.width - dx * 2, settings.display.height - dy * 2);
+		glViewport(glX, glY, vp.w, vp.h);
 		glBindFramebuffer(GL_FRAMEBUFFER, gl.ofbo.origFbo);
 		glcache.ClearColor(VO_BORDER_COL.red(), VO_BORDER_COL.green(), VO_BORDER_COL.blue(), 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -808,8 +808,9 @@ bool OpenGLRenderer::renderLastFrame()
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gl.ofbo.origFbo);
 		glcache.ClearColor(VO_BORDER_COL.red(), VO_BORDER_COL.green(), VO_BORDER_COL.blue(), 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
+		// Destination Y runs top-to-bottom (y0 > y1) to flip the image, as before.
 		glBlitFramebuffer(-gl.ofbo.shiftX, -gl.ofbo.shiftY, framebuffer->getWidth() - gl.ofbo.shiftX, framebuffer->getHeight() - gl.ofbo.shiftY,
-				dx, settings.display.height - dy, settings.display.width - dx, dy,
+				glX, glY + vp.h, glX + vp.w, glY,
 				GL_COLOR_BUFFER_BIT, config::TextureFiltering == 1 ? GL_NEAREST : GL_LINEAR);
     	glBindFramebuffer(GL_FRAMEBUFFER, gl.ofbo.origFbo);
 #endif

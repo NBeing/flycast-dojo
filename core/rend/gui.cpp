@@ -22,6 +22,8 @@
 #include "hw/maple/maple_if.h"
 #include "hw/maple/maple_devs.h"
 #include "imgui.h"
+#include "imgui_internal.h"	// DockBuilderGetCentralNode (game viewport)
+#include "rend/game_viewport.h"
 #include "network/net_handshake.h"
 #include "network/ggpo.h"
 #include "wsi/context.h"
@@ -441,11 +443,30 @@ void gui_set_mouse_wheel(float delta)
 //!     tools, where it would only add a stray node.
 static void submitDockspaceHost()
 {
-	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+	const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
+	// Publish what the docked tools left for the game. The central node IS the
+	// unoccupied middle of the dockspace, so this is the whole window until
+	// something docks and shrinks automatically as tools are added, moved or
+	// resized - no bookkeeping of our own. rend::gameViewport() letterboxes the
+	// picture into it; see core/rend/game_viewport.h for the contract.
+	// A node with no split children still covers the whole viewport, so the
+	// undocked case publishes a full-window area and costs nothing.
+	if (const ImGuiDockNode *central = ImGui::DockBuilderGetCentralNode(dockspaceId))
+		rend::setContentArea((int)central->Pos.x, (int)central->Pos.y,
+				(int)central->Size.x, (int)central->Size.y);
 }
 
 static void gui_newFrame()
 {
+	// Forget last frame's reservation. Whichever stream is running re-publishes
+	// it a few lines later in submitDockspaceHost(); states that render no tools
+	// never do, and so give the game the whole window again. Resetting here
+	// rather than in each of those states means a new GuiState cannot forget to.
+	// The renderers read the viewport BEFORE they call into the OSD stream, so
+	// this reset is never visible as a one-frame full-window flash.
+	rend::setContentArea(0, 0, 0, 0);
+
 	imguiDriver->newFrame();
 	ImGui::GetIO().DisplaySize.x = settings.display.width;
 	ImGui::GetIO().DisplaySize.y = settings.display.height;

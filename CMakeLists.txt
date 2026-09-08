@@ -1279,6 +1279,8 @@ if(NOT LIBRETRO)
 	target_sources(${PROJECT_NAME} PRIVATE
 			core/rend/game_scanner.h
 			core/rend/imgui_driver.h
+			core/rend/game_viewport.cpp
+			core/rend/game_viewport.h
 			core/rend/gui.cpp
 			core/rend/video_recorder.cpp
 			core/rend/video_recorder.h

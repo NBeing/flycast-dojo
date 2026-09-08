@@ -224,6 +224,54 @@ STAGES[7] = function()
 	return true
 end
 
+--- 8. THE PICTURE IS NOT THE WINDOW --------------------------------------
+--- The host letterboxes the game into whatever area the UI leaves for it
+--- (core/rend/game_viewport.h). Overlays that draw in game pixels map through
+--- that rectangle, so if it lies they land in the wrong place - or, as happened
+--- before this existed, the picture ignores docked panels and draws underneath
+--- them full-window.
+STAGES[8] = function()
+	--- flycast.session.*, not flycast.* - these live in the session namespace
+	--- alongside getGameResolution. [MEASURED 2026-09-07] the first draft of
+	--- this stage called them at the root, and the tour TIMED OUT rather than
+	--- failing: the error was raised inside the vblank callback, which the host
+	--- logs as a warning and then keeps calling, so the stage simply never
+	--- returned true. A stage that can hang is worth less than one that can
+	--- fail - hence the assertion below that the namespace exists at all.
+	report("the display accessors are where the adapter looks for them",
+		type(flycast.session) == "table"
+			and type(flycast.session.getGameViewport) == "function"
+			and type(flycast.session.getWindowSize) == "function"
+			and type(flycast.session.getGameResolution) == "function")
+
+	local vx, vy, vw, vh = flycast.session.getGameViewport()
+	local ww, wh = flycast.session.getWindowSize()
+	local gw, gh = flycast.session.getGameResolution()
+
+	report("the window has a size", ww > 0 and wh > 0, ("%dx%d px"):format(ww, wh))
+	report("the game viewport is inside the window",
+		vx >= 0 and vy >= 0 and vx + vw <= ww and vy + vh <= wh,
+		("%d,%d %dx%d in %dx%d"):format(vx, vy, vw, vh, ww, wh))
+
+	--- LETTERBOXED, not stretched: the picture keeps the game's aspect whatever
+	--- shape the area it is given. A viewport handed back as the raw area would
+	--- pass the containment check above and fail this one.
+	local want = gw / gh
+	local got  = vw / vh
+	report("the viewport preserves the game's aspect ratio",
+		math.abs(want - got) < 0.02, ("want %.3f got %.3f"):format(want, got))
+
+	--- NOTHING IS DOCKED in a headless run, so the area is the whole window and
+	--- the picture must touch two opposite edges of it. This is the regression
+	--- test for the per-frame RESET: without it a stale reservation from an
+	--- earlier frame survives and the picture shrinks into a corner forever,
+	--- which no other assertion here would notice.
+	report("undocked, the picture spans the window on its long axis",
+		(vx == 0 and vw == ww) or (vy == 0 and vh == wh),
+		("x %d w %d / y %d h %d"):format(vx, vw, vy, vh))
+	return true
+end
+
 --- CHAINED, NEVER REPLACED. emuapi installs its dispatcher into
 --- flycast_callbacks when it loads (vblank, overlay, terminate), so
 --- `flycast_callbacks = {}` here silently unregisters it - and with it every
@@ -273,10 +321,25 @@ flycast_callbacks.vblank = function()
 	for k, v in pairs(api.joypad.get(1) or {}) do if v then held[#held+1] = k end end
 	table.sort(held); live.held = #held > 0 and table.concat(held, "+") or "(none)"
 
+	--- A RAISING STAGE MUST FAIL, NOT HANG.
+	--- [MEASURED 2026-09-07] a stage called flycast.getGameViewport() when the
+	--- function actually lives at flycast.session.getGameViewport. The host
+	--- logs the exception as a warning and keeps calling this callback, so the
+	--- stage never returned true and the whole run TIMED OUT - no verdict line,
+	--- and indistinguishable from a slow machine or a wedged emulator. pcall
+	--- turns that back into one red line naming the stage and the error, which
+	--- is the difference between a test that reports and a test that sulks.
 	local fn = STAGES[stage]
-	if fn and fn() then
-		stage, sub, n = stage + 1, 0, 0
-		if STAGES[stage] == nil then t.finish() end
+	if fn then
+		local ok, doneOrErr = pcall(fn)
+		if not ok then
+			report(("stage %d raised"):format(stage), false, tostring(doneOrErr))
+			stage, sub, n = stage + 1, 0, 0
+			if STAGES[stage] == nil then t.finish() end
+		elseif doneOrErr then
+			stage, sub, n = stage + 1, 0, 0
+			if STAGES[stage] == nil then t.finish() end
+		end
 	end
 end
 

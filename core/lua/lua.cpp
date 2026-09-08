@@ -46,6 +46,7 @@
 #include "hw/sh4/sh4_if.h"
 #include "serialize.h"
 #include "rend/transform_matrix.h"
+#include "rend/game_viewport.h"
 #include <stdexcept>
 #include <optional>
 #include <mutex>
@@ -1277,35 +1278,35 @@ static int hashState(lua_State *L)
  * The game image's rectangle inside the window, in window pixels.
  *
  * A content overlay - a hitbox, a position marker - has to be positioned in
- * game pixels and land on the game image, which is letterboxed inside the
- * window whenever the window's aspect ratio differs from the game's. This is
- * the same computation renderLastFrame() uses to place the blit
- * (core/rend/gles/gldraw.cpp), against the same aspect-ratio source, so the
- * rectangle reported here is the one the frame is actually drawn into.
+ * game pixels and land on the game image. That image is not the window: it is
+ * letterboxed into whatever area the UI leaves for it, which shrinks when tool
+ * windows are docked.
  *
- * getDCFramebufferAspectRatio() reads only config - Rotate90 and
- * ScreenStretching - so this needs nothing from a renderer and is correct for
- * all of them.
+ * This does not re-derive that rectangle, it reads the one the renderers place
+ * the picture with (core/rend/game_viewport.h). It used to be a second copy of
+ * renderLastFrame()'s arithmetic, kept in step by hand - so when docking made
+ * the window stop being the picture, both copies were wrong at once. Now there
+ * is one derivation and a script's overlay tracks the docked layout for free.
  */
 static int getGameViewport(lua_State *L)
 {
-	const float screenW = (float)settings.display.width;
-	const float screenH = (float)settings.display.height;
-	const float screenAR = screenH > 0 ? screenW / screenH : 1.f;
-	const float renderAR = getDCFramebufferAspectRatio();
-
-	float dx = 0.f;
-	float dy = 0.f;
-	if (renderAR > screenAR)
-		dy = roundf(screenH * (1 - screenAR / renderAR) / 2.f);
-	else
-		dx = roundf(screenW * (1 - renderAR / screenAR) / 2.f);
-
-	lua_pushnumber(L, dx);
-	lua_pushnumber(L, dy);
-	lua_pushnumber(L, screenW - dx * 2);
-	lua_pushnumber(L, screenH - dy * 2);
+	const rend::ViewportRect vp = rend::gameViewport();
+	lua_pushnumber(L, vp.x);
+	lua_pushnumber(L, vp.y);
+	lua_pushnumber(L, vp.w);
+	lua_pushnumber(L, vp.h);
 	return 4;
+}
+
+//! The host window's drawable size in pixels. The picture is NOT this: it is
+//! getGameViewport(), which is this minus whatever the UI reserved (docked tool
+//! windows) and minus letterboxing. A tool that wants to know whether the host
+//! has taken space compares the two.
+static int getWindowSize(lua_State *L)
+{
+	lua_pushinteger(L, settings.display.width);
+	lua_pushinteger(L, settings.display.height);
+	return 2;
 }
 
 //! The logical resolution the game draws in, which is what game-pixel
@@ -1960,6 +1961,7 @@ static void luaRegister(lua_State *L)
 				// game-pixel coordinates are relative to. See docs/lua_api_spec.lua.
 				.addFunction("getGameViewport", getGameViewport)
 				.addFunction("getGameResolution", getGameResolution)
+				.addFunction("getWindowSize", getWindowSize)
 				.addFunction("isRollback", std::function<bool()>([]() {
 					return ggpo::rollbacking();
 				}))
@@ -2114,6 +2116,7 @@ static void luaRegister(lua_State *L)
 				.endNamespace()
 				.addFunction("getGameViewport", getGameViewport)
 				.addFunction("getGameResolution", getGameResolution)
+				.addFunction("getWindowSize", getWindowSize)
 			.endNamespace()
 
 			.beginNamespace("frame")
