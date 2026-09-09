@@ -1905,6 +1905,20 @@ endif()
 # enable is the thing this block exists to stop.
 enable_testing()
 
+# The .flyr frame counter. NEEDS NO EMULATOR, NO ROM AND NO DISPLAY, and runs
+# in milliseconds against synthetic movies it builds itself - the fast tier the
+# rest of this block does not have. It is registered FIRST because testrun.sh
+# now uses it to choose a clip, so a wrong answer here silently mis-selects the
+# fixture every other test runs on.
+#
+# Its six claims include the discriminating pair: a DUPLICATE batch must not
+# change the count (re-records legitimately re-author the same frames) while
+# genuinely new frames must. A record counter passes one and fails the other,
+# so neither alone would pin the behaviour.
+add_test(NAME flycast.flyrframes
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/flyrframes.sh --self-test)
+set_tests_properties(flycast.flyrframes PROPERTIES TIMEOUT 60)
+
 add_test(NAME flycast.harness_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/testrun.sh --self-test --timeout 45 -j 2)
 set_tests_properties(flycast.harness_can_fail PROPERTIES

@@ -164,15 +164,19 @@ Two things in its first session, both invisible to the tests that were passing:
    them, and gdb reported a `std::string` call arriving in `writeThrough<bool>`.
    No compiler warning (unused *template* parameters draw none) and no test
    failure (behaviour identical either way). Fixed in `d3c372bf0`.
-2. **The `.flyr` header is not 93 bytes.** gdb read 11520 movie keys from a
-   324,175-byte clip; 11520 × 28 = 322,560, leaving a **1615-byte header**. The
-   header is variable-length (it carries length-prefixed Player / Opponent /
-   Quark / Relay Key strings). `scripts/testrun.sh:122` still computes
-   `frames = (size - 93) / 28`, so it over-reports this clip by 54 frames. The
-   estimate only feeds a `>= 600` filter, so it has not broken a run — but the
-   frame count it prints is wrong, and the same constant has already invalidated
-   one sabotage attempt that corrupted a byte offset which was not where it
-   thought.
+2. **A `.flyr` is not a header followed by frames at all.** gdb read 11520 movie
+   keys from a 324,175-byte clip, which did not divide the way
+   `scripts/testrun.sh` assumed. Chasing that discrepancy is what turned up the
+   real layout: a stream of messages, each 12 bytes of header plus a body, with
+   frames arriving in 120-frame batches. This clip is one 79-byte
+   SPECTATE_START message plus 96 batches of 3376, summing to exactly 324,175.
+   `testrun.sh` computed `frames = (size - 93) / 28` and reported 11574.
+
+   My own first pass was wrong the same way: dividing the leftover by 28 gave a
+   "1615-byte header", which is what you get by assuming flat records when the
+   bytes are actually framing. The fix is `scripts/flyrframes.sh`, which parses
+   the stream and counts DISTINCT frame numbers - a re-record appends override
+   batches, so counting records inflates exactly the clips edited most.
 
 Both are the same lesson from opposite directions: source-reading tells you
 intent, the built artifact tells you truth.

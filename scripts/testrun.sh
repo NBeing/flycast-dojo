@@ -116,17 +116,39 @@ if [ -z "$CLIP" ]; then
 	#
 	# Prefers a clip that has a savestate beside it, since AutoSeekState=0 seeks
 	# to one - a clip without it plays from power-on, which is attract mode.
+	# FRAME COUNT COMES FROM scripts/flyrframes.sh, which parses the file.
+	# It used to be (filesize - 93) / 28, which is wrong twice over: a .flyr is a
+	# stream of 12-byte-headed messages rather than a header plus flat records,
+	# so the arithmetic counted each batch's 16 bytes of framing as movie data
+	# (16/28 = 0.57 frames per 120-frame batch); and it cannot see that the
+	# parser is last-write-wins, so a re-recorded clip whose batches override
+	# each other was inflated by every override. [MEASURED 2026-09-08] the
+	# 11520-frame clip used by these tests was reported as 11574, and appending
+	# one duplicate batch to it moved that to 11694 while the true count did not
+	# move at all.
+	#
+	# clip.json's stats.frames is NOT used as the oracle: it is a snapshot
+	# written when the clip was last opened, so it goes stale the moment
+	# recording continues. [MEASURED 2026-09-08] clip 2026-09-07T04_59_26Z holds
+	# 1800 frames and its clip.json still says 458.
 	MINFRAMES="${FLYCAST_TEST_MINFRAMES:-600}"
 	best=""; bestwithstate=""
 	for f in $(ls -1t "${XDG_DATA_HOME:-$HOME/.local/share}"/flycast-dojo/replays/*/*/*.flyr 2>/dev/null); do
-		frames=$(( ( $(stat -c%s "$f") - 93 ) / 28 ))
+		# A clip that will not parse is SKIPPED, not counted as short. A movie
+		# truncated by a killed run is a different thing from a stub recording,
+		# and silently treating one as the other is how a damaged fixture gets
+		# picked and blamed on the code under test.
+		frames=$("$ROOT/scripts/flyrframes.sh" "$f" 2>/dev/null) || continue
 		[ "$frames" -ge "$MINFRAMES" ] || continue
-		[ -z "$best" ] && best="$f"
-		if ls "$(dirname "$f")"/*.state >/dev/null 2>&1; then bestwithstate="$f"; break; fi
+		[ -z "$best" ] && best="$f"; bestframes="${bestframes:-$frames}"
+		if ls "$(dirname "$f")"/*.state >/dev/null 2>&1; then
+			bestwithstate="$f"; bestwithstateframes="$frames"; break
+		fi
 	done
 	CLIP="${bestwithstate:-$best}"
+	CLIPFRAMES="${bestwithstateframes:-${bestframes:-0}}"
 	[ -n "$CLIP" ] && echo "testrun: clip $(basename "$(dirname "$CLIP")")" \
-		"($(( ( $(stat -c%s "$CLIP") - 93 ) / 28 )) frames$(ls "$(dirname "$CLIP")"/*.state >/dev/null 2>&1 && echo ", has a savestate"))"
+		"($CLIPFRAMES frames$(ls "$(dirname "$CLIP")"/*.state >/dev/null 2>&1 && echo ", has a savestate"))"
 fi
 [ -n "$CLIP" ] && [ -f "$CLIP" ] || {
 	echo "testrun: SKIP - no usable .flyr clip (need >= ${MINFRAMES:-600} frames); pass --clip" >&2
