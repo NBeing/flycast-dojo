@@ -12,6 +12,7 @@
 #include "dojo/dojo_settings.h"
 #include "dojo/roll_profile.h"
 #include "dojo/roll_select.h"
+#include "dojo/roll_edit.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
 #include "archive/rzip.h"
@@ -71,6 +72,7 @@ int flycast_init(int argc, char* argv[])
 	dojocfg::selfTest();
 	roll::selfTest();
 	roll::selectionSelfTest();
+	roll::editSelfTest();
 	roll::registerPanel();
 	os_CreateWindow();
 	os_SetupInput();
