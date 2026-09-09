@@ -36,6 +36,33 @@
 #include <thread>
 
 static bool mainui_enabled;
+
+// THE HEADLESS ONE-SHOTS, AND WHY THEY ARE NOT FUNCTION-LOCAL ANY MORE.
+//
+// A replay boots PAUSED and headless has nobody to un-pause it, so these fire
+// exactly once per game to un-pause and to seek. As function-local statics they
+// fired once per PROCESS, which was indistinguishable until a game could be
+// restarted in one - and now one can (lua emulator.restartLater).
+//
+// `[MEASURED 2026-09-08]` the first in-process restart booted correctly and then
+// emulated nothing for two minutes. Boot 1 logged "auto-play -> un-pausing the
+// replay"; boot 2 could not, because the latch was already spent, so the second
+// machine sat at GuiState::Paused forever. Every other trace was identical up to
+// that line, which is why it read as a wedged restart rather than as a latch.
+//
+// This is the same class of defect the cold-boot-twice probe exists to hunt -
+// state that survives an init because nothing had ever re-inited before - found
+// in the harness rather than in the emulated machine.
+static bool autoPlayDone = false;
+static bool autoSeekDone = false;
+
+static void resetHeadlessOneShots(Event, void *)
+{
+	if (autoPlayDone || autoSeekDone)
+		NOTICE_LOG(NETWORK, "TAS TEST: game terminated - re-arming auto-play/auto-seek");
+	autoPlayDone = false;
+	autoSeekDone = false;
+}
 u32 MainFrameCount;
 static bool forceReinit;
 
@@ -130,7 +157,6 @@ bool mainui_rend_frame()
 	// to seek to and it is not capturing. `[MEASURED 2026-09-08]` without this
 	// the replay half sat on frame 0 for three minutes and logged nothing at
 	// all, because "paused" and "wedged" look identical from outside.
-	static bool autoPlayDone = false;
 	if (!autoPlayDone && dojo.play_match && gui_state == GuiState::Paused
 			&& (cfgLoadBool("dojo", "AutoPlay", false)
 				|| cfgLoadInt("dojo", "AutoSeekState", -1) >= 0
@@ -159,7 +185,6 @@ bool mainui_rend_frame()
 	// replay.startRecording() can, and its own docstring already warns the clip
 	// "needs a savestate to be replayable". That gap is real and recorded in
 	// TODOS.md; it is not closed by pretending the seek path handles it.
-	static bool autoSeekDone = false;
 	if (!autoSeekDone && dojo.play_match
 			// PAUSED ONLY for the mid-session branch, and that is ordering, not
 			// taste: auto-play above fires on exactly the same condition and is
@@ -228,6 +253,10 @@ bool mainui_rend_frame()
 
 void mainui_init()
 {
+	// Event::Terminate is fired by Emulator::unloadGame, which every game start
+	// runs first - so the one-shots re-arm for the next machine whether it was
+	// started by the menu, the command line, or a restart.
+	EventManager::listen(Event::Terminate, resetHeadlessOneShots);
 	if (!rend_init_renderer()) {
 		ERROR_LOG(RENDERER, "Renderer initialization failed");
 		gui_error("Renderer initialization failed.\nPlease select a different graphics API");

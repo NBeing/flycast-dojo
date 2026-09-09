@@ -102,6 +102,37 @@ static int luaPrint(lua_State *L)
 	return 0;
 }
 
+/*
+ * True while a callback is running ON THE EMULATION THREAD, so a binding that
+ * would join that thread can refuse instead of deadlocking.
+ *
+ * thread_local for the same reason inDrawCallback below is: the render thread
+ * always reads false no matter what the emulation thread is doing, and no
+ * synchronisation is needed.
+ *
+ * This exists because the failure it prevents is undiagnosable from outside.
+ * `[MEASURED 2026-09-08]` emulator.stopGame() from a `vblank` callback never
+ * returns - Emulator::stop() calls checkStatus(true) -> threadResult.get(),
+ * which waits for the emulation thread to finish, and vblank IS that thread. The
+ * process keeps drawing, the log keeps its last line, and nothing says why. A
+ * hang that explains itself is worth more than a comment nobody reads first.
+ */
+static thread_local bool inEmuThreadCallback;
+
+// Guard for bindings that must not run on the emulation thread. Returns true
+// (and explains itself) when the call has to be refused.
+static bool refuseOnEmuThread(const char *what)
+{
+	if (!inEmuThreadCallback)
+		return false;
+	ERROR_LOG(COMMON, "%s: refused - it would deadlock the emulation thread. "
+			"Use flycast.emulator.restartLater() instead.", what);
+	luaconsole::addf(luaconsole::Kind::Error,
+			"%s cannot be called from a vblank callback: it joins the emulation "
+			"thread it is running on. Use flycast.emulator.restartLater().", what);
+	return true;
+}
+
 static void emuEventCallback(Event event, void *)
 {
 	// GGPO re-simulates a frame for every rollback, and the VBlank event fires
@@ -153,7 +184,23 @@ static void emuEventCallback(Event event, void *)
 			break;
 		}
 		if (v[key].isFunction())
-			v[key]();
+		{
+			// Only VBlank is dispatched from the emulation thread; the rest
+			// reach here from wherever the emulator raised them, so the flag is
+			// set narrowly rather than for every event.
+			const bool onEmuThread = (event == Event::VBlank);
+			if (onEmuThread)
+				inEmuThreadCallback = true;
+			try {
+				v[key]();
+			} catch (...) {
+				if (onEmuThread)
+					inEmuThreadCallback = false;
+				throw;
+			}
+			if (onEmuThread)
+				inEmuThreadCallback = false;
+		}
 	} catch (const LuaException& e) {
 		WARN_LOG(COMMON, "Lua exception: %s", e.what());
 		luaconsole::add(luaconsole::Kind::Error, e.what());
@@ -1691,8 +1738,55 @@ static void luaRegister(lua_State *L)
 	getGlobalNamespace(L)
 		.beginNamespace ("flycast")
 	  		.beginNamespace("emulator")
-				.addFunction("startGame", gui_start_game)	// FIXME threading!
-				.addFunction("stopGame", std::function<void()>([]() { gui_stop_game(""); }))
+				.addFunction("startGame", std::function<void(const std::string&)>(
+						[](const std::string& path) {
+							if (refuseOnEmuThread("startGame")) return;
+							gui_start_game(path);
+						}))
+				.addFunction("stopGame", std::function<void()>([]() {
+							if (refuseOnEmuThread("stopGame")) return;
+							gui_stop_game("");
+						}))
+
+				// RESTART THE MACHINE FROM POWER-ON, from a callback, without
+				// deadlocking. The two above cannot be called from `vblank`:
+				//
+				//   vblank runs ON the emulation thread (Emulator::vblank).
+				//   Stopping calls Emulator::stop -> checkStatus(true) ->
+				//   threadResult.get(), which blocks until the emulation thread
+				//   finishes. From vblank that is the thread waiting for
+				//   itself. [MEASURED 2026-09-08] stopGame() from vblank never
+				//   returns; the run times out with the game panel still
+				//   drawing.
+				//
+				// So post it to the safe point instead - the same place the
+				// auto-seek block calls gui_loadState from. See deferred.h.
+				//
+				// gui_start_game, NOT stopGame-then-startGame. It unloads the
+				// current game itself, and gui_stop_game branches on
+				// commandLineStart: with a ROM given on the command line - every
+				// harness here - it calls dc_exit() and quits the emulator
+				// rather than returning to the menu.
+				//
+				// THE PATH IS CAPTURED AT POST TIME ON PURPOSE.
+				// Emulator::unloadGame() clears settings.content.path, so an
+				// action that read it when it ran would find it empty.
+				.addFunction("restartLater", std::function<void()>([]() {
+					const std::string path = settings.content.path;
+					if (path.empty())
+					{
+						WARN_LOG(COMMON, "restartLater: no content loaded");
+						return;
+					}
+					// A restart tears down the Lua state (the game-start path
+					// re-inits it), so the script that asked for this will not
+					// survive to see the result. Anything it wants to carry
+					// across has to be on disk. Said here because the symptom -
+					// a callback that simply stops being called - reads like a
+					// hang rather than a design fact.
+					NOTICE_LOG(COMMON, "restartLater: queued restart of %s", path.c_str());
+					deferred::post([path]() { gui_start_game(path); });
+				}))
 				// PAUSE MEANS "STOP THE MACHINE WHERE TOOLS CAN SEE IT".
 				//
 				// This used to be gui_open_settings() unconditionally, which

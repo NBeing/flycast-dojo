@@ -862,6 +862,7 @@ void gui_start_game(const std::string& path)
 		!dojo_file.NetSaveExists(path) &&
 		!dojo_file.no_save_launch)
 	{
+		NOTICE_LOG(COMMON, "gui_start_game: deferred to the net-save download popup");
 		dojo_gui.invoke_download_save_popup(path, &dojo_gui.net_save_download, true);
 		return;
 	}
@@ -870,8 +871,13 @@ void gui_start_game(const std::string& path)
 	dojo.Reset();
 
 	const LockGuard lock(guiMutex);
+	// TRACED because gui_start_game is the restart path (lua restartLater), and
+	// a silent early return there looks exactly like a wedged emulator.
 	if (gui_state != GuiState::Main && gui_state != GuiState::Closed && gui_state != GuiState::Commands)
+	{
+		NOTICE_LOG(COMMON, "gui_start_game: refused, gui_state is %d", (int)gui_state);
 		return;
+	}
 	emu.unloadGame();
 	reset_vmus();
     chat.reset();
@@ -907,6 +913,7 @@ void gui_start_game(const std::string& path)
 		dojo.replay.Init();
 
 	scanner.stop();
+	NOTICE_LOG(COMMON, "gui_start_game: loading %s", path.c_str());
 	gui_setState(GuiState::Loading);
 	gameLoader.load(path);
 }

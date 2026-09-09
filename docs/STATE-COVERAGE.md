@@ -539,3 +539,80 @@ deferred-restore work and this probe at once. Until then the init-residue
 question is **open, not answered** — nothing in §1's audit found a candidate,
 but that audit was by inspection, and inspection is what nbneo's earlier session
 also relied on before measurement contradicted it.
+
+---
+
+## 8. Blocker 1 is fixed — the in-process restart works
+
+§7 recorded the strong probe as blocked on "an in-process restart that does not
+wedge". That is done, 2026-09-08. **`flycast.emulator.restartLater()`**, and
+`scripts/tests/restart_inprocess.lua` is the regression test.
+
+Two separate defects had to be fixed, and both presented identically — as an
+emulator that boots and then does nothing.
+
+### The deadlock
+
+`vblank` is dispatched from `Emulator::vblank()` on the **emulation thread**.
+`Emulator::stop()` calls `checkStatus(true)` → `threadResult.get()`, which blocks
+until that thread finishes. From `vblank` that is the thread waiting for itself.
+Not a race — it can never work from there.
+
+`core/deferred.h` already documented this hazard in prose ("emu.stop() joins the
+thread it is called from - deadlock"). The safe point existed; what was missing
+was a restart that used it. `restartLater()` posts to `deferred::post`, which
+drains on the main thread at the top of `mainui_rend_frame` — the same point the
+auto-seek block already calls `gui_loadState` from.
+
+Two details that are not obvious and both bite:
+
+- **`gui_start_game`, not stop-then-start.** It calls `emu.unloadGame()` itself,
+  and `gui_stop_game` branches on `commandLineStart`: with a ROM on the command
+  line — every harness here — it calls `dc_exit()` and *quits the emulator*
+  rather than returning to the menu.
+- **The path is captured at post time.** `Emulator::unloadGame()` clears
+  `settings.content.path`, so an action that read it when it ran would find it
+  empty.
+
+### The latch, which is the interesting one
+
+With the deadlock gone the restart completed — and the second machine still
+emulated nothing for two minutes. Every log line was identical to the first boot
+up to one that was missing:
+
+    00:00:959  TAS TEST: auto-play -> un-pausing the replay (no hotkey headless)
+
+`autoPlayDone` and `autoSeekDone` in `mainui.cpp` were function-local statics, so
+they fired once per **process**. A replay boots PAUSED and headless has nobody to
+un-pause it; the second boot sat at `GuiState::Paused` forever. They now re-arm
+on `Event::Terminate`, which `unloadGame` raises and every game start runs first.
+
+**This is the class of defect this whole document is about — state that survives
+an init because nothing had ever re-inited before — found in the harness rather
+than in the emulated machine.** Worth keeping in view: the first thing an
+in-process restart found was residue in the code doing the restarting.
+
+### A guard, because the failure was undiagnosable
+
+`stopGame`/`startGame` from `vblank` now refuse with one error line naming
+`restartLater()`, instead of hanging. `scripts/tests/emu_thread_guard.lua` is its
+test, and the regression it protects against is *no answer* rather than a wrong
+one: **if that test ever times out instead of failing, the guard is gone.**
+
+### The signal, reported and NOT claimed
+
+The first run of the restart test produced this:
+
+    boot 1: frame=10 hash=1521734835
+    boot 2: frame=10 hash=2786697748
+
+Two boots in one process, sampled at the same frame, different state — the shape
+the cold-boot-twice probe exists to detect. **It is not yet evidence of init
+residue**, and the test records it as a `limit`, not a pass or a failure. These
+two boots are not a controlled pair: boot 2 loads a `skip.map` that boot 1 wrote,
+and other host state carries across. Turning this into an answer means removing
+those differences one at a time — and per §5's own warning, and nbneo's, a
+single-cause ablation can return a false negative when two causes mask each
+other.
+
+What has changed is that the question is now **askable**. It was not before.
