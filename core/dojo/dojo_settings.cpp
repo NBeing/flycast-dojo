@@ -70,8 +70,7 @@ std::string getStr(Key k)
 	the reverse order makes the intent legible, and if the persist ever throws
 	the shadow has not yet claimed a value that will never reach disk.
 */
-template <typename T>
-static void writeThrough(Key k, const T& v, const std::string& text)
+static void writeThrough(Key k, const std::string& text)
 {
 	const Row& r = row(k);
 	if (r.type == Type::Bool)      cfgSaveBool("dojo", r.name, textIsTrue(text.c_str()));
@@ -82,9 +81,9 @@ static void writeThrough(Key k, const T& v, const std::string& text)
 		cfgSetVirtual("dojo", r.name, text);
 }
 
-void set(Key k, bool v)                { writeThrough(k, v, std::string(v ? "yes" : "no")); }
-void set(Key k, int v)                 { writeThrough(k, v, std::to_string(v)); }
-void set(Key k, const std::string& v)  { writeThrough(k, v, v); }
+void set(Key k, bool v)                { writeThrough(k, v ? "yes" : "no"); }
+void set(Key k, int v)                 { writeThrough(k, std::to_string(v)); }
+void set(Key k, const std::string& v)  { writeThrough(k, v); }
 
 bool isOverridden(Key k)
 {
