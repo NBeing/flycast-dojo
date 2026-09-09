@@ -1,6 +1,9 @@
 #include "roll_profile.h"
 #include "roll_host.h"
 #include "roll_select.h"
+#include "roll_edit.h"
+#include "session.h"
+#include "rend/gui.h"
 #include "movie.h"
 #include "dojo.h"
 #include "tas_colors.h"
@@ -74,6 +77,109 @@ static void draw()
 		// Said rather than papered over: with no host there are no savestate
 		// markers, and a blank gutter would look like "no states exist".
 		ImGui::TextDisabled("No host installed - savestate markers unavailable.");
+	ImGui::Separator();
+
+	// ---- INTEGRATION PROBE, dojo:RollEditProbe=yes -----------------------
+	//
+	// Runs ONCE against the loaded movie: build a transform, push it through the
+	// funnel, check the movie changed, undo, check it came back. The unit tests
+	// prove the transforms; only this proves the WIRING - and the panel registry
+	// taught this tree an hour ago that a seam nothing calls hides its own
+	// defects.
+	//
+	// Safe to run because testrun.sh copies the clip into a temp dir per test,
+	// so the movie being edited is a throwaway. Off by default all the same.
+	{
+		static bool probed = false;
+		if (!probed && movie::authored() && cfgLoadBool("dojo", "RollEditProbe", false))
+		{
+			probed = true;
+			const u32 f = movie::end() > 4 ? movie::end() - 4 : 0;
+			auto rowOf = [&](u32 fr) -> Row {
+				auto it = dojo.session_inputs.find(fr);
+				return it == dojo.session_inputs.end() ? Row() : it->second;
+			};
+			const Row before = rowOf(f);
+			const size_t depth = dojo.undo_stack.size();
+
+			const Column& c = profile().cols[0];		// any plain-bit column
+			std::map<u32, Row> src; src[f] = before;
+			std::map<u32, Row> whole;
+			for (const auto& kv : dojo.session_inputs) whole[kv.first] = kv.second;
+			Edit e = mergeIntoMovie(whole, setColumn(src, { f }, 0, c, !rowHas(before, 0, c)));
+			const s64 first = dojo.ApplyEdit(e, "roll: probe");
+
+			const Row after = rowOf(f);
+			const bool changed = after != before;
+			const bool grew    = dojo.undo_stack.size() > depth;
+			NOTICE_LOG(RENDERER, "ROLL PROBE: apply frame=%u first=%lld changed=%s undo_depth %zu->%zu",
+					f, (long long)first, changed ? "yes" : "NO", depth, dojo.undo_stack.size());
+
+			const bool undone = dojo.ApplyUndo();
+			const bool restored = rowOf(f) == before;
+			NOTICE_LOG(RENDERER, "ROLL PROBE: undo=%s restored=%s  => %s",
+					undone ? "yes" : "NO", restored ? "yes" : "NO",
+					(changed && grew && undone && restored) ? "PASS" : "FAIL");
+		}
+	}
+
+	// ---- EDITS -----------------------------------------------------------
+	//
+	// THE GATE IS TWO CONDITIONS AND BOTH ARE STATED, not one silently
+	// disabled button. An edit needs the machine STILL (a running movie is
+	// being driven frame by frame; rewriting under it is the desync this
+	// project exists to avoid) and a session that MAY be written (read-only
+	// playback is deliberately not editable).
+	//
+	// Every button below builds a transform and hands it to the funnel -
+	// Dojo::ApplyEdit or ApplyEditResize - which persists, logs the timeline
+	// event the dead-timeline guard needs, and captures undo. Nothing here
+	// writes session_inputs itself.
+	{
+		Selection& sel = selection();
+		const bool paused   = gui_state == GuiState::Paused;
+		const bool writable = !session::readOnly();
+		const bool haveSel  = !sel.empty();
+
+		if (!paused)        ImGui::TextDisabled("edits need the movie PAUSED");
+		else if (!writable) ImGui::TextDisabled("edits need a writable session (this is read-only)");
+		else if (!haveSel)  ImGui::TextDisabled("select rows to edit them");
+		else
+		{
+			// A resize needs the WHOLE movie, because ApplyEditResize reads a
+			// frame's absence from the map as a deletion.
+			auto wholeMovie = [&]() {
+				std::map<u32, Row> all;
+				for (const auto& kv : dojo.session_inputs) all[kv.first] = kv.second;
+				return all;
+			};
+
+			if (ImGui::Button("Blank"))
+			{
+				// MERGED: the funnel refuses a map that does not span the movie.
+				Edit e = mergeIntoMovie(wholeMovie(), blankRows(sel.rows()));
+				dojo.ApplyEdit(e, "roll: blank");
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Delete rows"))
+			{
+				Edit e = deleteRows(wholeMovie(), sel.rows());
+				dojo.ApplyEditResize(e, "roll: delete rows");
+				// The rows are gone: a selection naming them now names other
+				// frames entirely, which is worse than naming nothing.
+				sel.clear();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Insert blanks"))
+			{
+				Edit e = insertBlanks(wholeMovie(), sel.lo(), (u32)sel.count());
+				dojo.ApplyEditResize(e, "roll: insert blanks");
+				sel.clear();
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(%d rows)", (int)sel.count());
+		}
+	}
 	ImGui::Separator();
 
 	std::map<u32, std::vector<int>> slotsAt;

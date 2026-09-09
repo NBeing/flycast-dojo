@@ -90,6 +90,14 @@ Edit setColumn(const std::map<u32, Row>& src, const std::set<u32>& rows,
 	return e;
 }
 
+Edit mergeIntoMovie(const std::map<u32, Row>& all, const Edit& e)
+{
+	Edit out(all.begin(), all.end());
+	for (const auto& kv : e)
+		out[kv.first] = kv.second;		// the edit wins where it names a frame
+	return out;
+}
+
 Edit deleteRows(const std::map<u32, Row>& all, const std::set<u32>& rows)
 {
 	Edit e;
@@ -202,6 +210,17 @@ void editSelfTest()
 	// gaps as deletions.
 	claim("a resize transform returns every surviving frame, not just changed ones",
 			d.size() + 1 == all.size() && ins.size() == all.size() + 2);
+
+	// THE FUNNEL'S COVERAGE RULE, learned the hard way: ApplyEdit REFUSES a map
+	// that does not span the movie, so a focused transform must be merged first.
+	Edit focused = blankRows({ 2 });
+	claim("a focused edit names only what it touches", focused.size() == 1);
+	Edit merged = mergeIntoMovie(all, focused);
+	claim("merged, it covers the whole movie", merged.size() == all.size()
+			&& merged.begin()->first == all.begin()->first
+			&& merged.rbegin()->first == all.rbegin()->first);
+	claim("...the edited frame carries the edit", !rowHas(merged[2], 0, *up));
+	claim("...and every other frame is untouched", rowHas(merged[3], 0, *up));
 
 	claim("inserting nothing is the movie unchanged",
 			insertBlanks(all, 2, 0).size() == all.size());

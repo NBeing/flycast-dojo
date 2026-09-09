@@ -21,6 +21,16 @@
 	the movie at all. The one place that can is the funnel, which was already
 	written and already guarded.
 
+	THE FUNNEL WANTS THE WHOLE MOVIE, both ways. `[MEASURED 2026-09-09]` an
+	edit map naming one frame was REFUSED: "edited movie (11516..11516) does not
+	cover the original (0..11519)". ApplyEdit's guard is deliberate - a map that
+	does not span the movie silently orphans the frames it omits, which is the
+	ambiguity a funnel exists to refuse - so mergeIntoMovie() is the bridge from
+	a focused transform to a fundable map. An earlier version of this comment
+	said only resize ops needed full coverage. That was wrong, and the unit
+	tests could not see it because they never touch the funnel; the integration
+	probe caught it on its first run.
+
 	IN PLACE vs RESIZE is a real distinction, not a naming one:
 
 	  blankRows / setColumn   touch the frames they name, nothing moves
@@ -64,6 +74,10 @@ Edit blankRows(const std::set<u32>& rows);
 //! One column set or cleared across the named rows, for one player.
 Edit setColumn(const std::map<u32, Row>& src, const std::set<u32>& rows,
 		int player, const Column& c, bool on);
+
+//! Overlay a focused edit onto the movie, producing a map the funnel accepts.
+//! Rows the edit names win; every other frame is carried through unchanged.
+Edit mergeIntoMovie(const std::map<u32, Row>& all, const Edit& e);
 
 // ---- RESIZE (hand to ApplyEditResize) -------------------------------------
 
