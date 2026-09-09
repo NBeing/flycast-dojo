@@ -7,6 +7,7 @@
 #include "log/LogManager.h"
 #include "rend/gui.h"
 #include "rend/panel.h"
+#include "dojo/tas_ui.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
 #include "archive/rzip.h"
@@ -61,6 +62,7 @@ int flycast_init(int argc, char* argv[])
 	// the window in which a registry is still safe to exercise: registration is
 	// additive and nothing has drawn yet.
 	panels::selfTest();
+	tas_ui::selfTest();
 	os_CreateWindow();
 	os_SetupInput();
 

@@ -53,3 +53,6 @@ inline const ImVec4 TAS_MODULE_COL   = TAS_ACCENT;	// section headers
 inline const ImVec4 TAS_SELECT_COL   = TAS_ACCENT;	// selection tint (was == MODULE by value)
 inline const ImVec4 TAS_BOOKMARK_COL = TAS_READ;	// bookmarks fold onto the one green
 inline const ImVec4 TAS_ACTIVE_COL   = TAS_ACTIVE;	// playhead gold
+inline const ImVec4 TAS_P1_COL       = TAS_P1;
+inline const ImVec4 TAS_P2_COL       = TAS_P2;
+inline const ImVec4 TAS_FOCUS_RING (0.93f, 0.95f, 0.99f, 1.f);	// steady active-window outline (near-white, non-pulsing) - NOT the gold sender glow
