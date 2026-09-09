@@ -21,27 +21,35 @@
 #   --self-test               the sabotage arm: a third run pokes one word of
 #                             guest RAM and MUST disagree with the first two.
 #
-# COLD BOOT, and what this probe still cannot do. [MEASURED 2026-09-08]
-# docs/STATE-COVERAGE.md asks for a cold-boot-twice probe because that is what
-# caught nbneo's init-residue bugs (a CPU zeroed once per PROCESS rather than
-# per game-init, and sprite fields saved into states but never cleared at init).
-# Two separate blockers were measured while building this:
+# COLD BOOT. docs/STATE-COVERAGE.md asks for a cold-boot-twice probe because
+# that is what caught nbneo's init-residue bugs (a CPU zeroed once per PROCESS
+# rather than per game-init, and sprite fields saved into states but never
+# cleared at init).
 #
-#   1. The variant that would catch that class must boot twice IN ONE PROCESS,
-#      because two fresh processes each initialise once and therefore agree -
-#      the residue is identical on both sides and cancels. Restarting in-process
-#      needs emulator.stopGame() from a Lua callback, and that WEDGES: the call
-#      never returns and the run times out. It is the same wall that stopped
-#      savestate.loadLater (core/lua/lua.cpp, "NO savestate.loadLater HERE").
+# WHAT THIS SCRIPT CAN AND CANNOT ANSWER. Init residue is state a PROCESS
+# carries into a second game-init. Two separate processes each initialise once,
+# carry identical residue, and therefore AGREE - the effect cancels in any
+# cross-process comparison, including --cold. So --cold measures cross-process
+# boot reproducibility, which is worth having and was untested, but it is NOT
+# the residue probe. That one has to boot twice in one process:
+# scripts/tests/coldboot_pair.lua, via lua emulator.restartLater().
 #
-#   2. --cold cannot run here at all: there is no BIOS on this machine
-#      ("Did not load BIOS, using reios") and the HLE boot of this title stalls
-#      - the emulator's own log stops 0.4s in, at "REIOS: Booting up", and no
-#      further frame is emulated in ten minutes.
+# TWO CORRECTIONS ARE RECORDED HERE RATHER THAN QUIETLY EDITED OUT, because both
+# wrong versions looked measured:
 #
-# So --cold SKIPs rather than fails, and even when a BIOS makes it run it will
-# test cross-process boot reproducibility, NOT init residue. The strong variant
-# needs an in-process restart that does not wedge. Recorded rather than faked.
+#   1. "An in-process restart wedges." It did - stopGame() from a vblank
+#      callback joins the emulation thread it runs on. That is FIXED
+#      (emulator.restartLater posts to the deferred point); see
+#      docs/STATE-COVERAGE.md §8.
+#
+#   2. "--cold cannot run here: no BIOS, and the HLE boot stalls." WRONG. The
+#      run was never un-paused: a replay boots PAUSED and auto-play fires only
+#      when AutoPlay, AutoSeekState >= 0 or AutoCapture is set, so passing
+#      AutoSeekState=-1 removed the only trigger. `[MEASURED 2026-09-08]` with
+#      AutoPlay=yes and no BIOS at all, a cold boot emulates normally: 800
+#      frames sampled, movie index advancing 61 -> 661. Paused and wedged look
+#      identical from outside, which is the hazard mainui.cpp already documents.
+
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
@@ -78,7 +86,14 @@ work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 one_run() {
 	local label="$1"; shift
 	local extra=()
-	[ "$COLD" -eq 1 ] && extra=(TESTRUN_EXTRA_CONFIG="-config dojo:AutoSeekState=-1")
+	# AutoPlay=yes IS REQUIRED, not decoration. A replay boots PAUSED and the
+	# auto-play block fires only when AutoPlay, AutoSeekState >= 0 or AutoCapture
+	# is set (mainui.cpp). Removing the seek therefore removes the only thing
+	# un-pausing the run, and the emulator sits at frame 0 emulating nothing.
+	# `[MEASURED 2026-09-08]` that is exactly what happened, and it was
+	# misdiagnosed here as "the HLE boot stalls" - because paused and wedged look
+	# identical from outside, which is the hazard mainui.cpp already warns about.
+	[ "$COLD" -eq 1 ] && extra=(TESTRUN_EXTRA_CONFIG="-config dojo:AutoSeekState=-1 -config dojo:AutoPlay=yes")
 	# testrun.sh owns display allocation, clip staging, teardown and the SKIP
 	# codes. Reusing it means this harness cannot drift from those.
 	# `|| rc=$?`, NOT `if ! cmd; then rc=$?`. Inside the then-branch of `if !`,
@@ -108,32 +123,16 @@ one_run() {
 	echo "  $label: $(wc -l < "$work/$label.seq") samples"
 }
 
-# COLD needs a real BIOS. Checked FIRST because the alternative is finding out
-# by booting: the HLE path stalls, and every cold run then burns its whole
-# timeout before the no-samples gate can skip it. This costs milliseconds.
-# nvmem.cpp:261 loads "%boot.bin;%boot.bin.bin;%bios.bin;%bios.bin.bin" with the
-# platform prefix, which is dc_ for Dreamcast.
+# NO BIOS PRECONDITION. An earlier version of this script refused --cold unless
+# a dc_boot.bin was present, on the measured-looking claim that the HLE fallback
+# stalled on this title. That claim was wrong: the run was never un-paused (see
+# AutoPlay above), and "paused" reads exactly like "stalled" from outside.
+# `[MEASURED 2026-09-08]` with AutoPlay set, a cold boot with NO BIOS emulates
+# normally - 800 frames sampled, movie index advancing 61 -> 661.
 #
-# Conservative on purpose: if this misses a BIOS that flycast would have found,
-# the run proceeds and the no-samples gate still skips correctly - just slowly.
-# It can make the skip cheap; it cannot make a broken run look like a pass.
-if [ "$COLD" -eq 1 ]; then
-	found=""
-	for d in "${XDG_DATA_HOME:-$HOME/.local/share}/flycast-dojo" \
-	         "${XDG_DATA_HOME:-$HOME/.local/share}/flycast" \
-	         "$ROOT/data" "$ROOT/build-dojo7/data"; do
-		for f in dc_boot.bin dc_bios.bin dc_boot.bin.bin dc_bios.bin.bin; do
-			[ -f "$d/$f" ] && found="$d/$f"
-		done
-	done
-	if [ -z "$found" ]; then
-		echo "reprotest: SKIP - no Dreamcast BIOS found; a cold boot needs one" >&2
-		echo "reprotest:   looked for dc_boot.bin / dc_bios.bin in the data dirs" >&2
-		echo "reprotest:   the HLE fallback (reios) stalls on this title - see COLD BOOT above" >&2
-		exit $SKIP
-	fi
-	echo "reprotest: BIOS $found"
-fi
+# Kept as a comment rather than deleted, because the wrong version of this gate
+# would have made --cold skip forever on a perfectly capable machine, and
+# reported that as a fact about the machine.
 
 echo "reprotest: mode=$([ "$COLD" -eq 1 ] && echo cold || echo from-state) runs=$RUNS"
 for i in $(seq 1 "$RUNS"); do one_run "run$i"; done

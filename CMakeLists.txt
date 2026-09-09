@@ -1949,14 +1949,44 @@ set_tests_properties(flycast.crossprocess PROPERTIES
 	FIXTURES_REQUIRED FLYCAST_HARNESS_TRUSTED
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
 
-# The cold-boot half of the same question, and it SKIPs here - deliberately
-# registered anyway so the gap is visible in ctest output instead of buried in
-# a document. docs/STATE-COVERAGE.md asks for a cold-boot-twice probe because
-# that is what caught nbneo's init-residue bugs; two blockers were measured
-# while building it (no BIOS on this machine, and the in-process restart that
-# the residue class actually requires wedges the emulator). It goes live the
-# moment a BIOS is present, and even then it tests cross-process boot
-# reproducibility rather than init residue. See COLD BOOT in reprotest.sh.
+# COLD BOOT TWICE, IN ONE PROCESS - the actual init-residue probe.
+#
+# --cold above cannot answer this: two separate processes each initialise once,
+# carry identical residue, and agree, so the effect cancels. Only a second init
+# in the SAME process exposes it, which needs lua emulator.restartLater().
+#
+# TESTRUN_CLIP_READONLY=1 freezes the staged clip so boot 2 cannot read anything
+# boot 1 wrote; AutoSeekState=-1 keeps a savestate load from overwriting the
+# registered set and washing the difference out; AutoPlay=yes is then REQUIRED,
+# because removing the seek removes the only thing that un-pauses a replay.
+#
+# It reports a difference as a `limit`, not a failure - a discovered property
+# under investigation is not a regression. Its two hard assertions (the boots are
+# aligned, the machine is moving) DO fail, and both are sabotage-verified.
+add_test(NAME flycast.coldboot_pair
+	COMMAND ${CMAKE_COMMAND} -E env
+		TESTRUN_CLIP_READONLY=1
+		"TESTRUN_EXTRA_CONFIG=-config dojo:AutoSeekState=-1 -config dojo:AutoPlay=yes"
+		${CMAKE_CURRENT_SOURCE_DIR}/scripts/testrun.sh --timeout 150
+		${CMAKE_CURRENT_SOURCE_DIR}/scripts/tests/repro/coldboot_pair.lua)
+set_tests_properties(flycast.coldboot_pair PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 600
+	RUN_SERIAL TRUE
+	DEPENDS flycast.crossprocess_cold
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
+# The cold-boot half of the cross-process question: two SEPARATE processes, each
+# booting from power-on, must produce identical per-frame hashes.
+#
+# `[MEASURED 2026-09-08]` they do - 12/12 identical. That is the control that
+# makes flycast.coldboot_pair's result meaningful: the boot itself is
+# reproducible, so when two boots INSIDE one process differ, the difference came
+# from the process, not from the boot.
+#
+# It was registered while it could only SKIP, on a misdiagnosis ("no BIOS, the
+# HLE boot stalls"). The run had simply never been un-paused. It runs now.
+
 add_test(NAME flycast.crossprocess_cold
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reprotest.sh --cold)
 set_tests_properties(flycast.crossprocess_cold PROPERTIES

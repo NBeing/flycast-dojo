@@ -202,6 +202,23 @@ run_one() {  # run_one <test.lua> <slot>
 	           "$(dirname "$CLIP")"/clip.json; do
 		[ -f "$sib" ] && cp "$sib" "$work/clip/" 2>/dev/null
 	done
+	# TESTRUN_CLIP_READONLY=1: make the staged clip unwritable, so a test that
+	# boots the same clip twice sees IDENTICAL bytes on disk both times.
+	#
+	# Without it the first boot writes into the clip folder - skip.map, a
+	# rewritten clip.json, an AutoSaveState savestate on unload - and the second
+	# boot reads them back, so the two boots differ for a reason that has nothing
+	# to do with the machine. That is the difference between a cold-boot-twice
+	# probe and a coincidence.
+	#
+	# The DIRECTORY is made read-only too, not just the files: creating skip.map
+	# needs a writable directory, and deleting or replacing clip.json needs one
+	# as well. Undone in cleanup, because rm -rf cannot unlink out of a
+	# read-only directory.
+	if [ "${TESTRUN_CLIP_READONLY:-0}" = "1" ]; then
+		chmod -R a-w "$work/clip"
+		echo "testrun: clip staged READ-ONLY (controlled-pair mode)"
+	fi
 	cp "$test" "$cfg/flycast.lua"
 
 	local xpid=""
@@ -217,7 +234,7 @@ run_one() {  # run_one <test.lua> <slot>
 		done
 		if [ "$ok" -ne 1 ]; then
 			echo "INCONCLUSIVE $name  (no display $disp)" > "$OUT/$name.verdict"
-			kill -9 "$xpid" 2>/dev/null; rm -rf "$work"; return
+			kill -9 "$xpid" 2>/dev/null; chmod -R u+w "$work" 2>/dev/null; rm -rf "$work"; return
 		fi
 	fi
 
@@ -286,6 +303,9 @@ run_one() {  # run_one <test.lua> <slot>
 		if [ "$failed" -eq 0 ]; then echo "PASS         $name  ($summary)" > "$OUT/$name.verdict"
 		else                          echo "FAIL         $name  ($summary)" > "$OUT/$name.verdict"; fi
 	fi
+	# u+w first: a read-only staged clip (TESTRUN_CLIP_READONLY) cannot be
+	# unlinked out of its own directory otherwise, and the temp dir would leak.
+	chmod -R u+w "$work" 2>/dev/null
 	rm -rf "$work"
 }
 

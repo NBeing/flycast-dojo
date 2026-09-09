@@ -471,16 +471,22 @@ the game panel still drawing. That is the same wall recorded at
 variants of a deferred load all wedged. Unblocking this is engine work on the
 stop/restart path, not test work.
 
-### Blocker 2 — a cold boot does not complete on this machine
+### Blocker 2 — WRONG, and corrected in §9
 
-`[MEASURED]` There is no BIOS present (`emulator.cpp:518`, "Did not load BIOS,
-using reios"), and the HLE fallback stalls on this title: the emulator's own log
-stops 0.4 s in at "REIOS: Booting up" and **no further frame is emulated in ten
-minutes**, while the Lua callback fires once and never again.
+The original claim was: no BIOS is present, the HLE fallback stalls on this
+title, the log stops 0.4 s in at "REIOS: Booting up", no further frame in ten
+minutes.
 
-This also explains, more concretely than "cold boot is nondeterministic", why
-every test in this tree starts from a savestate: on this machine a cold boot
-does not start at all.
+The observation was real; the diagnosis was not. **The run was never
+un-paused.** A replay boots PAUSED and `mainui.cpp`'s auto-play block fires only
+when `AutoPlay`, `AutoSeekState >= 0` or `AutoCapture` is set — so passing
+`AutoSeekState=-1` to disable the seek removed the only thing that starts
+playback. `[MEASURED 2026-09-08]` with `AutoPlay=yes` and **no BIOS at all**, a
+cold boot emulates normally: 800 frames sampled, movie index advancing 61 -> 661.
+
+Kept rather than edited away because the wrong version looked measured, and
+because `mainui.cpp` already documents the exact hazard it fell into: *"paused"
+and "wedged" look identical from outside*.
 
 ### What was built instead: `scripts/reprotest.sh`
 
@@ -616,3 +622,61 @@ single-cause ablation can return a false negative when two causes mask each
 other.
 
 What has changed is that the question is now **askable**. It was not before.
+
+---
+
+## 9. RESULT — the controlled pair, and what it shows
+
+`scripts/tests/repro/coldboot_pair.lua`, run as `flycast.coldboot_pair`.
+
+    boot 1: 121:586963683  122:3723392261 ... 128:3876770159
+    boot 2: 121:2931742079 122:1500767755 ... 128:3851653769
+
+    PASS  the machine is MOVING while sampling
+    PASS  both boots sampled at the same movie frame  boot1=121 boot2=121
+    LIMIT two boots of one process differ from sample 1 of 8
+
+**Two boots inside one process produce different machines.** All eight samples
+differ, from the first one.
+
+### The control that makes it mean something
+
+    two PROCESSES, each cold-booting once   ->  12/12 hashes IDENTICAL
+    two boots inside ONE process            ->  8/8 hashes DIFFER
+
+The boot itself is reproducible. So the difference did not come from the boot,
+from host timing, or from the disc — it came from **the process**. That is the
+definition of init residue, and it is the same signature nbneo recorded: two
+fresh processes each initialise once, carry identical residue, and agree, so the
+effect cancels in any cross-process comparison and only a second init in the
+same process can expose it.
+
+### What was controlled, and how each control was established
+
+| difference | control | why it was needed |
+|---|---|---|
+| on-disk carryover | `TESTRUN_CLIP_READONLY=1` freezes the staged clip | boot 1 wrote a `skip.map`, rewrote `clip.json`, and could write an `AutoSaveState` savestate on unload; boot 2 read them back |
+| a savestate load hiding it | `AutoSeekState=-1` (with `AutoPlay=yes`) | `[MEASURED]` a seeked pair agreed on 7 of 8 samples and differed only on the single pre-seek one — the state load overwrites the registered set and erases the evidence |
+| the headless latches | re-armed on `Event::Terminate` (§8) | boot 2 was never un-paused and emulated nothing |
+| sampling alignment | `frame.confirmed()` minus its value at the boot's first callback | see `docs/FRAME-CLOCKS.md`; `frame.count()` is the movie index and is 142 frames late at boot, so early samples read 0 in both boots and "agreement" there means nothing |
+
+### Falsifiability
+
+Reported as a `limit` rather than a failure: a discovered property under
+investigation is not a regression, and it flips to PASS by itself once the cause
+is fixed. The falsifiability lives in the two hard assertions, both
+sabotage-verified: making boot 2 sample seven frames later turns *"both boots
+sampled at the same movie frame"* red (`boot1=121 boot2=128`), so a
+misalignment can never be reported as residue.
+
+### What this does NOT say
+
+It does not name the residue. It does not say the residue is in an
+**unregistered** region — §1 found every suspect registered, and the seeked pair
+above shows this difference is in state a savestate load overwrites, i.e. inside
+the serialized set. So this is **not** the unregistered-region hypothesis; it is
+plain init residue in registered state, of the kind nbneo's causes 1 and 2 were.
+
+Localising it is the next step, and §5's warning applies with full force: nbneo's
+two causes masked each other, and testing either alone said neither was a cause.
+A single-cause ablation here can return a false negative.
