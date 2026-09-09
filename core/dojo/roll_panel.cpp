@@ -1,5 +1,6 @@
 #include "roll_profile.h"
 #include "roll_host.h"
+#include "roll_select.h"
 #include "movie.h"
 #include "dojo.h"
 #include "tas_colors.h"
@@ -66,6 +67,9 @@ static void draw()
 
 	const u32 playhead = dojo.frame_number.load();
 	ImGui::Text("%s   frame %u of %u", prof.name, playhead, movie::end());
+	if (!selection().empty())
+		ImGui::Text("selected: %d rows, %u..%u", (int)selection().count(),
+				selection().lo(), selection().hi());
 	if (h == nullptr)
 		// Said rather than papered over: with no host there are no savestate
 		// markers, and a blank gutter would look like "no states exist".
@@ -94,15 +98,41 @@ static void draw()
 	for (u32 f = lo; f < hi; f++)
 	{
 		ImGui::TableNextRow();
+		if (selection().has(f))
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
+					ImGui::GetColorU32(tasCol(TAS_P1_COL, 0.22f)));
 		if (f == playhead)
 			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
 					ImGui::GetColorU32(tasCol(TAS_FOCUS_RING, 0.16f)));
 
 		ImGui::TableNextColumn();
+		// THE ROW IS THE CLICK TARGET, spanning every column: selection is by
+		// FRAME, so a hit region narrower than the row would make the model and
+		// the gesture disagree about what was picked.
+		Selection& sel = selection();
+		ImGui::PushID((int)f);
+		const bool wasSel = sel.has(f);
+		char lbl[24];
+		snprintf(lbl, sizeof(lbl), movie::has(f) ? "%u" : "(%u)", f);
 		// A frame with no record is a HOLE, not an end - movie.h exists to keep
 		// that distinction, and the roll must show it rather than draw zeroes.
-		if (movie::has(f)) ImGui::Text("%u", f);
-		else               ImGui::TextDisabled("%u", f);
+		if (!movie::has(f)) ImGui::PushStyleColor(ImGuiCol_Text,
+				ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+		ImGui::Selectable(lbl, wasSel,
+				ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap);
+		if (!movie::has(f)) ImGui::PopStyleColor();
+
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+		{
+			// Modifiers read HERE and passed in: the grammar is a pure function
+			// of them, which is what lets it be tested without a frame.
+			ImGuiIO& io = ImGui::GetIO();
+			sel.press(f, Mods{ io.KeyShift, io.KeyCtrl, io.KeyAlt });
+		}
+		else if (sel.dragging() && ImGui::IsMouseDown(ImGuiMouseButton_Left)
+				&& ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+			sel.dragTo(f);
+		ImGui::PopID();
 
 		ImGui::TableNextColumn();
 		auto sit = slotsAt.find(f);
@@ -129,6 +159,10 @@ static void draw()
 		}
 	}
 	ImGui::EndTable();
+	// The drag ends wherever the mouse is released, including outside the
+	// table - a release the roll never sees would leave it dragging forever.
+	if (selection().dragging() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+		selection().release();
 
 	// ONE-SHOT DECODE CHECK. An all-empty grid is what a neutral stretch looks
 	// like AND what a broken pressed() looks like; they are not distinguishable

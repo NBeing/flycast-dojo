@@ -1283,6 +1283,7 @@ if(NOT LIBRETRO)
 			core/dojo/dojo_settings.cpp
 	core/dojo/roll_profile.cpp
 	core/dojo/roll_panel.cpp
+	core/dojo/roll_select.cpp
 			core/dojo/dojo_settings.h
 			core/dojo/session.cpp
 			core/dojo/session.h
