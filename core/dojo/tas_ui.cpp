@@ -122,12 +122,14 @@ float zoom(const char *panelId, int defaultPercent)
 		const int was = cfgLoadInt("dojo", key, defaultPercent);
 		const int now = std::max(60, std::min(140, was + (io.MouseWheel > 0.f ? 5 : -5)));
 		if (now != was)
-		{
-			// BOTH stores, per the cfg gotcha in CLAUDE.md: cfgSetVirtual wins
-			// now (and beats a -config flag's shadow), cfgSave persists.
-			cfgSetVirtual("dojo", key, std::to_string(now));
+			// ONE store. The "write both" rule in CLAUDE.md is conditional on a
+			// -config flag being able to shadow the key, and no launch flag sets
+			// Zoom.*. cfgSaveInt already lands in the same cfgdb cfgLoadInt
+			// reads, so the shadow would buy no liveness and cost persistence:
+			// the virtual section wins every later read, so the value on disk
+			// could never be seen again this process. See dojocfg's launchable
+			// column, which is this rule made lookup-able.
 			cfgSaveInt("dojo", key, now);
-		}
 	}
 	return std::max(0.6f, std::min(1.4f, cfgLoadInt("dojo", key, defaultPercent) / 100.f));
 }
@@ -139,9 +141,7 @@ void resetAllZoom()
 	// simply never reset.
 	for (const panels::Panel& p : panels::all())
 	{
-		const std::string key = zoomKey(p.id);
-		cfgSetVirtual("dojo", key, "100");
-		cfgSaveInt("dojo", key, 100);
+		cfgSaveInt("dojo", zoomKey(p.id), 100);	// one store; see zoomFor()
 	}
 }
 
@@ -214,6 +214,22 @@ void selfTest()
 			sameId(labelFor("selftest.label"), "A Readable Label"));
 	claim("labelFor() falls back to the id for an unregistered panel",
 			sameId(labelFor("selftest.nosuchpanel"), "selftest.nosuchpanel"));
+
+	// ZOOM MUST STAY PERSISTABLE. resetAllZoom touches only cfg (no ImGui
+	// window), so it is the one zoom path testable before any frame exists.
+	// This claim is red against the version of this file that wrote
+	// cfgSetVirtual beside every cfgSaveInt: a shadow entry wins every later
+	// read, so the value on disk becomes unreachable for the life of the
+	// process and the panel looks like it "won't stay where I put it".
+	{
+		const std::string zk = zoomKey("selftest.label");
+		resetAllZoom();
+		cfgSaveInt("dojo", zk, 120);	// stands in for a later writer: a UI, a profile
+		claim("a zoom key is not shadowed, so a later write is still readable",
+				cfgLoadInt("dojo", zk, 0) == 120);
+		claim("...and the cfg store agrees it holds no virtual entry for it",
+				!cfgIsVirtual("dojo", zk));
+	}
 
 	selectedId = savedSel;
 	lastSelectedId = savedLast;
