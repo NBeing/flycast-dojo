@@ -60,13 +60,30 @@ end
 LUAEOF
 
 FC=0
+IPID=0
 # KILL THE GROUP, NOT THE PID - the emulator is launched into its own process
 # group, so killing the pid we were handed orphans it and the next run competes
 # with it for the display. [MEASURED 2026-09-08] recordtest.sh had the same
 # defect and left three emulators running across one debugging session.
 cleanup() {
 	[ "$FC" -ne 0 ] && { kill -- -"$FC" 2>/dev/null || kill "$FC" 2>/dev/null; }
-	sleep 1; pkill -f "Xvfb $DISP" 2>/dev/null; return 0
+	sleep 1; pkill -f "Xvfb $DISP" 2>/dev/null
+	# THE TEST'S OWN i3, BY PID, NEVER BY NAME.
+	#
+	# This was leaking one i3 per run - started but never stopped - and the
+	# strays then collided over /run/user/*/i3/ipc-socket.*, so a later run's i3
+	# failed to start with errors ("Socket is already in use", "you did not
+	# specify required configuration option font") that had nothing to do with
+	# its own config. `[MEASURED 2026-09-09]` that cost several rounds of
+	# misdiagnosis in a session using this script as a reference.
+	#
+	# NEVER `pkill -x i3` OR `pgrep -x i3` HERE. Those match the USER'S window
+	# manager, and killing it drops them to a login screen - which happened,
+	# from an ad-hoc cleanup during that same session. CLAUDE.md already says
+	# "PID-scoped process handling in all automation"; this is that rule applied
+	# to the window manager and not only to the emulator.
+	[ "$IPID" -ne 0 ] && kill "$IPID" 2>/dev/null
+	return 0
 }
 trap cleanup EXIT
 
@@ -80,6 +97,7 @@ sleep 2
 if command -v i3 >/dev/null; then
 	printf 'default_border none\nfor_window [class=".*"] floating enable\n' > "$OUT/i3.conf"
 	DISPLAY="$DISP" i3 -c "$OUT/i3.conf" >/dev/null 2>&1 &
+	IPID=$!
 	sleep 2
 	HAVE_WM=1
 else
