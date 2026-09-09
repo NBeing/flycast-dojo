@@ -4431,6 +4431,13 @@ void gui_display_ui()
 	case GuiState::QuickMap:
 		submitDockspaceHost();		// inside the frame, before every dockable window
 		drawGamePanel();			// the picture is one of the windows
+		// ...and then EVERY OTHER REGISTERED PANEL. `[MEASURED 2026-09-09]`
+		// panels::drawStream() was never called anywhere in the app: the
+		// registry's three loops were all self-tested and none were wired, so
+		// a panel could register, restore its open flag, and never draw. The
+		// game panel was the only customer and it is the documented exception,
+		// which is exactly why nothing noticed.
+		panels::drawStream(panels::Menu, "game");	// "game" is drawn above, by hand
 		break;
 	default:
 		break;
@@ -4578,6 +4585,7 @@ void gui_display_osd()
 		ImGui::NewFrame();
 		submitDockspaceHost();		// inside the frame, before every dockable window
 		drawGamePanel();			// the picture is one of the windows
+		panels::drawStream(panels::Osd, "game");	// see the Menu-stream note above
 
 		if (!message.empty())
 		{

@@ -146,7 +146,19 @@ void open(const char *id);
 //! printed IN THE PANEL, in red, rather than counted somewhere nobody looks - a
 //! fault swallowed into a counter is indistinguishable from a tool that drew
 //! almost nothing, which is a lesson this package learned the expensive way.
-void drawStream(Stream s);
+//! Draws every OPEN panel declared for this stream, except one.
+//!
+//! `skipId` exists for the game panel, which is a registry MEMBER (the View
+//! menu and its open flag come from there) but is submitted by hand at a known
+//! point because it consumes the dockspace's central node. Without the skip it
+//! is drawn TWICE per frame - `[MEASURED 2026-09-09]` two Begin("Game") calls
+//! left the picture letterboxed into a shrunken central node, 604x453 inside a
+//! 640x480 window, which scripts/tests/tour.lua caught as "undocked, the
+//! picture spans the window on its long axis".
+//!
+//! Named rather than flagged: an exception one call site states out loud is
+//! findable, a seventh field on every descriptor is not.
+void drawStream(Stream s, const char *skipId = nullptr);
 
 //! The SELECTION half of drawStream, without any ImGui. Exists so the choice of
 //! which panels a stream draws can be exercised outside a frame - the self-test

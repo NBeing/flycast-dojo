@@ -10,6 +10,7 @@
 #include "dojo/tas_ui.h"
 #include "dojo/session.h"
 #include "dojo/dojo_settings.h"
+#include "dojo/roll_profile.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
 #include "archive/rzip.h"
@@ -67,6 +68,8 @@ int flycast_init(int argc, char* argv[])
 	tas_ui::selfTest();
 	session::selfTest();
 	dojocfg::selfTest();
+	roll::selfTest();
+	roll::registerPanel();
 	os_CreateWindow();
 	os_SetupInput();
 

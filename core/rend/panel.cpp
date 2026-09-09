@@ -20,6 +20,8 @@ namespace panels
 */
 static std::vector<Panel> registry;
 
+static std::string keyFor(const Panel& p);
+
 void add(const Panel& p)
 {
 	// A DUPLICATE ID IS A BUG, NOT A SECOND PANEL. Two entries sharing an id
@@ -37,6 +39,20 @@ void add(const Panel& p)
 		return;
 	}
 	registry.push_back(p);
+
+	// RESTORE AT REGISTRATION, not from a startup sweep. Panels register at
+	// different times - some at init, some lazily on first draw - so any single
+	// "now load them all" call runs before the late ones exist and silently
+	// does nothing for them.
+	//
+	// `[MEASURED 2026-09-09]` loadOpenState() was never called ANYWHERE outside
+	// this file's own self-test, so `persist: true` restored nothing: a panel
+	// opened from cfg stayed shut, which looks exactly like a panel that failed
+	// to register. Found by launching a persist=true panel with its cfg key set
+	// and watching it not appear.
+	if (registry.back().persist)
+		*registry.back().open = cfgLoadBool("dojo", keyFor(registry.back()),
+				*registry.back().open);
 }
 
 const std::vector<Panel>& all() { return registry; }
@@ -76,9 +92,21 @@ void visitStream(Stream s, void (*fn)(const Panel&))
 	}
 }
 
-void drawStream(Stream s)
+//! Ids are compared by VALUE, not by pointer: a caller may pass a literal that
+//! is not the same object the descriptor holds.
+static bool sameId(const char *a, const char *b)
 {
+	return a != nullptr && b != nullptr && strcmp(a, b) == 0;
+}
+
+static const char *skipThisFrame = nullptr;
+
+void drawStream(Stream s, const char *skipId)
+{
+	skipThisFrame = skipId;
 	visitStream(s, [](const Panel& p) {
+		if (skipThisFrame != nullptr && sameId(p.id, skipThisFrame))
+			return;
 		// Begin/End are the REGISTRY's, always paired, whatever the body does.
 		// `open` is handed to ImGui so the window's own close button writes
 		// straight into the one owner of that fact.
