@@ -3,6 +3,7 @@
 	for the reasoning and SYNC_SETTINGS.md for the classification argument.
 */
 #include "determinism.h"
+#include "dojo/session.h"
 #include "cfg/cfg.h"
 #include "cfg/option.h"
 #include "log/Log.h"
@@ -50,9 +51,25 @@ bool isDeterministicRun()
 
 const char *runKind()
 {
-	if (config::GGPOEnable || settings.network.online) return "netplay";
-	if (config::Replay)			return "replay";
-	if (config::RecordMatches)	return "record";
+	// REIMPLEMENTED OVER session::kind() rather than left beside it. This
+	// function was already a single owner of a COARSER version of the same
+	// question - netplay / replay / record / off - and session::kind() is that
+	// question grown up. Two implementations of one rule do not disagree when
+	// you write them; they disagree the day one of them is changed.
+	//
+	// The strings are unchanged, because they are read by tooling. What changes
+	// is that the ORDER now comes from one declared precedence table instead of
+	// two `if` chains that happened to be typed in the same sequence - and this
+	// chain was already missing the macro cases.
+	switch (session::kind())
+	{
+	case session::Kind::Netplay:     return "netplay";
+	case session::Kind::Replay:      return "replay";
+	case session::Kind::PlayMacro:   return "replay";	//!< a macro playback drives the guest from a roll
+	case session::Kind::RecordMovie: return "record";
+	case session::Kind::RecordMacro: return "record";	//!< ...and recording one writes frames
+	case session::Kind::JustPlay:    break;
+	}
 	return "off";
 }
 
