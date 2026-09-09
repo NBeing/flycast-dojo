@@ -953,7 +953,7 @@ void DojoGui::set_imgui_style()
 	style.GrabMinSize = 10.0f;
 	style.GrabRounding = 4.0f;
 	style.TabRounding = 4.0f;
-	style.TabBorderSize = 0.0f;
+	style.TabBorderSize = 1.0f;	// a seam between docked tabs so each tab reads separately
 	style.TabMinWidthForCloseButton = 0.0f;
 	style.ColorButtonPosition = ImGuiDir_Right;
 	style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
@@ -964,7 +964,7 @@ void DojoGui::set_imgui_style()
 	style.Colors[ImGuiCol_WindowBg] = ImVec4(0.05098039284348488f, 0.03529411926865578f, 0.03921568766236305f, 1.0f);
 	style.Colors[ImGuiCol_ChildBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 	style.Colors[ImGuiCol_PopupBg] = ImVec4(0.0784313753247261f, 0.0784313753247261f, 0.0784313753247261f, 0.9399999976158142f);
-	style.Colors[ImGuiCol_Border] = ImVec4(0.1019607856869698f, 0.1019607856869698f, 0.1019607856869698f, 0.5f);
+	style.Colors[ImGuiCol_Border] = ImVec4(0.36f, 0.33f, 0.45f, 0.6f);	// visible tab seam (also faintly outlines child panels / popups)
 	style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 	style.Colors[ImGuiCol_FrameBg] = ImVec4(0.1607843190431595f, 0.1490196138620377f, 0.1921568661928177f, 1.0f);
 	style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.2784313857555389f, 0.250980406999588f, 0.3372549116611481f, 1.0f);
@@ -992,11 +992,11 @@ void DojoGui::set_imgui_style()
 	style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.2784313857555389f, 0.250980406999588f, 0.3372549116611481f, 1.0f);
 	style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.2784313857555389f, 0.250980406999588f, 0.3372549116611481f, 1.0f);
 	style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.2784313857555389f, 0.250980406999588f, 0.3372549116611481f, 1.0f);
-	style.Colors[ImGuiCol_Tab] = ImVec4(0.2784313857555389f, 0.250980406999588f, 0.3372549116611481f, 1.0f);
-	style.Colors[ImGuiCol_TabHovered] = ImVec4(0.3254902064800262f, 0.2862745225429535f, 0.4156862795352936f, 1.0f);
-	style.Colors[ImGuiCol_TabActive] = ImVec4(0.4000000059604645f, 0.3490196168422699f, 0.5058823823928833f, 1.0f);
-	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.2784313857555389f, 0.250980406999588f, 0.3372549116611481f, 1.0f);
-	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.2784313857555389f, 0.250980406999588f, 0.3372549116611481f, 1.0f);
+	style.Colors[ImGuiCol_Tab] = ImVec4(0.15f, 0.14f, 0.19f, 1.0f);		// inactive: recessed/dark so the active tab pops
+	style.Colors[ImGuiCol_TabHovered] = ImVec4(0.34f, 0.30f, 0.44f, 1.0f);
+	style.Colors[ImGuiCol_TabActive] = ImVec4(0.44f, 0.38f, 0.56f, 1.0f);		// the current tab, clearly brightest
+	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.13f, 0.12f, 0.16f, 1.0f);
+	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.30f, 0.27f, 0.38f, 1.0f);	// active tab of an unfocused group - still visible
 	style.Colors[ImGuiCol_PlotLines] = ImVec4(0.6078431606292725f, 0.6078431606292725f, 0.6078431606292725f, 1.0f);
 	style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.0f, 0.4274509847164154f, 0.3490196168422699f, 1.0f);
 	style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.8980392217636108f, 0.6980392336845398f, 0.0f, 1.0f);
