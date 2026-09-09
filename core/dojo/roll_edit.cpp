@@ -90,6 +90,32 @@ Edit setColumn(const std::map<u32, Row>& src, const std::set<u32>& rows,
 	return e;
 }
 
+Edit paintColumn(const std::map<u32, Row>& all, u32 anchor, u32 to,
+		int player, const Column& c, bool on, int gap)
+{
+	Edit out(all.begin(), all.end());
+	const u32 lo   = std::min(anchor, to);
+	const u32 hi   = std::max(anchor, to);
+	const u32 step = (u32)(gap < 0 ? 0 : gap) + 1;
+
+	// Extend with blanks first if the stroke runs past the end, so the rows the
+	// pattern wants to touch exist to be touched.
+	const u32 end = all.empty() ? 0 : all.rbegin()->first;
+	for (u32 f = end + 1; f <= hi && !all.empty(); f++)
+		if (out.find(f) == out.end())
+			out[f] = blankRow();
+
+	for (u32 f = lo; f <= hi; f++)
+	{
+		const u32 d = f >= anchor ? f - anchor : anchor - f;	// distance, not offset
+		if (d % step != 0)
+			continue;
+		auto it = out.find(f);
+		out[f] = rowWith(it == out.end() ? blankRow() : it->second, player, c, on);
+	}
+	return out;
+}
+
 Edit mergeIntoMovie(const std::map<u32, Row>& all, const Edit& e)
 {
 	Edit out(all.begin(), all.end());
@@ -221,6 +247,42 @@ void editSelfTest()
 			&& merged.rbegin()->first == all.rbegin()->first);
 	claim("...the edited frame carries the edit", !rowHas(merged[2], 0, *up));
 	claim("...and every other frame is untouched", rowHas(merged[3], 0, *up));
+
+	// ---- MASH ----
+	std::map<u32, Row> m;
+	for (u32 i = 0; i < 12; i++) m[i] = blankRow();
+
+	Edit p0 = paintColumn(m, 2, 6, 0, *up, true, 0);
+	claim("gap 0 paints every row in the range",
+			rowHas(p0[2], 0, *up) && rowHas(p0[3], 0, *up) && rowHas(p0[6], 0, *up));
+	claim("...and nothing outside it", !rowHas(p0[1], 0, *up) && !rowHas(p0[7], 0, *up));
+
+	Edit p1 = paintColumn(m, 2, 8, 0, *up, true, 1);
+	claim("gap 1 paints every other row",
+			rowHas(p1[2], 0, *up) && !rowHas(p1[3], 0, *up)
+			&& rowHas(p1[4], 0, *up) && rowHas(p1[8], 0, *up));
+
+	// THE DISCRIMINATING CLAIM: the phase follows the ANCHOR, not the range
+	// start. THE RANGE LENGTH MUST NOT BE A MULTIPLE OF THE STEP, or the two
+	// implementations coincide and the claim proves nothing - the first version
+	// of this used anchor=8 to=4 step=2, where anchored fires 8,6,4 and
+	// range-start fires 4,6,8: THE SAME ROWS. Sabotaging the phase left it
+	// green, which is how the dud was found.
+	//
+	// anchor=8 to=3 step=2 separates them completely:
+	//   anchored     |f-8| % 2 == 0  ->  8, 6, 4
+	//   range-start  (f-3) % 2 == 0  ->  3, 5, 7
+	Edit down = paintColumn(m, 8, 3, 0, *up, true, 1);
+	claim("the gap phase is anchored, not measured from the range start",
+			rowHas(down[8], 0, *up) && rowHas(down[6], 0, *up) && rowHas(down[4], 0, *up)
+			&& !rowHas(down[7], 0, *up) && !rowHas(down[5], 0, *up)
+			&& !rowHas(down[3], 0, *up));
+	claim("...and the anchor row always fires, whichever way the drag went",
+			rowHas(down[8], 0, *up) && rowHas(paintColumn(m, 8, 13, 0, *up, true, 1)[8], 0, *up));
+
+	Edit past = paintColumn(m, 10, 14, 0, *up, true, 0);
+	claim("painting past the end EXTENDS the movie with blanks",
+			past.size() == 15 && rowHas(past[14], 0, *up));
 
 	claim("inserting nothing is the movie unchanged",
 			insertBlanks(all, 2, 0).size() == all.size());

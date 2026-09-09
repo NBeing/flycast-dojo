@@ -75,6 +75,25 @@ Edit blankRows(const std::set<u32>& rows);
 Edit setColumn(const std::map<u32, Row>& src, const std::set<u32>& rows,
 		int player, const Column& c, bool on);
 
+/*
+	MASH: one column, across a range, every (gap+1)th row.
+
+	THE PHASE IS ANCHORED AT `anchor`, NOT AT THE RANGE START - the fired rows
+	are those whose DISTANCE FROM THE ANCHOR is a multiple of the step. Painting
+	up from a row and painting down from it therefore produce the same pattern,
+	and the anchor itself always fires. Keying the phase off the range start
+	instead would shift the pattern with the drag direction, which a user feels
+	as "mash lands differently if I drag upwards".
+
+	gap 0 = every frame, 1 = every other (30 Hz on a 60 Hz movie), 2 = every
+	third (20 Hz) - the rates a mash actually wants.
+
+	Returns the WHOLE movie, extended with blank rows if the range runs past the
+	end. ApplyEdit permits that: "extension is fine, truncation is not".
+*/
+Edit paintColumn(const std::map<u32, Row>& all, u32 anchor, u32 to,
+		int player, const Column& c, bool on, int gap);
+
 //! Overlay a focused edit onto the movie, producing a map the funnel accepts.
 //! Rows the edit names win; every other frame is carried through unchanged.
 Edit mergeIntoMovie(const std::map<u32, Row>& all, const Edit& e);
