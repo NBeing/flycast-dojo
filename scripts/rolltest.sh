@@ -69,6 +69,15 @@ FC=$!
 sleep 18
 export DISPLAY="$DISP"
 
+# PID-SCOPED, ALL THREE. NEVER `pkill -x i3`, `pgrep -x i3`, a bare
+# `pkill -x Xvfb`, or `rm /run/user/*/i3/ipc-socket.*` - every one of those
+# matches the USER'S OWN window manager and X server, not this test's throwaway
+# pair, and killing them drops the user to a login screen.
+#
+# `[MEASURED 2026-09-09]` that happened, from ad-hoc cleanup typed outside this
+# script: Xorg and i3 both restarted mid-session. scripts/docktest.sh already
+# carried this warning and it was read past. It is repeated here because this
+# script also starts an i3, so this is where the next person will need it.
 cleanup() { kill "$FC" 2>/dev/null; kill "$IPID" 2>/dev/null; kill "$XPID" 2>/dev/null; }
 
 WID=$(xdotool search --name "Flycast" 2>/dev/null | head -1)
