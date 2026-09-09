@@ -1927,6 +1927,45 @@ set_tests_properties(flycast.harness_can_fail PROPERTIES
 	FIXTURES_SETUP FLYCAST_HARNESS_TRUSTED
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
 
+# Cross-process reproducibility. Every other test here runs in ONE process, so
+# none of them can see process-level nondeterminism - both halves of their
+# comparison share it. This runs the same deterministic input in two separate
+# processes and requires identical per-frame hashes.
+#
+# --self-test so CI also runs the sabotage arm: a third process pokes one word
+# of guest RAM and must DISAGREE. Without it "the two runs agreed" is
+# unfalsifiable, because a comparison that cannot report a difference agrees
+# with everything.
+#
+# Runs after flycast.lua rather than beside it: both drive testrun.sh, which
+# takes a lock on the shared verdict directory and refuses to run twice at once.
+add_test(NAME flycast.crossprocess
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reprotest.sh --self-test)
+set_tests_properties(flycast.crossprocess PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 900
+	RUN_SERIAL TRUE
+	DEPENDS flycast.lua
+	FIXTURES_REQUIRED FLYCAST_HARNESS_TRUSTED
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
+# The cold-boot half of the same question, and it SKIPs here - deliberately
+# registered anyway so the gap is visible in ctest output instead of buried in
+# a document. docs/STATE-COVERAGE.md asks for a cold-boot-twice probe because
+# that is what caught nbneo's init-residue bugs; two blockers were measured
+# while building it (no BIOS on this machine, and the in-process restart that
+# the residue class actually requires wedges the emulator). It goes live the
+# moment a BIOS is present, and even then it tests cross-process boot
+# reproducibility rather than init residue. See COLD BOOT in reprotest.sh.
+add_test(NAME flycast.crossprocess_cold
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reprotest.sh --cold)
+set_tests_properties(flycast.crossprocess_cold PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 900
+	RUN_SERIAL TRUE
+	DEPENDS flycast.crossprocess
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
 add_test(NAME flycast.lua
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/testrun.sh --timeout 120)
 set_tests_properties(flycast.lua PROPERTIES

@@ -443,3 +443,99 @@ three land on frame 63.
 
 Worth keeping in mind for §4's cold-boot-twice probe, which is still missing and
 will need an alignment rule of its own.
+
+---
+
+## 7. The cold-boot-twice probe — what was built, and what is blocked
+
+§4 named this as the missing probe: it is what caught nbneo's init residue (a
+CPU zeroed once per *process* rather than per game-init, and sprite fields saved
+into states but never cleared at init). It was attempted on 2026-09-08. **The
+variant that would catch that class cannot be built yet**, for two independently
+measured reasons, and the variant that *can* be built is a different test.
+
+### Blocker 1 — the residue class needs TWO INITS IN ONE PROCESS
+
+This is the part worth being precise about, because it is easy to build the
+wrong thing and believe the question is answered.
+
+Init residue is state a *process* carries into a second game-init. Two separate
+processes each initialise exactly once, so **both carry identical residue and
+therefore agree** — a cross-process comparison cancels the very effect it would
+be looking for, and passes. Only a second boot inside one process can see it.
+
+An in-process restart needs `emulator.stopGame()` from a Lua callback.
+**[MEASURED] it wedges**: the call does not return and the run times out with
+the game panel still drawing. That is the same wall recorded at
+`core/lua/lua.cpp` ("NO savestate.loadLater HERE — IT DID NOT WORK"), where four
+variants of a deferred load all wedged. Unblocking this is engine work on the
+stop/restart path, not test work.
+
+### Blocker 2 — a cold boot does not complete on this machine
+
+`[MEASURED]` There is no BIOS present (`emulator.cpp:518`, "Did not load BIOS,
+using reios"), and the HLE fallback stalls on this title: the emulator's own log
+stops 0.4 s in at "REIOS: Booting up" and **no further frame is emulated in ten
+minutes**, while the Lua callback fires once and never again.
+
+This also explains, more concretely than "cold boot is nondeterministic", why
+every test in this tree starts from a savestate: on this machine a cold boot
+does not start at all.
+
+### What was built instead: `scripts/reprotest.sh`
+
+Cross-process reproducibility, which was **also** missing and is worth having on
+its own. Every other test here runs in one process, so none of them can see
+process-level nondeterminism — both halves of their comparison share it.
+
+    ok   run1 == run2  (12 frames of hashes, identical)
+    ok   the poked run differs - the comparison can fail
+    reprotest: reproducible across processes
+
+Two separate processes, same deterministic input, identical per-frame hashes
+keyed by the **guest** frame number. `--self-test` adds the sabotage arm: a
+third process pokes one word of guest RAM and must disagree, because a
+comparison that cannot report a difference agrees with everything.
+
+`--cold` is the same harness with the seek removed. It SKIPs (77) here, checking
+for a BIOS first so the skip costs milliseconds rather than two stalled boots.
+Registered in ctest as `flycast.crossprocess_cold` **even though it only skips**,
+so the gap stays visible in test output rather than only in this file. When a
+BIOS makes it run it will test cross-process boot reproducibility — still not
+init residue.
+
+### Gates, and the two that fired during construction
+
+- **No samples is a SKIP, never a pass.** It fired immediately: an extraction
+  bug (`^REPRO` anchored past the Lua console's indent) made both runs look
+  empty, and the gate reported SKIP instead of "two empty files are identical".
+- **`--runs 1` is refused.** One run walks past an empty comparison loop and
+  prints "reproducible across processes" having compared nothing. Closed as a
+  usage error.
+- **The BIOS check was shown able to pass**, by planting a dummy `dc_boot.bin`
+  and confirming the run proceeded to the next gate. A precondition that can
+  only ever skip is indistinguishable from a disabled test.
+- **The shared log is deleted before every run.** `testrun.sh` writes one fixed
+  path, so a run producing no log leaves the PREVIOUS run's in place - and two
+  reads of one file are identical, which is this harness reporting perfect
+  reproducibility from a run that never happened. The no-samples gate cannot
+  catch it, because the stale file has samples. Found by review, not by a
+  failure; it had not fired.
+
+One suspicion that did NOT survive checking, recorded because the reasoning
+matters more than the outcome: the ctest entry finishes in 14 s, which looked
+impossible for three emulator runs and exactly like the stale-log bug above.
+It is legitimate. This script only needs `frame.count() >= 100`, the auto-seek
+lands near frame 63 about 2.3 s into boot, so a run is ~5 s rather than the ~50 s
+`differential_history` takes. The decisive evidence is that the poked run
+*differed*: a shared stale log would have made all three identical.
+
+### Standing recommendation
+
+The strong probe remains unbuilt and is now blocked on one specific thing: an
+in-process restart that does not wedge. That is the same defect as
+`savestate.loadLater`, so fixing either likely fixes both, and it would buy the
+deferred-restore work and this probe at once. Until then the init-residue
+question is **open, not answered** — nothing in §1's audit found a candidate,
+but that audit was by inspection, and inspection is what nbneo's earlier session
+also relied on before measurement contradicted it.
