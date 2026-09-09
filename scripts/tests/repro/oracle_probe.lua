@@ -15,44 +15,37 @@
 --- gameplay - 256 words spread that thinly land on untouched pages, and a
 --- constant fingerprint matches across forks for free. Windows of consecutive
 --- words hit live data.
--- WHERE TO LOOK, measured rather than guessed. `[MEASURED 2026-09-09]` a
--- diagnostic sampling one word per 4 KB page across ALL 16 MB of main RAM saw
--- 0, 0, 0, 4, 1, 0 words change between sampled frames of a RUNNING game - and
--- the few that did were confined to 0x0C1FB000..0x0C2AE000. The working set is
--- small and dense, so wide sparse sampling reads almost entirely static memory.
--- Two earlier probes died of this: a 64 KB stride over 16 MB, and eight 512-byte
--- windows at round megabyte offsets, both of which returned the SAME
--- fingerprint every frame and would have "matched" across forks for free.
-local BLOCKS  = { 0x0C1F8000, 0x0C210000, 0x0C230000, 0x0C250000,
-                  0x0C270000, 0x0C290000, 0x0C2A0000, 0x0C2A8000 }
-local PER     = 128     -- consecutive u32 per block (512 B each, 1024 reads)
--- EVERY FRAME, NOT EVERY FIFTH. The harness aligns the two forks by
--- cross-correlating the sequences, and sampling every Nth frame quantizes that
--- alignment to N-frame steps. `[MEASURED 2026-09-09]` at EVERY=5 the best
--- offset matched 4 of 24 samples - near noise - because the two builds start
--- emulating at different points relative to the seek and the true skew need not
--- be a multiple of 5. Identical emulators would fail that comparison. Sampling
--- every frame lets the correlation land on any offset; PER pays for it.
--- A LONG WINDOW, because the two forks' windows must OVERLAP in guest time
--- before any offset can align them. `[MEASURED 2026-09-09]` at SETTLE=90/SEQ=60
--- the best offset matched 0 of 20 - not subtle divergence, but two windows with
--- no guest time in common: our build auto-plays so its vblanks start at boot and
--- its window straddles the seek to frame 9928, while David's is paused until the
--- keypress and only starts counting once already AT 9928. Hundreds of frames of
--- skew cannot be bridged by an offset search over 60 samples.
-local SETTLE  = 30
-local SEQ     = 400
+-- WHERE TO LOOK, measured. `[MEASURED 2026-09-09]` a churn map that densely
+-- diffed each 256 KB block of main RAM at 16-byte granularity during gameplay:
+--
+--   0x0C000000  1     0x0C240000 11     0x0C340000  8
+--   0x0C140000  2     0x0C280000  5     0x0CF00000 56   <- hottest
+--   0x0C180000 12     0x0C300000  9
+--   0x0C1C0000 16                          (changed words per 16384 sampled)
+--
+-- CHURN IS SPARSE: tens of changed words per 256 KB. Two earlier probes used
+-- 512-byte windows, so the chance of containing one of ~12 changed words in
+-- 256 KB was near zero and the fingerprint sat constant - 19 to 24 distinct
+-- values over 400 samples, which produced a 168-sample "identical run" that was
+-- two idle machines coinciding. The fix is DENSE coverage of a hot block, not
+-- more scattered windows.
+--
+-- 0x0CF00000 is the top of main RAM, where the SH4 stack lives. That is the
+-- point: a stack churns every frame in ANY game, so this is a game-agnostic
+-- signal rather than a guess about where MvC2 keeps its state.
+local BLOCK   = 0x0CF00000
+local WORDS   = 16384   -- 256 KB at 16-byte granularity
+local STEP    = 16
+local SETTLE  = tonumber(os.getenv("ORACLE_SETTLE") or "") or 30
+local SEQ     = tonumber(os.getenv("ORACLE_SEQ") or "") or 150
 
 local n, rows, first, moved = 0, 0, nil, false
 
 local function fingerprint()
 	local h = 2166136261
-	for w = 1, #BLOCKS do
-		local base = BLOCKS[w]
-		for i = 0, PER - 1 do
-			local v = flycast.memory.read32(base + i * 4) or 0
-			h = ((h ~ v) * 16777619) % 4294967296
-		end
+	for i = 0, WORDS - 1 do
+		local v = flycast.memory.read32(BLOCK + i * STEP) or 0
+		h = ((h ~ v) * 16777619) % 4294967296
 	end
 	return math.floor(h)
 end

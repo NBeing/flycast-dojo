@@ -165,7 +165,8 @@ oracle_run_b() {
 	DISPLAY="$disp" nohup i3 -c "$w/i3.conf" >"$w/i3.log" 2>&1 & local ipid=$!
 	sleep 2
 
-	DISPLAY="$disp" XDG_CONFIG_HOME="$w/config" setsid "$bin" \
+	# B starts counting only once un-paused, which is already past its seek.
+	DISPLAY="$disp" XDG_CONFIG_HOME="$w/config" ORACLE_SETTLE=30 setsid "$bin" \
 		-config dojo:Replay=yes -config "dojo:ReplayFilename=$w/clip/clip.flyr" \
 		-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no \
 		-config dojo:Transmitting=no -config dojo:Receiving=no \
@@ -254,6 +255,32 @@ oracle_correlate() {
 				else { run = 0; if (firstbad < 0) firstbad = k }
 			}
 			printf "  longest identical run: %d   first difference at sample %d of %d\n", bestrun, firstbad, k
+			# DISTINCT VALUES INSIDE THE MATCHED RUN. The per-side vacuity gate
+			# only asks whether a sequence moved AT ALL; a sequence that moves
+			# once (at the seek) passes it while the matched region is a single
+			# repeated constant - which is 168 frames of identical DEAD memory
+			# masquerading as 168 frames of identical emulation.
+			run = 0; runend = 0; k = 0
+			for (i = 1; i <= na; i++) {
+				j = i + besto
+				if (j < 1 || j > nb) continue
+				k++
+				if (a[i] == b[j]) { run++; if (run == bestrun) runend = k } else run = 0
+			}
+			delete seen; distinct = 0; k = 0
+			for (i = 1; i <= na; i++) {
+				j = i + besto
+				if (j < 1 || j > nb) continue
+				k++
+				if (k > runend - bestrun && k <= runend && !(a[i] in seen)) {
+					seen[a[i]] = 1; distinct++
+				}
+			}
+			printf "  distinct values inside that run: %d of %d samples\n", distinct, bestrun
+			if (distinct <= 1) {
+				print "BAD  the matched run is ONE repeated value - identical dead memory, not identical emulation"
+				exit 1
+			}
 			if (bestn == bestden) {
 				print "ok   the two forks emulate identically (at that offset)"
 				exit 0
@@ -322,8 +349,10 @@ if [ -n "$ORACLE" ]; then
 	echo "  A = ${FLYCAST_BIN:-$ROOT/build-dojo7/flycast}"
 	echo "  B = $ORACLE"
 
-	# A is ours: auto-play handles the un-pause.
-	one_run oursA
+	# A is ours: auto-play handles the un-pause, but its vblanks start at BOOT
+	# and the seek to the clip's frame only lands around vblank 300 - so it must
+	# skip past that or it samples attract mode against David's gameplay.
+	ORACLE_SETTLE=380 one_run oursA
 	# B is the other fork: launched by hand so it can be un-paused.
 	oracle_run_b "$ORACLE" "$work/oracleB.seq"
 
@@ -333,15 +362,35 @@ if [ -n "$ORACLE" ]; then
 	[ "$a" -gt 0 ] && [ "$b" -gt 0 ] || {
 		echo "reprotest: SKIP - a side produced no samples" >&2; exit $SKIP; }
 
-	# VACUITY: a fingerprint that never moves matches at every offset.
+	# DISCRIMINATING POWER, not a moved/didn't-move flag. A fingerprint of a
+	# RUNNING machine should be close to unique per frame; one that takes only a
+	# handful of values produces long ACCIDENTAL matching runs, and a binary
+	# "did it move at all" gate waves those through.
+	#
+	# `[MEASURED 2026-09-09]` sequences of 400 samples holding 24 and 19 distinct
+	# values passed the old gate and yielded a 168-sample "identical run" that
+	# was two IDLE machines coinciding. The old gate is why that took four probe
+	# designs to notice; this one would have rejected all four immediately.
 	for side in oursA oracleB; do
-		if grep -q "OR-MOVED false" "$work/$side.seq" 2>/dev/null; then
-			echo "reprotest: SKIP - $side's fingerprint never moved; the probe is" >&2
-			echo "reprotest:   sampling dead memory and would match at any offset" >&2
+		tot=$(grep -c '^OR ' "$work/$side.seq" 2>/dev/null || echo 0)
+		uniq=$(grep '^OR ' "$work/$side.seq" 2>/dev/null | awk '{print $2}' | sort -u | wc -l)
+		echo "  $side: $uniq distinct of $tot samples"
+		# A tenth is generous: a live machine is near 1.0, dead memory near 0.
+		if [ "$tot" -gt 0 ] && [ $((uniq * 10)) -lt "$tot" ]; then
+			echo "reprotest: SKIP - $side's fingerprint takes only $uniq values over $tot" >&2
+			echo "reprotest:   samples. That is not a running machine's memory; long" >&2
+			echo "reprotest:   accidental matches would be reported as agreement." >&2
 			exit $SKIP
 		fi
 	done
 
+	# KEEP THE SEQUENCES. $work is a mktemp wiped on exit, so every question
+	# about a result ("was the matched region actually moving?") cost another
+	# five-minute pair of emulator runs. They are small.
+	mkdir -p "$OUT"
+	cp "$work/oursA.seq"   "$OUT/oracle_A.seq" 2>/dev/null || true
+	cp "$work/oracleB.seq" "$OUT/oracle_B.seq" 2>/dev/null || true
+	echo "  sequences kept: $OUT/oracle_{A,B}.seq"
 	oracle_correlate "$work/oursA.seq" "$work/oracleB.seq"
 	exit $?
 fi
