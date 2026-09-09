@@ -9,6 +9,7 @@
 #include "rend/panel.h"
 #include "dojo/tas_ui.h"
 #include "dojo/session.h"
+#include "dojo/dojo_settings.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
 #include "archive/rzip.h"
@@ -65,6 +66,7 @@ int flycast_init(int argc, char* argv[])
 	panels::selfTest();
 	tas_ui::selfTest();
 	session::selfTest();
+	dojocfg::selfTest();
 	os_CreateWindow();
 	os_SetupInput();
 

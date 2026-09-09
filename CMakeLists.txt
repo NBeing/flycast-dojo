@@ -1280,6 +1280,8 @@ if(NOT LIBRETRO)
 			core/rend/game_scanner.h
 			core/rend/imgui_driver.h
 			core/rend/game_viewport.cpp
+			core/dojo/dojo_settings.cpp
+			core/dojo/dojo_settings.h
 			core/dojo/session.cpp
 			core/dojo/session.h
 			core/dojo/tas_ui.cpp
