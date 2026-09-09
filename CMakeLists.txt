@@ -1931,6 +1931,22 @@ set_tests_properties(flycast.harness_can_fail PROPERTIES
 	FIXTURES_SETUP FLYCAST_HARNESS_TRUSTED
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
 
+# THE ROLL, DRIVEN BY REAL CLICKS. A self-test proves a model and never its
+# wiring - this tree learned that twice in one day (a registry with three
+# self-tested loops and zero call sites; an edit funnel that refused a map every
+# unit test had accepted). The selection grammar has 15 claims; this is the one
+# thing that proves a click reaches it.
+#
+# SKIPs without Xvfb / xdotool / i3 / a ROM / a clip with a savestate: this
+# machine cannot answer the question, which is neither a pass nor a failure.
+add_test(NAME flycast.rolltest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/rolltest.sh)
+set_tests_properties(flycast.rolltest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 600
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
 # Cross-process reproducibility. Every other test here runs in ONE process, so
 # none of them can see process-level nondeterminism - both halves of their
 # comparison share it. This runs the same deterministic input in two separate

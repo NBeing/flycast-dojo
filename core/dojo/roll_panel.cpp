@@ -70,6 +70,19 @@ static void draw()
 
 	const u32 playhead = dojo.frame_number.load();
 	ImGui::Text("%s   frame %u of %u", prof.name, playhead, movie::end());
+	// `dojo:RollSelTrace=yes` - the selection as a line a harness can assert on.
+	// Logged only when it CHANGES, so a driven test can watch it move rather
+	// than polling, and a quiet log means nothing was selected.
+	if (cfgLoadBool("dojo", "RollSelTrace", false))
+	{
+		static size_t lastN = (size_t)-1; static u32 lastLo = ~0u, lastHi = ~0u;
+		const Selection& sl = selection();
+		if (sl.count() != lastN || sl.lo() != lastLo || sl.hi() != lastHi)
+		{
+			lastN = sl.count(); lastLo = sl.lo(); lastHi = sl.hi();
+			NOTICE_LOG(RENDERER, "ROLL SEL: n=%d lo=%u hi=%u", (int)lastN, lastLo, lastHi);
+		}
+	}
 	if (!selection().empty())
 		ImGui::Text("selected: %d rows, %u..%u", (int)selection().count(),
 				selection().lo(), selection().hi());
