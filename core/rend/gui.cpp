@@ -25,6 +25,7 @@
 #include "imgui_internal.h"	// DockBuilderGetCentralNode (game viewport)
 #include "rend/game_viewport.h"
 #include "rend/panel.h"
+#include "dojo/movie.h"
 #include "hw/pvr/Renderer_if.h"	// Renderer::GetFrameTexture (the game panel)
 #include "rend/transform_matrix.h"	// getDCFramebufferAspectRatio
 #include "network/net_handshake.h"
@@ -4639,7 +4640,11 @@ void gui_display_osd()
 				// fired early". Identical for dense movies, correct for sparse -
 				// and sparse is reachable today, since re-recording leaves gaps
 				// and a macro roll is keyed from its own first frame.
-				if (dojo.frame_number == dojo.MovieEnd())
+				// This runs AFTER the frame was applied, so the frame number
+				// has already advanced past the last authored one. dojo.cpp's
+				// detector runs before and asks atEnd(n + 1); movie.h owns why
+				// the two differ.
+				if (movie::atEnd(dojo.frame_number))
 				{
 					settings.input.fastForwardMode = false;
 					gui_state = GuiState::ReplayEnd;

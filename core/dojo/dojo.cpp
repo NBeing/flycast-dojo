@@ -1,4 +1,5 @@
 #include "dojo.h"
+#include "movie.h"
 #include "pause.h"
 #include "tasmacro.h"
 #include "tas_auto.h"
@@ -1982,7 +1983,12 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		}
 	}
 
-	if (dojo.play_match && !macroReadSession && !dojo.session_inputs.empty() && dojo.frame_number == dojo.MovieEnd() - 1)
+	// atEnd() OWNS THE +-1 NOW, and this site states its own phase: it runs
+	// BEFORE the frame is applied, so the question is whether the NEXT frame is
+	// past the frontier. gui.cpp's detector runs after, and asks atEnd(n).
+	// Both were already using MovieEnd() and still disagreed; see movie.h.
+	if (dojo.play_match && !macroReadSession && movie::authored()
+			&& movie::atEnd(dojo.frame_number + 1))
 	{
 		if (gui_state != GuiState::ReplayEnd)
 		{
@@ -2008,8 +2014,11 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	// TAS: guard against reading a frame the movie doesn't have (seeking past the recorded range,
 	// or toggling read-only mid-record). Bare session_inputs[frame] would create an empty buffer
 	// and the FrameInputs cast below would dereference null -> GPF.
+	// movie::has(), NOT atEnd(): an unauthored frame in the MIDDLE of a movie is
+	// a HOLE, not an end, and re-recording can leave one. The iterator is still
+	// needed for the payload below, so this reads the question and keeps it.
 	auto tas_sit = dojo.session_inputs.find(dojo.frame_number);
-	if (tas_sit == dojo.session_inputs.end()
+	if (!movie::has(dojo.frame_number)
 			|| tas_sit->second.size() < sizeof(FrameInputs) * MAX_PLAYERS)
 	{
 		if (dojo.play_match && !macroReadSession)	// macro READ pauses at the roll's end (armed above), not ReplayEnd
