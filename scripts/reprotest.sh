@@ -55,15 +55,20 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 TEST="$ROOT/scripts/tests/repro/hash_sequence.lua"
 OUT="${FLYCAST_TEST_OUT:-$ROOT/build-dojo7/testresults}"
-LOG="$OUT/hash_sequence.lua.log"
+# Derived from $TEST, not hardcoded: --oracle swaps the script, and a fixed
+# name made one_run look for a log that run had never written - reported as
+# "no lua log", which reads like the emulator failed rather than like the
+# harness looking in the wrong place.
+luaLogFor() { echo "$OUT/$(basename "$1" .lua).lua.log"; }
 SKIP=77
 
-RUNS=2; COLD=0; SELFTEST=0; TIMEOUT=180
+RUNS=2; COLD=0; SELFTEST=0; TIMEOUT=180; ORACLE=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--cold)       COLD=1; shift ;;
 		--from-state) COLD=0; shift ;;
 		--self-test)  SELFTEST=1; shift ;;
+		--oracle)     ORACLE="$2"; shift 2 ;;
 		--runs)       RUNS="$2"; shift 2 ;;
 		--timeout)    TIMEOUT="$2"; shift 2 ;;
 		*) echo "reprotest: unknown argument $1" >&2; exit 2 ;;
@@ -105,6 +110,7 @@ one_run() {
 	# reads of one file are identical, which is this harness reporting perfect
 	# reproducibility from a run that never happened. The no-samples gate below
 	# cannot catch that: the stale file has samples.
+	local LOG; LOG="$(luaLogFor "$TEST")"
 	rm -f "$LOG"
 	local rc=0
 	env "${extra[@]}" "$@" "$ROOT/scripts/testrun.sh" --timeout "$TIMEOUT" "$TEST" \
@@ -118,9 +124,144 @@ one_run() {
 	# The Lua console indents every line it writes, so anchoring on ^REPRO
 	# silently matched nothing and the run looked empty. Extract the record
 	# itself rather than assuming a column.
-	grep -ao 'REPRO [0-9]\{1,\} [0-9]\{1,\}' "$LOG" > "$work/$label.seq" || true
+	# Both record formats: REPRO (hash_sequence, keyed by guest frame) and OR
+	# (oracle_probe, unkeyed because the two forks share no clock). One
+	# extraction so --oracle and the normal modes cannot drift apart.
+	grep -aoE 'REPRO [0-9]+ [0-9]+|OR [0-9]+|OR-MOVED (true|false)' "$LOG" > "$work/$label.seq" || true
 	cp "$LOG" "$work/$label.lua.log"
 	echo "  $label: $(wc -l < "$work/$label.seq") samples"
+}
+
+# oracle_run_b <binary> <outfile>: launch the OTHER fork and un-pause it.
+oracle_run_b() {
+	# `set +e` FOR THE WHOLE FUNCTION. This is orchestration - a grep that finds
+	# nothing yet, a kill for a process already gone, a glob that matches no
+	# sibling - and under `set -e` each of those aborts the SCRIPT rather than
+	# taking the branch written for it. Three separate instances were fixed one
+	# at a time before it was clear the option itself was the wrong tool here;
+	# every one presented identically, as the run stopping with no message and
+	# exit 0. The function checks its own statuses explicitly instead.
+	set +e
+	local bin="$1" out="$2"
+	echo "  launching B (no auto-play: it needs a keypress)"
+	local w="$work/b"; rm -rf "$w"; mkdir -p "$w/config/flycast-dojo" "$w/clip"
+	cp "$CLIP" "$w/clip/clip.flyr"
+	# `|| true` is load-bearing under `set -e`: when the LAST glob matches
+	# nothing, `[ -f ]` returns 1 and the for loop's final status aborts the
+	# whole script. testrun.sh has the identical loop and is not under `set -e`,
+	# so copying it here changed its meaning. The symptom was the run stopping
+	# after the A side with no message and exit 0.
+	for sib in "$(dirname "$CLIP")"/*.state "$(dirname "$CLIP")"/*.state.* \
+	           "$(dirname "$CLIP")"/clip.json; do
+		{ [ -f "$sib" ] && cp "$sib" "$w/clip/" 2>/dev/null; } || true
+	done
+	cp "$TEST" "$w/config/flycast-dojo/flycast.lua"
+
+	local disp=":$((BASE_DISPLAY + 40))"
+	nohup Xvfb "$disp" -screen 0 800x600x24 >"$w/xvfb.log" 2>&1 & local xpid=$!
+	sleep 2
+	# i3, because a bare Xvfb has no focus owner and SDL never receives the key.
+	printf 'default_border none\nfor_window [class=".*"] floating enable\n' > "$w/i3.conf"
+	DISPLAY="$disp" nohup i3 -c "$w/i3.conf" >"$w/i3.log" 2>&1 & local ipid=$!
+	sleep 2
+
+	DISPLAY="$disp" XDG_CONFIG_HOME="$w/config" setsid "$bin" \
+		-config dojo:Replay=yes -config "dojo:ReplayFilename=$w/clip/clip.flyr" \
+		-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no \
+		-config dojo:Transmitting=no -config dojo:Receiving=no \
+		"$ROM" >"$w/stdout.log" 2>&1 & local bpid=$!
+
+	# Wait for the seek to land, then send P. Watching the log rather than
+	# sleeping a fixed time: the boot is slower under software rendering and a
+	# key sent too early is simply lost.
+	local i
+	# `|| true` on the loop body: a `cmd && break` that never fires leaves the
+	# LAST iteration returning 1, and under `set -e` that aborts the script
+	# instead of falling through to the timeout branch. Third instance of this
+	# shape in this file - see the sibling-copy loop above.
+	local seen=0
+	for i in $(seq 1 60); do
+		sleep 1
+		if grep -aq "TAS READY\|replay seek to movie frame" "$w/stdout.log" 2>/dev/null; then
+			seen=1; break
+		fi
+	done
+	[ "$seen" -eq 1 ] || echo "  (B never logged its seek; sending the key anyway)"
+	local wid
+	wid=$(DISPLAY="$disp" xdotool search --name "Flycast" 2>/dev/null | head -1)
+	if [ -n "$wid" ]; then
+		DISPLAY="$disp" xdotool windowactivate "$wid" 2>/dev/null; sleep 1
+		DISPLAY="$disp" xdotool key --window "$wid" p
+	else
+		echo "reprotest:   (no window found; B will stay paused)" >&2
+	fi
+
+	for i in $(seq 1 "$TIMEOUT"); do
+		sleep 1
+		if grep -aq "OR-DONE" "$w/stdout.log" 2>/dev/null; then break; fi
+	done
+	# `|| true` on every kill: under `set -e` a kill that finds nothing already
+	# gone aborts the whole script, which showed up as the run simply stopping
+	# after the A side with no error and exit 0.
+	#
+	# pkill -P rather than `kill -- -$bpid`: $! is setsid's PARENT, which exits
+	# immediately, so the negated pid is not the new group and the signal can
+	# land on our own group instead.
+	pkill -P "$bpid" 2>/dev/null || true
+	kill "$bpid" 2>/dev/null || true
+	kill "$ipid" 2>/dev/null || true
+	kill "$xpid" 2>/dev/null || true
+	tr -d '\0' < "$w/stdout.log" | grep -aoE "OR [0-9]+|OR-MOVED (true|false)" > "$out" || true
+	echo "  oracleB: $(wc -l < "$out") samples"
+	set -e
+}
+
+# oracle_correlate <A.seq> <B.seq>: the two forks share no clock, so find the
+# OFFSET at which the sequences agree instead of assuming they start together.
+oracle_correlate() {
+	awk '
+		function best() {
+			bestn = -1; besto = 0
+			for (off = -maxoff; off <= maxoff; off++) {
+				m = 0; n = 0
+				for (i = 1; i <= na; i++) {
+					j = i + off
+					if (j < 1 || j > nb) continue
+					n++
+					if (a[i] == b[j]) m++
+				}
+				if (n >= 20 && m > bestn) { bestn = m; besto = off; bestden = n }
+			}
+		}
+		FNR == NR { if ($1 == "OR") a[++na] = $2; next }
+		           { if ($1 == "OR") b[++nb] = $2 }
+		END {
+			maxoff = (na < nb ? na : nb) - 20
+			if (maxoff < 1) maxoff = 1
+			best()
+			printf "  best alignment: offset %d, %d/%d samples identical\n", besto, bestn, bestden
+			# THE SHAPE OF THE MISMATCH IS THE FINDING, not the count. Matches
+			# in one contiguous run mean the two forks agree and then diverge at
+			# a locatable frame; matches scattered through the window mean the
+			# fingerprint is aliasing and the comparison is not measuring what it
+			# claims to.
+			run = 0; bestrun = 0; firstbad = -1; k = 0
+			for (i = 1; i <= na; i++) {
+				j = i + besto
+				if (j < 1 || j > nb) continue
+				k++
+				if (a[i] == b[j]) { run++; if (run > bestrun) bestrun = run }
+				else { run = 0; if (firstbad < 0) firstbad = k }
+			}
+			printf "  longest identical run: %d   first difference at sample %d of %d\n", bestrun, firstbad, k
+			if (bestn == bestden) {
+				print "ok   the two forks emulate identically (at that offset)"
+				exit 0
+			}
+			printf "BAD  %d of %d samples differ at the best offset\n", bestden - bestn, bestden
+			exit 1
+		}
+	' "$1" "$2"
 }
 
 # NO BIOS PRECONDITION. An earlier version of this script refused --cold unless
@@ -133,6 +274,77 @@ one_run() {
 # Kept as a comment rather than deleted, because the wrong version of this gate
 # would have made --cold skip forever on a perfectly capable machine, and
 # reported that as a fact about the machine.
+
+# ---------------------------------------------------------------------------
+# --oracle <other-flycast>: is a SECOND FORK's emulation the same as ours?
+#
+# Every other mode here compares our binary against itself. This compares it
+# against a different tree - David's flycast-rr - on the same clip and the same
+# savestate, which are interchangeable between the forks
+# (`[MEASURED 2026-09-09]` his build loads ours and passes its own STATE VERIFY).
+#
+# THE TWO FORKS SHARE NO CLOCK. His Lua has no frame/savestate/movie namespace
+# at all (822 lines to our 2572), so there is no frame number both sides can
+# report and no way to say "sample N of each is the same moment". The sequences
+# are therefore aligned by CROSS-CORRELATION: find the offset at which they
+# agree, and report it. An offset is expected and is not a fault - the two
+# builds start emulating at different points relative to the seek.
+#
+# HIS BUILD HAS NO AUTO-PLAY. That block is ours (mainui.cpp); his replay boots
+# PAUSED waiting for a human, so headless it seeks and then emulates nothing
+# forever. The keypress is supplied with xdotool, and a bare Xvfb swallows keys
+# (scripts/docktest.sh records the same finding), so the display gets a
+# config-less i3 first.
+if [ -n "$ORACLE" ]; then
+	[ -x "$ORACLE" ] || { echo "reprotest: SKIP - no such binary: $ORACLE" >&2; exit $SKIP; }
+	command -v xdotool >/dev/null || { echo "reprotest: SKIP - no xdotool" >&2; exit $SKIP; }
+	command -v i3 >/dev/null      || { echo "reprotest: SKIP - no i3 (bare Xvfb swallows keys)" >&2; exit $SKIP; }
+	TEST="$ROOT/scripts/tests/repro/oracle_probe.lua"
+
+	# Oracle mode launches the second fork DIRECTLY, so it needs the fixtures
+	# testrun.sh normally resolves on our behalf. Same rules as testrun.sh:
+	# prefer a clip that has a savestate beside it, and use flyrframes.sh for
+	# the length rather than arithmetic on the file size.
+	ROM="${FLYCAST_TEST_ROM:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
+	BASE_DISPLAY="${FLYCAST_TEST_DISPLAY_BASE:-90}"
+	[ -f "$ROM" ] || { echo "reprotest: SKIP - no ROM at $ROM" >&2; exit $SKIP; }
+	CLIP=""
+	for f in $(ls -1t "${XDG_DATA_HOME:-$HOME/.local/share}"/flycast-dojo/replays/*/*/*.flyr 2>/dev/null); do
+		frames=$("$ROOT/scripts/flyrframes.sh" "$f" 2>/dev/null) || continue
+		[ "$frames" -ge 600 ] || continue
+		ls "$(dirname "$f")"/*.state >/dev/null 2>&1 || continue
+		CLIP="$f"; break
+	done
+	[ -n "$CLIP" ] || { echo "reprotest: SKIP - no clip with a savestate" >&2; exit $SKIP; }
+	echo "  clip = $(basename "$(dirname "$CLIP")")"
+
+	echo "reprotest: oracle mode"
+	echo "  A = ${FLYCAST_BIN:-$ROOT/build-dojo7/flycast}"
+	echo "  B = $ORACLE"
+
+	# A is ours: auto-play handles the un-pause.
+	one_run oursA
+	# B is the other fork: launched by hand so it can be un-paused.
+	oracle_run_b "$ORACLE" "$work/oracleB.seq"
+
+	a=$(grep -c '^OR ' "$work/oursA.seq" 2>/dev/null || echo 0)
+	b=$(grep -c '^OR ' "$work/oracleB.seq" 2>/dev/null || echo 0)
+	echo "  A: $a samples   B: $b samples"
+	[ "$a" -gt 0 ] && [ "$b" -gt 0 ] || {
+		echo "reprotest: SKIP - a side produced no samples" >&2; exit $SKIP; }
+
+	# VACUITY: a fingerprint that never moves matches at every offset.
+	for side in oursA oracleB; do
+		if grep -q "OR-MOVED false" "$work/$side.seq" 2>/dev/null; then
+			echo "reprotest: SKIP - $side's fingerprint never moved; the probe is" >&2
+			echo "reprotest:   sampling dead memory and would match at any offset" >&2
+			exit $SKIP
+		fi
+	done
+
+	oracle_correlate "$work/oursA.seq" "$work/oracleB.seq"
+	exit $?
+fi
 
 echo "reprotest: mode=$([ "$COLD" -eq 1 ] && echo cold || echo from-state) runs=$RUNS"
 for i in $(seq 1 "$RUNS"); do one_run "run$i"; done
