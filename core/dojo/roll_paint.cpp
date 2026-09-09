@@ -39,22 +39,20 @@ bool Paint::touches(u32 row) const
 
 Edit Paint::build(const std::map<u32, Row>& all) const
 {
-	Edit e(all.begin(), all.end());
 	if (!active_)
-		return e;
-
-	const Column& c = profile().cols[col_];
-	for (u32 r = lo(); r <= hi(); r++)
-	{
-		if (!touches(r))
-			continue;			// a gap row is LEFT ALONE, not inverted
-		auto it = e.find(r);
-		// Painting past the end CREATES the frame: a stroke that ran off the
-		// movie should lengthen it, not stop at the edge.
-		const Row src = it == e.end() ? blankRow() : it->second;
-		e[r] = rowWith(src, player_, c, on_);
-	}
-	return e;
+		return Edit(all.begin(), all.end());
+	// DELEGATED, not reimplemented. roll_edit's paintColumn() is the same rule
+	// as a pure function - phase anchored at the anchor, gap rows skipped, whole
+	// movie returned - and it was written independently to the same conclusions.
+	// Two copies of one rule drift; this class owns the GESTURE (what is active,
+	// where it began, whether it writes or erases) and delegates the arithmetic.
+	//
+	// It is also stricter than the loop this replaced: it pre-fills blanks for
+	// every row past the old end, where mine created only the rows the pattern
+	// FIRES on - so painting 10->14 at gap 1 left 11 and 13 missing and the
+	// movie non-contiguous. ApplyEdit permits extension, so nothing would have
+	// refused it.
+	return paintColumn(all, anchor_, last_, player_, profile().cols[col_], on_, step_ - 1);
 }
 
 /*
