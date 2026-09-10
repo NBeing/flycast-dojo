@@ -513,10 +513,29 @@ within a session, so `scripts/tests/tiers.lua` is the run that is allowed to end
 narrowed. **That closes `MEMORY.md`'s note that the authorisation tier had never
 been exercised on any host.**
 
-### Phase 3 — frame-safe observation primitives (~1–2 weeks)
-A reactive Signal/Stream layer driven from a confirmed-frame-gated `vblank`,
-with emu-thread observers buffering and `overlay` draining on the render
-thread. Observers must never touch ImGui directly.
+### [x] Phase 3 — frame-safe observation primitives — LANDED `[2026-09-10]`
+`emuapi/components/reactive.lua`, and it needed **no C++ at all**. The host half
+already existed and is precisely enforced: `vblank` on the emulation thread
+gated to confirmed frames, `overlay` on the render thread inside an ImGui frame,
+a `thread_local` draw-context guard that refuses drawing from the wrong one —
+and **both callbacks take the same interpreter lock**, so a Lua table written by
+one and read by the other is already serialised. What was missing was the buffer
+the refusal message tells scripts to write.
+
+**A COMPONENT, not interface surface.** `ARCHITECTURE.md` decides this: a derive
+engine is "written ON the four verbs", and specifying the engine would specify
+one emulator's architecture so that no other host could conform. It also
+predicts the file — "a derive engine is portable Lua anyone can write".
+
+- signals are STATE: published as one step so observer ORDER does not matter.
+- streams are EVENTS: buffered on the emu thread, drained on the draw side —
+  which is why a stream handler may paint and a signal's `:on` may not.
+- bounded queues that COUNT drops.
+- `[MEASURED]` the two sides do not run at the same rate: **224 observed frames
+  against 10 draws**. A stream sized for "a few per frame" overflows long before
+  anything renders it.
+
+14 claims in a real emulator (`scripts/tests/reactive.lua`), three sabotages.
 
 ### Phase 4 — page-diff memory watch (~2–3 weeks, only if needed)
 Build change-notification on the existing `core/hw/mem/mem_watch.{h,cpp}`
