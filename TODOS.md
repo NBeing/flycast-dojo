@@ -163,11 +163,19 @@ through `panels::add`.
   work left is the notation parsers that BUILD the tracks (profile) and the UI
   that offers them. stretch/compress/reverse/clear are fully generic and
   independent of all of it.
-- [ ] **Structural edits should return a ROW REMAP.** `docs/ROLL-EDIT-MODEL.md`
-  §3. The fork writes selection-shifting five times and gets two of them wrong,
-  and hand-calls bookmark fixups from five sites with nothing enforcing it. Same
-  fact each time. It is also the fix for `docs/STATES-LIFT.md` §4.4, where a
-  resize leaves a savestate's anchored frame **wrong** rather than suspect.
+- [x] **Structural edits return a ROW REMAP.** `core/dojo/roll_remap.{h,cpp}`;
+  `deleteRows`/`insertBlanks` return `Resize { edit, remap }` with the edit
+  DERIVED from the remap, so there is one owner of "where did row f go".
+  `Selection::remap()` is the first customer — the panel no longer throws the
+  selection away after a resize. 17 remap claims, 6 new selection claims, 4
+  edit claims, 4 sabotages.
+- [ ] **`[OPEN]` savestate anchors are the remap's next customer.**
+  `docs/STATES-LIFT.md` §4.4 — a resize renumbers rows and nothing rewrites the
+  `.frame` sidecars, so an anchored state's frame goes *wrong* rather than
+  *suspect*. The remap exists now; applying it means writing user files, which
+  is a separate pass with its own hazards.
+- [ ] Bookmarks do not exist here yet. When they do, they are a remap customer
+  by construction rather than five hand-called fixups.
 - [ ] The States window. `docs/STATES-LIFT.md` — 131 real dependencies, **zero**
   game-specific. Our 4 host questions cover ~1.5 of the 17 it needs. `[OPEN]`
   the 100-slot wall lives in `core/rend/gui.cpp`, not `dojo_gui.cpp`, and has

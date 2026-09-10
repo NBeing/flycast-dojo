@@ -156,29 +156,41 @@ Edit mergeIntoMovie(const std::map<u32, Row>& all, const Edit& e)
 	return out;
 }
 
-Edit deleteRows(const std::map<u32, Row>& all, const std::set<u32>& rows)
+//! One past the last authored frame - the movie's INDEX SPAN, not its entry
+//! count. A movie with holes is a legitimate state (movie.h), and a remap
+//! describes index space, so a hole maps to a hole rather than being closed up.
+static u32 indexSpan(const std::map<u32, Row>& all)
 {
-	Edit e;
-	u32 dst = 0;
-	for (const auto& kv : all)
-	{
-		if (rows.count(kv.first) != 0)
-			continue;			// dropped; the tail closes over it
-		e[dst++] = kv.second;
-	}
-	return e;
+	return all.empty() ? 0 : all.rbegin()->first + 1;
 }
 
-Edit insertBlanks(const std::map<u32, Row>& all, u32 at, u32 count)
+Resize deleteRows(const std::map<u32, Row>& all, const std::set<u32>& rows)
 {
-	Edit e;
-	if (count == 0)
-		return Edit(all.begin(), all.end());
+	Resize r;
+	r.remap = Remap::deleted(rows, indexSpan(all));
 	for (const auto& kv : all)
-		e[kv.first < at ? kv.first : kv.first + count] = kv.second;
+	{
+		u32 to = 0;
+		if (!r.remap.at(kv.first, to))
+			continue;			// dropped; the tail closes over it
+		r.edit[to] = kv.second;
+	}
+	return r;
+}
+
+Resize insertBlanks(const std::map<u32, Row>& all, u32 at, u32 count)
+{
+	Resize r;
+	r.remap = Remap::inserted(at, count, indexSpan(all));
+	for (const auto& kv : all)
+	{
+		u32 to = 0;
+		if (r.remap.at(kv.first, to))
+			r.edit[to] = kv.second;
+	}
 	for (u32 i = 0; i < count; i++)
-		e[at + i] = blankRow();
-	return e;
+		r.edit[at + i] = blankRow();
+	return r;
 }
 
 /*
@@ -249,13 +261,15 @@ void editSelfTest()
 	for (u32 i = 0; i < 5; i++)
 		all[i] = rowWith(blankRow(), 0, *up, i == 3);	// only frame 3 pressed
 
-	Edit d = deleteRows(all, { 1 });
+	Resize dr = deleteRows(all, { 1 });
+	Edit& d = dr.edit;
 	claim("deleteRows shortens the movie by the count removed", d.size() == 4);
 	// frame 3 held the press; removing ONE row before it moves it to 2.
 	claim("...and PULLS THE TAIL UP, so the marked frame renumbers",
 			rowHas(d[2], 0, *up) && !rowHas(d[3], 0, *up));
 
-	Edit ins = insertBlanks(all, 1, 2);
+	Resize ir = insertBlanks(all, 1, 2);
+	Edit& ins = ir.edit;
 	claim("insertBlanks lengthens by the count inserted", ins.size() == 7);
 	claim("...pushes the tail down, so the marked frame renumbers",
 			rowHas(ins[5], 0, *up) && !rowHas(ins[3], 0, *up));
@@ -317,7 +331,24 @@ void editSelfTest()
 			past.size() == 15 && rowHas(past[14], 0, *up));
 
 	claim("inserting nothing is the movie unchanged",
-			insertBlanks(all, 2, 0).size() == all.size());
+			insertBlanks(all, 2, 0).edit.size() == all.size());
+
+	// ---- THE REMAP TRAVELS WITH THE RESIZE ----
+	//
+	// Not "the remap agrees with the edit" - the edit is DERIVED from the remap,
+	// so a check over one derivation of one fact cannot fail. These assert that
+	// the fact itself is right, against the same rows the claims above read.
+	{
+		u32 to = 0;
+		claim("a delete hands back where the marked frame went",
+				dr.remap.at(3, to) && to == 2);
+		claim("...and that the deleted row is gone, not merely moved",
+				!dr.remap.at(1, to));
+		claim("an insert hands back where the marked frame went",
+				ir.remap.at(3, to) && to == 5);
+		claim("...and leaves rows below the insert point alone",
+				ir.remap.at(0, to) && to == 0);
+	}
 
 	NOTICE_LOG(RENDERER, "ROLLEDIT SELFTEST: %d passed, %d failed", pass, fail);
 }

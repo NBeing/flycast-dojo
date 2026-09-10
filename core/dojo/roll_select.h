@@ -1,5 +1,6 @@
 #pragma once
 #include "types.h"
+#include "roll_remap.h"
 #include <set>
 
 /*
@@ -54,6 +55,21 @@ public:
 	//! plain drag replaces.
 	void dragTo(u32 row);
 	void release();
+
+	/*
+		FOLLOW A STRUCTURAL EDIT.
+
+		Rows that were deleted drop out; rows that moved move. The alternative
+		this replaces was clearing the selection outright, which is defensible
+		but throws away work - and the alternative the fork chose is worse: it
+		shifts by hand at five call sites and gets two of them wrong.
+
+		A live drag is ENDED rather than remapped. The mouse is still down, but
+		what it was dragging over no longer has the same frame numbers, and
+		continuing to extend from a stale anchor would select a range the user
+		never crossed.
+	*/
+	void remap(const Remap& m);
 
 	void clear();
 	bool has(u32 row) const   { return rows_.count(row) != 0; }

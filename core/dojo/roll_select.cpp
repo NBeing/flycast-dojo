@@ -83,6 +83,19 @@ void Selection::release()
 	base_.clear();
 }
 
+void Selection::remap(const Remap& m)
+{
+	if (m.isIdentity())
+		return;
+	m.applyTo(rows_);
+	// The anchor is a row index like any other, and a drag whose anchor was
+	// deleted has nothing to extend from.
+	u32 to = 0;
+	anchor_ = (anchor_ != ~0u && m.at(anchor_, to)) ? to : ~0u;
+	dragging_ = false;
+	base_.clear();
+}
+
 /*
 	SELF-TEST. The grammar is five branches and a drag, and every one of them is
 	a rule a user will notice being wrong - so each gets a claim rather than a
@@ -171,6 +184,36 @@ void selectionSelfTest()
 	Selection u;
 	u.dragTo(3);
 	claim("dragTo outside a drag is a no-op", u.empty());
+
+	// ---- FOLLOWING A STRUCTURAL EDIT ----
+	{
+		Selection s2;
+		s2.press(2, Mods{});
+		s2.dragTo(6);
+		s2.remap(Remap::deleted({ 3, 4 }, 10));
+		claim("a selection follows a delete, dropping what went",
+				s2.rows() == std::set<u32>({ 2, 3, 4 }));
+		// The anchor was row 2, below both deletions, so it does not move.
+		s2.press(9, Mods{ true, false, false });
+		claim("...and the anchor survived, so Shift still extends from it",
+				s2.lo() == 2 && s2.hi() == 9);
+	}
+	{
+		Selection s3;
+		s3.press(5, Mods{});
+		claim("a drag is live before the edit", s3.dragging());
+		s3.remap(Remap::inserted(0, 3, 20));
+		claim("a structural edit ENDS a live drag rather than remapping it",
+				!s3.dragging());
+		claim("...and the selected row moved with the insert",
+				s3.rows() == std::set<u32>({ 8 }));
+	}
+	{
+		Selection s4;
+		s4.press(4, Mods{});
+		s4.remap(Remap::deleted({ 4 }, 10));
+		claim("a selection whose only row was deleted becomes empty", s4.empty());
+	}
 
 	NOTICE_LOG(RENDERER, "ROLLSEL SELFTEST: %d passed, %d failed", pass, fail);
 }

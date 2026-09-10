@@ -191,6 +191,34 @@ survived there and why our own paint was immune by accident.
 only modelled columns, so analog axes and unnamed kcode bits survive. The fork
 round-trips through its canon word and drops them.
 
+### The remap, `[2026-09-09]`
+
+`core/dojo/roll_remap.{h,cpp}`. `deleteRows` and `insertBlanks` now return a
+`Resize { edit, remap }` — **returned, not an out-parameter**, because an
+out-parameter is a thing a caller can forget and forgetting is the fork's bug.
+
+**The edit is DERIVED from the remap**, not computed beside it. One owner for
+"where did row f go", so the movie and the map cannot disagree — which is also
+why there is no test asserting that they agree: a check over one derivation of
+one fact cannot fail. What the tests assert instead is the fact itself.
+
+Spans, not a table: a run of surviving rows shares one delta, so deleting N
+scattered rows costs N+1 spans rather than an entry per frame on an 11,520-frame
+movie. A row covered by no span **does not exist** — which is the answer a
+deletion has to be able to give, and answering "unchanged" instead is what makes
+a selection keep naming frames that now hold something else.
+
+`Selection::remap()` is the first customer: the panel used to `clear()` after a
+resize, which is defensible but throws work away. A live drag is ENDED rather
+than remapped — the mouse is still down, but what it was dragging over has
+different frame numbers now.
+
+**`[OPEN]` savestate anchors are the next customer.** `docs/STATES-LIFT.md` §4.4:
+a resize renumbers `session_inputs` and nothing rewrites the `.frame` sidecars,
+so an anchored state's frame becomes *wrong* rather than *suspect*, and nothing
+distinguishes those. The remap is the fix and now exists; applying it means
+writing user files, which is a separate pass with its own hazards.
+
 **The collapse is verified by what did NOT change.** `paintColumn` is now four
 lines delegating to `applyPattern`, and roll_edit's 29 claims and roll_paint's
 18 pass unaltered — that, rather than the new tests, is the evidence the two

@@ -1,6 +1,7 @@
 #pragma once
 #include "types.h"
 #include "roll_profile.h"
+#include "roll_remap.h"
 #include <map>
 #include <set>
 #include <vector>
@@ -125,12 +126,36 @@ Edit mergeIntoMovie(const std::map<u32, Row>& all, const Edit& e);
 
 // ---- RESIZE (hand to ApplyEditResize) -------------------------------------
 
+/*
+	A RESIZE IS TWO THINGS AND BOTH ARE RETURNED.
+
+	The new movie, and WHERE EVERY ROW WENT. Renumbering is the whole difference
+	between an in-place edit and a resize, and several things hold row indices -
+	the selection, bookmarks, a savestate anchored past the edit point.
+
+	RETURNED RATHER THAN AN OUT-PARAMETER, because an out-parameter is a thing a
+	caller can forget, and forgetting is precisely the fork's bug: its bookmark
+	fixups are hand-called from five sites with nothing enforcing it, and its
+	selection shift is written five times with two of them wrong
+	(docs/ROLL-EDIT-MODEL.md §3).
+
+	THE EDIT IS DERIVED FROM THE REMAP, not computed beside it. One owner for
+	"where did row f go", so the map and the movie cannot disagree - which also
+	means there is no test here asserting that they agree, since a check over one
+	derivation of one fact cannot fail.
+*/
+struct Resize
+{
+	Edit  edit;
+	Remap remap;
+};
+
 //! `rows` removed, everything after them pulled up. Returns the whole movie.
-Edit deleteRows(const std::map<u32, Row>& all, const std::set<u32>& rows);
+Resize deleteRows(const std::map<u32, Row>& all, const std::set<u32>& rows);
 
 //! `count` blank frames inserted BEFORE `at`, pushing the tail down. Returns
 //! the whole movie.
-Edit insertBlanks(const std::map<u32, Row>& all, u32 at, u32 count);
+Resize insertBlanks(const std::map<u32, Row>& all, u32 at, u32 count);
 
 //! Runs under dojo:PanelSelfTest, like the other seams in this tree.
 void editSelfTest();

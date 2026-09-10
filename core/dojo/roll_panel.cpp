@@ -315,18 +315,20 @@ static void draw()
 			ImGui::SameLine();
 			if (ImGui::Button("Delete rows"))
 			{
-				Edit e = deleteRows(wholeMovie(), sel.rows());
-				dojo.ApplyEditResize(e, "roll: delete rows");
-				// The rows are gone: a selection naming them now names other
-				// frames entirely, which is worse than naming nothing.
-				sel.clear();
+				Resize r = deleteRows(wholeMovie(), sel.rows());
+				dojo.ApplyEditResize(r.edit, "roll: delete rows");
+				// THE SELECTION FOLLOWS THE ROWS. It used to be cleared here,
+				// because a selection naming deleted frames now names other
+				// frames entirely - true, and the reason the remap exists. The
+				// deleted rows drop out and any survivor moves with its content.
+				sel.remap(r.remap);
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Insert blanks"))
 			{
-				Edit e = insertBlanks(wholeMovie(), sel.lo(), (u32)sel.count());
-				dojo.ApplyEditResize(e, "roll: insert blanks");
-				sel.clear();
+				Resize r = insertBlanks(wholeMovie(), sel.lo(), (u32)sel.count());
+				dojo.ApplyEditResize(r.edit, "roll: insert blanks");
+				sel.remap(r.remap);
 			}
 			ImGui::SameLine();
 			ImGui::TextDisabled("(%d rows)", (int)sel.count());
