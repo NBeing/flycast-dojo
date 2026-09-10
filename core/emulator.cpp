@@ -48,6 +48,7 @@
 #include "oslib/storage.h"
 #include "wsi/context.h"
 #include <chrono>
+#include "cfg/cfg.h"
 
 #include "dojo/dojo.h"
 #include "lua/lua.h"
@@ -710,6 +711,15 @@ void Emulator::stop()
 	sh4_cpu.Stop();
 	if (config::ThreadedRendering)
 	{
+		// STOP IS 73% OF A FRAME ADVANCE (docs/STEP-GRANULARITY.md), and this
+		// block is all of it. Two candidates with opposite implications - the
+		// JOIN is inherent (the emulation thread is waiting on a renderer the
+		// caller is blocking), the nvmem WRITE is incidental and removable -
+		// so `dojo:StepProbe` times them apart rather than leaving it to
+		// argument. Read once; this runs on the hot path when stepping.
+		static const bool timeStop = cfgLoadInt("dojo", "StepProbe", 0) > 0;
+		const auto t0 = std::chrono::steady_clock::now();
+
 		rend_cancel_emu_wait();
 		try {
 			checkStatus(true);
@@ -717,8 +727,16 @@ void Emulator::stop()
 			WARN_LOG(COMMON, "%s", e.what());
 			throw e;
 		}
+		const auto t1 = std::chrono::steady_clock::now();
 		nvmem::saveFiles();
+		const auto t2 = std::chrono::steady_clock::now();
 		EventManager::event(Event::Pause);
+		if (timeStop)
+			NOTICE_LOG(COMMON, "STOP SPLIT: join %.2f ms + nvmem %.2f ms + event %.2f ms",
+					std::chrono::duration<double, std::milli>(t1 - t0).count(),
+					std::chrono::duration<double, std::milli>(t2 - t1).count(),
+					std::chrono::duration<double, std::milli>(
+							std::chrono::steady_clock::now() - t2).count());
 	}
 	else
 	{

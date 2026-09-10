@@ -19,6 +19,10 @@
 
 #include "mainui.h"
 #include "deferred.h"
+#include "emulator.h"
+#include "cfg/option.h"
+#include <chrono>
+#include <algorithm>
 #include "cfg/cfg.h"
 #include "dojo/dojo.h"
 #include "hw/pvr/Renderer_if.h"
@@ -27,6 +31,7 @@
 #include "wsi/context.h"
 #include "cfg/option.h"
 #include "emulator.h"
+#include "cfg/option.h"
 #include "imgui_driver.h"
 #include "profiler/fc_profiler.h"
 #include "video_recorder.h"
@@ -110,6 +115,147 @@ void start_display_refresh_thread()
 	t1.detach();
 }
 
+/*
+	WHAT GRANULARITY CAN A COUNTERFACTUAL BE DRIVEN AT, AND WHAT DOES IT COST?
+
+	`dojo:StepProbe=N` - run N synchronous frame advances from the deferred
+	point and report the time each took. Off unless set.
+
+	THE QUESTION IT SETTLES. The pool/rollout work needs to run a machine
+	forward by a known amount from a stopped state, and the plan for it recorded
+	the granularity as UNSETTLED: flycast's Lua has no step binding, and
+	`Emulator::step()` is one SH4 INSTRUCTION on the debugger's path.
+
+	The tree does have a frame advance - `gui_open_step()` - but it is not a
+	step primitive and cannot be reused here. It sets `dojo.target_step_frame`,
+	releases the machine, and a LATER pass through `gui_display_osd()` stops it
+	when the counter arrives. That is asynchronous and render-thread-driven, and
+	this code runs at the top of the very function that would do the stopping.
+
+	A synchronous advance does not need it, and the reason is one fact worth
+	checking rather than reasoning about: `dojo.frame_number` is a
+	`std::atomic<u32>` incremented in `Dojo::MapleApplyAction`, which runs on
+	the EMULATION thread. So start the machine, watch the counter from here,
+	and stop - two threads, no dependency, no deadlock. The render thread simply
+	presents nothing while it waits, which for a bounded rollout is the cost
+	rather than a fault.
+
+	THE TIMEOUT IS THE POINT. If the counter never moves this reports a timeout
+	instead of hanging - which is also what a wrong premise would look like, and
+	is the only way this probe can tell us it is wrong.
+*/
+static void stepProbe()
+{
+	const int want = cfgLoadInt("dojo", "StepProbe", 0);
+	if (want <= 0)
+		return;
+	static bool done = false;
+	// Wait for a movie that is actually running: advancing a machine that has
+	// nothing to advance would measure the timeout path and call it a cost.
+	if (done || dojo.frame_number.load() < 120 || dojo.session_inputs.empty())
+		return;
+	done = true;
+
+	const bool wasRunning = emu.running();
+	double worst = 0.0, total = 0.0;
+	int advanced = 0, timedOut = 0;
+	// WHERE THE TIME GOES, split three ways. The whole-advance number alone
+	// says a rollout runs at ~5.6x real time; it does not say whether that is
+	// the emulator or the scaffolding around it, and those have opposite
+	// implications. `Emulator::start` launches a std::async whose lambda calls
+	// InitAudio(), and `stop` joins it after TermAudio() - so a full audio
+	// teardown and re-init happens per advance, for one frame of sound.
+	double tStart = 0.0, tFrame = 0.0, tStop = 0.0;
+
+	/*
+		BATCH MODE, dojo:StepProbeBatch=yes - one start, N frames, one stop.
+
+		The per-frame form below pays a THREAD LAUNCH AND JOIN for every frame
+		(`Emulator::start` spawns a std::async, `stop` joins it), and its own
+		source carries "FIXME single thread is better" for the instruction-level
+		twin of the same problem. A rollout advances many frames from one state,
+		so the interesting number is the MARGINAL cost of a frame, not the cost
+		of a frame plus a thread.
+	*/
+	if (cfgLoadBool("dojo", "StepProbeBatch", false))
+	{
+		if (emu.running())
+			emu.stop();
+		const u32 from = dojo.frame_number.load();
+		const auto t0 = std::chrono::steady_clock::now();
+		try { emu.start(); } catch (...) { return; }
+		u32 now = from;
+		while (now - from < (u32)want)
+		{
+			now = dojo.frame_number.load();
+			if (std::chrono::duration<double>(
+					std::chrono::steady_clock::now() - t0).count() > 10.0)
+				break;
+		}
+		emu.stop();
+		const double ms = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - t0).count();
+		if (wasRunning)
+			try { emu.start(); } catch (...) {}
+		const int got = (int)(now - from);
+		NOTICE_LOG(COMMON, "STEP PROBE BATCH: threaded=%s %d/%d frames in %.2f ms"
+				"  => %.2f ms/frame  => %s",
+				config::ThreadedRendering ? "yes" : "no", got, want, ms,
+				got > 0 ? ms / got : 0.0, got == want ? "PASS" : "FAIL");
+		return;
+	}
+
+	for (int i = 0; i < want; i++)
+	{
+		if (emu.running())
+			emu.stop();
+		const u32 from = dojo.frame_number.load();
+		const auto t0 = std::chrono::steady_clock::now();
+		try { emu.start(); } catch (...) { break; }
+		const auto tA = std::chrono::steady_clock::now();
+		if (i == 0)
+			// THE INSTRUMENT, ONCE. A start that did not take and a machine
+			// that cannot complete a frame both look like "the counter never
+			// moved", and only one of them is a fact about the threading.
+			NOTICE_LOG(COMMON, "STEP PROBE: after start, running=%s frame=%u",
+					emu.running() ? "yes" : "no", dojo.frame_number.load());
+		u32 now = from;
+		while (now == from)
+		{
+			now = dojo.frame_number.load();
+			if (std::chrono::duration<double>(
+					std::chrono::steady_clock::now() - t0).count() > 0.5)
+				break;			// bounded: a wrong premise reports, it does not hang
+		}
+		const auto tB = std::chrono::steady_clock::now();
+		emu.stop();
+		const auto tC = std::chrono::steady_clock::now();
+		const double ms = std::chrono::duration<double, std::milli>(tC - t0).count();
+		if (now == from)
+			timedOut++;
+		else
+		{
+			advanced++;
+			total += ms;
+			worst = std::max(worst, ms);
+			tStart += std::chrono::duration<double, std::milli>(tA - t0).count();
+			tFrame += std::chrono::duration<double, std::milli>(tB - tA).count();
+			tStop  += std::chrono::duration<double, std::milli>(tC - tB).count();
+		}
+	}
+	if (wasRunning)
+		try { emu.start(); } catch (...) {}
+	NOTICE_LOG(COMMON, "STEP PROBE: threaded=%s %d/%d frames advanced, %d timed out, "
+			"mean %.2f ms, worst %.2f ms  => %s",
+			config::ThreadedRendering ? "yes" : "no",
+			advanced, want, timedOut, advanced > 0 ? total / advanced : 0.0, worst,
+			(advanced == want && timedOut == 0) ? "PASS" : "FAIL");
+	if (advanced > 0)
+		NOTICE_LOG(COMMON, "STEP PROBE SPLIT: start %.2f ms + frame %.2f ms + stop %.2f ms"
+				" (mean per advance)",
+				tStart / advanced, tFrame / advanced, tStop / advanced);
+}
+
 bool mainui_rend_frame()
 {
 	FC_PROFILE_SCOPE;
@@ -122,6 +268,7 @@ bool mainui_rend_frame()
 	// auto-seek block below, which is the evidence that stopping the emulator
 	// here is safe - see core/deferred.h for what is not.
 	deferred::drain();
+	stepProbe();		// dojo:StepProbe=N - off unless set
 
 	// TAS test harness: -config dojo:AutoSeekState=N automates the
 	// "Play a Movie -> F3" step. Once playback is actually running (~2 s in),

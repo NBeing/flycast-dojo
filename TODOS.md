@@ -614,6 +614,29 @@ emulator, two sabotages.
   So speculative stepping is more tractable than this entry claimed. Reassess
   against the TA payload, not against RAM size.
 
+  **`[MEASURED 2026-09-10]` the STEPPING half is now measured, and it is the
+  binding constraint rather than the snapshot.** `docs/STEP-GRANULARITY.md`:
+  driving the machine a frame at a time from the deferred point costs
+  **94.11 ms per frame** (worst 154.65), needs `rend.ThreadedRendering` which
+  **defaults to false**, and **batching gains nothing** - one `emu.start()`
+  advances exactly ONE frame while the render thread is blocked, measured with
+  targets of both 30 and 3.
+
+  **The whole overhead is one thing, and it is the coupling.** Timed apart:
+  `emu.start()` is 0.06 ms, the frame is 21-32 ms, and `emu.stop()` is 59-68 ms
+  of which the JOIN is 61-79 and `nvmem::saveFiles()` is 0.3. Audio is not a
+  factor either - the `null` backend was no faster. Five plausible culprits were
+  guessed from source and five were wrong; `Emulator::stop()` says why in its
+  own code, calling `rend_cancel_emu_wait()` because the emulation thread is
+  waiting on the renderer the caller is blocking.
+
+  So there is nothing incidental left to strip: every number there comes from
+  driving *the machine that is also being displayed*. A pooled machine with no
+  renderer attached does not have that coupling - this is a cost of the
+  shortcut, not of the idea, and must not be quoted as an argument against it.
+
+  Reproduce: `scripts/stepprobe.sh`.
+
 ---
 
 ## Testing
