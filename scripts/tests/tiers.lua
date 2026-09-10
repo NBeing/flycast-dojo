@@ -78,5 +78,82 @@ flycast_callbacks.vblank = function()
 	--- A malformed tier is a caller bug, per the spec's failure tier 1.
 	report("an unknown tier name raises", not (pcall(st.declare, "wizard")))
 
+	---------------------------------------------------------------------------
+	--- AND THROUGH THE NEUTRAL INTERFACE.
+	---
+	--- `emuapi/conformance.lua` runs inside this emulator and reports
+	--- CONFORMS - but it SKIPS this one, and says exactly why:
+	---
+	---   "answering: emu.declare was not called: it changes the tier in force
+	---    for the rest of the run"
+	---
+	--- Which is correct of a suite that has to leave the session as it found
+	--- it, and is why `MEMORY.md` records the authorisation tier as never
+	--- exercised on any host. A tier is one-way within a session, so exercising
+	--- it needs a run that is ALLOWED to end narrowed. This is that run: the
+	--- declaration above already happened, and everything below is measured
+	--- through the neutral names rather than flycast's.
+	local root = os.getenv("FLYCAST_TESTLIB"):match("^(.*)/scripts/lua/testlib%.lua$")
+	if root then
+		table.insert(package.loaders or package.searchers, 1, function(name)
+			local rest = name:match("^emuapi%.(.+)$")
+			local file
+			if name == "emuapi" then file = root .. "/emuapi/init.lua"
+			elseif rest then        file = root .. "/emuapi/" .. rest:gsub("%.", "/") .. ".lua"
+			else return nil end
+			local chunk = loadfile(file)
+			return chunk or ("\n\tno file '" .. file .. "'")
+		end)
+		_G.EMUAPI_HOST = "flycast"
+		local okLoad, api = pcall(function() return require("emuapi").load("flycast") end)
+		report("emuapi loads against this emulator", okLoad and api ~= nil,
+			okLoad and "" or tostring(api))
+		if okLoad and api and api.emu then
+			local e = api.emu
+			--- TWO ENTRY POINTS, ONE CEILING. emuapi owns the neutral
+			--- declaration and wraps its own namespaces; flycast owns the
+			--- session ceiling and enforces at its own bindings. They are not
+			--- two copies of one model - they are two doors capped by the same
+			--- fact, and THAT fact is what must agree.
+			report("emu.capability is the host's own ceiling, not a guess",
+				e.capability() == st.capability(),
+				tostring(e.capability()) .. " vs " .. tostring(st.capability()))
+
+			--- The neutral declaration is emuapi's, and it has not been used in
+			--- this run yet - so it starts unrestricted, exactly as the spec's
+			--- compatibility rule requires.
+			report("an undeclared script is unrestricted at the neutral layer",
+				e.tier() == "full", tostring(e.tier()))
+
+			--- AND IT IS CAPPED BY THE HOST - tested so that it can FAIL.
+			---
+			--- "declaring full offline grants full" is true of an emuapi that
+			--- never asks the host anything, so asserting it proves nothing.
+			--- The session here is offline and the real ceiling is "full", so
+			--- the only way to make the question discriminate is to change the
+			--- answer the host gives and require emuapi to have used it.
+			---
+			--- Stubbing is legitimate rather than a cheat: hostCeiling() looks
+			--- capability() up at call time, which is exactly the coupling under
+			--- test. An implementation that guessed from isonline() would answer
+			--- "full" here and fail.
+			local realCap = e.capability
+			e.capability = function() return "observer" end
+			local granted = e.declare{ tier = "full" }
+			e.capability = realCap
+			report("a neutral declaration is capped by what the HOST reports",
+				granted == "observer", tostring(granted))
+			report("...and the host's real ceiling is restored for what follows",
+				e.capability() == st.capability())
+
+			--- ONCE ONLY, at the neutral layer too - and this is emuapi's own
+			--- rule, not a forwarded one.
+			report("declaring twice raises at the neutral layer",
+				not pcall(e.declare, { tier = "observer" }))
+			report("...and a non-table request is refused",
+				not pcall(e.declare, "observer"))
+		end
+	end
+
 	t.finish()
 end

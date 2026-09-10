@@ -501,9 +501,17 @@ because a self-test proves the model and never the bindings. The claim that
 discriminates is the negative one: a host that stored a string and enforced
 nothing would pass "declaring observer returns observer".
 
-`[OPEN]` `emuapi/adapters/flycast.lua` does not yet forward `emu.declare` /
-`emu.tier` / `emu.can` onto these, so the conformance suite still cannot
-exercise the tier through the neutral interface.
+**And the neutral layer now reaches it.** `emuapi/init.lua` already owned
+`emu.declare` / `emu.tier` and wrapped its own namespaces; what it lacked was a
+way to learn the SESSION's ceiling, and it guessed from `isonline()`. It asks
+`emu.capability()` now, which the flycast adapter answers. Two entry points, one
+ceiling.
+
+`emuapi/conformance.lua` still SKIPS `declare` — deliberately, and it says why:
+*"it changes the tier in force for the rest of the run"*. A tier is one-way
+within a session, so `scripts/tests/tiers.lua` is the run that is allowed to end
+narrowed. **That closes `MEMORY.md`'s note that the authorisation tier had never
+been exercised on any host.**
 
 ### Phase 3 — frame-safe observation primitives (~1–2 weeks)
 A reactive Signal/Stream layer driven from a confirmed-frame-gated `vblank`,
