@@ -1,4 +1,5 @@
 #include "dojo.h"
+#include "session.h"
 #include "dojo/session.h"
 #include "movie.h"
 #include "pause.h"
@@ -1948,9 +1949,18 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	// (R / banner) still has a filename attached, and the .flyr append path (below) treats HasAppendTarget()
 	// as writing too. Include it here so running off the movie end in that state GROWS the roll instead of
 	// pinning frame_number (which would kill pause/step/Space - the infinite-roll freeze on a sibling path).
-	const bool tasWriteGrow = !dojo.play_match && !settings.network.online && !replay.ggpo_session
-			&& (cfgLoadBool("dojo", "RecordMatches", false) || cfgLoadBool("dojo", "PlayMacro", false)
-				|| replay.HasAppendTarget());
+	// `[2026-09-10]` THE PREDICATE, not a fourth copy of the conjunction.
+	// session::writeGrow() was written by promoting this exact expression out of
+	// this function body, and then had ZERO callers while the body it was
+	// promoted from stayed the live path - so the promotion bought nothing and
+	// the tree carried two copies of one rule (docs/SESSION-KINDS.md §4 #2).
+	//
+	// A SECOND, DIFFERENT conjunction for what looks like the same question
+	// still exists ~240 lines below and in core/lua/lua.cpp - different netplay
+	// exclusion, different feature set, different access path. That one is NOT
+	// folded in here: neither is a superset of the other, so picking a winner is
+	// a decision about behaviour rather than a deduplication.
+	const bool tasWriteGrow = session::writeGrow();
 	if (dojo.session_inputs.empty() && !tasWriteGrow)
 		return;
 	tas_ruler::onPoll(frame_number.load());	// REL ruler: remember the MvC2 skip cadence at this poll (a few byte reads)

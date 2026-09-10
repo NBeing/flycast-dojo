@@ -184,6 +184,9 @@ local playback while saying "the tape is shared". No peer exists.
 `dojo.play_match && dojo.replay.ggpo_session`.
 
 **#1 — "must this run be byte-reproducible?", two lists differing by two flags.**
+`[PARTLY ADDRESSED 2026-09-10]` the stale premise is corrected in place and the
+conclusion is kept on the half of the argument that never depended on it. The
+two lists still disagree.
 `core/determinism.cpp` omits `Receiving` and `Transmitting`;
 `core/hw/aica/aica_if.cpp` includes them. `determinism.cpp` *names* the
 disagreement and refuses to copy it — but its stated justification

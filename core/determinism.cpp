@@ -28,13 +28,25 @@ bool isDeterministicRun()
 	// config::Transmitting and config::Receiving are DELIBERATELY ABSENT, and
 	// an earlier version of this function had them, which was a bug.
 	//
-	//   Option<bool> Transmitting("Transmitting", true, "dojo");   <- TRUE
+	// `[CORRECTED 2026-09-10]` this justified their absence with a DEFAULT:
 	//
-	// Transmitting defaults to true on every flycast-dojo base. It means "will
-	// upload replays if a session happens", not "a session is happening", so
-	// including it made this predicate return true in every plain single-player
-	// launch - which silently pinned the SH4 clock, forced EmulateFramebuffer
-	// off and turned on the savestate verify probe for everyone, always.
+	//   Option<bool> Transmitting("Transmitting", true, "dojo");   <- TRUE
+	//   "Transmitting defaults to true on every flycast-dojo base"
+	//
+	// That premise is now false. core/cfg/option.cpp reads
+	// `Option<bool> Transmitting("Transmitting", false, "dojo");` here, so the
+	// specific harm described - every plain single-player launch silently
+	// pinning the SH4 clock, forcing EmulateFramebuffer off and arming the
+	// savestate verify probe - no longer follows from the default alone.
+	//
+	// THE CONCLUSION SURVIVES ON THE OTHER HALF OF THE ARGUMENT, which never
+	// depended on the default: Transmitting means "will upload replays IF a
+	// session happens", not "a session is happening". A flag about what to do
+	// with a result is not a statement that the run must reproduce, so it does
+	// not belong in this predicate at any default. Kept rather than silently
+	// rewritten, because a conclusion whose stated reason has rotted is worth
+	// knowing about - the next reader would otherwise check option.cpp, find the
+	// comment wrong, and have no way to tell whether the code was wrong too.
 	//
 	// Upstream's own RTC condition in aica_if.cpp still has both flags and so is
 	// effectively unconditional. That is survivable for the RTC (a frozen clock
@@ -42,7 +54,11 @@ bool isDeterministicRun()
 	// removes a user-facing feature, which is why this one does not copy it.
 	//
 	// Caught by a negative test: overclock to 250 with recording off and watch
-	// whether the pin fires. It did.
+	// whether the pin fires. It did - under the old default.
+	//
+	// The disagreement with aica_if.cpp is docs/SESSION-KINDS.md §4 #1 and is
+	// still open: two lists for "must this run be byte-reproducible", differing
+	// by exactly these two flags.
 	return settings.network.online
 		|| config::GGPOEnable
 		|| config::RecordMatches
