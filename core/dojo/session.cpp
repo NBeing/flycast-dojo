@@ -78,6 +78,11 @@ bool trainingEnabled()
 bool readOnly()  { return mode() == Mode::Read; }
 
 
+bool steppable()
+{
+	return trainingEnabled() || dojo.play_match || writeGrow();
+}
+
 bool writeGrow()
 {
 	// tasWriteGrow, verbatim in meaning and promoted out of MapleApplyAction's
@@ -197,6 +202,24 @@ void selfTest()
 
 		set("Training", wasTrain);
 		dojo.play_match = false;
+	}
+
+	// ---- PAUSE AND STEP ----
+	{
+		set("MacroMode", false); set("PlayMacro", false); set("RecordMatches", false);
+		set("Training", false);
+		dojo.play_match = true;
+		claim("a replay can be paused and stepped", steppable());
+		dojo.play_match = false;
+		set("Training", true);
+		claim("training can be paused and stepped", steppable());
+		set("Training", false);
+		// THE ARM THAT WAS MISSING. dojo.cpp promises pause/step stay alive
+		// while recording, and the two functions delivering it excluded exactly
+		// this case.
+		set("RecordMatches", true);
+		claim("a RECORD MOVIE session can be paused and stepped", steppable());
+		set("RecordMatches", false);
 	}
 
 	// ---- THE NETPLAY ARM, which had a live bug ----

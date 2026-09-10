@@ -213,7 +213,11 @@ copied the first, and its comment cites a line number that has since rotted.
 reached from inside it, has a `config::GGPOEnable` arm that starts a recording.
 One of the two paths is unreachable and neither site says which.
 
-**#4 — "does this session get pause and step?"** `tasWriteGrow` exists so that
+**#4 — "does this session get pause and step?"** `[FIXED 2026-09-10]`
+`session::steppable()` names the question and adds the third arm, `writeGrow()`,
+which is the one that already excludes netplay. `gui_open_pause` and
+`gui_open_step` use it. A self-test claim covers the Record Movie case and the
+sabotage that restores the old pair fails exactly it. `tasWriteGrow` exists so that
 pause/step survive a Record-Movie session, and a comment in `dojo.cpp` says so
 explicitly. `gui_open_step` and `gui_open_pause` only resume for
 `Training || play_match`. A Record Movie session is in neither set.

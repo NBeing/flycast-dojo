@@ -140,6 +140,27 @@ bool readOnly();	//!< mode() == Read
 */
 bool writeGrow();
 
+/*
+	MAY THE USER PAUSE AND STEP THIS SESSION?
+
+	`[MEASURED 2026-09-09]` docs/SESSION-KINDS.md Q-i - four sites all spell this
+	as `Training || play_match`, and all four therefore exclude a RECORD MOVIE
+	session. core/dojo/dojo.cpp says the opposite in as many words:
+
+	  "TAS WRITE (recording, NOT replaying): the movie is UNBOUNDED ... the piano
+	   roll is infinite while writing, and pause/step stay alive. Only play_match
+	   (replay) has a fixed length / the ReplayEnd dead-end."
+
+	tasWriteGrow exists precisely so that holds, and then gui_open_pause and
+	gui_open_step would not stop or start the machine for such a session. So the
+	feature was built and the two functions that deliver it did not know.
+
+	writeGrow() is the third arm rather than `recording()` because it is the one
+	that already excludes netplay - `!network.online && !replay.ggpo_session` -
+	and pausing one side of a rollback session desyncs the other.
+*/
+bool steppable();
+
 //! For the status pill, logs and the HUD. Never nullptr.
 const char *label();
 

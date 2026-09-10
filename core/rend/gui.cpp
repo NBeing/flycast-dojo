@@ -5045,7 +5045,9 @@ void gui_open_step()
 	if (pausing::active(pausing::USER))
 		pausing::clear(pausing::USER);
 
-	if (session::trainingEnabled() || dojo.play_match)
+	// `[CORRECTED 2026-09-10]` this read `Training || play_match`, which left a
+	// RECORD MOVIE session unable to step - see session::steppable().
+	if (session::steppable())
 	{
 		if (gui_state == GuiState::Paused)
 		{
@@ -5061,7 +5063,7 @@ void gui_open_pause()
 	const LockGuard lock(guiMutex);
 	if (dojo.stepping)
 		dojo.stepping = false;
-	if (dojo.play_match || session::trainingEnabled())
+	if (session::steppable())
 	{
 		if (gui_state == GuiState::Closed)
 		{
