@@ -244,10 +244,17 @@ through `panels::add`.
   described it as "bumped on every savestate write" and it was bumped in two
   places, neither of them one. The half-second safety tick was covering for it,
   which is to say the fallback was hiding the defect it was added for.
+- [x] **Delete a slot** (§G8) — `Host::deleteSlot()`, the only irreversible
+  operation in the interface. `hostfs::deleteSavestate` had zero callers and its
+  own header names the side effects the caller owns; this is that caller.
+  Two-step arm-and-confirm rather than a modal, because a modal stops the frame
+  and this panel draws while a movie may run. `dojo:StatesDeleteProbe` runs in
+  its OWN launch on its OWN copy of the clip, and also checks that a
+  now-empty slot is REFUSED.
 - [ ] The States window, the rest: **no thumbnails** (nothing in this tree
-  writes one, and `GetLastFrameRGB` is DX9/DX11 only — §G6), **no delete**
-  (`deleteSavestate`, zero callers — §G8), no generations pane, no save/load
-  actions from the wall.
+  writes one, and `GetLastFrameRGB` is DX9/DX11 only — §G6), no generations
+  pane, no save/load actions from the wall (`dc_loadstate` from a deferred
+  point is documented as wedging the emulator — see `core/lua/lua.cpp`).
 - [ ] `[OPEN]` the fork's 100-slot wall in its `core/rend/gui.cpp` has still not
   been lifted; only its generations pane has, so the 131/17 figures describe the
   PANE and this slice was built from the gaps survey instead.

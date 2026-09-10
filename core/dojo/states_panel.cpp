@@ -8,6 +8,7 @@
 #include "imgui.h"
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
+#include "oslib/oslib.h"
 #include <ctime>
 #include <string>
 
@@ -51,6 +52,15 @@ static bool showEmpty = false;
 // buffer can only ever be stale about the row it is on.
 static int  editRow = -1;
 static char editBuf[80] = {};
+
+// TWO STEPS AND A DEADLINE, for the one irreversible thing this panel can do.
+// A modal would be the other answer and is worse here: it stops the frame, and
+// this panel is drawn while a movie may be running. Arming a specific slot and
+// letting it disarm itself means a stray click cannot delete anything, and a
+// deliberate one takes two.
+static int    armedDelete = -1;
+static double armedAt = 0.0;
+static constexpr double ARM_SECONDS = 4.0;
 
 static std::string whenText(s64 mtime)
 {
@@ -113,7 +123,7 @@ static void draw()
 
 	ImGui::Separator();
 
-	if (!ImGui::BeginTable("##states", 6,
+	if (!ImGui::BeginTable("##states", 7,
 			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY
 			| ImGuiTableFlags_SizingFixedFit))
 		return;
@@ -124,6 +134,7 @@ static void draw()
 	ImGui::TableSetupColumn("size");
 	ImGui::TableSetupColumn("saved");
 	ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch);
+	ImGui::TableSetupColumn("");
 	ImGui::TableHeadersRow();
 
 	const u32 playhead = dojo.frame_number.load();
@@ -217,6 +228,40 @@ static void draw()
 			}
 			ImGui::PopID();
 		}
+
+		// ---- delete, armed ----
+		ImGui::TableNextColumn();
+		if (v.exists)
+		{
+			ImGui::PushID(i);
+			const bool armed = armedDelete == i
+					&& os_GetSeconds() - armedAt < ARM_SECONDS;
+			if (!armed)
+			{
+				if (ImGui::SmallButton("x"))
+				{
+					armedDelete = i;
+					armedAt = os_GetSeconds();
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Delete this state and its sidecars");
+			}
+			else
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, TAS_WRITE);
+				if (ImGui::SmallButton("really?"))
+				{
+					// SAID, not swallowed - the host refuses with no clip
+					// folder, and a delete that quietly did nothing would look
+					// like one that worked until the next rescan.
+					if (!h->deleteSlot(i))
+						NOTICE_LOG(RENDERER, "STATES: delete of slot %d was REFUSED", i);
+					armedDelete = -1;
+				}
+				ImGui::PopStyleColor();
+			}
+			ImGui::PopID();
+		}
 	}
 	ImGui::EndTable();
 
@@ -261,6 +306,42 @@ static void draw()
 					slot, wrote ? "yes" : "NO", readBack ? "yes" : "NO",
 					restored ? "yes" : "NO", back ? "yes" : "NO", was.c_str(),
 					(wrote && readBack && restored && back) ? "PASS" : "FAIL");
+		}
+	}
+
+	/*
+		DELETE PROBE, `dojo:StatesDeleteProbe=yes`. One shot, and DESTRUCTIVE.
+
+		It removes a real savestate, so it runs only under scripts/statestest.sh,
+		which copies the clip and its states into a temp directory - and in a
+		SECOND launch, after the read and label checks have had their turn on an
+		intact one.
+	*/
+	{
+		static bool delProbed = false;
+		if (!delProbed && occupied > 0 && cfgLoadBool("dojo", "StatesDeleteProbe", false))
+		{
+			delProbed = true;
+			int slot = -1;
+			SlotView v0;
+			for (int i = 0; i < n; i++)
+				if (h->slotView(i, v0) && v0.exists) { slot = i; break; }
+
+			const bool deleted = h->deleteSlot(slot);
+			SlotView v1;
+			// READ BACK THROUGH THE SCAN, so this measures the disk rather than
+			// the return value agreeing with itself.
+			const bool gone = h->slotView(slot, v1) && !v1.exists;
+			// And the notice, which is the one thing that distinguishes a
+			// deletion from a stranding for anything drawing markers.
+			const bool noticed = h->staleNoticePhase() >= 0 && h->staleNoticeWasDeletion();
+			const bool refusesEmpty = !h->deleteSlot(slot);	// now empty: must refuse
+
+			NOTICE_LOG(RENDERER, "STATES DELETEPROBE: slot=%d deleted=%s gone=%s notice=%s"
+					" refuses-empty=%s  => %s", slot, deleted ? "yes" : "NO",
+					gone ? "yes" : "NO", noticed ? "yes" : "NO",
+					refusesEmpty ? "yes" : "NO",
+					(deleted && gone && noticed && refusesEmpty) ? "PASS" : "FAIL");
 		}
 	}
 

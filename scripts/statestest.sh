@@ -44,30 +44,38 @@ for f in $(ls -1t "${XDG_DATA_HOME:-$HOME/.local/share}"/flycast-dojo/replays/*/
 done
 [ -n "$CLIP" ] || { echo "statestest: SKIP - no clip with a savestate"; exit $SKIP; }
 
-mkdir -p "$OUT/config/flycast-dojo" "$OUT/data" "$OUT/clip"
-cp "$CLIP" "$OUT/clip/clip.flyr"
-for sib in "$(dirname "$CLIP")"/*.state "$(dirname "$CLIP")"/*.state.* "$(dirname "$CLIP")"/clip.json; do
-	{ [ -f "$sib" ] && cp "$sib" "$OUT/clip/" 2>/dev/null; } || true
-done
+# A FRESH COPY PER LAUNCH. The delete probe removes a real savestate, so it must
+# never run against the same copy the read checks are about to use - and a probe
+# that ate the states it was asked to look at would be its own bug report.
+run_states() {	# $1 = subdir, $2... = extra -config args
+	local w="$OUT/$1"; shift
+	mkdir -p "$w/config/flycast-dojo" "$w/data" "$w/clip"
+	cp "$CLIP" "$w/clip/clip.flyr"
+	for sib in "$(dirname "$CLIP")"/*.state "$(dirname "$CLIP")"/*.state.* \
+			"$(dirname "$CLIP")"/clip.json; do
+		{ [ -f "$sib" ] && cp "$sib" "$w/clip/" 2>/dev/null; } || true
+	done
+	nohup Xvfb "$DISP" -screen 0 900x700x24 >"$w/xvfb.log" 2>&1 & XPID=$!
+	sleep 2
+	XDG_CONFIG_HOME="$w/config" XDG_DATA_HOME="$w/data" DISPLAY="$DISP" "$EXE" \
+		-config dojo:UiIni=no -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
+		-config dojo:Replay=yes -config "dojo:ReplayFilename=$w/clip/clip.flyr" \
+		-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no \
+		-config dojo:Panel.states=yes -config dojo:StatesTrace=yes \
+		"$@" "$ROM" > "$w/out.log" 2>&1 &
+	FC=$!
+	sleep 26
+	# PID-SCOPED. Never `pkill -x Xvfb` - that matches any other X server on this
+	# machine, including ones this script did not start.
+	kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 1
+}
 
-nohup Xvfb "$DISP" -screen 0 900x700x24 >"$OUT/xvfb.log" 2>&1 & XPID=$!
-sleep 2
-XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
-	-config dojo:UiIni=no -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
-	-config dojo:Replay=yes -config "dojo:ReplayFilename=$OUT/clip/clip.flyr" \
-	-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no \
-	-config dojo:Panel.states=yes -config dojo:StatesTrace=yes \
-	-config dojo:StatesLabelProbe=yes \
-	"$ROM" > "$OUT/out.log" 2>&1 &
-FC=$!
-sleep 28
-# PID-SCOPED. Never `pkill -x Xvfb` - that matches any other X server on this
-# machine, including ones this script did not start.
-kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 1
+run_states read -config dojo:StatesLabelProbe=yes
+OUTLOG="$OUT/read/out.log"
 
-reg=$(tr -d '\0' < "$OUT/out.log" | grep -a "STATES PANEL:" | tail -1)
-st=$(tr -d '\0' < "$OUT/out.log" | grep -a "STATES:" | tail -1)
-lp=$(tr -d '\0' < "$OUT/out.log" | grep -a "STATES LABELPROBE:" | tail -1)
+reg=$(tr -d '\0' < "$OUTLOG" | grep -a "STATES PANEL:" | tail -1)
+st=$(tr -d '\0' < "$OUTLOG" | grep -a "STATES:" | tail -1)
+lp=$(tr -d '\0' < "$OUTLOG" | grep -a "STATES LABELPROBE:" | tail -1)
 [ -n "$reg" ] && echo "  ${reg##*N\[RENDERER\]: }"
 [ -n "$st" ]  && echo "  ${st##*N\[RENDERER\]: }"
 [ -n "$lp" ]  && echo "  ${lp##*N\[RENDERER\]: }"
@@ -89,5 +97,18 @@ case "$lp" in
 	*PASS*) ;;
 	*) echo "FAIL statestest - naming a slot did not survive the round trip"; exit 1 ;;
 esac
-echo "PASS statestest - $occ slot(s) seen, and a name round-tripped through the disk"
+# ---- the destructive one, on its own copy -----------------------------------
+run_states del -config dojo:StatesDeleteProbe=yes
+dp=$(tr -d '\0' < "$OUT/del/out.log" | grep -a "STATES DELETEPROBE:" | tail -1)
+if [ -z "$dp" ]; then
+	echo "statestest: SKIP - the delete probe never ran"
+	exit $SKIP
+fi
+echo "  ${dp##*N\[RENDERER\]: }"
+case "$dp" in
+	*PASS*) ;;
+	*) echo "FAIL statestest - deleting a slot did not take, or an empty slot was not refused"; exit 1 ;;
+esac
+
+echo "PASS statestest - $occ slot(s) seen, a name round-tripped, and a delete took"
 exit 0

@@ -85,6 +85,18 @@ struct Host
 	virtual bool setSlotLabel(int slot, const std::string& label)
 	{ (void)slot; (void)label; return false; }
 
+	/*
+		Delete a slot's state and everything that describes it.
+
+		THE ONLY IRREVERSIBLE OPERATION IN THIS INTERFACE. It refuses by default
+		for the same reason setSlotLabel does, and more so: a host that cannot
+		delete must not let a tool believe it did.
+
+		A CONFIRMATION IS THE CALLER'S JOB and not this function's. A host that
+		asked would be a host that blocks, and this one is called from a draw.
+	*/
+	virtual bool deleteSlot(int slot) { (void)slot; return false; }
+
 	// Does this slot still belong to the timeline currently being edited?
 	// A re-record past the frame a state was saved on strands it: the state is
 	// still a valid machine, but it is no longer a point on THIS movie.

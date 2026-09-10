@@ -98,6 +98,7 @@ one-shot integration checks that run inside a real session against a real movie.
 | `dojo:RollAnchorProbe` | a resize moves a `.frame` sidecar on disk AND a bookmark, and one undo brings both back |
 | `dojo:RollMarkProbe` | bookmarks survive save and reload, read from the FILE |
 | `dojo:StatesLabelProbe` | naming a slot round-trips through the disk |
+| `dojo:StatesDeleteProbe` | a delete takes, is visible through a rescan, raises a deletion notice, and an empty slot is refused |
 
 **Harnesses**: `scripts/rolltest.sh` drives real clicks and drags;
 `scripts/statestest.sh` reads traces with no mouse at all. Both are in ctest.
@@ -138,7 +139,6 @@ rewriting `.frame` sidecars) · `dojo:MarksPersist=no`.
 
 ## What is not here yet
 
-The generations pane, slot delete (`hostfs::deleteSavestate` still has zero
-callers), save/load from the wall, thumbnails (nothing in this tree writes one —
+The generations pane, save/load from the wall, thumbnails (nothing in this tree writes one —
 `GetLastFrameRGB` is DX9/DX11 only), the input/hotkey system, and the
 sequence library. `TODOS.md` carries them.

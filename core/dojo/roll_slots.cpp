@@ -200,6 +200,34 @@ public:
 		return true;
 	}
 
+	bool deleteSlot(int slot) override
+	{
+		ensureFresh();
+		if (slot < 0 || slot >= (int)info_.size() || !info_[slot].exists)
+			return false;
+		if (hostfs::savestateFolderOverride.empty())
+		{
+			// The same refusal as the anchor rewrite and the rename, and here it
+			// matters most: with no clip folder the READ derivation and the
+			// WRITE derivation of a path can name different directories
+			// (docs/STATES-LIFT.md G13), and this one removes files.
+			NOTICE_LOG(RENDERER, "ROLL SLOTS: no clip folder - refusing to delete slot %d", slot);
+			return false;
+		}
+		if (!hostfs::deleteSavestate(slot))
+			return false;
+		// deleteSavestate's own header says the caller owns the side effects.
+		// This is that caller.
+		dojo.savestate_epoch++;
+		scannedAt_ = -1000.0;
+		// A DELETION IS A STALENESS EVENT of its own kind, and the roll draws it
+		// differently from a stranding - that is what staleNoticeWasDeletion is
+		// for, and nothing else sets it.
+		noticeAt_ = os_GetSeconds();
+		noticeDeletion_ = true;
+		return true;
+	}
+
 	int staleNoticePhase() const override
 	{
 		ensureFresh();
