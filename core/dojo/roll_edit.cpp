@@ -1,4 +1,5 @@
 #include "roll_edit.h"
+#include "roll_pattern.h"
 #include "dojo.h"
 #include "input/gamepad.h"
 #include "tasmacro.h"
@@ -40,6 +41,27 @@ bool rowHas(const Row& r, int player, const Column& c)
 			BTN_TRIGGER_LEFT, BTN_TRIGGER_RIGHT);
 }
 
+//! One column into one decoded frame. Factored out because the cell codec
+//! applies every column of the profile in a loop, and a second copy of the
+//! trigger rule below is exactly the kind of drift this port exists to avoid.
+static void writeColumn(FrameInputs& f, const Column& c, bool on)
+{
+	if (c.trigger < 0)
+	{
+		if (on) f.kcode |= c.bit;
+		else    f.kcode &= ~c.bit;
+		return;
+	}
+	const u32 tbit = c.trigger == 0 ? BTN_TRIGGER_LEFT : BTN_TRIGGER_RIGHT;
+	u8& b = c.trigger == 0 ? f.triggers.l : f.triggers.r;
+	// BOTH spellings, so the row reads as pressed whichever one a reader
+	// checks. Setting only the byte would leave a kcode-reading path seeing
+	// an unpressed trigger - which is how half a recording goes missing.
+	b = on ? 0xFF : 0x00;
+	if (on) f.kcode |= tbit;
+	else    f.kcode &= ~tbit;
+}
+
 Row rowWith(const Row& r, int player, const Column& c, bool on)
 {
 	Row out = r;
@@ -47,24 +69,44 @@ Row rowWith(const Row& r, int player, const Column& c, bool on)
 		out.resize(rowBytes(), 0);
 	FrameInputs f{};
 	readFrame(out, player, f);
-
-	if (c.trigger < 0)
-	{
-		if (on) f.kcode |= c.bit;
-		else    f.kcode &= ~c.bit;
-	}
-	else
-	{
-		const u32 tbit = c.trigger == 0 ? BTN_TRIGGER_LEFT : BTN_TRIGGER_RIGHT;
-		u8& b = c.trigger == 0 ? f.triggers.l : f.triggers.r;
-		// BOTH spellings, so the row reads as pressed whichever one a reader
-		// checks. Setting only the byte would leave a kcode-reading path seeing
-		// an unpressed trigger - which is how half a recording goes missing.
-		b = on ? 0xFF : 0x00;
-		if (on) f.kcode |= tbit;
-		else    f.kcode &= ~tbit;
-	}
+	writeColumn(f, c, on);
 	writeFrame(out, player, f);
+	return out;
+}
+
+int laneCount()
+{
+	const size_t n = rowBytes() / sizeof(FrameInputs);
+	return n < 1 ? 1 : (int)n;
+}
+
+Cell cellOf(const Row& r, int lane)
+{
+	FrameInputs f{};
+	readFrame(r, lane, f);
+	const Profile& p = profile();
+	Cell c = 0;
+	for (int i = 0; i < p.count; i++)
+		if (pressed(p.cols[i], f.kcode, f.triggers.l, f.triggers.r,
+				BTN_TRIGGER_LEFT, BTN_TRIGGER_RIGHT))
+			c |= p.cols[i].canon;
+	return c;
+}
+
+Row cellInto(const Row& r, int lane, Cell c)
+{
+	Row out = r;
+	if (out.size() < rowBytes())
+		out.resize(rowBytes(), 0);
+	FrameInputs f{};
+	readFrame(out, lane, f);
+	// STARTS FROM THE EXISTING FRAME and rewrites only modelled columns, so
+	// unmodelled bits survive. Rebuilding from zero would be simpler and would
+	// silently drop analog axes.
+	const Profile& p = profile();
+	for (int i = 0; i < p.count; i++)
+		writeColumn(f, p.cols[i], (c & p.cols[i].canon) != 0);
+	writeFrame(out, lane, f);
 	return out;
 }
 
@@ -93,27 +135,17 @@ Edit setColumn(const std::map<u32, Row>& src, const std::set<u32>& rows,
 Edit paintColumn(const std::map<u32, Row>& all, u32 anchor, u32 to,
 		int player, const Column& c, bool on, int gap)
 {
-	Edit out(all.begin(), all.end());
-	const u32 lo   = std::min(anchor, to);
-	const u32 hi   = std::max(anchor, to);
-	const u32 step = (u32)(gap < 0 ? 0 : gap) + 1;
-
-	// Extend with blanks first if the stroke runs past the end, so the rows the
-	// pattern wants to touch exist to be touched.
-	const u32 end = all.empty() ? 0 : all.rbegin()->first;
-	for (u32 f = end + 1; f <= hi && !all.empty(); f++)
-		if (out.find(f) == out.end())
-			out[f] = blankRow();
-
-	for (u32 f = lo; f <= hi; f++)
-	{
-		const u32 d = f >= anchor ? f - anchor : anchor - f;	// distance, not offset
-		if (d % step != 0)
-			continue;
-		auto it = out.find(f);
-		out[f] = rowWith(it == out.end() ? blankRow() : it->second, player, c, on);
-	}
-	return out;
+	// DELEGATED, not reimplemented. `[MEASURED 2026-09-09]` this loop and the
+	// fork's tasMashPlace2, tasFillRowsWithMacro and brush stroke are one
+	// operation written four times - a periodic payload over a row range at a
+	// phase - and the four copies had already drifted (docs/ROLL-EDIT-MODEL.md).
+	// A single column is that operation with a one-step pattern.
+	//
+	// The mask is the column and nothing else, which is what makes this a
+	// SET/CLEAR of one input rather than a replace of the whole cell: every
+	// other button in the lane is outside the mask and survives.
+	return applyPattern(all, anchor, to,
+			Pattern::one(player, on ? (Cell)c.canon : 0, (Cell)c.canon), gap);
 }
 
 Edit mergeIntoMovie(const std::map<u32, Row>& all, const Edit& e)

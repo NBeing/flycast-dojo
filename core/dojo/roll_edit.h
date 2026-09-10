@@ -65,6 +65,31 @@ bool rowHas(const Row& r, int player, const Column& c);
 //! Set or clear one column, returning the changed row.
 Row rowWith(const Row& r, int player, const Column& c, bool on);
 
+// ---- THE CELL CODEC -------------------------------------------------------
+//
+// The row FORMAT half of the cell abstraction: roll_profile owns what a cell
+// MEANS, this owns how one is stored. Splitting it here is what lets the
+// pattern tools be written against Cells and never touch FrameInputs.
+
+//! How many lanes a row holds. Derived from the record size, never assumed:
+//! `sizeof(FrameInputs) * 2` appears 60+ times in the fork being ported, and
+//! every one of them is a place a third port would have to be found.
+int laneCount();
+
+//! One lane of a row, decoded. An absent or short lane reads as neutral - a
+//! hole in the movie is a legitimate state, not an error (see movie.h).
+Cell cellOf(const Row& r, int lane);
+
+/*
+	One lane of a row, encoded - NON-LOSSILY.
+
+	It starts from `r` and rewrites only the bits this profile models, so
+	anything it does not model (analog stick axes, kcode bits no column names)
+	SURVIVES. The fork round-trips through its canon word and loses them; that
+	is invisible until a movie carrying analog input meets an edit tool.
+*/
+Row cellInto(const Row& r, int lane, Cell c);
+
 // ---- IN PLACE (hand to ApplyEdit) -----------------------------------------
 
 //! Every named row, blanked. Rows absent from the movie are still written: a

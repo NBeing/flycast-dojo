@@ -35,11 +35,38 @@ struct Column
 	u16         canon;	// canonical id, for text notation and macros
 };
 
+/*
+	A CELL: one lane's input on one frame, as a bag of canonical bits.
+
+	OPAQUE TO EVERY TOOL. `[MEASURED 2026-09-09]` docs/ROLL-EDIT-MODEL.md - the
+	fork's 37 edit tools split into ~25 generic row/column operations, three
+	profile chokepoints, and ~9 generic bodies with ONE profile-shaped payload
+	threaded through them. That payload is always this: a per-lane word. Because
+	the type system never named it, mash, fill, brush and paint are the same loop
+	written four times, drifted four ways.
+
+	So the tools take Cells and never look inside. Only this file does.
+*/
+using Cell = u32;
+
+//! Inputs a stick cannot report together. Data, not a rule in code, because
+//! "up and down cancel" is a fact about a control, not about arithmetic.
+struct Opposed { u16 a, b; };
+
 struct Profile
 {
 	const char   *name;	// for the UI and for saying which profile is loaded
 	const Column *cols;
 	int           count;
+
+	// THE DIRECTION GROUP, which behaves differently from buttons and has to,
+	// because a stick reports ONE direction while buttons accumulate. Writing a
+	// direction REPLACES whatever direction was there; writing a button ORs.
+	// Kept as data so a second profile - another pad, another system - states
+	// its own grouping instead of inheriting a Dreamcast's.
+	Cell            dirs = 0;
+	const Opposed  *opposed = nullptr;
+	int             opposedCount = 0;
 };
 
 // The profile in force. A host sets it once at startup; the roll only reads it.
@@ -53,6 +80,40 @@ struct Profile
 	stores a frame. The trigger duality is the host's convention, passed in.
 */
 bool pressed(const Column& c, u32 kcode, u8 trigL, u8 trigR, u32 trigLBit, u32 trigRBit);
+
+// ---- CELLS ----------------------------------------------------------------
+
+//! Is this column set in this cell?
+bool cellHas(Cell c, const Column& col);
+
+//! One column set or cleared, nothing else touched.
+Cell cellWith(Cell c, const Column& col, bool on);
+
+/*
+	THE WRITE RULE, and the only place in the roll that knows what an input
+	MEANS. `bits` within `mask` replace what `have` held; everything outside
+	`mask` is untouched. That single primitive covers all four uses the fork
+	spells four ways:
+
+	  paint one column on     mask = that column,  bits = that column
+	  paint one column off    mask = that column,  bits = 0
+	  stamp, replacing        mask = every bit,    bits = the pattern frame
+	  overdub / merge         mask = the pattern frame's bits, bits = the same
+
+	MERGE IS NOT A FLAG HERE. It is what a mask of only the bits being added
+	means. Making it a flag is how the fork ended up with a brush that ZEROES
+	the rows it skips in one mode and leaves them alone in the other - the same
+	gesture, opposite destructiveness, decided by a switch in another panel.
+
+	Directions do not accumulate: if the write introduces one, it wins outright,
+	and an opposed pair cannot survive whatever produced it.
+*/
+Cell cellApply(Cell have, Cell bits, Cell mask);
+
+//! Every canon bit this profile models. The mask a full replace uses - and the
+//! bits a codec may overwrite, so anything the profile does NOT model survives
+//! a round trip.
+Cell cellAll();
 
 const Profile& profile();
 void setProfile(const Profile& p);

@@ -1286,6 +1286,7 @@ if(NOT LIBRETRO)
 	core/dojo/roll_select.cpp
 	core/dojo/roll_edit.cpp
 	core/dojo/roll_paint.cpp
+	core/dojo/roll_pattern.cpp
 	core/dojo/roll_slots.cpp
 			core/dojo/dojo_settings.h
 			core/dojo/session.cpp

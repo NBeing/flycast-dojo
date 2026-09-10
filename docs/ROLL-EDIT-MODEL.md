@@ -162,3 +162,41 @@ Order that follows: name the cell and the pattern first, because nine tools
 collapse onto them; then make structural edits return a remap, because that is
 what the selection, bookmarks and savestate anchors all need, and it is the
 join with the States window.
+
+---
+
+## 7. LANDED `[2026-09-09]` — the cell and the pattern
+
+`core/dojo/roll_profile.{h,cpp}` gained `Cell`, `cellHas`, `cellWith`,
+`cellApply`, `cellAll`, and the direction group as **data** on `Profile`
+(`dirs`, `opposed[]`) so a second pad states its own grouping rather than
+inheriting a Dreamcast's. `core/dojo/roll_edit.{h,cpp}` gained the codec —
+`laneCount`, `cellOf`, `cellInto`. `core/dojo/roll_pattern.{h,cpp}` is the one
+function.
+
+**Three things came out better than the fork, deliberately:**
+
+**Merge is not a flag; it is what a mask means.** A `CellOp` is `{bits, mask}`
+and the four uses — paint on, paint off, stamp-replacing, overdub — are four
+masks. A flag is how the fork ended up with a brush that zeroes the rows it
+skips in one mode and leaves them alone in the other.
+
+**The pattern advances in FRAME order however the drag went.** The fork indexes
+by absolute distance from the anchor, so an upward drag plays the pattern
+backwards in time; the phase stays anchored while step 0 lands on the lowest
+firing row. Its single-column case cannot see the difference, which is why it
+survived there and why our own paint was immune by accident.
+
+**The codec is non-lossy.** `cellInto` starts from the existing row and rewrites
+only modelled columns, so analog axes and unnamed kcode bits survive. The fork
+round-trips through its canon word and drops them.
+
+**The collapse is verified by what did NOT change.** `paintColumn` is now four
+lines delegating to `applyPattern`, and roll_edit's 29 claims and roll_paint's
+18 pass unaltered — that, rather than the new tests, is the evidence the two
+loops were one loop. `patternSelfTest` adds 18 more, and four sabotages each
+break their own claims: indexing by absolute distance breaks only the frame-order
+claim; writing neutral into gap rows breaks the gap claims **in both pattern and
+paint**, which is itself proof they share the code now; dropping the direction
+rule breaks only the direction and SOCD claims; and treating an empty track as
+neutral breaks only the empty-track claim.

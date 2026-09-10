@@ -153,10 +153,16 @@ through `panels::add`.
   the day. It carries the scan cache and the staleness memoisation the surveys
   said it needs (`docs/STATES-LIFT.md` G1, G3), and `scripts/rolltest.sh`
   asserts a real anchored slot with a failing arm.
-- [ ] Remaining edit tools — but **not 32 pieces of work**. See
-  `docs/ROLL-EDIT-MODEL.md`: name the cell and the pattern first and nine tools
-  collapse onto one function (mash, fill, brush, stamp, paint are the same
-  loop written four times); stretch/compress/reverse/clear are fully generic.
+- [x] **The cell and the pattern.** `core/dojo/roll_pattern.{h,cpp}` plus
+  `Cell`/`cellApply` in the profile and the codec in `roll_edit`. `paintColumn`
+  now delegates to it, and roll_edit's 29 claims and roll_paint's 18 pass
+  unaltered — which is the evidence the two loops were one loop. 18 new claims,
+  4 sabotages, each breaking its own. `docs/ROLL-EDIT-MODEL.md` §7.
+- [ ] Remaining edit tools, now that the payload has a name. Mash, fill, brush
+  and stamp are `applyPattern` with a longer track and a different mask; the
+  work left is the notation parsers that BUILD the tracks (profile) and the UI
+  that offers them. stretch/compress/reverse/clear are fully generic and
+  independent of all of it.
 - [ ] **Structural edits should return a ROW REMAP.** `docs/ROLL-EDIT-MODEL.md`
   §3. The fork writes selection-shifting five times and gets two of them wrong,
   and hand-calls bookmark fixups from five sites with nothing enforcing it. Same

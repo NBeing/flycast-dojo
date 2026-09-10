@@ -39,13 +39,73 @@ static const Column mvc2Cols[] = {
 	{ "ST", DC_BTN_START,  -1, tas_macro::CANON_START },
 };
 
-static const Profile mvc2{ "Marvel vs Capcom 2", mvc2Cols, (int)std::size(mvc2Cols) };
+// The stick, and what it cannot do. A Dreamcast pad fact, not a Marvel one -
+// it sits here because this is the layer that owns the bit vocabulary, and the
+// next profile on the same hardware will repeat it rather than inherit it
+// silently.
+static const Opposed mvc2Opposed[] = {
+	{ tas_macro::CANON_UP,   tas_macro::CANON_DOWN  },
+	{ tas_macro::CANON_LEFT, tas_macro::CANON_RIGHT },
+};
+
+static const Profile mvc2{ "Marvel vs Capcom 2", mvc2Cols, (int)std::size(mvc2Cols),
+		tas_macro::CANON_UP | tas_macro::CANON_DOWN
+			| tas_macro::CANON_LEFT | tas_macro::CANON_RIGHT,
+		mvc2Opposed, (int)std::size(mvc2Opposed) };
 
 // Defaults to the only profile there is. When a second one exists this becomes
 // a lookup, and the DEFAULT should probably become a plain Dreamcast pad with
 // hardware names - a roll that mislabels buttons is better than one that
 // refuses to draw.
 static const Profile *current = &mvc2;
+
+bool cellHas(Cell c, const Column& col) { return (c & col.canon) != 0; }
+
+Cell cellWith(Cell c, const Column& col, bool on)
+{
+	return on ? (c | col.canon) : (c & ~(Cell)col.canon);
+}
+
+Cell cellAll()
+{
+	const Profile& p = profile();
+	Cell m = 0;
+	for (int i = 0; i < p.count; i++)
+		m |= p.cols[i].canon;
+	return m;
+}
+
+//! Opposed inputs cancel: BOTH go, rather than one winning. A pad that reported
+//! left and right at once would be a broken pad, and picking a winner here
+//! would invent an input the user never gave.
+static Cell socdClean(Cell c)
+{
+	const Profile& p = profile();
+	for (int i = 0; i < p.opposedCount; i++)
+	{
+		const Cell pair = (Cell)p.opposed[i].a | (Cell)p.opposed[i].b;
+		if ((c & pair) == pair)
+			c &= ~pair;
+	}
+	return c;
+}
+
+Cell cellApply(Cell have, Cell bits, Cell mask)
+{
+	const Profile& p = profile();
+	Cell out = (have & ~mask) | (bits & mask);
+
+	// A DIRECTION REPLACES, A BUTTON ACCUMULATES, and the difference is decided
+	// by whether this write INTRODUCED a direction - not by whether the result
+	// has one. Painting LEFT onto a frame holding RIGHT must give LEFT, and
+	// CLEARING left must not resurrect right.
+	const Cell incoming = bits & mask & p.dirs;
+	if (incoming != 0)
+		out = (out & ~p.dirs) | socdClean(incoming);
+	else
+		out = (out & ~p.dirs) | socdClean(out & p.dirs);
+	return out;
+}
 
 bool pressed(const Column& c, u32 kcode, u8 trigL, u8 trigR, u32 trigLBit, u32 trigRBit)
 {
