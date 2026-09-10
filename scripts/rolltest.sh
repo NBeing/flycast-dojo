@@ -91,7 +91,16 @@ export DISPLAY="$DISP"
 # script: Xorg and i3 both restarted mid-session. scripts/docktest.sh already
 # carried this warning and it was read past. It is repeated here because this
 # script also starts an i3, so this is where the next person will need it.
-cleanup() { kill "$FC" 2>/dev/null; kill "$IPID" 2>/dev/null; kill "$XPID" 2>/dev/null; }
+# AND CONFIRMED DEAD, not merely signalled. `[MEASURED 2026-09-10]` a TERM the
+# emulator was too busy to service left it running past the end of a run. Wait,
+# then insist - still only on the three pids this script launched.
+cleanup() {
+	kill "$FC" 2>/dev/null; kill "$IPID" 2>/dev/null; kill "$XPID" 2>/dev/null
+	sleep 2
+	kill -0 "$FC" 2>/dev/null   && kill -9 "$FC" 2>/dev/null
+	kill -0 "$IPID" 2>/dev/null && kill -9 "$IPID" 2>/dev/null
+	kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null
+}
 
 WID=$(xdotool search --name "Flycast" 2>/dev/null | head -1)
 [ -n "$WID" ] || { echo "rolltest: SKIP - no window"; cleanup; exit $SKIP; }

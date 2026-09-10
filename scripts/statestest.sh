@@ -65,9 +65,18 @@ run_states() {	# $1 = subdir, $2... = extra -config args
 		"$@" "$ROM" > "$w/out.log" 2>&1 &
 	FC=$!
 	sleep 26
-	# PID-SCOPED. Never `pkill -x Xvfb` - that matches any other X server on this
-	# machine, including ones this script did not start.
-	kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 1
+	# PID-SCOPED. Never `pkill -x Xvfb` or `pkill -x flycast` - those match any
+	# other instance on this machine, including ones this script did not start.
+	#
+	# AND CONFIRMED DEAD. `[MEASURED 2026-09-10]` a TERM that the emulator was
+	# too busy to service left it running past the end of the run, holding a
+	# display this script was about to reuse. Wait, then insist - still only on
+	# the pids this function launched.
+	kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null
+	sleep 2
+	kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null
+	kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null
+	sleep 1
 }
 
 run_states read -config dojo:StatesLabelProbe=yes
