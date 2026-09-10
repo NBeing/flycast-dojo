@@ -18,6 +18,7 @@
  */
 
 #include "gamepad_device.h"
+#include "dojo/session.h"
 #include "cfg/cfg.h"
 #include "oslib/oslib.h"
 #include "rend/gui.h"
@@ -160,67 +161,67 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 
 		// training
 		case EMU_BTN_SWITCH_PLAYER:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.SwitchPlayer();
 			}
 			break;
 		case EMU_BTN_RECORD:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.ToggleRecording(0);
 			}
 			break;
 		case EMU_BTN_PLAY:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.TogglePlayback(0);
 			}
 			break;
 		case EMU_BTN_RECORD_1:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.ToggleRecording(1);
 			}
 			break;
 		case EMU_BTN_PLAY_1:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.TogglePlayback(1);
 			}
 			break;
 		case EMU_BTN_RECORD_2:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.ToggleRecording(2);
 			}
 			break;
 		case EMU_BTN_PLAY_2:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.TogglePlayback(2);
 			}
 			break;
 		case EMU_BTN_PLAY_RND:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.ToggleRandomPlayback();
 			}
 			break;
 		case EMU_BTN_SELECT_SLOT:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.SelectRecordSlot();
 			}
 			break;
 		case EMU_BTN_PLAY_SLOT:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.ToggleSelectedPlayback();
 			}
 			break;
 		case EMU_BTN_RECORD_SLOT:
-			if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))
+			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
 				dojo.training.ToggleSelectedRecording();
 			}

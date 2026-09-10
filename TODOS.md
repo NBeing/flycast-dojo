@@ -202,9 +202,16 @@ this; the counts and the evidence are there, not here.
 - [ ] The predicates are unused because they answer questions nobody asks — the
   census names **14** distinct questions with no predicate. Name those first.
   `session::livePeer()` is the first one added under that reading.
-- [ ] **Training is not in `Kind` at all** — 21 sites, 11 of them one
-  copy-pasted block in `core/input/gamepad_device.cpp`. The largest unmodelled
-  kind in the tree.
+- [x] **Training is in `Kind` now**, below Replay — an ordering read out of
+  `dojo_gui.cpp`, which already spells the pair as `if (play_match) … else if
+  (Training)`. And **34 raw reads of the key migrated to one owner**, including
+  the 11 copy-pasted lines in `gamepad_device.cpp`.
+  **TWO predicates, deliberately not one:** `training()` is the KIND
+  (exclusive); `trainingEnabled()` is the TOGGLE, which is what all 34 sites
+  actually ask — they read it as `Training && ShowTrainingInputDisplay` or as an
+  arm beside `play_match`, never as "what kind of session is this". Collapsing
+  them would have silently changed behaviour wherever the toggle is set under a
+  higher kind. A self-test claim pins the difference and a sabotage confirms it.
 - [ ] Migrate against the denominator (170), so a missed site is loud. A partial
   migration reads exactly like a complete one.
 - [ ] Work §4's **11 latent disagreements** as a bug list. **#9 fixed

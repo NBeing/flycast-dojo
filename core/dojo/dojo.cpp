@@ -1,4 +1,5 @@
 #include "dojo.h"
+#include "dojo/session.h"
 #include "movie.h"
 #include "pause.h"
 #include "tasmacro.h"
@@ -2064,7 +2065,7 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	std::vector<u8> current_inputs = tas_sit->second;
 	VerifyInputsFrame(current_inputs);		// T3: SENT-vs-READ, one call per applied frame
 
-	if (cfgLoadBool("dojo", "Training", false))
+	if (session::trainingEnabled())
 	{
 		if (training.player_switched)
 		{
@@ -2252,7 +2253,7 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 		last_applied_frame = dojo.frame_number;
 	}
 
-	if (cfgLoadBool("dojo", "Training", false) && config::ShowTrainingInputDisplay ||
+	if (session::trainingEnabled() && config::ShowTrainingInputDisplay ||
 		dojo.play_match && config::ShowReplayInputDisplay)
 		AddToInputDisplay(inputState);
 

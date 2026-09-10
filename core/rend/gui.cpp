@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "gui.h"
+#include "dojo/session.h"
 #include "osd.h"
 #include "cfg/cfg.h"
 #include "hw/maple/maple_if.h"
@@ -785,7 +786,7 @@ void gui_open_settings()
 	const LockGuard lock(guiMutex);
 	if ((gui_state == GuiState::Closed || gui_state == GuiState::Paused) && !settings.naomi.slave)
 	{
-		if (cfgLoadBool("dojo", "Training", false) && config::EnableTrainingLua)
+		if (session::trainingEnabled() && config::EnableTrainingLua)
 			lua::releasePressedButtons();
 
 		if (dojo.play_match || !ggpo::active())
@@ -813,7 +814,7 @@ void gui_open_settings()
 	}
 	else if (gui_state == GuiState::Commands || gui_state == GuiState::ButtonCheck)
 	{
-		if (cfgLoadBool("dojo", "Training", false) && config::EnableTrainingLua)
+		if (session::trainingEnabled() && config::EnableTrainingLua)
 			lua::releasePressedButtons();
 
 		// buffering and stepping stay as themselves ON PURPOSE. They are not
@@ -1006,7 +1007,7 @@ static void gui_display_commands()
 		}
     }
 
-	if (cfgLoadBool("dojo", "Training", false))
+	if (session::trainingEnabled())
 	{
 		if (ImGui::Button("Load Record Slots", ScaledVec2(160, 40)))
 		{
@@ -1049,7 +1050,7 @@ static void gui_display_commands()
 	if (!dojo.play_match)
 	{
 
-	if (cfgLoadBool("dojo", "Training", false))
+	if (session::trainingEnabled())
 	{
 		std::string net_state_path = get_net_savestate_file_path(false);
 
@@ -1155,7 +1156,7 @@ static void gui_display_commands()
 	displayed_button_count++;
 	ImGui::NextColumn();
 
-	if (cfgLoadBool("dojo", "Training", false))
+	if (session::trainingEnabled())
 	{
 		char player_ico_txt[64];
 		if (dojo.training.control_player == 0)
@@ -1211,11 +1212,11 @@ static void gui_display_commands()
 
 	}
 
-	if (cfgLoadBool("dojo", "Training", false) && config::Delay == 0 || dojo.play_match)
+	if (session::trainingEnabled() && config::Delay == 0 || dojo.play_match)
 	{
 		char disp_ico_txt[64];
 		if ((dojo.play_match && config::ShowReplayInputDisplay.get()) ||
-			(cfgLoadBool("dojo", "Training", false) && config::ShowTrainingInputDisplay.get()))
+			(session::trainingEnabled() && config::ShowTrainingInputDisplay.get()))
 			sprintf(disp_ico_txt, "%s  ", ICON_FA_EYE);
 		else
 			sprintf(disp_ico_txt, "%s  ", ICON_FA_EYE_SLASH);
@@ -1271,7 +1272,7 @@ static void gui_display_commands()
 	if (!dojo.play_match)
 	{
 #if !defined(__APPLE__)
-	if (cfgLoadBool("dojo", "Training", false) && dojo.GetTrainingLua() != "")
+	if (session::trainingEnabled() && dojo.GetTrainingLua() != "")
 	{
 		char lua_ico_txt[64];
 		if (config::EnableTrainingLua.get())
@@ -1386,7 +1387,7 @@ static void gui_display_commands()
 
 	}
 
-	if (!cfgLoadBool("dojo", "Training", false))
+	if (!session::trainingEnabled())
 	{
 	// Insert/Eject Disk
 	char disc_label_txt[64];\
@@ -4623,7 +4624,7 @@ void gui_display_osd()
 			}
 		}
 
-		if (cfgLoadBool("dojo", "Training", false) && config::ShowTrainingInputDisplay ||
+		if (session::trainingEnabled() && config::ShowTrainingInputDisplay ||
 			dojo.play_match && config::ShowReplayInputDisplay)
 			dojo_gui.show_last_inputs_overlay();
 
@@ -5044,7 +5045,7 @@ void gui_open_step()
 	if (pausing::active(pausing::USER))
 		pausing::clear(pausing::USER);
 
-	if (cfgLoadBool("dojo", "Training", false) || dojo.play_match)
+	if (session::trainingEnabled() || dojo.play_match)
 	{
 		if (gui_state == GuiState::Paused)
 		{
@@ -5060,7 +5061,7 @@ void gui_open_pause()
 	const LockGuard lock(guiMutex);
 	if (dojo.stepping)
 		dojo.stepping = false;
-	if (dojo.play_match || cfgLoadBool("dojo", "Training", false))
+	if (dojo.play_match || session::trainingEnabled())
 	{
 		if (gui_state == GuiState::Closed)
 		{

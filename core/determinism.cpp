@@ -68,6 +68,11 @@ const char *runKind()
 	case session::Kind::PlayMacro:   return "replay";	//!< a macro playback drives the guest from a roll
 	case session::Kind::RecordMovie: return "record";
 	case session::Kind::RecordMacro: return "record";	//!< ...and recording one writes frames
+	// Training writes no movie and has no peer, so it is not a deterministic
+	// run - "off", exactly like a plain boot. Listed rather than defaulted:
+	// -Wswitch is what told this file a new kind existed, and a default would
+	// have taken that away for the next one.
+	case session::Kind::Training:    break;
 	case session::Kind::JustPlay:    break;
 	}
 	return "off";

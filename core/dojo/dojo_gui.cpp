@@ -1,4 +1,5 @@
 #include "dojo_gui.h"
+#include "dojo/session.h"
 
 void DojoGui::copy_btn(const char *si, std::string name)
 {
@@ -1033,13 +1034,13 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 	// MovieEnd(), not size() - see dojo.h:151. The counter is hidden early and
 	// its denominator is wrong for any movie not keyed from frame 0.
 	if (dojo.frame_number < dojo.MovieEnd() ||
-		cfgLoadBool("dojo", "Training", false))
+		session::trainingEnabled())
 	{
 		char text_pos[30] = {0};
 
 		if (dojo.play_match)
 			sprintf(text_pos, "%u / %u  ", frame_num, dojo.MovieEnd());
-		else if (cfgLoadBool("dojo", "Training", false))
+		else if (session::trainingEnabled())
 			sprintf(text_pos, "%u  ", frame_num);
 
 		float font_size_x = ImGui::CalcTextSize(text_pos).x;
@@ -1052,7 +1053,7 @@ void DojoGui::show_replay_position_overlay(int frame_num)
 
 		if (dojo.play_match)
 			ImGui::Text("%u / %u", frame_num, dojo.MovieEnd());
-		else if (cfgLoadBool("dojo", "Training", false))
+		else if (session::trainingEnabled())
 			ImGui::Text("%u", frame_num);
 
 		ImGui::End();
@@ -1149,7 +1150,7 @@ void DojoGui::display_input_str(std::string input_str, std::string prev_str)
 
 void DojoGui::show_last_inputs_overlay()
 {
-	if (cfgLoadBool("dojo", "Training", false) && config::Delay > 0)
+	if (session::trainingEnabled() && config::Delay > 0)
 		return;
 
 	for (int di = 0; di < 2; di++)
@@ -2453,7 +2454,7 @@ void DojoGui::show_pause()
 
 	settings.input.fastForwardMode = false;
 
-	if (cfgLoadBool("dojo", "Training", false) && config::ShowTrainingInputDisplay ||
+	if (session::trainingEnabled() && config::ShowTrainingInputDisplay ||
 		dojo.play_match && config::ShowReplayInputDisplay)
 		dojo_gui.show_last_inputs_overlay();
 

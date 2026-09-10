@@ -44,6 +44,8 @@ Kind kind()
 
 	if (dojo.play_match)
 		return Kind::Replay;
+	if (trainingEnabled())
+		return Kind::Training;
 	if (cfgLoadBool("dojo", "RecordMatches", false))
 		return Kind::RecordMovie;
 	return Kind::JustPlay;
@@ -64,6 +66,15 @@ bool recording() { const Kind k = kind(); return k == Kind::RecordMovie || k == 
 bool replaying() { const Kind k = kind(); return k == Kind::Replay || k == Kind::PlayMacro; }
 bool macro()     { const Kind k = kind(); return k == Kind::RecordMacro || k == Kind::PlayMacro; }
 bool netplay()   { return kind() == Kind::Netplay; }
+bool training()  { return kind() == Kind::Training; }
+bool trainingEnabled()
+{
+	// THE ONE OWNER OF THE KEY, and the one place in the tree that may read it
+	// raw. `config::Training` is registered and read by nobody;
+	// `settings.dojo.Training` is written once and read never
+	// (docs/SESSION-KINDS.md §4 #11).
+	return cfgLoadBool("dojo", "Training", false);
+}
 bool readOnly()  { return mode() == Mode::Read; }
 
 
@@ -84,6 +95,7 @@ const char *label()
 	switch (kind())
 	{
 	case Kind::Netplay:     return "NETPLAY";
+	case Kind::Training:    return "TRAINING";
 	case Kind::PlayMacro:   return "PLAY MACRO";
 	case Kind::RecordMacro: return "RECORD MACRO";
 	case Kind::Replay:      return "REPLAY";
@@ -160,6 +172,32 @@ void selfTest()
 	claim("label() reflects the kind", std::strcmp(label(), "RECORD MOVIE") == 0);
 	dojo.play_match = true;
 	claim("...and changes with it", std::strcmp(label(), "REPLAY") == 0);
+
+	// ---- TRAINING: A KIND AND A TOGGLE, WHICH ARE DIFFERENT QUESTIONS ----
+	{
+		const bool wasTrain = trainingEnabled();
+		set("MacroMode", false); set("PlayMacro", false); set("RecordMatches", false);
+		dojo.play_match = false;
+		set("Training", true);
+		claim("Training alone is Kind::Training", kind() == Kind::Training && training());
+		claim("label() says so", std::strcmp(label(), "TRAINING") == 0);
+
+		set("RecordMatches", true);
+		claim("Training outranks RecordMatches", kind() == Kind::Training);
+		set("RecordMatches", false);
+
+		// THE CLAIM THAT KEEPS THE TWO APART, and the one that would catch a
+		// later "simplification" of either into the other. The ordering is read
+		// out of dojo_gui.cpp, which already spells the pair as
+		// `if (play_match) ... else if (Training)`.
+		dojo.play_match = true;
+		claim("Replay outranks Training", kind() == Kind::Replay && !training());
+		claim("...while the TOGGLE is still on, because it is a different question",
+				trainingEnabled());
+
+		set("Training", wasTrain);
+		dojo.play_match = false;
+	}
 
 	// ---- THE NETPLAY ARM, which had a live bug ----
 	//

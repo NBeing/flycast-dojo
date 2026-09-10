@@ -43,6 +43,7 @@ enum class Kind
 	Replay,			//!< dojo.play_match - a .flyr driving the guest
 	RecordMacro,	//!< dojo:MacroMode without PlayMacro
 	PlayMacro,		//!< dojo:MacroMode with PlayMacro
+	Training,		//!< dojo:Training - the practice mode, with its own overlays
 	Netplay,		//!< GGPO or settings.network.online, INCLUDING spectate
 };
 
@@ -57,7 +58,7 @@ enum class Mode
 /*
 	PRECEDENCE IS DECLARED, NOT EMERGENT:
 
-	    Netplay > macro pair > Replay > RecordMovie > JustPlay
+	    Netplay > macro pair > Replay > Training > RecordMovie > JustPlay
 
 	Writing it down is the point. The fork being ported computes the same order
 	as an accident of how a `?:` chain was typed, and nothing there says so - so
@@ -65,6 +66,12 @@ enum class Mode
 
 	Netplay first because an online session is online whatever else is set, and
 	every TAS answer below it would be wrong about who is driving.
+
+	TRAINING SITS BELOW REPLAY, and that is read out of the code rather than
+	chosen: core/dojo/dojo_gui.cpp already spells the pair as
+	`if (dojo.play_match) ... else if (Training)` at two sites. `[MEASURED
+	2026-09-09]` docs/SESSION-KINDS.md Q-d - training was the largest kind with
+	no representation here at all, 21 raw sites and nothing to adopt.
 */
 Kind kind();
 Mode mode();
@@ -93,6 +100,32 @@ bool macro();		//!< RecordMacro or PlayMacro
 	neither had been tested on.
 */
 bool netplay();
+
+//! kind() == Kind::Training. THE KIND QUESTION, and NOT what most of the tree
+//! is asking - see trainingEnabled() directly below, and pick deliberately.
+bool training();
+
+/*
+	IS THE TRAINING FEATURE TURNED ON? Deliberately NOT kind() == Kind::Training.
+
+	A kind is EXCLUSIVE - a session is one thing - while `dojo:Training` is a
+	TOGGLE that can be set alongside a replay or a recording. `[MEASURED
+	2026-09-09]` all 21 raw sites in docs/SESSION-KINDS.md Q-d ask the toggle:
+	they read it as `Training && ShowTrainingInputDisplay`, or beside play_match
+	as an alternative arm, never as "what kind of session is this".
+
+	So both exist and neither is a synonym for the other. Migrating those sites
+	to the KIND would have silently changed behaviour anywhere the toggle is set
+	under a higher kind - which is the shape of mistake this whole census is
+	about, and the reason the two are named apart rather than one being quietly
+	preferred.
+
+	This is also the one owner of the key. `config::Training` is registered and
+	read by nobody, and `settings.dojo.Training` is written once and read never
+	(SESSION-KINDS §4 #11): three representations of one fact, and this is the
+	one that carries the traffic.
+*/
+bool trainingEnabled();
 
 bool readOnly();	//!< mode() == Read
 

@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "emulator.h"
+#include "dojo/session.h"
 #include "pause.h"
 #include "determinism.h"
 #include "types.h"
@@ -565,7 +566,7 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 		// reload settings so that all settings can be overridden
 		loadGameSpecificSettings();
 
-		if (cfgLoadBool("dojo", "Training", false) && config::ShowTrainingGameOverlay)
+		if (session::trainingEnabled() && config::ShowTrainingGameOverlay)
 		{
 			auto lua_file = dojo.GetTrainingLua();
 			if (lua_file != "")
@@ -585,7 +586,7 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 		if (!settings.content.path.empty())
 		{
 			if ((cfgLoadBool("network", "GGPO", false) && config::AutoLoadNetState) ||
-				(cfgLoadBool("dojo", "Training", false) && config::AutoLoadTrainingNetState) ||
+				(session::trainingEnabled() && config::AutoLoadTrainingNetState) ||
 				(cfgLoadBool("dojo", "Receiving", false) && config::AutoLoadNetState) ||
 				(cfgLoadBool("dojo", "Replay", false) && config::AutoLoadNetState))
 				dc_loadstate(-1);

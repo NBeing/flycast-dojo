@@ -85,10 +85,16 @@ of them spell it inline as `!filename.empty()` rather than calling the accessor.
 rollback?"** — `Kind::Netplay` is documented as "GGPO or `settings.network.online`,
 **INCLUDING spectate**", so nothing can separate them. 17 sites.
 
-**Q-d. "Is this TRAINING mode?"** — 21 sites, **zero** representation in `Kind`.
-The single largest unmodelled session kind in the tree. Eleven of its sites are
-one copy-pasted block in `core/input/gamepad_device.cpp`:
-`if (pressed && !gui_is_open() && cfgLoadBool("dojo", "Training", false))`.
+**Q-d. "Is this TRAINING mode?"** — **ANSWERED `[2026-09-10]`, and it turned out
+to be TWO questions.** `Kind::Training` now exists, below Replay. But all 34 raw
+sites ask a *toggle*, not a kind — `Training && ShowTrainingInputDisplay`, or an
+arm beside `play_match` — so `session::trainingEnabled()` is the one owner they
+migrated to, and `session::training()` (the exclusive kind) is kept separate.
+
+That distinction is the census's own thesis in miniature. Collapsing the two
+would have changed behaviour silently wherever the toggle is set under a higher
+kind, and the obvious migration — "replace the raw reads with the new
+predicate" — is exactly the one that does it.
 
 **Q-e. "Must this run be byte-reproducible?"** — `determinism::isDeterministicRun()`
 plus every ROM/BIOS/VMU digest guard. Overlaps `kind()` but is not derivable

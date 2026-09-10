@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include "lua.h"
+#include "dojo/session.h"
 
 #ifdef USE_LUA
 #include <lua.hpp>
@@ -1811,7 +1812,7 @@ static void luaRegister(lua_State *L)
 					if (gui_state != GuiState::Closed)
 						return;			// already stopped; do not toggle back
 					const bool toolsVisible = dojo.play_match
-							|| cfgLoadBool("dojo", "Training", false);
+							|| session::trainingEnabled();
 					if (toolsVisible)
 					{
 						gui_open_pause();
