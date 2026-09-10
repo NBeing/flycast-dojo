@@ -2,7 +2,11 @@
 #include "roll_meta.h"
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
+#include "oslib/oslib.h"
+#include "stdclass.h"
+#include "deps/filesystem.hpp"
 #include <cstdlib>
+#include <fstream>
 
 namespace roll
 {
@@ -103,6 +107,79 @@ void Marks::load(const std::string& blob)
 	}
 }
 
+namespace {
+
+//! Beside the clip, or empty when no clip folder is open.
+std::string marksPath()
+{
+	if (hostfs::savestateFolderOverride.empty())
+		return std::string();
+	return hostfs::savestateFolderOverride + "/marks.txt";
+}
+
+}	// namespace
+
+void marksSave()
+{
+	if (!cfgLoadBool("dojo", "MarksPersist", true))
+		return;
+	const std::string path = marksPath();
+	if (path.empty())
+		return;
+	std::error_code ec;
+	if (theMarks.count() == 0)
+	{
+		// NO MARKS MEANS NO FILE, matching saveSavestateLabel's rule for an
+		// empty label - an empty sidecar and an absent one should not be two
+		// different states of the same nothing.
+		ghc::filesystem::remove(path, ec);
+		return;
+	}
+	// ATOMIC, the idiom tas_clip.cpp uses for clip.json after a torn read cost
+	// it a whole record set. A bookmark file is smaller and the reasoning is
+	// the same.
+	const std::string tmp = path + ".tmp";
+	{
+		std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+		if (!f.good())
+			return;
+		// ONE LINE PER MARK, "frame<TAB>label" - readable, greppable, and
+		// diffable, which a binary blob would not be for something a user might
+		// reasonably want to edit by hand.
+		for (const auto& kv : theMarks.all())
+			f << kv.first << '\t' << kv.second << '\n';
+		if (!f.good())
+			return;
+	}
+	ghc::filesystem::rename(tmp, path, ec);
+	if (ec)
+		ghc::filesystem::remove(tmp, ec);
+}
+
+void marksLoad()
+{
+	const std::string path = marksPath();
+	if (path.empty())
+		return;
+	std::ifstream f(path, std::ios::binary);
+	if (!f.good())
+		return;					// no file is not an error; it is no bookmarks
+	std::map<u32, std::string> found;
+	std::string line;
+	while (std::getline(f, line))
+	{
+		if (!line.empty() && line.back() == '\r')
+			line.pop_back();
+		const size_t tab = line.find('\t');
+		if (tab == std::string::npos)
+			continue;			// a malformed line is skipped, not fatal
+		found[(u32)strtoul(line.substr(0, tab).c_str(), nullptr, 10)] = line.substr(tab + 1);
+	}
+	theMarks.clear();
+	for (const auto& kv : found)
+		theMarks.set(kv.first, kv.second);
+}
+
 void marksInstall()
 {
 	remapRegister([](const Remap& m) { theMarks.remap(m); });
@@ -110,6 +187,48 @@ void marksInstall()
 			[]() { return theMarks.serialise(); },
 			[](const std::string& blob) { theMarks.load(blob); });
 	metaInstall();
+}
+
+void marksProbe()
+{
+	static bool done = false;
+	if (done || !cfgLoadBool("dojo", "RollMarkProbe", false))
+		return;
+	if (marksPath().empty())
+		return;					// no clip folder: nowhere for a bookmark to live
+	done = true;
+
+	// Whatever the user had, put back at the end. A probe that ate the real
+	// bookmarks would be worse than no probe.
+	const std::map<u32, std::string> was = theMarks.all();
+
+	theMarks.clear();
+	theMarks.set(4242, "probe mark");
+	marksSave();
+
+	// FROM THE FILE, not from the set. Clearing first is what makes the load a
+	// measurement instead of a no-op that would pass either way.
+	theMarks.clear();
+	const bool cleared = theMarks.count() == 0;
+	marksLoad();
+	const bool loaded = theMarks.count() == 1 && theMarks.has(4242)
+			&& theMarks.labelAt(4242) != nullptr
+			&& std::string(theMarks.labelAt(4242)) == "probe mark";
+
+	// And the empty case, which removes the sidecar rather than writing an
+	// empty one - the branch a happy path never reaches.
+	theMarks.clear();
+	marksSave();
+	const bool gone = !ghc::filesystem::exists(marksPath());
+
+	theMarks.clear();
+	for (const auto& kv : was)
+		theMarks.set(kv.first, kv.second);
+	marksSave();
+
+	NOTICE_LOG(RENDERER, "ROLL MARKPROBE: cleared=%s loaded=%s emptied=%s restored=%d"
+			"  => %s", cleared ? "yes" : "NO", loaded ? "yes" : "NO", gone ? "yes" : "NO",
+			(int)was.size(), (cleared && loaded && gone) ? "PASS" : "FAIL");
 }
 
 /*

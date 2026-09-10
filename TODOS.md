@@ -219,8 +219,13 @@ through `panels::add`.
   and the probe, a fourth caller, had one of them, so the bookmark silently did
   not move. Three lines to remember is the fork's five hand-called fixups, just
   younger.
-- [ ] **`[OPEN]` bookmarks are session-only.** The fork persists them in
-  `clip.json`. Persisting means writing user files, so it is its own pass.
+- [x] **Bookmarks persist**, as a `marks.txt` sidecar beside the clip — NOT in
+  `clip.json`. The tree states the reason at `.label`: a sidecar "travels with
+  F8 backups and clip renames for free, works when there is no clip folder at
+  all, and needs no read-modify-write of a shared file". A bookmark save has no
+  business being able to lose a generation record. One line per mark,
+  `frame<TAB>label`, written atomically; no marks means no file.
+  `dojo:RollMarkProbe` reads the FILE back, `dojo:MarksPersist=no` turns it off.
 - [x] **The States window, first slice** — `core/dojo/states_panel.cpp`, the
   slot WALL. Reads through `roll::Host::slotView()`, which answers in slots and
   movie frames and names no file: slot, anchored frame, clean/stale/unjudged,

@@ -75,6 +75,7 @@ XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	-config dojo:RollSlotTrace=yes \
 	-config dojo:RollAnchorProbe=yes \
 	-config dojo:RollMashProbe=yes \
+	-config dojo:RollMarkProbe=yes \
 	-config window:width=1000 -config window:height=800 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 &
 FC=$!
@@ -442,6 +443,16 @@ case "$anchor" in
 	*PASS*) ;;
 	*) echo "FAIL rolltest - a resize did not move the savestate anchor, or undo did not restore it"; exit 1 ;;
 esac
+
+# ---- bookmarks survive a round trip through the disk ------------------------
+mp=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL MARKPROBE:" | tail -1)
+if [ -n "$mp" ]; then
+	echo "  ${mp##*N\[RENDERER\]: }"
+	case "$mp" in
+		*PASS*) ;;
+		*) echo "FAIL rolltest - a bookmark did not survive save and reload"; exit 1 ;;
+	esac
+fi
 
 # ---- the multi-row stroke, proved in process --------------------------------
 # NOT a duplicate of the click test and NOT a self-test: it drives the real

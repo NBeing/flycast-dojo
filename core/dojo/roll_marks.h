@@ -61,6 +61,30 @@ Marks& marks();
 //! Register with roll_meta so an undo restores them alongside the frames.
 void marksInstall();
 
+/*
+	PERSISTENCE, as a sidecar beside the clip.
+
+	A SIDECAR AND NOT clip.json, deliberately. The tree already carries `.frame`,
+	`.label` and `.wave` sidecars and states the reason at `.label`: a sidecar
+	"travels with F8 backups and clip renames for free, works when there is no
+	clip folder at all, and needs no read-modify-write of a shared file". Every
+	word of that applies here, and clip.json is a file several other things
+	rewrite - a bookmark save has no business being able to lose a generation
+	record.
+
+	Bounded by the clip folder: with none open there is nowhere a bookmark
+	belongs, and marksSave() does nothing rather than inventing a location.
+
+	`dojo:MarksPersist=no` turns it off.
+*/
+void marksSave();
+void marksLoad();
+
+//! `dojo:RollMarkProbe` - the integration check for persistence. One shot, and
+//! it reads the FILE back rather than the in-memory set, because the set
+//! agreeing with itself proves nothing.
+void marksProbe();
+
 //! Runs under dojo:PanelSelfTest, like the other seams in this tree.
 void marksSelfTest();
 

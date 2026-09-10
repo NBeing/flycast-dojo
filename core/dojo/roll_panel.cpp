@@ -20,6 +20,7 @@
 #include <string>
 #include "log/LogManager.h"
 #include "cfg/cfg.h"
+#include "oslib/oslib.h"
 
 /*
 	A PIANO ROLL: frames down, inputs across.
@@ -99,6 +100,30 @@ static void draw()
 	{
 		ImGui::TextDisabled("No movie is open.");
 		return;
+	}
+
+	// BOOKMARKS FOLLOW THE CLIP. Loaded once per folder and saved whenever they
+	// change - which is cheap (a handful of lines) and means the file is never
+	// out of date with what is on screen. Compared by VALUE rather than by a
+	// "loaded" flag, so opening a second clip in one session reloads.
+	{
+		static std::string lastClip = "\x01";	// a value no path can be
+		if (lastClip != hostfs::savestateFolderOverride)
+		{
+			lastClip = hostfs::savestateFolderOverride;
+			marksLoad();
+		}
+		static size_t lastMarks = (size_t)-1;
+		static u32 lastMarkSig = ~0u;
+		u32 sig = 0;
+		for (const auto& kv : marks().all())
+			sig = sig * 31u + kv.first + (u32)kv.second.size();
+		if (marks().count() != lastMarks || sig != lastMarkSig)
+		{
+			lastMarks = marks().count();
+			lastMarkSig = sig;
+			marksSave();
+		}
 	}
 
 	const u32 playhead = dojo.frame_number.load();
@@ -181,6 +206,7 @@ static void draw()
 		}
 	}
 
+	marksProbe();		// dojo:RollMarkProbe - one-shot, reads the marks file back
 	anchorProbe();		// dojo:RollAnchorProbe - one-shot, reads the real sidecars
 
 	// ---- STROKE PROBE, dojo:RollPaintProbe=yes ---------------------------
