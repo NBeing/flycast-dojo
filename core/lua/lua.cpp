@@ -2486,8 +2486,28 @@ static void luaRegister(lua_State *L)
 				// wedges too, the place is not safe after all and gui_loadState
 				// only ever worked because it runs once, early, before the
 				// pipeline is full.
-				.addFunction("loadSlotLater", std::function<void()>([]() {
-					deferred::post([]() { gui_loadState(); });
+				/*
+					`[2026-09-10]` NOW TAKES A SLOT, and is a supported call
+					rather than a bisect probe.
+
+					THE SLOT IS SET AND PUT BACK. gui_loadState() reads
+					config::SavestateSlot, which PERSISTS IN emu.cfg ACROSS
+					GAMES (oslib.h) - so a script loading slot 5 must not leave
+					the user's next session pointed at slot 5. The restore is
+					inside the deferred action, not around the post, because the
+					post returns immediately.
+
+					-1 means "whatever slot is current", which is what the
+					no-argument form used to do.
+				*/
+				.addFunction("loadSlotLater", std::function<void(int)>([](int index) {
+					deferred::post([index]() {
+						const int was = config::SavestateSlot;
+						if (index >= 0)
+							config::SavestateSlot.set(index);
+						gui_loadState();
+						config::SavestateSlot.set(was);
+					});
 				}))
 				// The other half of the torn-fixture probe: SAVE from the same
 				// safe place. The probe's fixture was saved from a `vblank`
@@ -2495,8 +2515,14 @@ static void luaRegister(lua_State *L)
 				// cannot join that thread - so dc_savestate may have read a
 				// machine that was still running. If a fixture saved HERE loads
 				// without wedging, the wedge was a bad state, not a bad place.
-				.addFunction("saveSlotLater", std::function<void()>([]() {
-					deferred::post([]() { gui_saveState(); });
+				.addFunction("saveSlotLater", std::function<void(int)>([](int index) {
+					deferred::post([index]() {
+						const int was = config::SavestateSlot;
+						if (index >= 0)
+							config::SavestateSlot.set(index);
+						gui_saveState();
+						config::SavestateSlot.set(was);
+					});
 				}))
 				/*
 					`[CORRECTED 2026-09-10]` THE WEDGE WAS A BAD STATE, NOT A
