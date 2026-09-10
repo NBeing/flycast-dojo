@@ -549,10 +549,31 @@ predicts the file — "a derive engine is portable Lua anyone can write".
 
 14 claims in a real emulator (`scripts/tests/reactive.lua`), three sabotages.
 
-### Phase 4 — page-diff memory watch (~2–3 weeks, only if needed)
-Build change-notification on the existing `core/hw/mem/mem_watch.{h,cpp}`
-dirty-page tracking, evaluated once per confirmed frame. Page granularity, no
-PC context — document the gap rather than calling it an fbneo-equivalent hook.
+### [x] Phase 4 — memory watches — LANDED `[2026-09-10]`, mechanism changed
+`core/lua/luawatch.{h,cpp}`. Change notification once per confirmed frame, as
+this entry asked — but **NOT built on the dirty-page tracking**, and that is a
+refusal with evidence rather than a preference:
+
+- **Page protection is armed only under GGPO.**
+  `inline static void protect() { if (!config::GGPOEnable) return; ... }` —
+  outside a rollback session nothing is write-protected, so nothing is tracked.
+  Arming it for a watch would put a SIGSEGV round trip on every guest write, and
+  the only sessions where it IS armed are the ones where a script is capped at
+  `observer` anyway.
+- **And the page lists are DRAINED by the rollback path.** `getPages()` copies
+  them out then does `count = 0; clearBitmap()`, and those copies *are* the
+  deltas `load_game_state` walks backwards. A watch reading them would steal a
+  frame's delta and corrupt a rollback — a desync, not a slowdown.
+
+So it is a byte comparison against a shadow, and the page filter is refused
+rather than half-wired. **No PC context**, as the entry required: this says a
+region changed, never which instruction changed it.
+
+`[MEASURED]` a 256-byte watch costs **1.0 µs typical, 3.0 µs peak** (~12 ns a
+byte), so the 64 KB cap is ~750 µs a frame — 4.5% of a 60 Hz budget for one
+watch that size. `watchMicros()` reports it live, so the price travels with the
+feature rather than living in a comment. 11 self-test claims, 15 in a real
+emulator, two sabotages.
 
 ### Explicitly skipped
 - **A single frame-step choke point.** flycast has no run-ahead, so
