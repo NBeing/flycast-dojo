@@ -165,10 +165,17 @@ through `panels::add`.
   generalises. Compress is built ON `deleteRows` rather than beside it, because
   the fork writes that loop twice with different phase. All three have panel
   buttons.
-- [ ] Remaining edit tools, now that the payload has a name. Mash, fill, brush
-  and stamp are `applyPattern` with a longer track and a different mask; the
-  work left is the notation parsers that BUILD the tracks (profile) and the UI
-  that offers them.
+- [x] **Notation and mash.** `core/dojo/roll_notation.{h,cpp}` is the third
+  profile chokepoint, and ONE dialect where the fork has five. It is built from
+  the profile — buttons match its own column labels, the numpad comes from the
+  four direction bits it names — so a second game needs no change here. Mash is
+  `applyPattern` with a longer track and no second loop, which is
+  `docs/ROLL-EDIT-MODEL.md` §2 cashed in. `dojo:RollMashProbe` covers the
+  wiring the harness cannot type.
+- [ ] Remaining edit tools: fill (a pattern cycled over a selection rather than
+  a range), brush/stamp (a pattern armed and painted by drag), the staged
+  buffer. All three are `applyPattern` with a different track and mask; what is
+  left is UI, not arithmetic.
 - [x] **Structural edits return a ROW REMAP.** `core/dojo/roll_remap.{h,cpp}`;
   `deleteRows`/`insertBlanks` return `Resize { edit, remap }` with the edit
   DERIVED from the remap, so there is one owner of "where did row f go".

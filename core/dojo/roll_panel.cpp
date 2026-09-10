@@ -4,6 +4,8 @@
 #include "roll_edit.h"
 #include "roll_paint.h"
 #include "roll_marks.h"
+#include "roll_notation.h"
+#include "roll_pattern.h"
 #include "session.h"
 #include "rend/gui.h"
 #include "movie.h"
@@ -113,7 +115,19 @@ static void draw()
 			NOTICE_LOG(RENDERER, "ROLL SEL: n=%d lo=%u hi=%u", (int)lastN, lastLo, lastHi);
 		}
 	}
-	if (!selection().empty())
+	// ALWAYS OCCUPIES ITS HEIGHT, drawn or not. A line that appears when you
+	// select something moves everything below it - the table included - so the
+	// row you were about to click is no longer under the cursor.
+	//
+	// `[MEASURED 2026-09-10]` that is not theoretical: scripts/rolltest.sh
+	// measures where the rows are, selects two, and then found the table had
+	// slid a line down, so the paint drag landed outside it and the harness
+	// reported the stroke unwired. The fork learned the same thing in its
+	// snapshots pane - "It always occupies its height, drawn or not, so picking
+	// a snapshot never moves the bar below."
+	if (selection().empty())
+		ImGui::TextDisabled("no selection");
+	else
 		ImGui::Text("selected: %d rows, %u..%u", (int)selection().count(),
 				selection().lo(), selection().hi());
 	if (h == nullptr)
@@ -279,6 +293,47 @@ static void draw()
 	const bool editable = paused && writable;
 	static int paintGap = 0;		// 0 = every row, 1 = every 2nd, 2 = every 3rd
 	static int rangeFactor = 2;		// stretch xN / compress /N, shared deliberately
+	static char mashText[96] = "236LP";
+	static bool mashMerge = false;
+	static std::string mashErr;
+
+	// ---- MASH PROBE, dojo:RollMashProbe=yes ------------------------------
+	//
+	// The panel's mash needs typed text, which the harness cannot supply, so the
+	// wiring between the parser and the funnel gets an in-process customer -
+	// parse, build a track, apply, check the movie says what the pattern said.
+	{
+		static bool mashProbed = false;
+		if (!mashProbed && movie::authored() && cfgLoadBool("dojo", "RollMashProbe", false))
+		{
+			mashProbed = true;
+			const u32 f = movie::end() > 24 ? movie::end() - 24 : 0;
+			std::vector<Cell> cells;
+			std::string err;
+			const bool parsed = parsePattern("2 8 5", cells, err);	// down, up, neutral
+
+			Pattern pat;
+			pat.tracks.resize(1);
+			for (Cell c : cells)
+				pat.tracks[0].push_back(CellOp{ c, cellAll() });
+			Edit e = applyPattern(wholeMovie(), f, f + 5, pat, 0);
+			const s64 first = dojo.ApplyEdit(e, "roll: mash probe");
+
+			auto lane = [&](u32 fr) {
+				auto it = dojo.session_inputs.find(fr);
+				return it == dojo.session_inputs.end() ? (Cell)0 : cellOf(it->second, 0);
+			};
+			// THE PATTERN TILES: down, up, neutral, down, up, neutral.
+			const bool tiled = parsed && cells.size() == 3
+					&& lane(f) == cells[0] && lane(f + 1) == cells[1] && lane(f + 2) == cells[2]
+					&& lane(f + 3) == cells[0] && lane(f + 4) == cells[1];
+			const bool undone = dojo.ApplyUndo();
+			NOTICE_LOG(RENDERER, "ROLL MASHPROBE: parsed=%s cells=%d first=%lld tiled=%s undo=%s"
+					"  => %s", parsed ? "yes" : "NO", (int)cells.size(), (long long)first,
+					tiled ? "yes" : "NO", undone ? "yes" : "NO",
+					(parsed && tiled && undone) ? "PASS" : "FAIL");
+		}
+	}
 
 	// ---- EDITS -----------------------------------------------------------
 	//
@@ -306,8 +361,20 @@ static void draw()
 			ImGui::Combo("paint every", &paintGap, "row\0" "2nd row\0" "3rd row\0");
 			ImGui::SameLine();
 
-			if (!haveSel) { ImGui::TextDisabled("select rows for the buttons"); }
-			else
+			// ALWAYS DRAWN, DISABLED WHEN THERE IS NOTHING TO ACT ON.
+			//
+			// `[MEASURED 2026-09-10]` these used to be replaced by a one-line
+			// "select rows for the buttons", so SELECTING SOMETHING grew the
+			// panel by several lines and slid the table down underneath the
+			// cursor. scripts/rolltest.sh measured where the rows were, selected
+			// two, and then painted outside the table - and reported that the
+			// stroke was unwired. A layout that moves when you use it is a bug
+			// on its own; being the second one in this file today is what makes
+			// it worth a comment.
+			//
+			// It is also better to look at: a disabled button says what exists,
+			// a vanished one says nothing.
+			ImGui::BeginDisabled(!haveSel);
 			{
 
 			if (ImGui::Button("Blank"))
@@ -375,6 +442,54 @@ static void draw()
 				dojo.ApplyEditResize(r.edit, "roll: compress");
 				remapAll(r.remap);
 			}
+			// ---- MASH: A PATTERN, WRITTEN OUT ----------------------------
+			//
+			// The same applyPattern the paint stroke uses, with a longer track.
+			// docs/ROLL-EDIT-MODEL.md §2: mash, fill, brush, stamp and paint are
+			// ONE function once the payload has a name, and this is that claim
+			// cashed in - there is no second loop here, only a different track.
+			//
+			// MERGE IS THE MASK, not a flag on the write: replacing masks every
+			// bit the profile models, merging masks only the bits the pattern
+			// carries. That is why an "overdub" cannot clear anything and a
+			// "stamp" can.
+			{
+				ImGui::SetNextItemWidth(140.f);
+				ImGui::InputText("##mash", mashText, sizeof(mashText));
+				ImGui::SameLine();
+				ImGui::BeginDisabled(!haveSel);
+				if (ImGui::Button("Mash"))
+				{
+					std::vector<Cell> cells;
+					mashErr.clear();
+					if (!parsePattern(mashText, cells, mashErr))
+					{
+						// The parser names the token it choked on and the panel
+						// shows it. A pattern that silently dropped a token
+						// would write something nobody typed.
+					}
+					else if (cells.empty())
+						mashErr = "nothing to write";
+					else
+					{
+						Pattern pat;
+						pat.tracks.resize(1);
+						for (Cell c : cells)
+							pat.tracks[0].push_back(CellOp{ c, mashMerge ? c : cellAll() });
+						Edit e = applyPattern(wholeMovie(), sel.lo(), sel.hi(), pat, paintGap);
+						dojo.ApplyEdit(e, "roll: mash");
+					}
+				}
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				ImGui::Checkbox("merge", &mashMerge);
+				if (!mashErr.empty())
+				{
+					ImGui::SameLine();
+					ImGui::TextColored(TAS_P2_COL, "%s", mashErr.c_str());
+				}
+			}
+
 			// ---- BOOKMARKS ------------------------------------------------
 			//
 			// Deliberately NOT gated on a selection: marking where you are is
@@ -412,6 +527,7 @@ static void draw()
 			ImGui::InputInt("x / \xc3\xb7", &rangeFactor);
 			rangeFactor = rangeFactor < 2 ? 2 : (rangeFactor > 16 ? 16 : rangeFactor);
 			}
+			ImGui::EndDisabled();
 		}
 	}
 	ImGui::Separator();

@@ -18,6 +18,7 @@
 #include "dojo/roll_remap.h"
 #include "dojo/roll_meta.h"
 #include "dojo/roll_marks.h"
+#include "dojo/roll_notation.h"
 #include "dojo/roll_host.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
@@ -84,6 +85,7 @@ int flycast_init(int argc, char* argv[])
 	roll::remapSelfTest();
 	roll::metaSelfTest();
 	roll::marksSelfTest();
+	roll::notationSelfTest();
 	roll::installHost();
 	roll::marksInstall();
 	roll::selectionInstall();

@@ -67,6 +67,12 @@ struct Profile
 	Cell            dirs = 0;
 	const Opposed  *opposed = nullptr;
 	int             opposedCount = 0;
+
+	// THE FOUR DIRECTIONS BY NAME, so notation can build a numpad without
+	// knowing which bit is which. `dirs` says a bit IS a direction; these say
+	// WHICH. Zero means this control has no such direction, which is a real
+	// answer - a two-way lever is a control.
+	Cell up = 0, down = 0, left = 0, right = 0;
 };
 
 // The profile in force. A host sets it once at startup; the roll only reads it.

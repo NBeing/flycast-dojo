@@ -1287,6 +1287,7 @@ if(NOT LIBRETRO)
 	core/dojo/roll_edit.cpp
 	core/dojo/roll_paint.cpp
 	core/dojo/roll_marks.cpp
+	core/dojo/roll_notation.cpp
 	core/dojo/roll_meta.cpp
 	core/dojo/roll_pattern.cpp
 	core/dojo/roll_remap.cpp
@@ -1986,6 +1987,22 @@ set_tests_properties(flycast.docktest_can_fail PROPERTIES
 	TIMEOUT 600
 	RUN_SERIAL TRUE
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;DOCKTEST_DISPLAY=78")
+
+# THE STATES WALL, which needs no mouse and therefore no window manager.
+#
+# A SEPARATE SCRIPT, and `[MEASURED 2026-09-10]` that is not tidiness. These
+# checks were arms on rolltest for one commit, and opening a second panel put
+# the two in the same dock node as TABS: the States tab covered the roll, the
+# roll stopped drawing, its hover trace went to row=-1, and rolltest reported
+# that the PAINT STROKE was unwired. It was not - it was not on screen. One
+# harness per panel removes the whole class.
+add_test(NAME flycast.statestest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/statestest.sh)
+set_tests_properties(flycast.statestest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 300
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
 
 # Cross-process reproducibility. Every other test here runs in ONE process, so
 # none of them can see process-level nondeterminism - both halves of their

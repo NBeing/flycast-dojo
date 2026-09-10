@@ -74,8 +74,7 @@ XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	-config dojo:RollPaintTrace=yes -config dojo:RollPaintProbe=yes \
 	-config dojo:RollSlotTrace=yes \
 	-config dojo:RollAnchorProbe=yes \
-	-config dojo:Panel.states=yes -config dojo:StatesTrace=yes \
-	-config dojo:StatesLabelProbe=yes \
+	-config dojo:RollMashProbe=yes \
 	-config window:width=1000 -config window:height=800 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 &
 FC=$!
@@ -442,35 +441,6 @@ echo "  ${anchor##*N\[RENDERER\]: }"
 case "$anchor" in
 	*PASS*) ;;
 	*) echo "FAIL rolltest - a resize did not move the savestate anchor, or undo did not restore it"; exit 1 ;;
-esac
-
-# ---- the States panel sees the same slot ------------------------------------
-# The clip this script picks is required to have a savestate beside it, so
-# "occupied=0" is a failure and not a fact about the machine. This is the only
-# check that the States wall and the roll's gutter agree about what exists -
-# they read the same host, and that is the claim.
-st=$(tr -d '\0' < "$OUT/out.log" | grep -a "STATES:" | tail -1)
-if [ -z "$st" ]; then
-	echo "FAIL rolltest - the States panel never reported; it did not draw"
-	exit 1
-fi
-echo "  ${st##*N\[RENDERER\]: }"
-occ=$(echo "$st" | sed -n 's/.*occupied=\([0-9]*\).*/\1/p')
-if [ -z "${occ:-}" ] || [ "$occ" -lt 1 ]; then
-	echo "FAIL rolltest - the States wall found no state, and this clip has one"
-	exit 1
-fi
-
-# ---- naming a slot reaches the disk and comes back ---------------------------
-lp=$(tr -d '\0' < "$OUT/out.log" | grep -a "STATES LABELPROBE:" | tail -1)
-if [ -z "$lp" ]; then
-	echo "rolltest: SKIP - the label probe never ran (no occupied slot)"
-	exit $SKIP
-fi
-echo "  ${lp##*N\[RENDERER\]: }"
-case "$lp" in
-	*PASS*) ;;
-	*) echo "FAIL rolltest - naming a slot did not survive the round trip"; exit 1 ;;
 esac
 
 # ---- the multi-row stroke, proved in process --------------------------------

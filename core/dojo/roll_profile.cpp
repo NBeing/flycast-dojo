@@ -51,7 +51,9 @@ static const Opposed mvc2Opposed[] = {
 static const Profile mvc2{ "Marvel vs Capcom 2", mvc2Cols, (int)std::size(mvc2Cols),
 		tas_macro::CANON_UP | tas_macro::CANON_DOWN
 			| tas_macro::CANON_LEFT | tas_macro::CANON_RIGHT,
-		mvc2Opposed, (int)std::size(mvc2Opposed) };
+		mvc2Opposed, (int)std::size(mvc2Opposed),
+		tas_macro::CANON_UP, tas_macro::CANON_DOWN,
+		tas_macro::CANON_LEFT, tas_macro::CANON_RIGHT };
 
 // Defaults to the only profile there is. When a second one exists this becomes
 // a lookup, and the DEFAULT should probably become a plain Dreamcast pad with
