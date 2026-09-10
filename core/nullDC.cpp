@@ -107,8 +107,26 @@ int flycast_init(int argc, char* argv[])
 	if(config::ProfilerEnabled)
 		LogManager::GetInstance()->SetEnable(LogTypes::PROFILER, true);
 
-	if (cfgLoadBool("dojo", "Replay", false))
-		dojo.replay.Init();
+	/*
+		`[REMOVED 2026-09-10]` there was a second `dojo.replay.Init()` here.
+
+		docs/SESSION-KINDS.md §4 #10 filed it as "triggered from two places on
+		identical conditions". Measured, it ran twice per session - but the calls
+		were never redundant: gui_start_game() calls dojo.Reset() and THEN
+		Init(), so this one's movie was parsed and thrown away.
+
+		AND IT WAS WORSE THAN WASTED FROM THE UI. Init's own first comment
+		explains that the replay browser sets ReplayFilename with cfgSetVirtual
+		"just before boot" - which is after this point. So a UI-launched replay
+		loaded the PREVIOUS session's persisted clip here, and pointed
+		hostfs::savestateFolderOverride at that clip's folder. Dojo::Reset() does
+		not clear the override; it READS it. Anything asking about savestates
+		between here and gui_start_game - a Lua script from lua::init() just
+		above, the States panel drawing on the Main screen - saw the wrong clip.
+
+		Safe to remove because every game start goes through gui_start_game:
+		`gameLoader.load()` has exactly one caller, and Init sits above it.
+	*/
 
 	return 0;
 }

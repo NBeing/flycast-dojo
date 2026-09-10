@@ -321,10 +321,34 @@ already loaded", it still never fired, because the movie is empty by then. A
 guard that cannot fire is dead code, so it was reverted rather than shipped.
 
 So the finding is not "one call is redundant" but **the first call is wasted**,
-and the fix is a boot-ordering change rather than a guard — Init also sets
-`savestateFolderOverride` and pins the savestate slot, which may be wanted
-before the game loads. `[OPEN]`: whether the early call is needed for those
-side effects, or can simply go.
+and the fix is a boot-ordering change rather than a guard.
+
+**`[RESOLVED 2026-09-10]` — the early call is removed.** It was not merely
+wasted; from the UI it was *wrong*. `Replay::Init`'s own opening comment records
+that the replay browser sets `ReplayFilename` with `cfgSetVirtual` "just before
+boot" — which is after `flycast_init`. So at the early call the cfg still held
+the **previous session's** persisted path: Init parsed a stale movie and pointed
+`hostfs::savestateFolderOverride` at that clip's folder. `Dojo::Reset()` does
+not clear the override, it *reads* it, so the wrong folder survived to the
+second Init.
+
+Two questions had to be answered before deleting it, both `[SOURCE]`:
+
+- **Does every game start reach the second call?** Yes. `gameLoader.load(` has
+  exactly one call site, `gui_start_game`, and Init sits above it in that same
+  function — after that function's own `dojo.Reset()`, which is the correct
+  order.
+- **Does anything between the two calls depend on the side effects?** No. Every
+  reader of `savestateFolderOverride` — the roll's slot host, marks, the States
+  panel, `avi_dump`, the generation archive — opens with `if (…empty()) return`,
+  because empty already means "no clip is open". Before a game boots that is the
+  honest answer, and it is the one they now get instead of last session's clip.
+  The slot pin is `cfgSetVirtual("config", "Dreamcast.SavestateSlot", "0")`,
+  whose pre-boot readers are the settings UI's slot selector; showing the user's
+  persisted slot when no clip is open is likewise correct.
+
+`[MEASURED 2026-09-10]` `scripts/rolltest.sh` still passes and `LOAD REPLAY
+FILE` drops from 2 to 1.
 
 **#11 — the same key read through two mechanisms.** `config::Training` is
 registered and read by **nobody**; all 21 training sites use
