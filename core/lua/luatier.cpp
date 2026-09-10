@@ -29,6 +29,11 @@ const Rule RULES[] = {
 	{ "ui.",            Tier::Observer },
 	{ "gui.",           Tier::Observer },
 	{ "memory.read",    Tier::Observer },
+	//! WATCHING IS READING. Without this line it falls through to the
+	//! unclassified default of `full`, which is the safe direction for an
+	//! omission but the wrong answer for an overlay - and an overlay noticing a
+	//! value change is the whole use case.
+	{ "memory.watch",   Tier::Observer },
 	{ "frame.",         Tier::Observer },
 	{ "state.",         Tier::Observer },
 	{ "session.",       Tier::Observer },

@@ -18,6 +18,7 @@
 */
 #include "lua.h"
 #include "luatier.h"
+#include "luawatch.h"
 #include "dojo/session.h"
 
 #ifdef USE_LUA
@@ -158,7 +159,14 @@ static void emuEventCallback(Event event, void *)
 	// emulated frame has ended, so a typed line cannot re-enter a half-drawn
 	// window or redefine a table the dispatcher is walking.
 	if (event == Event::VBlank)
+	{
 		luaconsole::drain(L);
+		// BEFORE the script's own frame hook, so a callback that reads a watch's
+		// revision sees this frame's answer rather than last frame's. Reached
+		// only past the rollback guard above, so a region written and rewritten
+		// across a re-simulation counts once.
+		luawatch::tick();
+	}
 	try {
 		LuaRef v = LuaRef::getGlobal(L, CallbackTable);
 		if (!v.isTable())
@@ -2171,6 +2179,37 @@ static void luaRegister(lua_State *L)
 				.addFunction("write16", addrspace::writet<u16>)
 				.addFunction("write32", addrspace::writet<u32>)
 				.addFunction("write64", addrspace::writet<u64>)
+				/*
+					WATCHES - "did this region change since the last confirmed
+					frame", without pulling the region through the Lua stack
+					every frame. See core/lua/luawatch.h for why this is a byte
+					comparison and not the dirty-page filter Phase 4 proposed.
+				*/
+				.addFunction("watch", std::function<int(u32, u32)>([](u32 addr, u32 len) {
+					if (!luatier::allow("memory.watch"))
+						throw std::runtime_error("memory.watch needs the observer tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
+					const int id = luawatch::add(addr, len);
+					if (id < 0)
+						// REFUSED LOUDLY. A cap that silently truncated would
+						// report "no change" about bytes nobody was watching.
+						throw std::runtime_error("memory.watch: length must be 1.."
+								+ std::to_string(luawatch::MAX_BYTES));
+					return id;
+				}))
+				.addFunction("unwatch", std::function<bool(int)>(&luawatch::remove))
+				.addFunction("watchRevision", std::function<u32(int)>(&luawatch::revision))
+				.addFunction("watchCount", std::function<int()>(&luawatch::count))
+				.addFunction("watchCompares", std::function<double()>([]() {
+					return (double)luawatch::compares();
+				}))
+				.addFunction("watchChanges", std::function<double()>([]() {
+					return (double)luawatch::changes();
+				}))
+				//! What the last tick cost, so the price of a watch is visible
+				//! rather than argued about.
+				.addFunction("watchMicros", std::function<double()>(&luawatch::lastMicros))
+				.addFunction("watchMaxMicros", std::function<double()>(&luawatch::maxMicros))
 				.addFunction("read8s", read8s)
 				.addFunction("read16s", read16s)
 				.addFunction("read32s", read32s)
@@ -2559,6 +2598,10 @@ void exec(const std::string& path)
 //! Caller holds the lock.
 static void openState(const std::string& initFile)
 {
+	// A new script owns new watches, for the same reason it owns a new
+	// declaration: carrying them would leave a script paying for a predecessor's
+	// regions every frame, and reading revisions it never armed.
+	luawatch::reset();
 	// A NEW SCRIPT OWNS A NEW DECLARATION. Carrying one across a reload would
 	// mean a script could be restricted by a predecessor it never saw, and the
 	// refusal counters would be somebody else's.
