@@ -7,6 +7,11 @@
 #   FAIL:  a rofi menu appears saying WHAT is missing, and exit 1. It never
 #          exits silently, and it never launches something other than the pick.
 #
+#   FAST PATHS (no menu for the pick they name):
+#          --play  --record  --conformance  --tas
+#          --tas is the TAS studio on Marvel vs. Capcom 2, which is what this
+#          fork is developed against; it still asks which replay.
+#
 #   SELF-CHECK (no menu, no launch):
 #          shell/linux/flycast-rofi --check
 #   PASS:  exit 0 and a line per resolved path. exit 1 naming the first thing
@@ -68,6 +73,21 @@ stale_check() {
     fi
 }
 stale_check
+# THE BUILD-TREE BINARY, as distinct from artifact/bin.
+#
+# artifact/bin holds a COPY, and stale_check() below exists because that copy
+# goes out of date invisibly. The TAS actions are for testing work in progress,
+# where "invisibly out of date" is the whole failure mode, so they run the BUILD
+# TREE binary and the menu says which one it used.
+DEV_BIN="${FLYCAST_DEV_BIN:-$ROOT/build-dojo7/flycast}"
+
+# THE DAVIDRR FORK - the reference build, for side by side.
+#
+# Not in this repository and not built by it, so it is a path with an override
+# and an existence check rather than an assumption. An absent one is REPORTED
+# by name; a menu row that quietly does nothing is the failure this avoids.
+RR_BIN="${FLYCAST_RR_BIN:-$HOME/dev/flycast-rr-oracle/build/flycast}"
+
 SCANNER="$ROOT/core/rend/game_scanner.h"
 # WHERE GAMES ARE, ASKED OF FLYCAST'S OWN CONFIG FIRST
 #
@@ -120,6 +140,22 @@ die() {
             | rofi -dmenu -p 'cannot launch' >/dev/null 2>&1
     fi
     exit 1
+}
+
+# A binary this script does not build, checked before it is used. `which` is
+# named in the message because "it did not start" and "it is not there" are the
+# same thing from a menu.
+need_bin() {
+    [ -x "$1" ] || die "$2 is not at:
+  $1
+Build it, or set $3 to point at it."
+    printf '%s\n' "$1"
+}
+
+# The game this fork is developed against. Used only by --tas, and matched
+# rather than hardcoded: the file may be a .chd or a .zip and either is fine.
+mvc2_game() {
+    printf '%s\n' "$1" | grep -iE 'mvsc2|marvel.*capcom.*2' | head -n 1
 }
 
 # --- derived lists ---------------------------------------------------------
@@ -180,10 +216,28 @@ lua_scripts() {
 
 # Replays live under the data path, which follows FLYCAST_ROOT when set and
 # ~/.local/share otherwise. Both are offered rather than guessed between.
+#
+# `[CORRECTED 2026-09-09]` this searched `-maxdepth 1` and found NOTHING, on a
+# machine with clips. The emulator writes them nested per game and per session -
+# `replays/<game>/<session>/<clip>.flyr`, which is why scripts/rolltest.sh globs
+# `replays/*/*/*.flyr` - so one level down is the empty directory above them all.
+#
+# It failed in the quiet direction this file warns about elsewhere: an empty
+# list reads as "you have not recorded anything yet", and `--check` deliberately
+# does NOT fail on zero replays because a fresh checkout has none. So the bug
+# and the intended state produced identical output.
 replays() {
-    { find "$ROOT/data/replays" -maxdepth 1 \( -name '*.flyr' -o -name '*.flyreplay' \) 2>/dev/null
-      find "$HOME/.local/share/flycast-dojo/replays" -maxdepth 1 \
+    { find "$ROOT/data/replays" -maxdepth 3 \( -name '*.flyr' -o -name '*.flyreplay' \) 2>/dev/null
+      find "${XDG_DATA_HOME:-$HOME/.local/share}/flycast-dojo/replays" -maxdepth 3 \
            \( -name '*.flyr' -o -name '*.flyreplay' \) 2>/dev/null; } | sort -u
+}
+
+# A clip's savestate sits beside it. dojo:AutoSeekState=0 is what starts an
+# unattended replay - `[MEASURED 2026-09-09]` with AutoSeekState=-1 the replay
+# loads and sits PAUSED forever, which reads as a hang - but it needs a state to
+# seek to, so the TAS actions pass it only when one exists and say which.
+has_state() {
+    ls "$(dirname "$1")"/*.state >/dev/null 2>&1
 }
 
 preflight() {
@@ -210,6 +264,10 @@ if [ "${1:-}" = "--check" ]; then
     printf 'games       %s\n' "$n_game"
     printf 'lua         %s\n' "$n_lua"
     printf 'replays     %s\n' "$n_rep"
+    printf 'dev binary  %s%s\n' "$DEV_BIN" \
+        "$([ -x "$DEV_BIN" ] && printf ' (%s)' "$(date -r "$DEV_BIN" '+%Y-%m-%d %H:%M')" || printf ' (absent)')"
+    printf 'rr binary   %s%s\n' "$RR_BIN" \
+        "$([ -x "$RR_BIN" ] && printf ' (%s)' "$(date -r "$RR_BIN" '+%Y-%m-%d %H:%M')" || printf ' (absent)')"
 
     # VACUITY, ASSERTED RATHER THAN HOPED FOR. A parse yielding nothing gives an
     # empty menu, and an empty menu looks exactly like "you own no games".
@@ -322,8 +380,11 @@ case "${1:-}" in
     --play)       GAME="$DEFAULT_GAME"; ACTION='Play' ;;
     --record)     GAME="$DEFAULT_GAME"; ACTION='Play + record video' ;;
     --conformance) GAME="$DEFAULT_GAME"; ACTION='Run the Lua conformance suite' ;;
+    --tas)        GAME="$(mvc2_game "$GAMES")"; ACTION='TAS: open the studio'
+                  [ -n "$GAME" ] || die "--tas wants Marvel vs. Capcom 2 and found none under:
+$(game_dirs | tr '\n' ' ')" ;;
     "")           ;;
-    *)            die "unknown option: $1 (try --check, --play, --record, --conformance)" ;;
+    *)            die "unknown option: $1 (try --check, --play, --record, --conformance, --tas)" ;;
 esac
 
 if [ -z "$GAME" ]; then
@@ -339,7 +400,11 @@ Play + record video
 Play with Vulkan
 Play with a scratch config
 Play a replay
-Run the Lua conformance suite'
+Run the Lua conformance suite
+TAS: open the studio
+TAS: panel self-tests
+TAS: open the studio on a replay
+Compare: davidrr studio'
 
 if [ -z "$ACTION" ]; then
     ACTION="$(printf '%s\n' "$ACTIONS" | pick "$GAME_NAME")"
@@ -394,7 +459,13 @@ Play)
     replay="$(printf '%s\n' "$REPLAYS" | pick 'replay')"
     [ -n "$replay" ] || exit 0
     [ -r "$replay" ] || die "no such replay: '$replay'"
-    launch "${base[@]}" -config dojo:LaunchReplay=yes \
+    # `[CORRECTED 2026-09-09]` this said `dojo:LaunchReplay=yes`, a key that
+    # exists NOWHERE in the emulator - `grep -rn LaunchReplay core/ shell/`
+    # matches this line and nothing else. So the action launched the game with
+    # a filename nothing read, and playing the game normally is exactly what a
+    # replay of that game looks like for the first few seconds. The real key is
+    # `dojo:Replay`, read by core/nullDC.cpp and core/rend/gui.cpp.
+    launch "${base[@]}" -config dojo:Replay=yes \
                         -config "dojo:ReplayFilename=$replay" "$GAME"
     ;;
 
@@ -412,6 +483,90 @@ Play)
     printf 'require("emuapi.conformance")\n' > "$OUT_DIR/conf-root/flycast.lua"
     term_run "flycast conformance" \
         "FLYCAST_ROOT='$OUT_DIR/conf-root' '$BIN' '$GAME' 2>&1 | grep -E 'emuapi|pass=|FAIL|RESULT|missing'"
+    ;;
+
+# ---------------------------------------------------------------------------
+# TAS ACTIONS - work in progress, so they run the BUILD TREE binary rather than
+# the artifact/bin copy, whose staleness is invisible.
+#
+# THE STUDIO OPENS ON A RECORDING, NOT ON A REPLAY. A replay is READ - the movie
+# drives the guest and the roll shows a tape you are watching. Recording is the
+# re-record workflow the tool is for: dojo:RecordMatches writes a movie from
+# power-on, movie::authored() is true from the first recorded frame (it is
+# `!dojo.session_inputs.empty()`), and the roll fills in as you play.
+#
+# The roll is deliberately UNBOUNDED there. core/dojo/dojo.cpp: "TAS WRITE
+# (recording, NOT replaying): the movie is UNBOUNDED ... the piano roll is
+# infinite while writing, and pause/step stay alive. Only play_match (replay)
+# has a fixed length / the ReplayEnd dead-end."
+#
+# `[MEASURED 2026-09-09]` PAUSE IS BOUND TO COMMA in this fork, not P: it is
+# EMU_BTN_PAUSE, keycode 54 (core/input/keyboard_device.h); the davidrr fork
+# uses P. Worth knowing before deciding the roll is broken because it will not
+# stop - the roll gates its edit tools on the machine being paused, so they read
+# as permanently disabled until the right key is found.
+#
+# In the roll: click a frame number to select, Shift-click to extend, and click
+# and drag inside an INPUT column to paint that button down the frames crossed.
+'TAS: open the studio')
+    dev="$(need_bin "$DEV_BIN" "the build-tree flycast" FLYCAST_DEV_BIN)" || exit 1
+    # Traces on: each logs only when its value CHANGES, so they stay quiet until
+    # something happens and then say exactly what. They land in $LOG, which
+    # die() quotes back on a failed launch.
+    launch "$dev" -config dojo:RecordMatches=yes \
+                  -config dojo:Panel.pianoroll=yes \
+                  -config dojo:RollSelTrace=yes -config dojo:RollPaintTrace=yes \
+                  "$GAME"
+    ;;
+
+# The self-tests print their verdict, so this runs in a terminal for the reason
+# the conformance action does: launched detached, the verdict goes to a log
+# nobody opens.
+#
+# NOT a substitute for scripts/rolltest.sh. These prove the MODELS - selection
+# grammar, edit transforms, paint stroke, the game profile - and a self-test
+# proves a module, never its integration. The probes that cross the edit funnel
+# (ROLL PROBE, ROLL PAINTPROBE) only run once a movie exists, so they appear
+# here only after recording has begun.
+'TAS: panel self-tests')
+    dev="$(need_bin "$DEV_BIN" "the build-tree flycast" FLYCAST_DEV_BIN)" || exit 1
+    term_run "flycast panel self-tests" \
+        "'$dev' -config dojo:RecordMatches=yes -config dojo:Panel.pianoroll=yes \
+                -config dojo:PanelSelfTest=yes -config dojo:RollEditProbe=yes \
+                -config dojo:RollPaintProbe=yes '$GAME' 2>&1 \
+         | grep -aE 'SELFTEST|ROLL PROBE|ROLL PAINTPROBE|passed|failed'"
+    ;;
+
+# The read-only case, kept because it is the one that shows a FINISHED movie -
+# every frame already authored, savestate markers in the gutter, and the edit
+# tools live, because rewriting a paused replay is re-recording. See
+# docs/SESSION-KINDS.md #6 for the guard that opened.
+'TAS: open the studio on a replay')
+    dev="$(need_bin "$DEV_BIN" "the build-tree flycast" FLYCAST_DEV_BIN)" || exit 1
+    REPLAYS="$(replays)"
+    [ -n "$REPLAYS" ] || die 'no replays found -- record one first'
+    replay="$(printf '%s\n' "$REPLAYS" | pick 'replay')"
+    [ -n "$replay" ] || exit 0
+    seek=()
+    if has_state "$replay"; then
+        seek=(-config dojo:AutoSeekState=0)
+    else
+        log "no .state beside $replay - starting at frame 0"
+    fi
+    launch "$dev" -config dojo:Replay=yes -config "dojo:ReplayFilename=$replay" \
+                  "${seek[@]}" \
+                  -config dojo:Panel.pianoroll=yes \
+                  -config dojo:RollSelTrace=yes -config dojo:RollPaintTrace=yes \
+                  "$GAME"
+    ;;
+
+# SIDE BY SIDE, on the same game. That fork's studio is its own UI, opened from
+# inside it; this only launches it. It is a separate build this repository does
+# not produce, hence the path, the override, and the refusal that names both.
+'Compare: davidrr studio')
+    rr="$(need_bin "$RR_BIN" "the davidrr fork" FLYCAST_RR_BIN)" || exit 1
+    # Its pause key is P, not comma.
+    launch "$rr" -config dojo:RecordMatches=yes "$GAME"
     ;;
 
 *)

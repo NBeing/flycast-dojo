@@ -2,6 +2,7 @@
 #include "roll_host.h"
 #include "roll_select.h"
 #include "roll_edit.h"
+#include "roll_paint.h"
 #include "session.h"
 #include "rend/gui.h"
 #include "movie.h"
@@ -42,6 +43,33 @@ static bool panelOpen = false;
 // window that scrolls to a selection is edit-tool work, and there are no edit
 // tools yet.
 static constexpr int SPAN = 24;
+
+/*
+	THE HOVER FLAGS A DRAG NEEDS - and a correction, kept because the wrong
+	answer is instructive.
+
+	`[CORRECTED 2026-09-09]` this briefly also carried
+	ImGuiHoveredFlags_AllowWhenOverlappedByItem, on the theory that the last test
+	in ImGui::IsItemHovered() was capping a drag at the row next to its anchor:
+
+	    if ((g.LastItemData.InFlags & ImGuiItemFlags_AllowOverlap) && id != 0)
+	        if ((flags & ImGuiHoveredFlags_AllowWhenOverlappedByItem) == 0)
+	            if (g.HoveredIdPreviousFrame != g.LastItemData.ID)
+	                return false;
+
+	The reading of ImGui was right and the diagnosis was wrong: the flag changed
+	the measurement not at all, because the mouse was never moving. What it DID
+	change was to turn hover into a raw rectangle test, after which TWO adjacent
+	rows claimed the same point every frame and the stroke covered two rows from
+	a stationary cursor - which then passed a "the stroke spanned more than one
+	row" assertion for entirely the wrong reason.
+
+	The real cause was the harness's environment, not this file: scripts/
+	rolltest.sh records that no pointer motion is delivered while a button is
+	held under Xvfb + i3, measured on both axes through both XTest and
+	XWarpPointer. One flag, and the extend fires for exactly one row per frame.
+*/
+static constexpr ImGuiHoveredFlags DRAG_HOVER = ImGuiHoveredFlags_AllowWhenBlockedByActiveItem;
 
 //! One player's half of a session_inputs row, or nothing if the row is absent
 //! or too short. A hole in the movie is a legitimate state, not an error.
@@ -136,6 +164,118 @@ static void draw()
 		}
 	}
 
+	// ---- STROKE PROBE, dojo:RollPaintProbe=yes ---------------------------
+	//
+	// WHY THIS EXISTS WHEN scripts/rolltest.sh ALREADY DRIVES A REAL CLICK.
+	// It drives a real PRESS and a real RELEASE, and those prove the gesture
+	// reaches the model and the commit reaches the funnel. It cannot prove the
+	// EXTEND, because `[MEASURED 2026-09-09]` no pointer motion is delivered
+	// while a button is held under Xvfb + i3 - measured on both axes, through
+	// XTest and XWarpPointer, with SDL_GetGlobalMouseState reporting the press
+	// position for the whole hold. scripts/docktest.sh passes in that same
+	// environment only because a dock drop is decided at the RELEASE position,
+	// which does arrive.
+	//
+	// So the multi-row path gets an in-process customer instead of none. It is
+	// still an INTEGRATION probe - the real movie, the real funnel, the real
+	// undo stack - and only ImGui hit-testing is stubbed, which is the half the
+	// click test already covers. Saying that out loud is the point: this is a
+	// limitation named, not a gap papered over.
+	{
+		static bool strokeProbed = false;
+		if (!strokeProbed && movie::authored() && cfgLoadBool("dojo", "RollPaintProbe", false))
+		{
+			strokeProbed = true;
+			const u32 f = movie::end() > 8 ? movie::end() - 8 : 0;
+			const u32 last = f + 4;
+			const Column& c = profile().cols[0];
+			std::map<u32, Row> whole;
+			for (const auto& kv : dojo.session_inputs) whole[kv.first] = kv.second;
+
+			auto rowOf = [&](u32 fr) -> Row {
+				auto it = dojo.session_inputs.find(fr);
+				return it == dojo.session_inputs.end() ? Row() : it->second;
+			};
+			std::map<u32, Row> before;
+			for (u32 r = f; r <= last; r++) before[r] = rowOf(r);
+			const bool wasOn = rowHas(before[f], 0, c);
+			const size_t depth = dojo.undo_stack.size();
+
+			// The GESTURE, not a hand-built map: begin/extendTo/build is exactly
+			// what a mouse would drive, so a defect in the stroke's own state
+			// machine is reachable from here.
+			paint().begin(f, 0, 0, wasOn, /*forceErase*/ false, /*gap*/ 0);
+			paint().extendTo(last);
+			const bool spanned = paint().lo() == f && paint().hi() == last;
+			Edit e = paint().build(whole);
+			const s64 first = dojo.ApplyEdit(e, "roll: stroke probe");
+			paint().end();
+
+			// EVERY row in the span, not just the ends: a stroke that wrote only
+			// its anchor and its last row would satisfy a first/last check.
+			int set = 0;
+			for (u32 r = f; r <= last; r++)
+				if (rowHas(rowOf(r), 0, c) == !wasOn) set++;
+			const bool grew = dojo.undo_stack.size() > depth;
+
+			const bool undone = dojo.ApplyUndo();
+			int restored = 0;
+			for (u32 r = f; r <= last; r++)
+				if (rowOf(r) == before[r]) restored++;
+
+			const bool ok = spanned && first == (s64)f && set == 5 && grew
+					&& undone && restored == 5;
+			NOTICE_LOG(RENDERER, "ROLL PAINTPROBE: %u..%u spanned=%s first=%lld set=%d/5 "
+					"undo=%s restored=%d/5  => %s",
+					f, last, spanned ? "yes" : "NO", (long long)first, set,
+					undone ? "yes" : "NO", restored, ok ? "PASS" : "FAIL");
+		}
+	}
+
+	// THE WHOLE MOVIE AS A MAP. Both funnels want it - ApplyEdit refuses a map
+	// that does not span the movie, ApplyEditResize reads absence as a deletion -
+	// and the paint stroke needs it at RELEASE, which happens outside the
+	// buttons' scope and often outside the table entirely.
+	auto wholeMovie = [&]() {
+		std::map<u32, Row> all;
+		for (const auto& kv : dojo.session_inputs) all[kv.first] = kv.second;
+		return all;
+	};
+
+	// ONE GATE, READ ONCE, used by the buttons AND the stroke. Two copies of a
+	// permission rule is how a tool ends up with a button that refuses and a
+	// drag that does not.
+	//
+	// `[CORRECTED 2026-09-09]` this asked `!session::readOnly()` and that was
+	// WRONG in a way no unit test could see: `dojo:Replay=yes` sets play_match,
+	// so mode() is Read, so EVERY edit tool was unreachable in the only mode
+	// where a movie exists. The panel drew "edits need a writable session" and
+	// looked like a working gate. Two facts settle it:
+	//
+	//   `session::readOnly()` had exactly ONE caller in the tree - this line.
+	//   It answers "the movie drives the guest and the live pad is ignored",
+	//   which is about INPUT ROUTING while emulating. The roll rewrites the
+	//   TAPE while the machine is STOPPED. Different question.
+	//
+	//   The tree's own shipped edit customers - TextApply and ResizeProbe in
+	//   replay.cpp - push ApplyEdit into a REPLAY with no such check. The
+	//   funnel's actual contract is "a loaded movie is editable".
+	//
+	// The real hazard is A LIVE PEER, whose tape is shared and who desyncs if
+	// this side rewrites it - and that is the one case replay.cpp's probes never
+	// meet, because they run at load. Rewriting a paused replay is not a hazard;
+	// it is the feature, and dojo.cpp calls it re-recording.
+	//
+	// livePeer(), NOT netplay(). `[MEASURED 2026-09-09]` netplay() answers TRUE
+	// for a purely local replay of a clip recorded from a GGPO match, because
+	// replay.cpp sets config::GGPOEnable when it loads one - so this gate would
+	// refuse every edit on such a clip while telling the user the tape is
+	// shared, with nothing on the other end. docs/SESSION-KINDS.md #9.
+	const bool paused   = gui_state == GuiState::Paused;
+	const bool writable = !session::livePeer();
+	const bool editable = paused && writable;
+	static int paintGap = 0;		// 0 = every row, 1 = every 2nd, 2 = every 3rd
+
 	// ---- EDITS -----------------------------------------------------------
 	//
 	// THE GATE IS TWO CONDITIONS AND BOTH ARE STATED, not one silently
@@ -150,22 +290,21 @@ static void draw()
 	// writes session_inputs itself.
 	{
 		Selection& sel = selection();
-		const bool paused   = gui_state == GuiState::Paused;
-		const bool writable = !session::readOnly();
 		const bool haveSel  = !sel.empty();
 
 		if (!paused)        ImGui::TextDisabled("edits need the movie PAUSED");
-		else if (!writable) ImGui::TextDisabled("edits need a writable session (this is read-only)");
-		else if (!haveSel)  ImGui::TextDisabled("select rows to edit them");
+		else if (!writable) ImGui::TextDisabled("edits are refused while a peer is connected - the tape is shared");
 		else
 		{
-			// A resize needs the WHOLE movie, because ApplyEditResize reads a
-			// frame's absence from the map as a deletion.
-			auto wholeMovie = [&]() {
-				std::map<u32, Row> all;
-				for (const auto& kv : dojo.session_inputs) all[kv.first] = kv.second;
-				return all;
-			};
+			// GOVERNS THE DRAG, NOT THE BUTTONS, and says so. A control sitting
+			// among widgets it does not affect is worse than an unlabelled one.
+			ImGui::SetNextItemWidth(96.f);
+			ImGui::Combo("paint every", &paintGap, "row\0" "2nd row\0" "3rd row\0");
+			ImGui::SameLine();
+
+			if (!haveSel) { ImGui::TextDisabled("select rows for the buttons"); }
+			else
+			{
 
 			if (ImGui::Button("Blank"))
 			{
@@ -191,6 +330,7 @@ static void draw()
 			}
 			ImGui::SameLine();
 			ImGui::TextDisabled("(%d rows)", (int)sel.count());
+			}
 		}
 	}
 	ImGui::Separator();
@@ -210,6 +350,38 @@ static void draw()
 	for (int c = 0; c < prof.count; c++)
 		ImGui::TableSetupColumn(prof.cols[c].label, ImGuiTableColumnFlags_WidthFixed, 28.f);
 	ImGui::TableHeadersRow();
+
+	// WHICH COLUMN IS UNDER THE MOUSE, asked ONCE. The row is a single hit
+	// target spanning the whole table, so the click alone cannot say whether
+	// the user meant the frame gutter or a button cell - but the table knows.
+	// Column hover does not vary down a row, so this is per draw, not per row.
+	//
+	// -1 is the frame or state gutter, or nothing: those SELECT. An input
+	// column PAINTS. One button, and geometry decides which gesture it was -
+	// exactly how the row already derives its frame from where the mouse is.
+	int hoveredCol = -1;
+	for (int c = 0; c < prof.count; c++)
+		if (ImGui::TableGetColumnFlags(2 + c) & ImGuiTableColumnFlags_IsHovered)
+		{
+			hoveredCol = c;
+			break;
+		}
+
+	// `dojo:RollPaintTrace=yes` - the hovered column, logged on CHANGE. Without
+	// it a paint test that reports nothing cannot tell "the click missed the
+	// table" from "the stroke never began", which are bugs in different files -
+	// and the harness clicks at a fixed pixel offset, so which column it lands
+	// in is a measurement, not something to assume.
+	if (cfgLoadBool("dojo", "RollPaintTrace", false))
+	{
+		static int lastHov = -2;
+		if (hoveredCol != lastHov)
+		{
+			lastHov = hoveredCol;
+			NOTICE_LOG(RENDERER, "ROLL HOVER: col=%d(%s)", hoveredCol,
+					hoveredCol >= 0 ? prof.cols[hoveredCol].label : "gutter");
+		}
+	}
 
 	const u32 lo = playhead > (u32)SPAN ? playhead - SPAN : 0;
 	const u32 hi = std::min(playhead + (u32)SPAN, movie::end());
@@ -241,15 +413,63 @@ static void draw()
 				ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap);
 		if (!movie::has(f)) ImGui::PopStyleColor();
 
-		if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !paint().active())
 		{
 			// Modifiers read HERE and passed in: the grammar is a pure function
 			// of them, which is what lets it be tested without a frame.
 			ImGuiIO& io = ImGui::GetIO();
-			sel.press(f, Mods{ io.KeyShift, io.KeyCtrl, io.KeyAlt });
+			if (editable && hoveredCol >= 0)
+			{
+				// !active() GUARDS AGAINST A DOUBLE ANCHOR.
+				// `[MEASURED 2026-09-09]` one press produced TWO "begin" lines,
+				// on consecutive rows, in the same millisecond, and the second
+				// re-anchored the stroke - so a four-row drag committed one row.
+				// A PAUSED emulator renders the UI far faster than input is
+				// polled, so one mouse-down edge can be observed by more than one
+				// ImGui frame; the roll scrolls a row between them, so the second
+				// anchor is not even the row the user pressed. The anchor is
+				// decided ONCE per stroke - the stroke already says so, and this
+				// is where it is enforced.
+				// SET vs ERASE IS DECIDED AT THE ANCHOR and never asked again,
+				// so the cell's CURRENT state is read here, once. Deciding it
+				// per row would make a drag flicker between writing and erasing
+				// as it crossed existing input.
+				FrameInputs a{};
+				const bool wasOn = frameAt(f, 0, a)
+						&& pressed(prof.cols[hoveredCol], a.kcode, a.triggers.l,
+								a.triggers.r, BTN_TRIGGER_LEFT, BTN_TRIGGER_RIGHT);
+				paint().begin(f, 0, hoveredCol, wasOn, io.KeyAlt, paintGap);
+				if (cfgLoadBool("dojo", "RollPaintTrace", false))
+					NOTICE_LOG(RENDERER, "ROLL PAINT: begin frame=%u col=%d(%s) was=%s -> %s gap=%d",
+							f, hoveredCol, prof.cols[hoveredCol].label,
+							wasOn ? "on" : "off", paint().writes() ? "set" : "clear", paintGap);
+			}
+			else
+				sel.press(f, Mods{ io.KeyShift, io.KeyCtrl, io.KeyAlt });
+		}
+		else if (paint().active() && ImGui::IsMouseDown(ImGuiMouseButton_Left)
+				&& ImGui::IsItemHovered(DRAG_HOVER))
+		{
+			// COLUMN-LOCKED: only the row is taken from the hover. However far
+			// sideways the mouse wanders, the stroke stays in the column and the
+			// port it began in.
+			paint().extendTo(f);
+			// Logged on CHANGE. "the stroke committed fewer rows than the mouse
+			// crossed" has at least three causes - the far row was never hovered,
+			// the table scrolled under the drag, or the extend branch was never
+			// reached - and they are indistinguishable from the commit alone.
+			if (cfgLoadBool("dojo", "RollPaintTrace", false))
+			{
+				static u32 lastExt = ~0u;
+				if (f != lastExt)
+				{
+					lastExt = f;
+					NOTICE_LOG(RENDERER, "ROLL PAINT: extend to %u (drawn window %u..%u)", f, lo, hi);
+				}
+			}
 		}
 		else if (sel.dragging() && ImGui::IsMouseDown(ImGuiMouseButton_Left)
-				&& ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+				&& ImGui::IsItemHovered(DRAG_HOVER))
 			sel.dragTo(f);
 		ImGui::PopID();
 
@@ -267,14 +487,24 @@ static void draw()
 
 		FrameInputs fi{};
 		const bool have = frameAt(f, 0, fi);
+		const Paint& pt = paint();
 		for (int c = 0; c < prof.count; c++)
 		{
 			ImGui::TableNextColumn();
-			if (!have)
-				continue;
-			if (pressed(prof.cols[c], fi.kcode, fi.triggers.l, fi.triggers.r,
-					BTN_TRIGGER_LEFT, BTN_TRIGGER_RIGHT))
-				ImGui::TextColored(TAS_P1_COL, "%s", "\xe2\x96\xa0");	// filled square
+			bool on = have && pressed(prof.cols[c], fi.kcode, fi.triggers.l,
+					fi.triggers.r, BTN_TRIGGER_LEFT, BTN_TRIGGER_RIGHT);
+			// LIVE PREVIEW, through the SAME predicate the commit uses. touches()
+			// is what build() consults, so the grid cannot promise a cell the
+			// release will not write - and a gap row keeps the movie's own value
+			// because the stroke SKIPS it rather than inverting it.
+			//
+			// Drawn even where the movie has no record: a stroke past a hole
+			// creates the frame, and showing nothing there would hide that.
+			const bool prev = pt.active() && c == pt.column() && pt.touches(f);
+			if (prev)
+				on = pt.writes();
+			if (on)
+				ImGui::TextColored(prev ? TAS_FOCUS_RING : TAS_P1_COL, "%s", "\xe2\x96\xa0");	// filled square
 		}
 	}
 	ImGui::EndTable();
@@ -282,6 +512,43 @@ static void draw()
 	// table - a release the roll never sees would leave it dragging forever.
 	if (selection().dragging() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
 		selection().release();
+
+	// A STROKE COMMITS ON RELEASE, wherever the mouse is - outside the table,
+	// outside the window - for the same reason the selection drag does: a
+	// release the roll never sees would leave it painting forever.
+	if (paint().active() && cfgLoadBool("dojo", "RollPaintTrace", false))
+	{
+		// ONE LINE PER UI FRAME while a stroke is live. Three different failures
+		// look identical from the commit alone - the UI is not redrawing, the
+		// pointer is not where xdotool put it, or no row reports hovered - and
+		// this separates them: a gap in the timestamps is the first, a static
+		// mouse= is the second, row=none is the third.
+		const ImGuiIO& io = ImGui::GetIO();
+		NOTICE_LOG(RENDERER, "ROLL DRAG: mouse=%.0f,%.0f down=%d stroke=%u..%u",
+				io.MousePos.x, io.MousePos.y, (int)ImGui::IsMouseDown(ImGuiMouseButton_Left),
+				paint().lo(), paint().hi());
+	}
+	if (paint().active())
+	{
+		if (!editable)
+			// The gate was lost MID-STROKE: the movie resumed, or the session
+			// became read-only. Drop the stroke rather than commit it. The user
+			// authored it under a rule that no longer holds, and an edit landing
+			// on a running movie is the desync this project exists to avoid.
+			paint().end();
+		else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+		{
+			// ONE EDIT FOR THE WHOLE STROKE, not one per row - so one undo step
+			// walks the gesture back the way the user made it.
+			Edit e = paint().build(wholeMovie());
+			const s64 first = dojo.ApplyEdit(e, "roll: paint");
+			if (cfgLoadBool("dojo", "RollPaintTrace", false))
+				NOTICE_LOG(RENDERER, "ROLL PAINT: commit col=%d %s %u..%u gap=%d first=%lld rows=%zu",
+						paint().column(), paint().writes() ? "set" : "clear",
+						paint().lo(), paint().hi(), paintGap, (long long)first, e.size());
+			paint().end();
+		}
+	}
 
 	// ONE-SHOT DECODE CHECK. An all-empty grid is what a neutral stretch looks
 	// like AND what a broken pressed() looks like; they are not distinguishable

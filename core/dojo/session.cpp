@@ -46,6 +46,15 @@ bool macro()     { const Kind k = kind(); return k == Kind::RecordMacro || k == 
 bool netplay()   { return kind() == Kind::Netplay; }
 bool readOnly()  { return mode() == Mode::Read; }
 
+bool livePeer()
+{
+	// Spectate first: its frames come off a socket while play_match is true, so
+	// the movie test below would wrongly call it a local session.
+	if (cfgLoadBool("dojo", "Receiving", false))
+		return true;
+	return settings.network.online && !dojo.play_match;
+}
+
 bool writeGrow()
 {
 	// tasWriteGrow, verbatim in meaning and promoted out of MapleApplyAction's

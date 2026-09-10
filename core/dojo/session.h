@@ -77,6 +77,28 @@ bool recording();	//!< RecordMovie or RecordMacro
 bool replaying();	//!< Replay or PlayMacro
 bool macro();		//!< RecordMacro or PlayMacro
 bool netplay();		//!< Netplay
+
+/*
+	IS THERE A LIVE PEER - one that would desync if this side rewrote the tape?
+
+	NOT netplay(), and the difference is not academic. `[MEASURED 2026-09-09]`
+	netplay() is TRUE for a purely LOCAL replay: replay.cpp sets
+	config::GGPOEnable = true when it loads a clip that was recorded from a GGPO
+	match, and kind() reads that Option. ggpo::active() has the same flaw from the
+	other end - its body answers true for `dojo.play_match && replay.ggpo_session`.
+	Both describe the SHAPE of the session, and both are satisfied with nothing on
+	the other end of the wire.
+
+	The discriminator is that A MOVIE DRIVING THE GUEST AND A LIVE ROLLBACK
+	SESSION ARE MUTUALLY EXCLUSIVE - maple_if.cpp routes
+	`if (dojo.play_match) MapleApplyAction(...) else ggpo::getInput(...)`, one or
+	the other, every frame. Receiving is excluded separately: a spectator's frames
+	arrive on a socket and play_match is true for it, so the movie test alone
+	would call a spectate session editable.
+
+	docs/SESSION-KINDS.md #9 is this bug; this is the predicate it asks for.
+*/
+bool livePeer();
 bool readOnly();	//!< mode() == Read
 
 /*

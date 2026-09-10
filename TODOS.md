@@ -118,6 +118,57 @@ and not sufficient, and support that looks real is worse than a recorded gap.
 
 ---
 
+## The studio port — the piano roll
+
+`[2026-09-09]` Five modules landed under `core/dojo/roll_*`, all with self-tests
+and none of them naming flycast or Marvel vs. Capcom 2: `roll_host.h` (the four
+host questions), `roll_profile` (game columns), `roll_select` (15 claims),
+`roll_edit` (29), `roll_paint` (18). The panel is `roll_panel.cpp`, registered
+through `panels::add`.
+
+- [x] Paint wired into the panel. A press in an input column begins a stroke, a
+  release commits one edit through `Dojo::ApplyEdit`. `scripts/rolltest.sh`
+  drives real clicks and asserts the commit; `dojo:RollPaintProbe` drives the
+  multi-row span in process. Both have failing arms.
+- [ ] **The extend path has no mouse-driven customer.** `[MEASURED 2026-09-09]`
+  no pointer motion is delivered while a button is held under Xvfb + i3 —
+  measured on both axes, through XTest and XWarpPointer, with
+  `dojo:MouseDragTrace` showing `SDL_GetGlobalMouseState` returning the press
+  position for the whole hold. `scripts/docktest.sh` passes in the same
+  environment only because a dock DROP is decided at the release position.
+  Cause not established; the in-process probe covers the span meanwhile.
+- [ ] Two adjacent rows report hovered at one cursor position, so a stationary
+  press paints two rows. Survived reverting
+  `ImGuiHoveredFlags_AllowWhenOverlappedByItem`, so that flag was not the cause.
+  Minor, but it inflates every stroke by a row.
+- [ ] Remaining edit tools from the lift's 37 symbols: brush/stamp, stretch,
+  repeat, the staged-buffer tools.
+- [ ] The States window. Ranked by the user alongside the roll, above branches.
+- [ ] Report two davidrr bugs upstream: missing `core/deps/glslang/CHANGES.md`,
+  and no headless auto-play.
+
+## Session kinds — TAS, rollback, training and plain play are conflated
+
+`[MEASURED 2026-09-09]` `docs/SESSION-KINDS.md` is the census: **170 raw
+decision sites against 2 that use `session::`.** Read it before touching any of
+this; the counts and the evidence are there, not here.
+
+- [ ] The predicates are unused because they answer questions nobody asks — the
+  census names **14** distinct questions with no predicate. Name those first.
+  `session::livePeer()` is the first one added under that reading.
+- [ ] **Training is not in `Kind` at all** — 21 sites, 11 of them one
+  copy-pasted block in `core/input/gamepad_device.cpp`. The largest unmodelled
+  kind in the tree.
+- [ ] Migrate against the denominator (170), so a missed site is loud. A partial
+  migration reads exactly like a complete one.
+- [ ] Work §4's **11 latent disagreements** as a bug list. #9 is live: replaying
+  a clip recorded from a GGPO match reports `Kind::Netplay` offline, because
+  `replay.cpp` sets `config::GGPOEnable` when it loads one.
+- [ ] **[OPEN]** §6 — permitting edits during a paused replay bypasses two
+  guards in `dojo.cpp` written as `!play_match`: the locked-range filter and the
+  structural-edit refusal. The gate correction was right in direction and opened
+  a path those guards assumed closed. Not resolved.
+
 ## Known bugs
 
 ### [x] Lua `vblank` double-fires during rollback — FIXED

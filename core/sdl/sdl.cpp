@@ -285,6 +285,20 @@ static void updateMousePositionWhileDragging()
 		return;			// no drag in progress; ordinary motion events suffice
 	int wx = 0, wy = 0;
 	SDL_GetWindowPosition(window, &wx, &wy);
+	// `dojo:MouseDragTrace=yes` - logged on CHANGE. "the drag position froze" has
+	// two causes that look identical from the UI: this function early-returning
+	// because the global button mask reads empty, or the global position itself
+	// not tracking. A quiet log means the first, a static one means the second.
+	if (cfgLoadBool("dojo", "MouseDragTrace", false))
+	{
+		static int lgx = -99999, lgy = -99999;
+		if (gx != lgx || gy != lgy)
+		{
+			lgx = gx; lgy = gy;
+			NOTICE_LOG(INPUT, "MOUSE DRAG: global=%d,%d window=%d,%d -> %d,%d buttons=0x%x",
+					gx, gy, wx, wy, gx - wx, gy - wy, (unsigned)buttons);
+		}
+	}
 	// Deliberately NOT clamped: ImGui wants the true position, negative or past
 	// the far edge, to work out which dock target the pointer is over.
 	gui_set_mouse_position(gx - wx, gy - wy);

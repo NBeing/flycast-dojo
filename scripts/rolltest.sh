@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# rolltest - drive the piano roll with REAL clicks and check the selection moved.
+# rolltest - drive the piano roll with REAL clicks and drags, and check that the
+# selection moved and that a paint stroke reached the edit funnel.
 #
 # The roll's selection grammar has a 15-claim self-test, but a self-test proves
 # the MODEL and never the WIRING - the lesson this tree learned twice in one day
@@ -24,7 +25,14 @@ ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 EXE="${FLYCAST_BIN:-$ROOT/build-dojo7/flycast}"
 ROM="${FLYCAST_TEST_ROM:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
 DISP="${FLYCAST_TEST_DISPLAY:-:141}"
-OUT="$(mktemp -d)"; trap 'chmod -R u+w "$OUT" 2>/dev/null; rm -rf "$OUT"' EXIT
+# ROLLTEST_OUT keeps the run directory - the emulator's full log included - for
+# a diagnostic run. Unset, it is a temp dir that is removed, so a normal run
+# leaves nothing behind.
+if [ -n "${ROLLTEST_OUT:-}" ]; then
+	OUT="$ROLLTEST_OUT"; mkdir -p "$OUT"
+else
+	OUT="$(mktemp -d)"; trap 'chmod -R u+w "$OUT" 2>/dev/null; rm -rf "$OUT"' EXIT
+fi
 
 [ -x "$EXE" ] || { echo "rolltest: SKIP - not built"; exit $SKIP; }
 [ -f "$ROM" ] || { echo "rolltest: SKIP - no ROM"; exit $SKIP; }
@@ -63,6 +71,7 @@ XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no \
 	-config dojo:Transmitting=no -config dojo:Receiving=no \
 	-config dojo:Panel.pianoroll=yes -config dojo:RollSelTrace=yes \
+	-config dojo:RollPaintTrace=yes -config dojo:RollPaintProbe=yes \
 	-config window:width=1000 -config window:height=800 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 &
 FC=$!
@@ -100,30 +109,137 @@ xdotool windowactivate "$WID" 2>/dev/null; sleep 1
 # no click can land reliably, and edits are gated on paused regardless.
 xdotool key --window "$WID" comma; sleep 2
 
-# The roll's rows sit below its header; these offsets are inside the table for a
-# 1000x800 window with the panel open at its default place.
-ROWX=$((wx + 330)); ROW1=$((wy + 360)); ROW2=$((wy + 424))
+# ---------------------------------------------------------------------------
+# LOCATE THE COLUMNS BEFORE CLICKING ANYTHING.
+#
+# The row is ONE hit target spanning the table, and the panel decides the
+# GESTURE from which column the mouse is over: the frame gutter selects, an
+# input column paints. A fixed pixel offset therefore no longer picks a
+# gesture - it picks whichever gesture that offset happens to land on.
+#
+# `[MEASURED 2026-09-09]` not hypothetical. The offset this script used for its
+# plain click, wx+330, turned out to be an INPUT column. It only ever selected
+# because a wrong gate (session::readOnly()) made painting impossible in a
+# replay; correcting the gate would have silently turned the selection test
+# into a paint test, and it would still have printed PASS.
+#
+# So sweep and ask the panel where column 0 begins and ends. The gutter is 30px
+# left of its left edge, the paint target is its midpoint - both derived from
+# what the emulator reports, never from arithmetic on column widths.
+hovcol() {
+	tr -d '\0' < "$OUT/out.log" | grep -a "ROLL HOVER:" | tail -1 \
+		| sed -n 's/.*col=\(-*[0-9]*\).*/\1/p'
+}
+# `[MEASURED 2026-09-09]` a row is ~32px in this layout: a press at ROW1 and a
+# shift-press at ROW2 (+64) are two frames apart. ROW5 must therefore be several
+# rows down, not 40px - at 40px the paint drag never left the row it started on
+# and committed a single frame while looking like a working stroke.
+ROW1=$((wy + 360)); ROW2=$((wy + 424)); ROW5=$((wy + 360 + 128))
+C0A=""; C0B=""
+for dx in $(seq 120 6 760); do
+	xdotool mousemove $((wx + dx)) $ROW1; sleep 0.25
+	c=$(hovcol)
+	if [ "${c:-}" = "0" ]; then
+		[ -n "$C0A" ] || C0A=$dx
+		C0B=$dx
+	elif [ -n "$C0B" ]; then
+		break
+	fi
+done
+if [ -z "$C0A" ] || [ "$C0A" -lt 40 ]; then
+	echo "rolltest: SKIP - never hovered the roll's first input column (layout changed?)"
+	cleanup; exit $SKIP
+fi
+GUTX=$((wx + C0A - 30))
+PNTX=$((wx + (C0A + C0B) / 2))
+echo "rolltest: column 0 spans dx $C0A..$C0B; gutter click x=$GUTX, paint x=$PNTX"
+
+# ---------------------------------------------------------------------------
+# PHASE 1 - SELECTION, in the gutter.
+#
 # PRESS AND RELEASE AS SEPARATE STEPS, WITH A PAUSE BETWEEN THEM.
 # `[MEASURED 2026-09-09]` `xdotool click 1` sends down+up faster than one frame,
 # and an immediate-mode GUI samples button state ONCE PER FRAME - so ImGui never
 # observes the down state and IsItemClicked never fires. The tell was that HOVER
 # worked while clicks did not: motion is sampled continuously, clicks are edges.
-# scripts/docktest.sh already does it this way (mousedown; sleep 0.4).
-xdotool mousemove $ROWX $ROW1; sleep 0.4
+xdotool mousemove $GUTX $ROW1; sleep 0.4
 xdotool mousedown 1; sleep 0.4; xdotool mouseup 1; sleep 1
 
 xdotool keydown shift; sleep 0.2
-xdotool mousemove $ROWX $ROW2; sleep 0.4
+xdotool mousemove $GUTX $ROW2; sleep 0.4
 xdotool mousedown 1; sleep 0.4; xdotool mouseup 1; sleep 0.4
 xdotool keyup shift; sleep 2
+
+# READ THE VERDICT NOW, not at the end. Phase 2 drags in the gutter too, so it
+# OVERWRITES this evidence - and reading the last line after both phases judged
+# phase 2's drag while naming phase 1 in the failure message. That is the wrong
+# component named in the report, which is the expensive kind of wrong.
+SEL1=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL SEL:" | tail -3)
+SELN=$(echo "$SEL1" | tail -1 | sed -n 's/.*n=\([0-9]*\).*/\1/p')
+
+# ---------------------------------------------------------------------------
+# PHASE 2 - THE PAINT STROKE, and its control.
+#
+# Same reason as phase 1: roll_paint has an 18-claim self-test, and that proves
+# the MODEL. Until a real drag in a real input column reaches Dojo::ApplyEdit,
+# the stroke is a tested module with no customer - the exact shape of the two
+# defects this tree found on 2026-09-09 (a panel registry with zero call sites;
+# an edit funnel that refused a map every unit test had accepted).
+paintcommits() { tr -d '\0' < "$OUT/out.log" | grep -ac "ROLL PAINT: commit" || true; }
+
+# THE CONTROL, RUN FIRST so its evidence is unambiguous: the identical drag in
+# the GUTTER must commit nothing. Without it, "a commit line appeared" is also
+# what an unconditional log looks like, and one arm cannot tell a stroke that
+# fires everywhere from one that fires only where it should.
+xdotool mousemove $GUTX $ROW1; sleep 0.4
+xdotool mousedown 1; sleep 0.4
+xdotool mousemove $GUTX $ROW5; sleep 0.5
+xdotool mouseup 1; sleep 1
+GUTTER=$(paintcommits)
+
+# THE STROKE: press in column 0, drag down in STEPS, release.
+#
+# STEPPED, NOT TELEPORTED - though in this environment it makes no difference,
+# for a reason worth writing down rather than rediscovering.
+#
+# NO POINTER MOTION IS DELIVERED WHILE A BUTTON IS HELD, here.
+# `[MEASURED 2026-09-09]` measured four times, on BOTH axes, through XTest
+# (plain `xdotool mousemove`) and XWarpPointer (`mousemove --window`), with
+# flycast's own `dojo:MouseDragTrace` showing SDL_GetGlobalMouseState returning
+# the PRESS position for the entire hold and jumping to the final position only
+# on the frame the button reads up.
+#
+# So this script CANNOT drive a multi-row stroke, and does not claim to. What it
+# proves is the press, the column gate and the commit; the extend over a span is
+# proved in-process by dojo:RollPaintProbe, asserted below.
+#
+# scripts/docktest.sh drives a "successful" drag in this same environment - it
+# passes because a dock DROP is decided at the release position, which arrives.
+# It is not evidence that drags work here.
+geomof() { xdotool getwindowgeometry "$WID" 2>/dev/null | grep Position | head -1; }
+G0=$(geomof)
+xdotool mousemove $PNTX $ROW1; sleep 0.4
+xdotool mousedown 1; sleep 0.5
+for i in 1 2 3 4 5 6 7 8; do
+	xdotool mousemove $PNTX $((ROW1 + i * 16)); sleep 0.12
+done
+sleep 0.4
+xdotool mouseup 1; sleep 1.5
+G1=$(geomof)
+PAINTED=$(paintcommits)
+# THE WINDOW MUST NOT HAVE MOVED. A floating window dragged by the WM keeps the
+# cursor over the same widget however far the mouse travels, which is exactly
+# what a stroke that will not extend looks like from the emulator's side.
+if [ "$G0" != "$G1" ]; then
+	echo "rolltest: window MOVED during the drag - $G0 -> $G1"
+fi
+
 xdotool key --window "$WID" comma >/dev/null 2>&1   # let it run on, so teardown is clean
 sleep 1
 cleanup; sleep 1
 
-sel=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL SEL:" | tail -3)
-echo "$sel" | sed 's/^/  /'
-last=$(echo "$sel" | tail -1)
-n=$(echo "$last" | sed -n 's/.*n=\([0-9]*\).*/\1/p')
+echo "$SEL1" | sed 's/^/  /'
+n="${SELN:-}"
 
 # THE ASSERTION IS THAT A RANGE APPEARED, not merely that something did. A plain
 # click alone gives n=1, which a stuck or mis-read click could also produce; a
@@ -132,9 +248,9 @@ if [ -z "${n:-}" ]; then
 	echo "rolltest: SKIP - the roll never reported a selection (no click reached it)"
 	exit $SKIP
 fi
-if [ "$n" -gt 1 ]; then
-	echo "PASS rolltest - a click and a shift-click selected $n rows"
-	exit 0
+if [ "$n" -le 1 ] && [ "$n" -ne 0 ]; then
+	echo "FAIL rolltest - a click selected $n row(s) but the shift-click did not extend it"
+	exit 1
 fi
 if [ "$n" -eq 0 ]; then
 	# NOT a failure of the shift-click: nothing reached the roll at all. Saying
@@ -142,5 +258,42 @@ if [ "$n" -eq 0 ]; then
 	echo "rolltest: SKIP - no click reached the roll (selection never left 0)"
 	exit $SKIP
 fi
-echo "FAIL rolltest - a click selected $n row(s) but the shift-click did not extend it"
-exit 1
+echo "  selection: a click and a shift-click selected $n rows"
+
+# ---- the paint verdict ----------------------------------------------------
+tr -d '\0' < "$OUT/out.log" | grep -a "ROLL PAINT:" | tail -4 | sed 's/^/  /'
+if [ "${GUTTER:-0}" -ne 0 ]; then
+	echo "FAIL rolltest - a GUTTER drag committed a paint edit ($GUTTER); the column gate does not hold"
+	exit 1
+fi
+if [ "${PAINTED:-0}" -eq 0 ]; then
+	echo "FAIL rolltest - a drag in column 0 committed nothing (stroke not wired to the funnel)"
+	exit 1
+fi
+# THE ZERO IS NOT THE ASSERTION. ApplyEdit answers with the first frame it
+# changed; a commit that changed nothing reports -1, and that is what a stroke
+# painting a column it had already painted would look like.
+first=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL PAINT: commit" | tail -1 \
+		| sed -n 's/.*first=\(-*[0-9]*\).*/\1/p')
+if [ -z "${first:-}" ] || [ "$first" -lt 0 ]; then
+	echo "FAIL rolltest - the stroke reached the funnel but changed no frame (first=${first:-none})"
+	exit 1
+fi
+# ---- the multi-row stroke, proved in process --------------------------------
+# NOT a duplicate of the click test and NOT a self-test: it drives the real
+# begin/extendTo/build through the real funnel against the real movie, and it is
+# the only thing here that can exercise a span, for the input reason above.
+probe=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL PAINTPROBE:" | tail -1)
+if [ -z "$probe" ]; then
+	# A SKIPPED CHECK IS NOT A PASSING ONE. The probe is one-shot and gated on a
+	# loaded movie; silence means it never ran, which is not the same as PASS.
+	echo "rolltest: SKIP - the stroke probe never ran (no movie, or the panel never drew)"
+	exit $SKIP
+fi
+echo "  ${probe##*N\[RENDERER\]: }"
+case "$probe" in
+	*PASS*) ;;
+	*) echo "FAIL rolltest - the multi-row stroke probe failed"; exit 1 ;;
+esac
+echo "PASS rolltest - $n rows selected; a press in an input column committed an edit from frame $first; a gutter drag committed none; the multi-row stroke probe passed"
+exit 0
