@@ -472,20 +472,38 @@ at roughly 85% confidence. Confirm that is what was meant before investing.
 **Port the ideas and your own `spec/` code. Reimplement everything else from
 the design, never from FBNeo source.**
 
-### Phase 1 — stop the double-fire (~1–2 days)
-The rollback gate above, plus `isRollback()` and a confirmed-frame counter.
-Best value/effort on the list: it closes a real bug and the primitive already
-exists. Ship it with a test that fails first.
+### [x] Phase 1 — stop the double-fire — DONE
+`Event::VBlank` is gated on `!ggpo::rollbacking()`, and both
+`flycast.state.isRollback()` and `getConfirmedFrameNumber()` exist. See
+**Known bugs** above for the scope correction (it was netplay-only).
 
-### Phase 2 — Lua capability tiers (~1 week)
-Replace the blunt "Lua off entirely in netplay" switch
-(`core/nullDC.cpp`, `core/rend/gui.cpp`) with OFF / OBSERVER / MUTATOR / FULL
-tiers, a per-binding requirement check, refusal counters, and
-`flycast.state.capability()` / `can()`.
+### [x] Phase 2 — Lua capability tiers — LANDED `[2026-09-10]`
+`core/lua/luatier.{h,cpp}`, and `emuapi/spec.lua` owns the vocabulary — this is
+the host side of a contract that, per `MEMORY.md`, **had never been implemented
+on any host**, so its authorisation tier had never been exercised anywhere.
 
-**Biggest user-visible win available** — a training-tool fork whose scripts do
-not work in netplay is exactly the problem those tiers were designed for. It
-would also let recorded netplay matches show Lua overlays.
+- ceiling: netplay → `observer`, otherwise `full`; `dojo:LuaTier` may lower it
+  further and never raise it.
+- **undeclared means full** (the spec's compatibility rule) with the session
+  ceiling still on top — declaring is opting IN to being restricted, and not
+  declaring is not opting out of the session's limits.
+- declaring is irreversible and narrowing-only; a second declaration raises.
+- an unclassified capability needs `full`: the safe direction for an omission
+  is refusing a script, not letting one through.
+- refusals are counted per name; `dojo:LuaTierTrace` logs them.
+- `flycast.state.capability() / tier() / declare() / can() / refusals()`.
+- enforced at savestates, emulator pause/resume, and input driving — the last
+  being the one netplay most needs, since a script pressing a button on one
+  side of a rollback session desyncs the other.
+
+18 self-test claims and **14 more from a script** (`scripts/tests/tiers.lua`),
+because a self-test proves the model and never the bindings. The claim that
+discriminates is the negative one: a host that stored a string and enforced
+nothing would pass "declaring observer returns observer".
+
+`[OPEN]` `emuapi/adapters/flycast.lua` does not yet forward `emu.declare` /
+`emu.tier` / `emu.can` onto these, so the conformance suite still cannot
+exercise the tier through the neutral interface.
 
 ### Phase 3 — frame-safe observation primitives (~1–2 weeks)
 A reactive Signal/Stream layer driven from a confirmed-frame-gated `vblank`,

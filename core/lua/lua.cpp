@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include "lua.h"
+#include "luatier.h"
 #include "dojo/session.h"
 
 #ifdef USE_LUA
@@ -567,8 +568,28 @@ static void luaSavestateSlot(int index, bool load)
 		dc_savestate(index);
 }
 
+/*
+	DRIVING INPUT IS `mutator`, and this is the capability netplay most needs to
+	refuse: a script pressing a button on one side of a rollback session desyncs
+	the other. Checked INSIDE these two rather than around their bindings,
+	because LuaBridge injects the lua_State* and a wrapper would lose it - and
+	because a guard that lives with the function cannot be forgotten by a second
+	binding of the same thing.
+
+	THROWN, NOT luaL_error'd. Lua is linked as C here, so lua_error is a longjmp
+	that unwinds past LuaRef and std::string destructors; this file states that
+	rule for its draw checks and it applies to authorisation just as much.
+*/
+static void requireInputTier()
+{
+	if (!luatier::allow("input.setButton"))
+		throw std::runtime_error("driving input needs the mutator tier; this session grants "
+				+ std::string(luatier::name(luatier::granted())));
+}
+
 static void setButtonTable(int player, LuaRef buttons, lua_State *L)
 {
+	requireInputTier();
 	checkPlayerNum(L, player);
 	if (!buttons.isTable())
 	{
@@ -590,6 +611,7 @@ static void setButtonTable(int player, LuaRef buttons, lua_State *L)
 
 static void setButton(int player, const std::string& name, bool pressed, lua_State *L)
 {
+	requireInputTier();
 	checkPlayerNum(L, player);
 	for (const ButtonMapping& m : ButtonMappings)
 	{
@@ -1809,6 +1831,11 @@ static void luaRegister(lua_State *L)
 				// opposite of what it says. Both branches are gated on the
 				// state they transition out of.
 				.addFunction("pause", std::function<void()>([]() {
+					// EMULATOR CONTROL IS `full`. Stopping one side of a
+					// rollback session is not an overlay's business.
+					if (!luatier::allow("emulator.pause"))
+						throw std::runtime_error("emulator.pause needs the full tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
 					if (gui_state != GuiState::Closed)
 						return;			// already stopped; do not toggle back
 					const bool toolsVisible = dojo.play_match
@@ -1839,6 +1866,9 @@ static void luaRegister(lua_State *L)
 				// Resuming from the wrong state is how a paused emulator gets
 				// stuck - the old version only knew how to leave Commands.
 				.addFunction("resume", std::function<void()>([]() {
+					if (!luatier::allow("emulator.resume"))
+						throw std::runtime_error("emulator.resume needs the full tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
 					// Dropped FIRST here, for the mirror-image reason: the gui
 					// call below restarts the machine, so the reason must be gone
 					// before it does or the arbiter is left holding a reason for
@@ -2196,13 +2226,47 @@ static void luaRegister(lua_State *L)
 				.addFunction("getResimSteps", std::function<int()>([]() {
 					return (int)ggpo::resimSteps();
 				}))
+				/*
+				AUTHORISATION - `emuapi/spec.lua` owns this vocabulary and
+				these are the host side of it. It is a DIFFERENT QUESTION
+				from supports(): a host can have a function and refuse it.
+
+				capability() is what the SESSION allows at most; tier() is
+				what is in force after any declaration; declare() narrows,
+				once, irreversibly, and answers what was actually granted -
+				which may be less than was asked for, and that is not an
+				error. can() asks about one capability by name.
+			*/
+			.addFunction("capability", std::function<std::string()>([]() {
+				return std::string(luatier::name(luatier::ceiling()));
+			}))
+			.addFunction("tier", std::function<std::string()>([]() {
+				return std::string(luatier::name(luatier::granted()));
+			}))
+			.addFunction("declare", std::function<std::string(std::string)>(
+					[](std::string want) {
+				luatier::Tier got;
+				std::string err;
+				if (!luatier::declare(want, got, err))
+					// RAISES rather than answering nil: a malformed tier and
+					// a second declaration are both caller bugs, and
+					// spec.lua puts a caller bug in failure tier 1.
+					throw std::runtime_error(err);
+				return std::string(luatier::name(got));
+			}))
+			.addFunction("can", std::function<bool(std::string)>([](std::string what) {
+				return luatier::can(what);
+			}))
+			.addFunction("refusals", std::function<int()>([]() {
+				return luatier::refusals();
+			}))
 				.addProperty("system", &settings.platform.system, false)
 				.addProperty("media", &settings.content.path, false)
 				.addProperty("gameId", &settings.content.gameId, false)
 				.beginNamespace("display")
 					.addProperty("width", &settings.display.width, false)
 					.addProperty("height", &settings.display.height, false)
-				.endNamespace()
+			.endNamespace()
 				.addFunction("getFrameNumber", getFrameNumber)
 			.endNamespace()
 
@@ -2279,8 +2343,21 @@ static void luaRegister(lua_State *L)
 				//! would invite a script to compare two hosts' hashes, which is
 				//! meaningless. What travels is the ANSWER.
 				.addFunction("anchor", savestateAnchor)
-				.addFunction("save", std::function<void(int)>([](int index) { luaSavestateSlot(index, false); }))
-				.addFunction("load", std::function<void(int)>([](int index) { luaSavestateSlot(index, true); }))
+				// AUTHORISATION BEFORE THE ARGUMENT CHECK, deliberately: a
+				// script that may not save at all should be told that, not told
+				// its slot number is out of range.
+				.addFunction("save", std::function<void(int)>([](int index) {
+					if (!luatier::allow("savestate.save"))
+						throw std::runtime_error("savestate.save needs the full tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
+					luaSavestateSlot(index, false);
+				}))
+				.addFunction("load", std::function<void(int)>([](int index) {
+					if (!luatier::allow("savestate.load"))
+						throw std::runtime_error("savestate.load needs the full tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
+					luaSavestateSlot(index, true);
+				}))
 				.addFunction("tostring", saveStateToString)
 				.addFunction("fromstring", loadStateFromString)
 				// Take a snapshot BETWEEN FRAMES. Returns immediately; the state
@@ -2482,6 +2559,11 @@ void exec(const std::string& path)
 //! Caller holds the lock.
 static void openState(const std::string& initFile)
 {
+	// A NEW SCRIPT OWNS A NEW DECLARATION. Carrying one across a reload would
+	// mean a script could be restricted by a predecessor it never saw, and the
+	// refusal counters would be somebody else's.
+	luatier::resetDeclaration();
+
 	L = luaL_newstate();
 	luaL_openlibs(L);
 

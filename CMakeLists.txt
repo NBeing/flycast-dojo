@@ -1291,6 +1291,7 @@ if(NOT LIBRETRO)
 	core/dojo/roll_meta.cpp
 	core/dojo/roll_pattern.cpp
 	core/dojo/roll_remap.cpp
+	core/lua/luatier.cpp
 	core/dojo/roll_staged.cpp
 	core/dojo/roll_slots.cpp
 	core/dojo/states_panel.cpp
