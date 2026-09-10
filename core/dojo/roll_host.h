@@ -62,6 +62,37 @@ struct SlotView
 	std::string label;
 };
 
+/*
+	ONE SNAPSHOT of a whole slot set - a "generation" in the fork's words.
+
+	`[MEASURED 2026-09-09]` docs/STATES-LIFT.md: the pane that shows these has
+	131 real dependencies and ZERO game-specific symbols, so the port's whole
+	cost is this interface.
+
+	THE ID IS OPAQUE AND NEVER A FOLDER NAME ON SCREEN. The fork had to invent a
+	`#` column precisely because its folder numbers restart per kind - "8 or 6
+	backups?" says its own comment, because the last row read 06 while the count
+	was 8. A tool that shows the stored number shows a different number from the
+	one it counted.
+*/
+struct SnapshotView
+{
+	std::string id;				//!< opaque handle; pass it back, never show it
+	std::string kindLabel;		//!< what sort of snapshot, in the host's words
+	int         ordinal = 0;	//!< the host's own numbering WITHIN that kind
+	std::string createdLocal;
+	int         files = 0;
+	u64         bytes = 0;
+	bool        haveFrame = false;
+	u32         atFrame = 0;
+	u32         movieFrames = 0;
+	u32         rerecords = 0;
+	std::vector<int> slots;
+	bool        onDisk = true;		//!< false = recorded but the files are gone
+	bool        synthesized = false;//!< the record was rebuilt from the folder
+	std::string tags, notes;
+};
+
 struct Host
 {
 	virtual ~Host() = default;
@@ -96,6 +127,31 @@ struct Host
 		asked would be a host that blocks, and this one is called from a draw.
 	*/
 	virtual bool deleteSlot(int slot) { (void)slot; return false; }
+
+	// ---- SNAPSHOTS of the whole slot set -----------------------------------
+
+	//! How many snapshots the bound set has.
+	virtual int snapshotCount() const { return 0; }
+	virtual bool snapshotView(int i, SnapshotView& out) const
+	{ (void)i; (void)out; return false; }
+
+	/*
+		A number that CHANGES when the snapshot library does, and never
+		otherwise.
+
+		The pane's only refresh trigger. The alternative - rescanning per draw -
+		is a directory walk plus a JSON parse per frame, and the fork's comment
+		says its equivalent pane asked ~200 times a frame before it was
+		memoised.
+	*/
+	virtual u32 snapshotRevision() const { return 0; }
+
+	//! Name or annotate a snapshot. Refuses by default, like every other write
+	//! in this interface.
+	virtual bool setSnapshotTags(const std::string& id, const std::string& tagsCsv)
+	{ (void)id; (void)tagsCsv; return false; }
+	virtual bool setSnapshotNotes(const std::string& id, const std::string& notes)
+	{ (void)id; (void)notes; return false; }
 
 	// Does this slot still belong to the timeline currently being edited?
 	// A re-record past the frame a state was saved on strands it: the state is

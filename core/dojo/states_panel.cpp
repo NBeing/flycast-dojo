@@ -58,6 +58,13 @@ static char editBuf[80] = {};
 // this panel is drawn while a movie may be running. Arming a specific slot and
 // letting it disarm itself means a stray click cannot delete anything, and a
 // deliberate one takes two.
+// The generations pane's own click-to-edit cell. Separate from the wall's
+// because they are different tables with different rows, and one shared row
+// index between two lists is how a rename lands on the wrong thing.
+static int  genEditRow = -1;
+static int  genEditCol = 0;			// 0 = tags, 1 = notes
+static char genEditBuf[512] = {};
+
 static int    armedDelete = -1;
 static double armedAt = 0.0;
 static constexpr double ARM_SECONDS = 4.0;
@@ -342,6 +349,163 @@ static void draw()
 					gone ? "yes" : "NO", noticed ? "yes" : "NO",
 					refusesEmpty ? "yes" : "NO",
 					(deleted && gone && noticed && refusesEmpty) ? "PASS" : "FAIL");
+		}
+	}
+
+	// ---- GENERATIONS: snapshots of the whole slot set ---------------------
+	//
+	// `[MEASURED 2026-09-09]` docs/STATES-LIFT.md: this pane is what the fork's
+	// show_states_snapshots delegates to, and it has ZERO game-specific symbols.
+	// The whole port cost is the host interface above.
+	//
+	// THE `#` COLUMN IS A RUNNING COUNT IN DISPLAY ORDER and not the host's
+	// stored number, which is the fork's own hard-won lesson: its folder numbers
+	// restart per kind, so a list of eight ended with "06" and its comment reads
+	// "8 or 6 backups?". The stored number sits beside its kind where it means
+	// something.
+	ImGui::Separator();
+	if (ImGui::CollapsingHeader("Generations", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		const int gn = h->snapshotCount();
+		if (gn == 0)
+			ImGui::TextDisabled("No snapshots of this slot set yet.");
+		else if (ImGui::BeginTable("##gens", 7, ImGuiTableFlags_Borders
+				| ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit
+				| ImGuiTableFlags_ScrollY, ImVec2(0, 160.f)))
+		{
+			ImGui::TableSetupScrollFreeze(1, 1);
+			ImGui::TableSetupColumn("#");
+			ImGui::TableSetupColumn("kind");
+			ImGui::TableSetupColumn("created");
+			ImGui::TableSetupColumn("files");
+			ImGui::TableSetupColumn("MB");
+			ImGui::TableSetupColumn("at frame");
+			ImGui::TableSetupColumn("tags / notes", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			for (int i = 0; i < gn; i++)
+			{
+				SnapshotView g;
+				if (!h->snapshotView(i, g))
+					continue;
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("%d", i + 1);
+				if (!g.onDisk)
+				{
+					ImGui::SameLine();
+					// RECORDED BUT ABSENT is a real state and says so: the
+					// alternative is a row that looks fine and restores nothing.
+					ImGui::TextColored(TAS_P2_COL, "!");
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("recorded, but its files are not on disk");
+				}
+				else if (g.synthesized && ImGui::IsItemHovered())
+					ImGui::SetTooltip("record rebuilt from the folder");
+
+				ImGui::TableNextColumn();
+				ImGui::Text("%s %02d", g.kindLabel.c_str(), g.ordinal);
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(g.createdLocal.empty() ? "-" : g.createdLocal.c_str());
+				ImGui::TableNextColumn();
+				ImGui::Text("%d", g.files);
+				ImGui::TableNextColumn();
+				ImGui::Text("%.1f", (double)g.bytes / 1048576.0);
+				ImGui::TableNextColumn();
+				if (g.haveFrame) ImGui::Text("%u", g.atFrame);
+				else             ImGui::TextDisabled("-");
+
+				ImGui::TableNextColumn();
+				ImGui::PushID(i);
+				if (genEditRow == i)
+				{
+					ImGui::SetNextItemWidth(-1.f);
+					if (ImGui::InputText("##ge", genEditBuf, sizeof(genEditBuf),
+							ImGuiInputTextFlags_EnterReturnsTrue)
+						|| ImGui::IsItemDeactivatedAfterEdit())
+					{
+						const bool ok = genEditCol == 0
+								? h->setSnapshotTags(g.id, genEditBuf)
+								: h->setSnapshotNotes(g.id, genEditBuf);
+						if (!ok)
+							NOTICE_LOG(RENDERER, "STATES: annotating snapshot %d was REFUSED", i);
+						genEditRow = -1;
+					}
+					else if (ImGui::IsItemDeactivated())
+						genEditRow = -1;
+				}
+				else
+				{
+					const std::string shown = g.tags.empty() && g.notes.empty()
+							? std::string("(untagged)")
+							: g.tags + (g.notes.empty() ? "" : "  -  " + g.notes);
+					if (g.tags.empty() && g.notes.empty()) ImGui::TextDisabled("%s", shown.c_str());
+					else                                   ImGui::TextUnformatted(shown.c_str());
+					if (ImGui::IsItemHovered())
+						ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+					if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+					{
+						genEditRow = i;
+						// Click edits TAGS; the notes are reachable from the
+						// same cell with Ctrl, rather than stealing a column
+						// from a pane that is already seven wide.
+						genEditCol = ImGui::GetIO().KeyCtrl ? 1 : 0;
+						snprintf(genEditBuf, sizeof(genEditBuf), "%s",
+								genEditCol == 0 ? g.tags.c_str() : g.notes.c_str());
+					}
+				}
+				ImGui::PopID();
+			}
+			ImGui::EndTable();
+			ImGui::TextDisabled("click to tag, Ctrl+click to annotate");
+		}
+
+		/*
+			GENERATIONS PROBE, `dojo:StatesGenProbe=yes`. One shot, and it MAKES
+			a snapshot, so it only belongs in a harness working on a copy.
+
+			Counting what is already there would be vacuous - the test clip has
+			no generations - so this creates one and watches the count move,
+			which is the only version of the claim that can fail.
+		*/
+		static bool genProbed = false;
+		if (!genProbed && cfgLoadBool("dojo", "StatesGenProbe", false)
+				&& !hostfs::savestateFolderOverride.empty())
+		{
+			genProbed = true;
+			const int before = h->snapshotCount();
+			int files = 0;
+			u64 bytes = 0;
+			const int num = dojo.ArchiveClipDir(hostfs::savestateFolderOverride,
+					&files, &bytes, "gen");
+			// COPYING AND RECORDING ARE TWO STEPS, and the first alone is
+			// invisible. `[MEASURED 2026-09-10]` the probe called only
+			// ArchiveClipDir and reported "archived=1 files=4 count 0 -> 0" -
+			// four files on disk and nothing in the library, which is exactly
+			// what a half-finished F8 would leave behind. Dojo::ArchiveGeneration
+			// pairs them and this follows it.
+			if (num >= 0)
+			{
+				dojo.RecordGeneration(num, files, bytes, "gen");
+				dojo.ReconcileGenerations(hostfs::savestateFolderOverride);
+			}
+			const int after = h->snapshotCount();
+
+			// Tag the new one and read it back THROUGH the host, so this
+			// measures clip.json rather than the string handed in.
+			bool tagged = false, readBack = false;
+			SnapshotView g;
+			if (after > before && h->snapshotView(after - 1, g))
+			{
+				tagged = h->setSnapshotTags(g.id, "probe, auto");
+				SnapshotView g2;
+				readBack = h->snapshotView(after - 1, g2)
+						&& g2.tags.find("probe") != std::string::npos;
+			}
+			NOTICE_LOG(RENDERER, "STATES GENPROBE: archived=%d files=%d count %d -> %d"
+					" tagged=%s readback=%s  => %s", num, files, before, after,
+					tagged ? "yes" : "NO", readBack ? "yes" : "NO",
+					(num >= 0 && after == before + 1 && tagged && readBack) ? "PASS" : "FAIL");
 		}
 	}
 

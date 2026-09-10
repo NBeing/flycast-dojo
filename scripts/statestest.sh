@@ -98,6 +98,16 @@ case "$lp" in
 	*) echo "FAIL statestest - naming a slot did not survive the round trip"; exit 1 ;;
 esac
 # ---- the destructive one, on its own copy -----------------------------------
+run_states gen -config dojo:StatesGenProbe=yes
+gp=$(tr -d '\0' < "$OUT/gen/out.log" | grep -a "STATES GENPROBE:" | tail -1)
+if [ -n "$gp" ]; then
+	echo "  ${gp##*N\[RENDERER\]: }"
+	case "$gp" in
+		*PASS*) ;;
+		*) echo "FAIL statestest - taking a generation did not register, or its tag did not stick"; exit 1 ;;
+	esac
+fi
+
 run_states del -config dojo:StatesDeleteProbe=yes
 dp=$(tr -d '\0' < "$OUT/del/out.log" | grep -a "STATES DELETEPROBE:" | tail -1)
 if [ -z "$dp" ]; then
@@ -110,5 +120,5 @@ case "$dp" in
 	*) echo "FAIL statestest - deleting a slot did not take, or an empty slot was not refused"; exit 1 ;;
 esac
 
-echo "PASS statestest - $occ slot(s) seen, a name round-tripped, and a delete took"
+echo "PASS statestest - $occ slot(s) seen, a name round-tripped, a generation registered, and a delete took"
 exit 0

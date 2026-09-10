@@ -251,9 +251,18 @@ through `panels::add`.
   and this panel draws while a movie may run. `dojo:StatesDeleteProbe` runs in
   its OWN launch on its OWN copy of the clip, and also checks that a
   now-empty slot is REFUSED.
+- [x] **The generations pane** — snapshots of the whole slot set, behind
+  `Host::snapshotView()` and cached on `tas_clip::libraryVersion()` rather than
+  rescanned per draw. The `#` column is a running count in DISPLAY order and not
+  the stored number, which is the fork's own hard-won lesson (its folder numbers
+  restart per kind, so a list of eight ended "06" — "8 or 6 backups?").
+  Click to tag, Ctrl+click to annotate. `dojo:StatesGenProbe` MAKES a snapshot
+  and watches the count move, because counting what is already there is vacuous
+  on a fixture with none.
 - [ ] The States window, the rest: **no thumbnails** (nothing in this tree
-  writes one, and `GetLastFrameRGB` is DX9/DX11 only — §G6), no generations
-  pane, no save/load actions from the wall (`dc_loadstate` from a deferred
+  writes one, and `GetLastFrameRGB` is DX9/DX11 only — §G6); no restore of a
+  generation (pre-boot only in the fork, and the wall's own clip is always
+  live); no save/load actions from the wall (`dc_loadstate` from a deferred
   point is documented as wedging the emulator — see `core/lua/lua.cpp`).
 - [ ] `[OPEN]` the fork's 100-slot wall in its `core/rend/gui.cpp` has still not
   been lifted; only its generations pane has, so the 131/17 figures describe the

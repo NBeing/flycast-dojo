@@ -4,6 +4,7 @@
 #include "roll_edit.h"
 #include "roll_meta.h"
 #include "roll_marks.h"
+#include "tas_clip.h"
 #include "movie.h"
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
@@ -226,6 +227,94 @@ public:
 		noticeAt_ = os_GetSeconds();
 		noticeDeletion_ = true;
 		return true;
+	}
+
+	// ---- SNAPSHOTS ------------------------------------------------------
+	//
+	// CACHED ON THE LIBRARY VERSION, which is the number tas_clip bumps on every
+	// write through it. Reloading per draw would be a directory walk plus a JSON
+	// parse per frame; the fork measured its pane asking ~200 times a frame
+	// before it memoised the same thing.
+	void ensureSnapshots() const
+	{
+		const std::string dir = hostfs::savestateFolderOverride;
+		const u32 rev = tas_clip::libraryVersion();
+		if (dir == snapDir_ && rev == snapRev_)
+			return;
+		snapDir_ = dir;
+		snapRev_ = rev;
+		snaps_.clear();
+		if (!dir.empty())
+			tas_clip::loadGenerations(dir, snaps_);
+	}
+
+	int snapshotCount() const override
+	{
+		ensureSnapshots();
+		return (int)snaps_.size();
+	}
+
+	u32 snapshotRevision() const override { return tas_clip::libraryVersion(); }
+
+	bool snapshotView(int i, SnapshotView& out) const override
+	{
+		ensureSnapshots();
+		if (i < 0 || i >= (int)snaps_.size())
+			return false;
+		const tas_clip::Generation& g = snaps_[i];
+		out = SnapshotView();
+		// The NAME is the id - opaque, passed back, and never shown. What the
+		// pane displays is kindLabel plus the host's ordinal, and a running
+		// count of its own for the position.
+		out.id           = g.name;
+		out.kindLabel    = g.kind;
+		out.ordinal      = g.gen;
+		out.createdLocal = g.createdLocal;
+		out.files        = g.files;
+		out.bytes        = g.bytes;
+		out.haveFrame    = g.atFrame != 0 || g.movieFrames != 0;
+		out.atFrame      = g.atFrame;
+		out.movieFrames  = g.movieFrames;
+		out.rerecords    = g.rerecords;
+		out.slots        = g.slots;
+		out.onDisk       = g.present;
+		out.synthesized  = g.recovered;
+		for (const std::string& t : g.tags)
+			out.tags += (out.tags.empty() ? "" : ", ") + t;
+		out.notes        = g.notes;
+		return true;
+	}
+
+	bool setSnapshotTags(const std::string& id, const std::string& tagsCsv) override
+	{
+		ensureSnapshots();
+		if (snapDir_.empty())
+			return false;
+		const SnapshotView *cur = nullptr;
+		static SnapshotView tmp;
+		for (int i = 0; i < (int)snaps_.size(); i++)
+			if (snaps_[i].name == id) { snapshotView(i, tmp); cur = &tmp; break; }
+		if (cur == nullptr)
+			return false;
+		// BOTH FIELDS EVERY TIME, because the writer takes both and passing a
+		// stale notes string would quietly revert an edit made a moment ago.
+		return tas_clip::setGenerationTagsNotes(snapDir_, id, tagsCsv.c_str(),
+				cur->notes.c_str());
+	}
+
+	bool setSnapshotNotes(const std::string& id, const std::string& notes) override
+	{
+		ensureSnapshots();
+		if (snapDir_.empty())
+			return false;
+		static SnapshotView tmp;
+		const SnapshotView *cur = nullptr;
+		for (int i = 0; i < (int)snaps_.size(); i++)
+			if (snaps_[i].name == id) { snapshotView(i, tmp); cur = &tmp; break; }
+		if (cur == nullptr)
+			return false;
+		return tas_clip::setGenerationTagsNotes(snapDir_, id, cur->tags.c_str(),
+				notes.c_str());
 	}
 
 	int staleNoticePhase() const override
@@ -517,6 +606,9 @@ private:
 	mutable size_t rewinds_ = (size_t)-1;
 	mutable u32    rerecords_ = ~0u;
 	mutable std::string lastSig_;
+	mutable std::vector<tas_clip::Generation> snaps_;
+	mutable std::string snapDir_ = "\x01";	// a value no path can be
+	mutable u32 snapRev_ = ~0u;
 };
 
 SlotHost theSlotHost;

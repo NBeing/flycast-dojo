@@ -99,6 +99,7 @@ one-shot integration checks that run inside a real session against a real movie.
 | `dojo:RollMarkProbe` | bookmarks survive save and reload, read from the FILE |
 | `dojo:StatesLabelProbe` | naming a slot round-trips through the disk |
 | `dojo:StatesDeleteProbe` | a delete takes, is visible through a rescan, raises a deletion notice, and an empty slot is refused |
+| `dojo:StatesGenProbe` | taking a generation registers it in the library and a tag on it sticks |
 
 **Harnesses**: `scripts/rolltest.sh` drives real clicks and drags;
 `scripts/statestest.sh` reads traces with no mouse at all. Both are in ctest.
