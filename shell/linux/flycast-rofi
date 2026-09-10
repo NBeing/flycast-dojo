@@ -508,14 +508,22 @@ Play)
 #
 # In the roll: click a frame number to select, Shift-click to extend, and click
 # and drag inside an INPUT column to paint that button down the frames crossed.
+# Type a pattern (numpad plus button names, e.g. "236LP _ _") and Mash it over a
+# range, Fill it over a gapped selection, or arm it as a Brush and drag. Stage a
+# selection to transform it as a second document without touching the movie.
+#
+# THE TWO PANELS DOCK AS TABS by default, which means one covers the other until
+# you drag them apart. That is ImGui docking behaving normally, not a bug - but
+# it is the first thing that looks like one.
 'TAS: open the studio')
     dev="$(need_bin "$DEV_BIN" "the build-tree flycast" FLYCAST_DEV_BIN)" || exit 1
     # Traces on: each logs only when its value CHANGES, so they stay quiet until
     # something happens and then say exactly what. They land in $LOG, which
     # die() quotes back on a failed launch.
     launch "$dev" -config dojo:RecordMatches=yes \
-                  -config dojo:Panel.pianoroll=yes \
+                  -config dojo:Panel.pianoroll=yes -config dojo:Panel.states=yes \
                   -config dojo:RollSelTrace=yes -config dojo:RollPaintTrace=yes \
+                  -config dojo:StatesTrace=yes \
                   "$GAME"
     ;;
 
@@ -555,8 +563,9 @@ Play)
     fi
     launch "$dev" -config dojo:Replay=yes -config "dojo:ReplayFilename=$replay" \
                   "${seek[@]}" \
-                  -config dojo:Panel.pianoroll=yes \
+                  -config dojo:Panel.pianoroll=yes -config dojo:Panel.states=yes \
                   -config dojo:RollSelTrace=yes -config dojo:RollPaintTrace=yes \
+                  -config dojo:StatesTrace=yes \
                   "$GAME"
     ;;
 
@@ -567,6 +576,7 @@ Play)
     rr="$(need_bin "$RR_BIN" "the davidrr fork" FLYCAST_RR_BIN)" || exit 1
     # Its pause key is P, not comma.
     launch "$rr" -config dojo:RecordMatches=yes "$GAME"
+    # Its studio is opened from its own menus; this only starts it.
     ;;
 
 *)
