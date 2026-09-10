@@ -199,23 +199,23 @@ GUTTER=$(paintcommits)
 
 # THE STROKE: press in column 0, drag down in STEPS, release.
 #
-# STEPPED, NOT TELEPORTED - though in this environment it makes no difference,
-# for a reason worth writing down rather than rediscovering.
+# STEPPED, NOT TELEPORTED. A real drag emits motion continuously, and one jump
+# is a shape no user produces.
 #
-# NO POINTER MOTION IS DELIVERED WHILE A BUTTON IS HELD, here.
-# `[MEASURED 2026-09-09]` measured four times, on BOTH axes, through XTest
-# (plain `xdotool mousemove`) and XWarpPointer (`mousemove --window`), with
-# flycast's own `dojo:MouseDragTrace` showing SDL_GetGlobalMouseState returning
-# the PRESS position for the entire hold and jumping to the final position only
-# on the frame the button reads up.
+# `[CORRECTED 2026-09-09]` this block previously claimed that NO pointer motion
+# is delivered while a button is held under Xvfb + i3, and concluded the script
+# could not drive a stroke at all. That was wrong, and wrong in the worst way:
+# the evidence for it was `dojo:MouseDragTrace`, which traces
+# updateMousePositionWhileDragging() in core/sdl/sdl.cpp - the very function that
+# was CAUSING it, by overwriting each fresh SDL_MOUSEMOTION with a stale
+# SDL_GetGlobalMouseState read on every input pump. The instrument was reporting
+# its own defect as a fact about X.
 #
-# So this script CANNOT drive a multi-row stroke, and does not claim to. What it
-# proves is the press, the column gate and the commit; the extend over a span is
-# proved in-process by dojo:RollPaintProbe, asserted below.
+# The tell was visible and read past: the row under the cursor oscillated
+# 10904, 10909, 10904, 10910, 10904, 10911 - the odd samples tracking the drag
+# perfectly. "Nothing is moving" does not produce a monotonic sequence.
 #
-# scripts/docktest.sh drives a "successful" drag in this same environment - it
-# passes because a dock DROP is decided at the release position, which arrives.
-# It is not evidence that drags work here.
+# Fixed, a drag now spans the rows it crosses, and this script asserts it.
 geomof() { xdotool getwindowgeometry "$WID" 2>/dev/null | grep Position | head -1; }
 G0=$(geomof)
 xdotool mousemove $PNTX $ROW1; sleep 0.4
@@ -275,10 +275,25 @@ fi
 # painting a column it had already painted would look like.
 first=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL PAINT: commit" | tail -1 \
 		| sed -n 's/.*first=\(-*[0-9]*\).*/\1/p')
+lo=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL PAINT: commit" | tail -1 \
+		| sed -n 's/.*set \([0-9]*\)\.\.[0-9]*.*/\1/p')
+hi=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL PAINT: commit" | tail -1 \
+		| sed -n 's/.*set [0-9]*\.\.\([0-9]*\).*/\1/p')
+span=$(( ${hi:-0} - ${lo:-0} + 1 ))
 if [ -z "${first:-}" ] || [ "$first" -lt 0 ]; then
 	echo "FAIL rolltest - the stroke reached the funnel but changed no frame (first=${first:-none})"
 	exit 1
 fi
+# THE DRAG MUST HAVE COVERED THE ROWS IT CROSSED. Eight 16px steps over ~32px
+# rows is four rows at minimum; anything less means the stroke stopped extending,
+# which is what BOTH bugs found on 2026-09-09 looked like - the stale-position
+# override, and two adjacent rows claiming one point. Neither changed the commit
+# COUNT, so a count-only assertion passed through both.
+if [ "$span" -lt 4 ]; then
+	echo "FAIL rolltest - an 8-step drag committed only $span row(s) ($lo..$hi); the stroke stopped extending"
+	exit 1
+fi
+
 # ---- the multi-row stroke, proved in process --------------------------------
 # NOT a duplicate of the click test and NOT a self-test: it drives the real
 # begin/extendTo/build through the real funnel against the real movie, and it is
@@ -295,5 +310,5 @@ case "$probe" in
 	*PASS*) ;;
 	*) echo "FAIL rolltest - the multi-row stroke probe failed"; exit 1 ;;
 esac
-echo "PASS rolltest - $n rows selected; a press in an input column committed an edit from frame $first; a gutter drag committed none; the multi-row stroke probe passed"
+echo "PASS rolltest - $n rows selected; an 8-step paint drag committed $span rows from frame $first; a gutter drag committed none; the in-process stroke probe passed"
 exit 0

@@ -12,6 +12,7 @@
 #include "input/gamepad.h"
 #include "imgui.h"
 #include <cstring>
+#include <cmath>
 #include <string>
 #include "log/LogManager.h"
 #include "cfg/cfg.h"
@@ -166,21 +167,20 @@ static void draw()
 
 	// ---- STROKE PROBE, dojo:RollPaintProbe=yes ---------------------------
 	//
-	// WHY THIS EXISTS WHEN scripts/rolltest.sh ALREADY DRIVES A REAL CLICK.
-	// It drives a real PRESS and a real RELEASE, and those prove the gesture
-	// reaches the model and the commit reaches the funnel. It cannot prove the
-	// EXTEND, because `[MEASURED 2026-09-09]` no pointer motion is delivered
-	// while a button is held under Xvfb + i3 - measured on both axes, through
-	// XTest and XWarpPointer, with SDL_GetGlobalMouseState reporting the press
-	// position for the whole hold. scripts/docktest.sh passes in that same
-	// environment only because a dock drop is decided at the RELEASE position,
-	// which does arrive.
+	// WHY THIS EXISTS WHEN scripts/rolltest.sh DRIVES A REAL DRAG.
 	//
-	// So the multi-row path gets an in-process customer instead of none. It is
-	// still an INTEGRATION probe - the real movie, the real funnel, the real
-	// undo stack - and only ImGui hit-testing is stubbed, which is the half the
-	// click test already covers. Saying that out loud is the point: this is a
-	// limitation named, not a gap papered over.
+	// `[CORRECTED 2026-09-09]` it was written because the harness appeared
+	// unable to drive a multi-row stroke at all, which turned out to be a defect
+	// in core/sdl/sdl.cpp rather than a fact about the display server. The
+	// harness drives a real eight-row drag now and asserts the span.
+	//
+	// It is kept, and not as a duplicate. It needs no window manager, no
+	// synthetic input and no timing, so it distinguishes "the STROKE is broken"
+	// from "the INPUT never arrived" - the two possibilities that cost a full
+	// afternoon to tell apart, because they produce the same commit. It also
+	// checks EVERY row of the span rather than the ends, which a drag cannot
+	// easily assert. Real movie, real funnel, real undo stack; only ImGui hit
+	// testing is absent, and that is exactly the half rolltest covers.
 	{
 		static bool strokeProbed = false;
 		if (!strokeProbed && movie::authored() && cfgLoadBool("dojo", "RollPaintProbe", false))
@@ -383,6 +383,40 @@ static void draw()
 		}
 	}
 
+	// WHICH ROW IS UNDER THE CURSOR - decided ONCE, from geometry, exactly as
+	// the column above is. A row is NOT allowed to answer for itself.
+	//
+	// `[MEASURED 2026-09-09]` because TWO ADJACENT ROWS ANSWER YES to the same
+	// pixel. ImGui::Selectable deliberately inflates its hit box so selectables
+	// tile with no click-gap - imgui_widgets.cpp, "Selectables are meant to be
+	// tightly packed together with no click-gap, so we extend their box to cover
+	// spacing between selectable":
+	//
+	//     const float spacing_U = IM_TRUNC(spacing_y * 0.50f);
+	//     bb.Min.y -= spacing_U;
+	//     bb.Max.y += (spacing_y - spacing_U);
+	//
+	// The inflation is ItemSpacing.y, which is the right amount between
+	// selectables IN A WINDOW. A TABLE lays its rows out with CellPadding
+	// instead, and flycast scales the whole style, so the two stop tiling:
+	// IM_TRUNC rounds, the boxes overlap, and both rows contain the point.
+	//
+	// The symptom was that a stationary press painted TWO frames, and that one
+	// press logged two "begin" lines in the same millisecond on consecutive
+	// rows. `[CORRECTED 2026-09-09]` that was first blamed on a paused emulator
+	// rendering faster than input is polled, so that one click edge was seen by
+	// two frames. It was one frame and two rows.
+	//
+	// THE TIE-BREAK PREFERS AN EXACT HIT, then the nearest centre. Exact means
+	// the cursor is inside the row's own rect rather than in the inflation, and
+	// those cannot overlap. Falling back to nearest-centre rather than to
+	// nothing matters for a drag: in the inflation between two rows there is no
+	// exact hit, and a stroke that stalled there would drop frames the user
+	// dragged across.
+	bool  hoverAny = false, hoverExact = false;
+	u32   hoverRow = 0;
+	float hoverDist = 0.f;
+
 	const u32 lo = playhead > (u32)SPAN ? playhead - SPAN : 0;
 	const u32 hi = std::min(playhead + (u32)SPAN, movie::end());
 
@@ -413,64 +447,24 @@ static void draw()
 				ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap);
 		if (!movie::has(f)) ImGui::PopStyleColor();
 
-		if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !paint().active())
+		// OFFERED, NOT ACTED ON. The winner is picked after the table, so a row
+		// cannot start a gesture its neighbour is equally entitled to start.
+		if (ImGui::IsItemHovered(DRAG_HOVER))
 		{
-			// Modifiers read HERE and passed in: the grammar is a pure function
-			// of them, which is what lets it be tested without a frame.
-			ImGuiIO& io = ImGui::GetIO();
-			if (editable && hoveredCol >= 0)
+			const ImGuiStyle& st = ImGui::GetStyle();
+			const float padU = std::trunc(st.ItemSpacing.y * 0.5f);
+			const float padD = st.ItemSpacing.y - padU;
+			const float y0 = ImGui::GetItemRectMin().y;
+			const float y1 = ImGui::GetItemRectMax().y;
+			const float my = ImGui::GetIO().MousePos.y;
+			const bool  exact = my >= y0 + padU && my < y1 - padD;
+			const float dist  = std::fabs(my - (y0 + y1) * 0.5f);
+			if (!hoverAny || (exact && !hoverExact)
+					|| (exact == hoverExact && dist < hoverDist))
 			{
-				// !active() GUARDS AGAINST A DOUBLE ANCHOR.
-				// `[MEASURED 2026-09-09]` one press produced TWO "begin" lines,
-				// on consecutive rows, in the same millisecond, and the second
-				// re-anchored the stroke - so a four-row drag committed one row.
-				// A PAUSED emulator renders the UI far faster than input is
-				// polled, so one mouse-down edge can be observed by more than one
-				// ImGui frame; the roll scrolls a row between them, so the second
-				// anchor is not even the row the user pressed. The anchor is
-				// decided ONCE per stroke - the stroke already says so, and this
-				// is where it is enforced.
-				// SET vs ERASE IS DECIDED AT THE ANCHOR and never asked again,
-				// so the cell's CURRENT state is read here, once. Deciding it
-				// per row would make a drag flicker between writing and erasing
-				// as it crossed existing input.
-				FrameInputs a{};
-				const bool wasOn = frameAt(f, 0, a)
-						&& pressed(prof.cols[hoveredCol], a.kcode, a.triggers.l,
-								a.triggers.r, BTN_TRIGGER_LEFT, BTN_TRIGGER_RIGHT);
-				paint().begin(f, 0, hoveredCol, wasOn, io.KeyAlt, paintGap);
-				if (cfgLoadBool("dojo", "RollPaintTrace", false))
-					NOTICE_LOG(RENDERER, "ROLL PAINT: begin frame=%u col=%d(%s) was=%s -> %s gap=%d",
-							f, hoveredCol, prof.cols[hoveredCol].label,
-							wasOn ? "on" : "off", paint().writes() ? "set" : "clear", paintGap);
-			}
-			else
-				sel.press(f, Mods{ io.KeyShift, io.KeyCtrl, io.KeyAlt });
-		}
-		else if (paint().active() && ImGui::IsMouseDown(ImGuiMouseButton_Left)
-				&& ImGui::IsItemHovered(DRAG_HOVER))
-		{
-			// COLUMN-LOCKED: only the row is taken from the hover. However far
-			// sideways the mouse wanders, the stroke stays in the column and the
-			// port it began in.
-			paint().extendTo(f);
-			// Logged on CHANGE. "the stroke committed fewer rows than the mouse
-			// crossed" has at least three causes - the far row was never hovered,
-			// the table scrolled under the drag, or the extend branch was never
-			// reached - and they are indistinguishable from the commit alone.
-			if (cfgLoadBool("dojo", "RollPaintTrace", false))
-			{
-				static u32 lastExt = ~0u;
-				if (f != lastExt)
-				{
-					lastExt = f;
-					NOTICE_LOG(RENDERER, "ROLL PAINT: extend to %u (drawn window %u..%u)", f, lo, hi);
-				}
+				hoverAny = true; hoverExact = exact; hoverRow = f; hoverDist = dist;
 			}
 		}
-		else if (sel.dragging() && ImGui::IsMouseDown(ImGuiMouseButton_Left)
-				&& ImGui::IsItemHovered(DRAG_HOVER))
-			sel.dragTo(f);
 		ImGui::PopID();
 
 		ImGui::TableNextColumn();
@@ -508,6 +502,76 @@ static void draw()
 		}
 	}
 	ImGui::EndTable();
+
+	// ---- THE GESTURE, on the ONE row that won -----------------------------
+	//
+	// Moved out of the row loop so there is exactly one decision per frame.
+	// IsItemClicked is not reachable here, so the press edge is read globally -
+	// which is all it ever was: IsItemClicked is "hovered AND clicked this
+	// frame", and hoverAny already carries ImGui's hover verdict, including the
+	// window test, the clip rect and the blocked-by-active-item rule.
+	//
+	// The selection highlight is therefore one frame behind a click. It was
+	// already inconsistent - rows drawn AFTER the clicked one saw the new
+	// selection and rows before it did not - so this trades half a frame of
+	// disagreement for a whole frame of honest lag.
+	if (hoverAny)
+	{
+		Selection& sel = selection();
+		const bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+		// !active() KEEPS THE ANCHOR DECIDED ONCE. With one row per frame a
+		// second begin should now be unreachable, but the stroke's own rule is
+		// that the anchor is chosen once and this is where that is enforced.
+		if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !paint().active())
+		{
+			// Modifiers read HERE and passed in: the grammar is a pure function
+			// of them, which is what lets it be tested without a frame.
+			ImGuiIO& io = ImGui::GetIO();
+			if (editable && hoveredCol >= 0)
+			{
+				// SET vs ERASE IS DECIDED AT THE ANCHOR and never asked again,
+				// so the cell's CURRENT state is read here, once. Deciding it
+				// per row would make a drag flicker between writing and erasing
+				// as it crossed existing input.
+				FrameInputs a{};
+				const bool wasOn = frameAt(hoverRow, 0, a)
+						&& pressed(prof.cols[hoveredCol], a.kcode, a.triggers.l,
+								a.triggers.r, BTN_TRIGGER_LEFT, BTN_TRIGGER_RIGHT);
+				paint().begin(hoverRow, 0, hoveredCol, wasOn, io.KeyAlt, paintGap);
+				if (cfgLoadBool("dojo", "RollPaintTrace", false))
+					NOTICE_LOG(RENDERER, "ROLL PAINT: begin frame=%u col=%d(%s) was=%s -> %s gap=%d exact=%s",
+							hoverRow, hoveredCol, prof.cols[hoveredCol].label,
+							wasOn ? "on" : "off", paint().writes() ? "set" : "clear",
+							paintGap, hoverExact ? "yes" : "no");
+			}
+			else
+				sel.press(hoverRow, Mods{ io.KeyShift, io.KeyCtrl, io.KeyAlt });
+		}
+		else if (paint().active() && down)
+		{
+			// COLUMN-LOCKED: only the ROW comes from the hover. However far
+			// sideways the mouse wanders, the stroke stays in the column and the
+			// port it began in.
+			paint().extendTo(hoverRow);
+			// Logged on CHANGE. "the stroke committed fewer rows than the mouse
+			// crossed" has several causes - the far row was never hovered, the
+			// table scrolled under the drag, the extend never ran - and they are
+			// indistinguishable from the commit alone.
+			if (cfgLoadBool("dojo", "RollPaintTrace", false))
+			{
+				static u32 lastExt = ~0u;
+				if (hoverRow != lastExt)
+				{
+					lastExt = hoverRow;
+					NOTICE_LOG(RENDERER, "ROLL PAINT: extend to %u (drawn window %u..%u)",
+							hoverRow, lo, hi);
+				}
+			}
+		}
+		else if (sel.dragging() && down)
+			sel.dragTo(hoverRow);
+	}
+
 	// The drag ends wherever the mouse is released, including outside the
 	// table - a release the roll never sees would leave it dragging forever.
 	if (selection().dragging() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))

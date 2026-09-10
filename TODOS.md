@@ -130,17 +130,23 @@ through `panels::add`.
   release commits one edit through `Dojo::ApplyEdit`. `scripts/rolltest.sh`
   drives real clicks and asserts the commit; `dojo:RollPaintProbe` drives the
   multi-row span in process. Both have failing arms.
-- [ ] **The extend path has no mouse-driven customer.** `[MEASURED 2026-09-09]`
-  no pointer motion is delivered while a button is held under Xvfb + i3 —
-  measured on both axes, through XTest and XWarpPointer, with
-  `dojo:MouseDragTrace` showing `SDL_GetGlobalMouseState` returning the press
-  position for the whole hold. `scripts/docktest.sh` passes in the same
-  environment only because a dock DROP is decided at the release position.
-  Cause not established; the in-process probe covers the span meanwhile.
-- [ ] Two adjacent rows report hovered at one cursor position, so a stationary
-  press paints two rows. Survived reverting
-  `ImGuiHoveredFlags_AllowWhenOverlappedByItem`, so that flag was not the cause.
-  Minor, but it inflates every stroke by a row.
+- [x] Two adjacent rows reported hovered at one cursor position, so a stationary
+  press painted two rows and one press logged two `begin` lines. Cause:
+  `ImGui::Selectable` inflates its hit box by `ItemSpacing.y` so selectables
+  tile with no click-gap, but a table lays rows out with `CellPadding` and
+  flycast scales the style, so the boxes overlap. The roll now decides the
+  hovered row **once per frame** from geometry, preferring an exact hit and
+  falling back to nearest centre — the same shape as the column decision.
+- [x] A drag committed only the row it started on. Cause was **not** the display
+  server: `updateMousePositionWhileDragging()` in `core/sdl/sdl.cpp` overwrote
+  every fresh `SDL_MOUSEMOTION` with a stale `SDL_GetGlobalMouseState` read on
+  each input pump. It now applies only while the pointer is OUTSIDE the window,
+  which is its stated purpose. `[CORRECTED 2026-09-09]` this was written up as
+  "no pointer motion is delivered while a button is held under Xvfb + i3",
+  measured four ways — every measurement went through `dojo:MouseDragTrace`,
+  which traces the guilty function. **An instrument built on the defect will
+  confirm the defect.** `scripts/rolltest.sh` now drives an 8-step drag and
+  asserts the span; `scripts/docktest.sh` still passes.
 - [ ] Remaining edit tools from the lift's 37 symbols: brush/stamp, stretch,
   repeat, the staged-buffer tools.
 - [ ] The States window. Ranked by the user alongside the roll, above branches.

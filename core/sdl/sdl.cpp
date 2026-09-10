@@ -299,9 +299,28 @@ static void updateMousePositionWhileDragging()
 					gx, gy, wx, wy, gx - wx, gy - wy, (unsigned)buttons);
 		}
 	}
-	// Deliberately NOT clamped: ImGui wants the true position, negative or past
-	// the far edge, to work out which dock target the pointer is over.
-	gui_set_mouse_position(gx - wx, gy - wy);
+	// ONLY WHILE THE POINTER IS OUTSIDE THE WINDOW, which is the whole reason
+	// this function exists (see the block comment above). Inside the window
+	// SDL_MOUSEMOTION already reports the position and reports it FRESHER, and
+	// overwriting it here does active harm.
+	//
+	// `[MEASURED 2026-09-09]` it did. A paint drag in the piano roll oscillated:
+	// the row under the cursor read 10904, 10909, 10904, 10910, 10904, 10911 -
+	// the odd samples tracking the drag correctly from motion events, the even
+	// ones snapped back to the press row by this call. The commit took whichever
+	// landed last, so a multi-row stroke committed one row, and the whole thing
+	// looked like "no motion is delivered while a button is held" because the
+	// stale value is what a trace on THIS function shows.
+	//
+	// Deliberately NOT clamped when it does apply: ImGui wants the true
+	// position, negative or past the far edge, to work out which dock target the
+	// pointer is over.
+	const int rx = gx - wx, ry = gy - wy;
+	int ww = 0, wh = 0;
+	SDL_GetWindowSize(window, &ww, &wh);
+	if (rx >= 0 && ry >= 0 && rx < ww && ry < wh)
+		return;			// inside: the motion events are correct and newer
+	gui_set_mouse_position(rx, ry);
 }
 
 void input_sdl_handle()
