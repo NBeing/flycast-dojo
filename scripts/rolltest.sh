@@ -101,6 +101,20 @@ wy=$(echo "$geom" | sed 's/.*Position: [0-9-]*,\([0-9-]*\).*/\1/')
 echo "rolltest: window at $wx,$wy"
 
 xdotool windowactivate "$WID" 2>/dev/null; sleep 1
+
+# THE TWO READINGS THIS SCRIPT STEERS BY, both out of the panel's own trace.
+# Defined up here rather than beside their first sweep because the pause check
+# below needs them too, and a helper defined after its caller is a "command not
+# found" that reads like the emulator failing.
+hovcol() {
+	tr -d '\0' < "$OUT/out.log" | grep -a "ROLL HOVER:" | tail -1 \
+		| sed -n 's/.*col=\(-*[0-9]*\).*/\1/p'
+}
+hovrow() {
+	tr -d '\0' < "$OUT/out.log" | grep -a "ROLL HOVER:" | tail -1 \
+		| sed -n 's/.*row=\(-*[0-9]*\).*/\1/p'
+}
+
 # PAUSE, and the key is COMMA, not P. `[MEASURED 2026-09-09]` this tree binds
 # EMU_BTN_PAUSE to keycode 54 (core/input/keyboard_device.h) - dojo's playback
 # control - while David's fork uses P. Sending p here paused nothing and the
@@ -109,7 +123,52 @@ xdotool windowactivate "$WID" 2>/dev/null; sleep 1
 #
 # It matters twice over: a running roll scrolls under the cursor every 16 ms, so
 # no click can land reliably, and edits are gated on paused regardless.
-xdotool key --window "$WID" comma; sleep 2
+xdotool key --clearmodifiers comma; sleep 2
+
+# ---------------------------------------------------------------------------
+# CONFIRM THE PAUSE BEFORE ANYTHING ELSE, AND EARLY.
+#
+# `[MEASURED 2026-09-10]` two failures came out of not doing this. The comma was
+# sent with `xdotool key --window`, which uses XSendEvent - SDL ignores those -
+# so it landed only sometimes; and because nothing checked, the movie ran on
+# through the whole column sweep and reached frame 11502 of 11520, leaving the
+# roll a dozen rows from the end with nothing to select. Every measurement after
+# that point was of the playhead moving, not of the mouse.
+#
+# A comma that went nowhere and a roll that will not stop look identical from
+# outside. This is the house rule: a test's first assertion is that it is in the
+# state it claims to test.
+probe_inside() {	# echo a y that is inside the table, or nothing
+	local py
+	for py in 400 340 470 300 540 620 260; do
+		xdotool mousemove $((wx + 200)) $((wy + py)); sleep 0.25
+		r=$(hovrow)
+		case "${r:-}" in ""|-1) ;; *) printf '%s' "$py"; return 0 ;; esac
+	done
+	return 1
+}
+PROBEY="$(probe_inside)" || PROBEY=""
+if [ -z "$PROBEY" ]; then
+	echo "rolltest: SKIP - never found a point inside the roll's table"
+	cleanup; exit $SKIP
+fi
+paused_now() {	# the same point, twice, half a second apart
+	xdotool mousemove $((wx + 200)) $((wy + PROBEY)); sleep 0.3
+	local a b
+	a=$(hovrow); sleep 0.5; b=$(hovrow)
+	[ -n "${a:-}" ] && [ "$a" != "-1" ] && [ "$a" = "${b:-}" ]
+}
+PAUSED=0
+for try in 1 2 3 4 5; do
+	if paused_now; then PAUSED=1; break; fi
+	xdotool key --clearmodifiers comma; sleep 1.2
+done
+if [ "$PAUSED" -ne 1 ]; then
+	echo "rolltest: SKIP - the roll kept scrolling, so the movie never paused"
+	echo "         (pause is EMU_BTN_PAUSE = comma in this fork, P in davidrr)"
+	cleanup; exit $SKIP
+fi
+echo "rolltest: paused at frame $(hovrow)"
 
 # ---------------------------------------------------------------------------
 # LOCATE THE COLUMNS BEFORE CLICKING ANYTHING.
@@ -128,25 +187,25 @@ xdotool key --window "$WID" comma; sleep 2
 # So sweep and ask the panel where column 0 begins and ends. The gutter is 30px
 # left of its left edge, the paint target is its midpoint - both derived from
 # what the emulator reports, never from arithmetic on column widths.
-hovcol() {
-	tr -d '\0' < "$OUT/out.log" | grep -a "ROLL HOVER:" | tail -1 \
-		| sed -n 's/.*col=\(-*[0-9]*\).*/\1/p'
-}
-# `[MEASURED 2026-09-09]` a row is ~32px in this layout: a press at ROW1 and a
-# shift-press at ROW2 (+64) are two frames apart. ROW5 must therefore be several
-# rows down, not 40px - at 40px the paint drag never left the row it started on
-# and committed a single frame while looking like a working stroke.
-ROW1=$((wy + 360)); ROW2=$((wy + 424)); ROW5=$((wy + 360 + 128))
+# THE PROBE Y IS TRIED, NOT ASSUMED. Sweeping x needs a point inside the table
+# and sweeping y needs a point in the gutter, so one of them has to go first -
+# and this one VALIDATES its guess by whether it found column 0 at all, rather
+# than trusting a pixel. Several candidates, because the table's top moves every
+# time the panel gains a control.
 C0A=""; C0B=""
-for dx in $(seq 120 6 760); do
-	xdotool mousemove $((wx + dx)) $ROW1; sleep 0.25
-	c=$(hovcol)
-	if [ "${c:-}" = "0" ]; then
-		[ -n "$C0A" ] || C0A=$dx
-		C0B=$dx
-	elif [ -n "$C0B" ]; then
-		break
-	fi
+for py in "$PROBEY"; do
+	C0A=""; C0B=""
+	for dx in $(seq 120 6 760); do
+		xdotool mousemove $((wx + dx)) $((wy + py)); sleep 0.18
+		c=$(hovcol)
+		if [ "${c:-}" = "0" ]; then
+			[ -n "$C0A" ] || C0A=$dx
+			C0B=$dx
+		elif [ -n "$C0B" ]; then
+			break
+		fi
+	done
+	[ -n "$C0A" ] && break
 done
 if [ -z "$C0A" ] || [ "$C0A" -lt 40 ]; then
 	echo "rolltest: SKIP - never hovered the roll's first input column (layout changed?)"
@@ -155,6 +214,52 @@ fi
 GUTX=$((wx + C0A - 30))
 PNTX=$((wx + (C0A + C0B) / 2))
 echo "rolltest: column 0 spans dx $C0A..$C0B; gutter click x=$GUTX, paint x=$PNTX"
+
+# ---------------------------------------------------------------------------
+# AND THE ROWS, FOUND THE SAME WAY.
+#
+# `[MEASURED 2026-09-10]` this used fixed offsets - wy+360 and wy+424 - and they
+# broke the moment the panel grew a second row of buttons and the table moved
+# down: both clicks landed on the SAME row, so the shift-click extended nothing
+# and the script reported that the selection grammar was broken. It was not. A
+# pixel offset is an assumption about a layout that is still being built, and
+# this script already learned it once for columns.
+#
+# So sweep down the gutter and ask the panel which row each point is over. ROW1
+# is the first point inside the table, ROW2 the first at least two rows below it
+# so a Shift-click has something to extend across, ROW5 several rows below that
+# for the paint drag.
+# ---------------------------------------------------------------------------
+# LOCATE THE ROWS.
+#
+# `[MEASURED 2026-09-10]` this used fixed offsets - wy+360 and wy+424 - and they
+# broke the moment the panel grew a second row of buttons and the table moved
+# down: both clicks landed on the SAME row, so the shift-click extended nothing
+# and the script reported that the selection grammar was broken. It was not. A
+# pixel offset is an assumption about a layout that is still being built, and
+# this script already learned that once for columns.
+# KEEP OFF THE TABLE'S TOP EDGE. `[MEASURED 2026-09-10]` the first row a sweep
+# finds is the partially clipped one at the top, and clicking it makes ImGui
+# scroll it into view - so the table moves under the cursor and every reading
+# after the click is of a different row than the one that was measured. The tell
+# was a single click reporting a FOUR row selection. So find the top, then step
+# a clear row past it before taking any measurement.
+ROW1=""; ROW2=""; ROW5=""; R1=""; TOPY=""
+for dy in $(seq 240 8 720); do
+	xdotool mousemove "$GUTX" $((wy + dy)); sleep 0.22
+	r=$(hovrow)
+	case "${r:-}" in ""|-1) continue ;; esac
+	if [ -z "$TOPY" ]; then TOPY=$dy; continue; fi
+	[ $((dy - TOPY)) -ge 40 ] || continue
+	if [ -z "$ROW1" ]; then ROW1=$((wy + dy)); R1="$r"; continue; fi
+	if [ -z "$ROW2" ] && [ "$r" -ge $((R1 + 2)) ]; then ROW2=$((wy + dy)); continue; fi
+	if [ -n "$ROW2" ] && [ "$r" -ge $((R1 + 7)) ]; then ROW5=$((wy + dy)); break; fi
+done
+if [ -z "$ROW1" ] || [ -z "$ROW2" ] || [ -z "$ROW5" ]; then
+	echo "rolltest: SKIP - could not find three distinct rows by sweeping (roll layout changed?)"
+	cleanup; exit $SKIP
+fi
+echo "rolltest: rows at y=$ROW1 (frame $R1), y=$ROW2, y=$ROW5"
 
 # ---------------------------------------------------------------------------
 # PHASE 1 - SELECTION, in the gutter.
@@ -167,8 +272,13 @@ echo "rolltest: column 0 spans dx $C0A..$C0B; gutter click x=$GUTX, paint x=$PNT
 xdotool mousemove $GUTX $ROW1; sleep 0.4
 xdotool mousedown 1; sleep 0.4; xdotool mouseup 1; sleep 1
 
+# THE FAR ROW, not the near one. `[MEASURED 2026-09-10]` a Shift-click two rows
+# down reported an extension of ONE row: at mouse-down the table shifts under the
+# cursor by a couple of rows - visible as a plain click reporting a four-row
+# selection - so a small separation is inside the noise. Several rows apart is
+# outside it, and the claim is "a range appeared", not "exactly N rows did".
 xdotool keydown shift; sleep 0.2
-xdotool mousemove $GUTX $ROW2; sleep 0.4
+xdotool mousemove $GUTX $ROW5; sleep 0.4
 xdotool mousedown 1; sleep 0.4; xdotool mouseup 1; sleep 0.4
 xdotool keyup shift; sleep 2
 
@@ -222,8 +332,10 @@ geomof() { xdotool getwindowgeometry "$WID" 2>/dev/null | grep Position | head -
 G0=$(geomof)
 xdotool mousemove $PNTX $ROW1; sleep 0.4
 xdotool mousedown 1; sleep 0.5
+PSTEP=$(( (ROW5 - ROW1) / 8 ))
+[ "$PSTEP" -ge 1 ] || PSTEP=1
 for i in 1 2 3 4 5 6 7 8; do
-	xdotool mousemove $PNTX $((ROW1 + i * 16)); sleep 0.12
+	xdotool mousemove $PNTX $((ROW1 + i * PSTEP)); sleep 0.12
 done
 sleep 0.4
 xdotool mouseup 1; sleep 1.5
@@ -236,7 +348,7 @@ if [ "$G0" != "$G1" ]; then
 	echo "rolltest: window MOVED during the drag - $G0 -> $G1"
 fi
 
-xdotool key --window "$WID" comma >/dev/null 2>&1   # let it run on, so teardown is clean
+xdotool key --clearmodifiers comma >/dev/null 2>&1   # let it run on, so teardown is clean
 sleep 1
 cleanup; sleep 1
 

@@ -420,16 +420,23 @@ static void draw()
 	// table" from "the stroke never began", which are bugs in different files -
 	// and the harness clicks at a fixed pixel offset, so which column it lands
 	// in is a measurement, not something to assume.
-	if (cfgLoadBool("dojo", "RollPaintTrace", false))
-	{
-		static int lastHov = -2;
-		if (hoveredCol != lastHov)
-		{
-			lastHov = hoveredCol;
-			NOTICE_LOG(RENDERER, "ROLL HOVER: col=%d(%s)", hoveredCol,
-					hoveredCol >= 0 ? prof.cols[hoveredCol].label : "gutter");
-		}
-	}
+	// Reported AFTER the row loop, because the row half is only known then.
+	// `[MEASURED 2026-09-10]` the row belongs here as much as the column: a
+	// harness with fixed pixel offsets for its rows broke the moment the panel
+	// grew a second button row and the table moved down. Which row a point is
+	// over is a measurement, exactly like which column.
+	auto traceHover = [&](int col, bool anyRow, u32 row) {
+		if (!cfgLoadBool("dojo", "RollPaintTrace", false))
+			return;
+		static int lastCol = -2;
+		static s64 lastRow = -2;
+		const s64 r = anyRow ? (s64)row : -1;
+		if (col == lastCol && r == lastRow)
+			return;
+		lastCol = col; lastRow = r;
+		NOTICE_LOG(RENDERER, "ROLL HOVER: col=%d(%s) row=%lld", col,
+				col >= 0 ? profile().cols[col].label : "gutter", (long long)r);
+	};
 
 	// WHICH ROW IS UNDER THE CURSOR - decided ONCE, from geometry, exactly as
 	// the column above is. A row is NOT allowed to answer for itself.
@@ -550,6 +557,8 @@ static void draw()
 		}
 	}
 	ImGui::EndTable();
+
+	traceHover(hoveredCol, hoverAny, hoverRow);
 
 	// ---- THE GESTURE, on the ONE row that won -----------------------------
 	//
