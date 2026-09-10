@@ -267,8 +267,20 @@ through `panels::add`.
 - [ ] `[OPEN]` the fork's 100-slot wall in its `core/rend/gui.cpp` has still not
   been lifted; only its generations pane has, so the 131/17 figures describe the
   PANE and this slice was built from the gaps survey instead.
-- [ ] Report two davidrr bugs upstream: missing `core/deps/glslang/CHANGES.md`,
-  and no headless auto-play.
+- [x] **Reported two davidrr bugs** `[2026-09-10]`, both re-verified against
+  `davidrr/main` @ `edca8915b` before filing:
+  - [#1](https://github.com/magnetro1/flycast-rr/issues/1) — a fresh clone fails
+    to configure: `CHANGES.md` was removed in `71e6e786a` but
+    `core/deps/glslang/CMakeLists.txt:212` still parses it. Reproduced by moving
+    our restored copy aside; `cmake -S . -B build` exits 1. An existing working
+    tree keeps the file as an untracked leftover and configures fine, which is
+    why it hides.
+  - [#2](https://github.com/magnetro1/flycast-rr/issues/2) — `dojo:AutoSeekState`
+    never fires. **Not** "no headless auto-play" as this entry used to say: his
+    fork HAS the feature, and the replay boot pause added 2026-09-04 makes its
+    guard (`gui_state == GuiState::Closed`) unsatisfiable. Measured: frozen at
+    the seeked frame for 35s, `TAS TEST: auto-seek` logged zero times. The
+    handoff already does the seek; what is missing is the resume.
 
 ## Session kinds — TAS, rollback, training and plain play are conflated
 
