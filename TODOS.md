@@ -172,10 +172,15 @@ through `panels::add`.
   `applyPattern` with a longer track and no second loop, which is
   `docs/ROLL-EDIT-MODEL.md` §2 cashed in. `dojo:RollMashProbe` covers the
   wiring the harness cannot type.
-- [ ] Remaining edit tools: fill (a pattern cycled over a selection rather than
-  a range), brush/stamp (a pattern armed and painted by drag), the staged
-  buffer. All three are `applyPattern` with a different track and mask; what is
-  left is UI, not arithmetic.
+- [x] **Fill** — `applyPatternToRows`, the same pattern cycled over a SET of
+  rows. Different from mash only when the selection is gapped, which is exactly
+  when it is wanted. The fork's two "Fill" buttons disagree about untouched
+  lanes and one wipes the other player; here an empty track means leave that
+  lane alone, and a claim pins it.
+- [ ] Remaining edit tools: brush/stamp (a pattern armed and painted by drag —
+  `Paint` would carry a Pattern instead of a column) and the staged buffer
+  (a second document with its own op queue and its own undo). Both are UI over
+  machinery that now exists.
 - [x] **Structural edits return a ROW REMAP.** `core/dojo/roll_remap.{h,cpp}`;
   `deleteRows`/`insertBlanks` return `Resize { edit, remap }` with the edit
   DERIVED from the remap, so there is one owner of "where did row f go".

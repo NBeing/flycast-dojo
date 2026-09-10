@@ -75,6 +75,43 @@ Edit applyPattern(const std::map<u32, Row>& all, u32 anchor, u32 to,
 	return out;
 }
 
+Edit applyPatternToRows(const std::map<u32, Row>& all, const std::set<u32>& rows,
+		const Pattern& p)
+{
+	Edit out(all.begin(), all.end());
+	if (p.empty() || rows.empty())
+		return out;
+
+	// Extend first, for the same reason the range form does: a selection may
+	// name frames past the end, and the movie has to stay contiguous.
+	const u32 end = all.empty() ? 0 : all.rbegin()->first;
+	const u32 hi = *rows.rbegin();
+	for (u32 f = end + 1; f <= hi && !all.empty(); f++)
+		if (out.find(f) == out.end())
+			out[f] = blankRow();
+
+	const int lanes = laneCount();
+	size_t bk = 0;
+	for (u32 f : rows)			// std::set is ascending: frame order, always
+	{
+		auto it = out.find(f);
+		Row row = it == out.end() ? blankRow() : it->second;
+		for (size_t lane = 0; lane < p.tracks.size() && (int)lane < lanes; lane++)
+		{
+			const std::vector<CellOp>& track = p.tracks[lane];
+			if (track.empty())
+				continue;		// this lane is not part of the pattern
+			const CellOp& op = track[bk % track.size()];
+			if (op.mask == 0)
+				continue;
+			row = cellInto(row, (int)lane, cellApply(cellOf(row, (int)lane), op.bits, op.mask));
+		}
+		out[f] = row;
+		bk++;
+	}
+	return out;
+}
+
 /*
 	SELF-TEST. Every claim is a rule a user would notice being broken, and four
 	of them are rules the fork gets WRONG - so a port that passed by copying
@@ -227,6 +264,40 @@ void patternSelfTest()
 		Edit e = applyPattern(fresh(), 4, 8, Pattern(), 0);
 		claim("an empty pattern changes nothing", e.size() == 16 && !has(e, 4, 0, cLp));
 	}
+
+	// ---- the same pattern over a SET of rows ----------------------------
+	{
+		Pattern p;
+		p.tracks.resize(1);
+		p.tracks[0].push_back(CellOp{ cLp.canon, cellAll() });
+		p.tracks[0].push_back(CellOp{ cHp.canon, cellAll() });
+		Edit e = applyPatternToRows(fresh(), { 2, 5, 6, 9 }, p);
+		// ONE STEP PER ROW, in ascending frame order, however scattered.
+		claim("a gapped fill gets consecutive steps on non-consecutive rows",
+				has(e, 2, 0, cLp) && has(e, 5, 0, cHp) && has(e, 6, 0, cLp) && has(e, 9, 0, cHp));
+		claim("...and rows outside the set are untouched",
+				!has(e, 3, 0, cLp) && !has(e, 4, 0, cHp));
+	}
+	{
+		// THE FORK'S FILL BUG, which cannot happen here: a lane the pattern
+		// does not write is left alone rather than wiped.
+		//
+		// TWO TRACKS, THE SECOND EMPTY - not one track. `[MEASURED 2026-09-10]`
+		// with `tracks.resize(1)` the loop never VISITS lane 1 at all, so a
+		// sabotage that made an empty track write neutral changed nothing and
+		// the claim passed. An absent track and an empty one are different
+		// cases, and only the empty one is the rule being claimed.
+		std::map<u32, Row> m = fresh();
+		m[3] = cellInto(blankRow(), 1, cellWith(0, cHp, true));
+		Pattern p;
+		p.tracks.resize(2);
+		p.tracks[0].push_back(CellOp{ cLp.canon, cellAll() });
+		Edit e = applyPatternToRows(m, { 3 }, p);
+		claim("a one-lane fill does not wipe the other lane",
+				has(e, 3, 0, cLp) && has(e, 3, 1, cHp));
+	}
+	claim("an empty selection changes nothing",
+			applyPatternToRows(fresh(), {}, Pattern::one(0, cLp.canon, cLp.canon)).size() == 16);
 
 	NOTICE_LOG(RENDERER, "ROLLPATTERN SELFTEST: %d passed, %d failed", pass, fail);
 }

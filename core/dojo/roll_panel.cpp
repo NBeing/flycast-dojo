@@ -482,6 +482,26 @@ static void draw()
 				}
 				ImGui::EndDisabled();
 				ImGui::SameLine();
+				ImGui::BeginDisabled(!haveSel);
+				if (ImGui::Button("Fill"))
+				{
+					// The SAME pattern over the selected ROWS rather than over
+					// the range - a different thing only when the selection is
+					// gapped, and that is exactly when a user wants it.
+					std::vector<Cell> cells;
+					mashErr.clear();
+					if (parsePattern(mashText, cells, mashErr) && !cells.empty())
+					{
+						Pattern pat;
+						pat.tracks.resize(1);
+						for (Cell c : cells)
+							pat.tracks[0].push_back(CellOp{ c, mashMerge ? c : cellAll() });
+						Edit e = applyPatternToRows(wholeMovie(), sel.rows(), pat);
+						dojo.ApplyEdit(e, "roll: fill");
+					}
+				}
+				ImGui::EndDisabled();
+				ImGui::SameLine();
 				ImGui::Checkbox("merge", &mashMerge);
 				if (!mashErr.empty())
 				{

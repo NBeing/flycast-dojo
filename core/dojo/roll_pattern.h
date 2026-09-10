@@ -2,6 +2,7 @@
 #include "roll_edit.h"
 #include "roll_profile.h"
 #include <map>
+#include <set>
 #include <vector>
 
 /*
@@ -91,6 +92,25 @@ struct Pattern
 */
 Edit applyPattern(const std::map<u32, Row>& all, u32 anchor, u32 to,
 		const Pattern& p, int gap);
+
+/*
+	The same pattern, cycled over a SET of rows instead of a range.
+
+	One pattern step per row, in ascending frame order - so a gapped selection
+	gets consecutive steps on rows that are not consecutive, which is what
+	"fill these frames with this" means when the frames are scattered.
+
+	`[MEASURED 2026-09-09]` docs/ROLL-EDIT-MODEL.md §4: the fork has TWO buttons
+	labelled "Fill" whose loops disagree about untouched lanes, so one of them
+	wipes the other player on every row it touches when the clip is single-
+	player. Here that cannot happen: an empty track means LEAVE THAT LANE ALONE
+	and a mask decides what a written lane clears.
+
+	No gap and no phase - a set has no anchor to count from. Gaps belong to the
+	range form, where "every Nth row" is meaningful.
+*/
+Edit applyPatternToRows(const std::map<u32, Row>& all, const std::set<u32>& rows,
+		const Pattern& p);
 
 //! Runs under dojo:PanelSelfTest, like the other seams in this tree.
 void patternSelfTest();
