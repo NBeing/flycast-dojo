@@ -157,6 +157,37 @@ Resize deleteRows(const std::map<u32, Row>& all, const std::set<u32>& rows);
 //! the whole movie.
 Resize insertBlanks(const std::map<u32, Row>& all, u32 at, u32 count);
 
+/*
+	THE CONTENTS OF THE NAMED ROWS, IN REVERSE ORDER. Row count unchanged, so
+	this is an IN-PLACE edit despite feeling structural.
+
+	A GAPPED SELECTION IS ALLOWED and means what it says: exactly the named rows
+	exchange contents, and the frames between them are not touched. The fork
+	permits gaps here too, but permits or refuses them differently in six other
+	tools with no rule stated anywhere.
+*/
+Edit reverseRows(const std::map<u32, Row>& all, const std::set<u32>& rows);
+
+/*
+	Each row in [lo, hi] held `times` times; everything after shifts down.
+
+	TAKES A RANGE, NOT A SELECTION, on purpose. "What does a gapped selection
+	mean for a stretch" has no good answer - the fork refuses it here, allows it
+	in reverse, and silently drops the gaps in copy - so this asks for the thing
+	it can actually do rather than refusing a shape it was offered.
+*/
+Resize stretchRows(const std::map<u32, Row>& all, u32 lo, u32 hi, u32 times);
+
+/*
+	Every `every`-th row in [lo, hi] survives; the rest are deleted.
+
+	BUILT ON deleteRows rather than beside it. The fork writes this loop twice
+	with DIFFERENT PHASE - one counts from the selection start, the other from
+	the macro start - and they agree only because both happen to begin at index
+	zero. Here the phase is stated once, counted from `lo`.
+*/
+Resize compressRows(const std::map<u32, Row>& all, u32 lo, u32 hi, u32 every);
+
 //! Runs under dojo:PanelSelfTest, like the other seams in this tree.
 void editSelfTest();
 

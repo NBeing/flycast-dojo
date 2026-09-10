@@ -158,11 +158,17 @@ through `panels::add`.
   now delegates to it, and roll_edit's 29 claims and roll_paint's 18 pass
   unaltered — which is the evidence the two loops were one loop. 18 new claims,
   4 sabotages, each breaking its own. `docs/ROLL-EDIT-MODEL.md` §7.
+- [x] **stretch / compress / reverse** — the fully generic tools. Stretch was
+  the interesting one: it maps a row to `k` rows, a STRIDE and not a shift, so
+  it is the case a single delta cannot express — `Remap` took it with one span
+  per source row and nothing else changed, which is the evidence the span design
+  generalises. Compress is built ON `deleteRows` rather than beside it, because
+  the fork writes that loop twice with different phase. All three have panel
+  buttons.
 - [ ] Remaining edit tools, now that the payload has a name. Mash, fill, brush
   and stamp are `applyPattern` with a longer track and a different mask; the
   work left is the notation parsers that BUILD the tracks (profile) and the UI
-  that offers them. stretch/compress/reverse/clear are fully generic and
-  independent of all of it.
+  that offers them.
 - [x] **Structural edits return a ROW REMAP.** `core/dojo/roll_remap.{h,cpp}`;
   `deleteRows`/`insertBlanks` return `Resize { edit, remap }` with the edit
   DERIVED from the remap, so there is one owner of "where did row f go".

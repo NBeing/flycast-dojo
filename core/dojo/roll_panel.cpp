@@ -277,6 +277,7 @@ static void draw()
 	const bool writable = !session::livePeer();
 	const bool editable = paused && writable;
 	static int paintGap = 0;		// 0 = every row, 1 = every 2nd, 2 = every 3rd
+	static int rangeFactor = 2;		// stretch xN / compress /N, shared deliberately
 
 	// ---- EDITS -----------------------------------------------------------
 	//
@@ -339,6 +340,44 @@ static void draw()
 			}
 			ImGui::SameLine();
 			ImGui::TextDisabled("(%d rows)", (int)sel.count());
+
+			// ---- THE RANGE TOOLS ------------------------------------------
+			//
+			// These take sel.lo()..sel.hi() and NOT the selected set. "What does
+			// a gapped selection mean for a stretch" has no good answer, and the
+			// fork gives three different ones across its tools; asking for the
+			// thing they can do is more honest than refusing a shape.
+			//
+			// Reverse is the exception and does take the set, because exchanging
+			// exactly the named rows IS well defined however scattered they are.
+			if (ImGui::Button("Reverse"))
+			{
+				Edit e = reverseRows(wholeMovie(), sel.rows());
+				dojo.ApplyEdit(e, "roll: reverse");
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Stretch"))
+			{
+				Resize r = stretchRows(wholeMovie(), sel.lo(), sel.hi(), (u32)rangeFactor);
+				dojo.ApplyEditResize(r.edit, "roll: stretch");
+				if (h != nullptr) h->rowsRemapped(r.remap);
+				sel.remap(r.remap);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Compress"))
+			{
+				Resize r = compressRows(wholeMovie(), sel.lo(), sel.hi(), (u32)rangeFactor);
+				dojo.ApplyEditResize(r.edit, "roll: compress");
+				if (h != nullptr) h->rowsRemapped(r.remap);
+				sel.remap(r.remap);
+			}
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(90.f);
+			// ONE FACTOR FOR BOTH, which is what the fork does and is right:
+			// stretch x2 then compress /2 is the round trip a user expects, and
+			// two separate fields make that a coincidence rather than a rule.
+			ImGui::InputInt("x / \xc3\xb7", &rangeFactor);
+			rangeFactor = rangeFactor < 2 ? 2 : (rangeFactor > 16 ? 16 : rangeFactor);
 			}
 		}
 	}

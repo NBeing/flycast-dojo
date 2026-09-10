@@ -178,6 +178,79 @@ Resize deleteRows(const std::map<u32, Row>& all, const std::set<u32>& rows)
 	return r;
 }
 
+Edit reverseRows(const std::map<u32, Row>& all, const std::set<u32>& rows)
+{
+	Edit e(all.begin(), all.end());
+	if (rows.size() < 2)
+		return e;
+	std::vector<u32> idx(rows.begin(), rows.end());
+	std::vector<Row> content;
+	content.reserve(idx.size());
+	for (u32 r : idx)
+	{
+		auto it = all.find(r);
+		// A HOLE READS AS BLANK rather than being skipped. Skipping would make
+		// the reversal shift the surviving contents by however many holes it
+		// crossed, which is not a reversal.
+		content.push_back(it == all.end() ? blankRow() : it->second);
+	}
+	for (size_t i = 0; i < idx.size(); i++)
+		e[idx[i]] = content[idx.size() - 1 - i];
+	return e;
+}
+
+Resize stretchRows(const std::map<u32, Row>& all, u32 lo, u32 hi, u32 times)
+{
+	Resize r;
+	const u32 span = indexSpan(all);
+	r.remap = Remap::stretched(lo, hi, times, span);
+	if (r.remap.isIdentity())
+	{
+		r.edit = Edit(all.begin(), all.end());
+		return r;
+	}
+	for (const auto& kv : all)
+	{
+		u32 to = 0;
+		if (r.remap.at(kv.first, to))
+			r.edit[to] = kv.second;
+	}
+	// The copies. Walked over INDEX SPACE, not over the map, so a hole inside
+	// the range becomes `times` blank rows instead of a gap - an operation over
+	// a range has to produce a contiguous result.
+	const u32 end = std::min(hi, span == 0 ? 0 : span - 1);
+	for (u32 f = lo; f <= end && span != 0; f++)
+	{
+		u32 to = 0;
+		if (!r.remap.at(f, to))
+			continue;
+		auto it = all.find(f);
+		const Row& src = it == all.end() ? blankRow() : it->second;
+		for (u32 j = 0; j < times; j++)
+			r.edit[to + j] = src;
+	}
+	return r;
+}
+
+Resize compressRows(const std::map<u32, Row>& all, u32 lo, u32 hi, u32 every)
+{
+	if (every <= 1 || hi < lo)
+	{
+		Resize r;
+		r.edit = Edit(all.begin(), all.end());
+		r.remap = Remap::identity();
+		return r;
+	}
+	// THE PHASE IS COUNTED FROM `lo`, stated once. Row lo always survives.
+	std::set<u32> dropped;
+	const u32 span = indexSpan(all);
+	const u32 end = std::min(hi, span == 0 ? 0 : span - 1);
+	for (u32 f = lo; f <= end && span != 0; f++)
+		if ((f - lo) % every != 0)
+			dropped.insert(dropped.end(), f);
+	return deleteRows(all, dropped);
+}
+
 Resize insertBlanks(const std::map<u32, Row>& all, u32 at, u32 count)
 {
 	Resize r;
@@ -332,6 +405,79 @@ void editSelfTest()
 
 	claim("inserting nothing is the movie unchanged",
 			insertBlanks(all, 2, 0).edit.size() == all.size());
+
+	// ---- REVERSE / STRETCH / COMPRESS ----
+	{
+		// Rows 0..4, only frame 3 pressed (the `all` built above).
+		Edit rev = reverseRows(all, { 1, 2, 3 });
+		claim("reverse moves the marked content to the other end of the selection",
+				rowHas(rev[1], 0, *up) && !rowHas(rev[3], 0, *up));
+		claim("...and leaves rows outside the selection alone",
+				rev.size() == all.size() && !rowHas(rev[0], 0, *up) && !rowHas(rev[4], 0, *up));
+		// A GAPPED reverse exchanges exactly the named rows and skips between.
+		Edit gap = reverseRows(all, { 1, 3 });
+		claim("a gapped reverse exchanges only the rows it names",
+				rowHas(gap[1], 0, *up) && !rowHas(gap[3], 0, *up) && !rowHas(gap[2], 0, *up));
+		claim("reversing fewer than two rows changes nothing",
+				!rowHas(reverseRows(all, { 3 })[2], 0, *up));
+		// A MOVIE WITH A HOLE IN THE REVERSED RANGE. Without one, "a hole reads
+		// as blank" and "a hole is skipped" produce identical output, and a
+		// sabotage that skipped them passed until this fixture existed.
+		{
+			std::map<u32, Row> holed;
+			holed[0] = blankRow();
+			holed[1] = rowWith(blankRow(), 0, *up, true);
+			// frame 2 absent - a hole
+			holed[3] = blankRow();
+			Edit hr = reverseRows(holed, { 1, 2, 3 });
+			claim("a hole inside a reverse reads as blank, so the order still flips",
+					rowHas(hr[3], 0, *up) && !rowHas(hr[1], 0, *up));
+			claim("...and the hole is materialised rather than closing the range up",
+					hr.count(2) == 1 && !rowHas(hr[2], 0, *up));
+		}
+	}
+	{
+		Resize st = stretchRows(all, 1, 3, 2);		// rows 1,2,3 held twice
+		claim("stretch lengthens by the rows it added", st.edit.size() == all.size() + 3);
+		// Frame 3 was pressed; it becomes frames 5 AND 6.
+		claim("a stretched row becomes `times` copies of itself",
+				rowHas(st.edit[5], 0, *up) && rowHas(st.edit[6], 0, *up));
+		claim("...and its neighbours are not pressed",
+				!rowHas(st.edit[4], 0, *up) && !rowHas(st.edit[7], 0, *up));
+		claim("the stretched movie is contiguous",
+				st.edit.count(0) && st.edit.count(7) && st.edit.size() == 8);
+		u32 to = 0;
+		claim("the remap says where the marked row went",
+				st.remap.at(3, to) && to == 5);
+	}
+	{
+		std::map<u32, Row> ten;
+		for (u32 i = 0; i < 10; i++)
+			ten[i] = rowWith(blankRow(), 0, *up, i == 4);
+		Resize cp = compressRows(ten, 0, 9, 2);		// keep 0,2,4,6,8
+		claim("compress keeps every Nth row", cp.edit.size() == 5);
+		// Frame 4 survives (it is on the phase) and lands at index 2.
+		claim("...counting the phase from the range start, so `lo` always survives",
+				rowHas(cp.edit[2], 0, *up));
+		u32 to = 0;
+		claim("compress reports the rows it dropped as gone",
+				!cp.remap.at(3, to) && cp.remap.at(4, to) && to == 2);
+		claim("compressing by one changes nothing",
+				compressRows(ten, 0, 9, 1).edit.size() == ten.size());
+		// A RANGE THAT DOES NOT START AT ZERO, because with lo == 0 "phase from
+		// lo" and "phase from 0" are THE SAME ARITHMETIC and the claim above
+		// cannot tell them apart. `[MEASURED 2026-09-10]` a sabotage proving
+		// exactly that passed the suite until this case existed.
+		{
+			Resize off = compressRows(ten, 1, 9, 2);	// keeps 1,3,5,7,9 - not 4
+			u32 to = 0;
+			claim("compress phases from `lo`, so an odd start keeps odd rows",
+					off.remap.at(1, to) && to == 1 && !off.remap.at(2, to)
+					&& off.remap.at(3, to) && to == 2);
+			claim("...and the pressed row at 4 is DROPPED by that phase",
+					!off.remap.at(4, to));
+		}
+	}
 
 	// ---- THE REMAP TRAVELS WITH THE RESIZE ----
 	//

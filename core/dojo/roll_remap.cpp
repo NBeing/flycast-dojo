@@ -61,6 +61,22 @@ Remap Remap::deleted(const std::set<u32>& rows, u32 movieRows)
 	return m;
 }
 
+Remap Remap::stretched(u32 lo, u32 hi, u32 times, u32 movieRows)
+{
+	Remap m;
+	if (times <= 1 || hi < lo || lo >= movieRows)
+		return identity();
+	hi = std::min(hi, movieRows - 1);
+	if (lo > 0)
+		m.spans_.push_back(Span{ 0, lo, 0 });
+	for (u32 r = lo; r <= hi; r++)
+		m.spans_.push_back(Span{ r, 1, (s64)(r - lo) * (s64)(times - 1) });
+	const u32 added = (hi - lo + 1) * (times - 1);
+	if (movieRows > hi + 1)
+		m.spans_.push_back(Span{ hi + 1, movieRows - hi - 1, (s64)added });
+	return m;
+}
+
 bool Remap::at(u32 row, u32& out) const
 {
 	if (identity_)
@@ -205,6 +221,20 @@ void remapSelfTest()
 		Remap::deleted({ 2, 3 }, 8).applyTo(sel);
 		claim("a selection entirely inside a deletion becomes empty", sel.empty());
 	}
+
+	// ---- stretch: a stride, not a shift ---------------------------------
+	{
+		const Remap m = Remap::stretched(2, 4, 3, 8);	// rows 2,3,4 held x3
+		claim("stretch leaves rows below the range alone", to(m, 0) == 0 && to(m, 1) == 1);
+		// THE STRIDE. Each source row moves by its own multiple, which is the
+		// case a single delta cannot express.
+		claim("a stretched row maps to the FIRST of its copies",
+				to(m, 2) == 2 && to(m, 3) == 5 && to(m, 4) == 8);
+		claim("the tail shifts by every row the stretch added",
+				to(m, 5) == 11 && to(m, 7) == 13);
+		claim("one span per source row, plus the head and the tail", m.spans() == 5);
+	}
+	claim("stretching by one is identity", Remap::stretched(2, 4, 1, 8).isIdentity());
 
 	// ---- collapsed(): a position for a row that no longer exists ---------
 	{

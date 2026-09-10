@@ -57,6 +57,21 @@ public:
 	//! `rows` deleted, survivors pulled up by however many went from below them.
 	static Remap deleted(const std::set<u32>& rows, u32 movieRows);
 
+	/*
+		Each row in [lo, hi] held `times` times; the tail shifts down.
+
+		ONE SPAN PER SOURCE ROW inside the range, because the mapping there is a
+		STRIDE and not a constant shift - row lo+1 moves by (times-1), lo+2 by
+		2*(times-1), and so on. That is a real test of whether spans generalise,
+		and they do: a 1,000-row stretch is 1,002 spans, at() stays a binary
+		search, and nothing else in the class changes.
+
+		A stretched row maps to the FIRST of its copies. The others are new rows
+		and no old row maps onto them, which is the honest answer - a selection
+		following a stretch keeps naming the frame it named, not a range.
+	*/
+	static Remap stretched(u32 lo, u32 hi, u32 times, u32 movieRows);
+
 	bool isIdentity() const { return identity_; }
 	size_t spans() const    { return spans_.size(); }
 
