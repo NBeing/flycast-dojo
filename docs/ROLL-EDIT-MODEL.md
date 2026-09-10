@@ -145,6 +145,24 @@ worth having, and a real hazard worth not acquiring by accident.
 
 ## 6. What this changes about the port
 
+> **`[2026-09-10]` Status.** Everything in this section except the staged buffer
+> has landed, and the prediction held: the tools collapsed rather than
+> accumulating. `applyPattern` has five customers — paint, mash, fill, the
+> brush, and `paintColumn` itself — and not one of them is a second loop.
+>
+> | | where |
+> |---|---|
+> | cell, pattern, the codec | `roll_profile`, `roll_edit`, `roll_pattern` |
+> | stretch / compress / reverse / clear | `roll_edit` |
+> | the remap, and every holder told in one call | `roll_remap` |
+> | savestate anchors, bookmarks, selection | `roll_slots`, `roll_marks`, `roll_select` |
+> | notation, mash, fill, brush | `roll_notation`, `roll_pattern`, `roll_panel` |
+>
+> Self-tests: profile 6, select 23, edit 50, paint 21, pattern 22, remap 29,
+> meta 8, marks 18, notation 15, session 22. Integration probes: the edit
+> funnel, the stroke, the anchor + bookmark undo pair, the mash, the slot label.
+
+
 The remaining ~32 unported symbols are not 32 pieces of work:
 
 - **stretch, compress, reverse, clear, the tail splice** — fully generic, and
