@@ -1,5 +1,6 @@
 #pragma once
 #include "types.h"
+#include "roll_remap.h"
 #include <map>
 #include <vector>
 
@@ -49,6 +50,20 @@ struct Host
 	// blink phase; and whether the event deleted states or merely stranded them.
 	virtual int  staleNoticePhase() const { return -1; }
 	virtual bool staleNoticeWasDeletion() const { return false; }
+
+	/*
+		THE MOVIE RENUMBERED - follow it.
+
+		A slot's anchored frame is a row index like any other, so a resize makes
+		it WRONG rather than merely suspect, and nothing distinguishes those two
+		conditions from outside. `[MEASURED 2026-09-09]` docs/STATES-LIFT.md §4.4:
+		in the fork, sidecars are never rewritten at all.
+
+		Default is a no-op, because a host that anchors nothing has nothing to
+		do - and because this must not become a function every host has to
+		remember to implement correctly.
+	*/
+	virtual void rowsRemapped(const Remap& m) { (void)m; }
 };
 
 // The host in force. Null until one is installed, which is itself the useful
@@ -61,5 +76,11 @@ void setHost(Host *h);
 // from setHost so a test can still substitute a fake, and so the production
 // host is a thing something CALLS rather than a static that hopes to be linked.
 void installHost();
+
+// `dojo:RollAnchorProbe` - the integration check for rowsRemapped(). Runs once,
+// against the loaded movie and the REAL sidecars: resize, read the file back,
+// undo, read it back again. A self-test cannot reach this - the whole question
+// is whether bytes on disk moved.
+void anchorProbe();
 
 }	// namespace roll

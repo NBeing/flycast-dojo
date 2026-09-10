@@ -213,11 +213,30 @@ resize, which is defensible but throws work away. A live drag is ENDED rather
 than remapped — the mouse is still down, but what it was dragging over has
 different frame numbers now.
 
-**`[OPEN]` savestate anchors are the next customer.** `docs/STATES-LIFT.md` §4.4:
-a resize renumbers `session_inputs` and nothing rewrites the `.frame` sidecars,
-so an anchored state's frame becomes *wrong* rather than *suspect*, and nothing
-distinguishes those. The remap is the fix and now exists; applying it means
-writing user files, which is a separate pass with its own hazards.
+**Savestate anchors are the second customer, `[2026-09-10]`.** `Host::rowsRemapped()`
+rewrites the `.frame` sidecars so a slot's marker follows its row. Six
+constraints, because this writes the user's work: only with a clip folder open
+(with none, the read and write derivations can name different directories,
+`docs/STATES-LIFT.md` G13); only the sidecar, never the `.state`; only slots
+that already have one; the file's length and every other field survive, so a v1
+4-byte sidecar does not silently become a v3; atomic temp-plus-rename; and
+`dojo:RemapAnchors=no`.
+
+**The staleness verdict is deliberately untouched.** Moving the anchor puts the
+marker on the right ROW. Whether the state still belongs to the timeline is a
+different question the rewind log already answers, and a resize logs an event at
+or below every row this moves — so these states remain correctly flagged.
+
+**An anchor whose row was deleted** gets `Remap::collapsed()` — the index the
+tail closed up to. The two alternatives are worse: the old number points at a
+frame now holding different content, and zero means "no anchor at all", a value
+already overloaded (`docs/STATES-LIFT.md` §4.3).
+
+**Undo works because the rails already existed and had no customer.** dojo's
+`EditPatch` carries an opaque `gui_meta` captured pre-edit and reapplied on
+undo, written for bookmarks — and neither `edit_meta_capture` nor
+`edit_meta_apply` had ever been assigned anywhere in the tree. The host
+registers them now.
 
 **The collapse is verified by what did NOT change.** `paintColumn` is now four
 lines delegating to `applyPattern`, and roll_edit's 29 claims and roll_paint's

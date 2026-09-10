@@ -81,6 +81,25 @@ bool Remap::at(u32 row, u32& out) const
 	return true;
 }
 
+u32 Remap::collapsed(u32 row) const
+{
+	if (identity_)
+		return row;
+	u32 to = 0;
+	if (at(row, to))
+		return to;
+	// Deleted: count what still lives below it. The spans are disjoint and
+	// sorted, so this stops at the first one starting at or after the row.
+	u32 below = 0;
+	for (const Span& s : spans_)
+	{
+		if (s.from >= row)
+			break;
+		below += std::min(s.count, row - s.from);
+	}
+	return below;
+}
+
 void Remap::applyTo(std::set<u32>& rows) const
 {
 	if (identity_)
@@ -186,6 +205,27 @@ void remapSelfTest()
 		Remap::deleted({ 2, 3 }, 8).applyTo(sel);
 		claim("a selection entirely inside a deletion becomes empty", sel.empty());
 	}
+
+	// ---- collapsed(): a position for a row that no longer exists ---------
+	{
+		const Remap m = Remap::deleted({ 2, 3 }, 8);
+		claim("collapsed() agrees with at() for a surviving row",
+				m.collapsed(4) == 2 && m.collapsed(1) == 1);
+		// Rows 2 and 3 are gone; two rows live below them, so the tail closed
+		// up to index 2 and that is where an anchor on either now points.
+		claim("a deleted row collapses to where the tail closed up",
+				m.collapsed(2) == 2 && m.collapsed(3) == 2);
+	}
+	{
+		const Remap m = Remap::deleted({ 0, 1 }, 8);
+		claim("a deletion at the very start collapses to 0", m.collapsed(0) == 0);
+	}
+	{
+		const Remap m = Remap::deleted({ 2, 5 }, 8);
+		claim("collapsed() counts survivors, not indices",
+				m.collapsed(2) == 2 && m.collapsed(5) == 4);
+	}
+	claim("collapsed() on identity is the row itself", Remap::identity().collapsed(77) == 77);
 
 	NOTICE_LOG(RENDERER, "ROLLREMAP SELFTEST: %d passed, %d failed", pass, fail);
 }

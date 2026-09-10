@@ -73,6 +73,7 @@ XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	-config dojo:Panel.pianoroll=yes -config dojo:RollSelTrace=yes \
 	-config dojo:RollPaintTrace=yes -config dojo:RollPaintProbe=yes \
 	-config dojo:RollSlotTrace=yes \
+	-config dojo:RollAnchorProbe=yes \
 	-config window:width=1000 -config window:height=800 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 &
 FC=$!
@@ -312,6 +313,22 @@ if [ -z "${anch:-}" ] || [ "$anch" -lt 1 ]; then
 	echo "FAIL rolltest - the host scanned slots but anchored none, and this clip has a savestate"
 	exit 1
 fi
+
+# ---- the savestate anchor followed the renumber -----------------------------
+# The only check in this tree that reads BYTES ON DISK. A resize renumbers the
+# movie and a savestate's recorded frame is a row index like any other; without
+# the rewrite it keeps pointing at a frame that now holds different content -
+# wrong rather than suspect, and nothing distinguishes those from outside.
+anchor=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL ANCHORPROBE:" | tail -1)
+if [ -z "$anchor" ]; then
+	echo "rolltest: SKIP - the anchor probe never ran (no anchored slot, or no clip folder)"
+	exit $SKIP
+fi
+echo "  ${anchor##*N\[RENDERER\]: }"
+case "$anchor" in
+	*PASS*) ;;
+	*) echo "FAIL rolltest - a resize did not move the savestate anchor, or undo did not restore it"; exit 1 ;;
+esac
 
 # ---- the multi-row stroke, proved in process --------------------------------
 # NOT a duplicate of the click test and NOT a self-test: it drives the real

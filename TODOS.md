@@ -169,11 +169,15 @@ through `panels::add`.
   `Selection::remap()` is the first customer — the panel no longer throws the
   selection away after a resize. 17 remap claims, 6 new selection claims, 4
   edit claims, 4 sabotages.
-- [ ] **`[OPEN]` savestate anchors are the remap's next customer.**
-  `docs/STATES-LIFT.md` §4.4 — a resize renumbers rows and nothing rewrites the
-  `.frame` sidecars, so an anchored state's frame goes *wrong* rather than
-  *suspect*. The remap exists now; applying it means writing user files, which
-  is a separate pass with its own hazards.
+- [x] **Savestate anchors follow a renumber.** `Host::rowsRemapped()` rewrites
+  the `.frame` sidecars, atomically, preserving every other field and the file's
+  version length; `dojo:RemapAnchors=no` turns it off. Undo restores them
+  through dojo's `edit_meta_capture`/`edit_meta_apply` rails, which existed for
+  bookmarks and had never been assigned. `dojo:RollAnchorProbe` reads the real
+  file before and after, and `scripts/rolltest.sh` asserts it with two failing
+  arms. `[OPEN]` with NO clip folder open the rewrite refuses and says so —
+  the shared data path has two derivations that can disagree
+  (`docs/STATES-LIFT.md` G13), and settling that is its own work.
 - [ ] Bookmarks do not exist here yet. When they do, they are a remap customer
   by construction rather than five hand-called fixups.
 - [ ] The States window. `docs/STATES-LIFT.md` — 131 real dependencies, **zero**

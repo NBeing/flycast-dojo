@@ -1,9 +1,14 @@
 #include "roll_host.h"
 #include "dojo.h"
 #include "oslib/oslib.h"
+#include "roll_edit.h"
+#include "movie.h"
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
+#include "stdclass.h"
 #include <string>
+#include <fstream>
+#include <vector>
 
 /*
 	THE PRODUCTION HOST - the piano roll's four questions, answered by flycast.
@@ -67,6 +72,82 @@ public:
 	{
 		ensureFresh();
 		build(out);
+	}
+
+	/*
+		FOLLOW A RENUMBER, by rewriting the `.frame` sidecars.
+
+		SAFETY, because this writes the user's files and a savestate is their
+		work. Six constraints, each for a reason:
+
+		  ONLY WITH A CLIP FOLDER OPEN. `hostfs::savestateFolderOverride` empty
+		  means the states live in the shared data path - where
+		  `docs/STATES-LIFT.md` G13 records that the READ derivation and the
+		  WRITE derivation can name different directories. Rewriting a file the
+		  scan did not come from is exactly the mistake worth refusing.
+
+		  ONLY THE SIDECAR, never the .state. The machine is untouched.
+
+		  ONLY SLOTS THAT ALREADY HAVE ONE. Read-modify-write; a state with no
+		  anchor does not acquire one here.
+
+		  THE FILE'S LENGTH AND EVERY OTHER FIELD SURVIVE. The sidecar is
+		  versioned by extension - v1 is 4 bytes, v2 is 12, v3 is 20 - so this
+		  patches the first u32 in place rather than rewriting the record. A v1
+		  sidecar must not silently become a v3 with invented fields.
+
+		  ATOMIC. Temp plus rename, the idiom tas_clip.cpp already uses for
+		  clip.json after a torn read cost it a whole record set.
+
+		  AND AN OFF SWITCH. `dojo:RemapAnchors=no`.
+
+		THE STALENESS VERDICT IS NOT TOUCHED and must not be. Moving the anchor
+		puts the marker on the right ROW; whether the state still belongs to the
+		timeline is a separate question the rewind log already answers, and a
+		resize logs an event at or below every row this moves.
+	*/
+	void rowsRemapped(const Remap& m) override
+	{
+		if (m.isIdentity())
+			return;
+		if (!cfgLoadBool("dojo", "RemapAnchors", true))
+			return;
+		if (hostfs::savestateFolderOverride.empty())
+		{
+			// Said, not skipped silently: with no clip folder the states are in
+			// the shared data path and their anchors are now wrong.
+			NOTICE_LOG(RENDERER, "ROLL ANCHORS: no clip folder - %d sidecar(s) left unmoved",
+					(int)info_.size());
+			return;
+		}
+		ensureFresh();
+		int moved = 0, gone = 0;
+		for (int i = 0; i < (int)info_.size(); i++)
+		{
+			if (!info_[i].exists || info_[i].movieFrame == 0)
+				continue;
+			const u32 was = info_[i].movieFrame;
+			u32 to = 0;
+			const bool survived = m.at(was, to);
+			if (!survived)
+			{
+				to = m.collapsed(was);
+				gone++;
+			}
+			if (to == was)
+				continue;
+			if (writeAnchor(i, to))
+				moved++;
+		}
+		if (moved != 0)
+		{
+			// Our own cache and everyone else's: the epoch is what the States
+			// window and the roll both watch.
+			dojo.savestate_epoch++;
+			scannedAt_ = -1000.0;
+		}
+		NOTICE_LOG(RENDERER, "ROLL ANCHORS: remapped %d sidecar(s), %d had lost their row",
+				moved, gone);
 	}
 
 	int staleNoticePhase() const override
@@ -206,6 +287,114 @@ private:
 		}
 	}
 
+public:
+	//! The anchor as it is ON DISK. Deliberately not the cache: the probe that
+	//! proves this works has to read the file, or it proves the cache.
+	static bool readAnchor(int slot, u32& out)
+	{
+		std::ifstream f(hostfs::getSavestatePath(slot, false) + ".frame", std::ios::binary);
+		if (!f.good())
+			return false;
+		u32 v = 0;
+		f.read((char *)&v, sizeof(v));
+		if (f.gcount() != (std::streamsize)sizeof(v))
+			return false;
+		out = v;
+		return true;
+	}
+
+	static bool writeAnchor(int slot, u32 frame)
+	{
+		const std::string path = hostfs::getSavestatePath(slot, true) + ".frame";
+		std::vector<char> buf;
+		{
+			std::ifstream in(path, std::ios::binary);
+			if (!in.good())
+				return false;			// no sidecar: nothing to move, none created
+			buf.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+		}
+		if (buf.size() < sizeof(u32))
+			return false;				// truncated beyond even v1 - leave it alone
+		memcpy(buf.data(), &frame, sizeof(frame));	// EVERY other byte survives
+
+		const std::string tmp = path + ".tmp";
+		{
+			std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+			if (!out.good())
+				return false;
+			out.write(buf.data(), (std::streamsize)buf.size());
+			if (!out.good())
+				return false;
+		}
+		std::error_code ec;
+		ghc::filesystem::rename(tmp, path, ec);
+		if (ec)
+		{
+			ghc::filesystem::remove(tmp, ec);
+			WARN_LOG(RENDERER, "ROLL ANCHORS: could not replace %s", path.c_str());
+			return false;
+		}
+		return true;
+	}
+
+	/*
+		THE ANCHORS AS A BLOB, so undo can put them back.
+
+		dojo's EditPatch already carries an opaque `gui_meta` string captured
+		pre-edit and reapplied on undo - the rails written for bookmarks, whose
+		comment says "the piano roll registers these so undo/redo restore
+		bookmarks alongside the frames". `[MEASURED 2026-09-09]` neither
+		std::function had ever been assigned anywhere in the tree. They are the
+		right rails and they had no customer; this is the customer.
+
+		Captured from the CACHE, which is correct rather than merely cheap: the
+		cache is only stale with respect to writes this class makes, and it
+		refreshes after each one.
+	*/
+	std::string captureAnchors() const
+	{
+		ensureFresh();
+		std::string out;
+		for (int i = 0; i < (int)info_.size(); i++)
+			if (info_[i].exists && info_[i].movieFrame != 0)
+				out += (out.empty() ? "" : ",") + std::to_string(i) + "="
+						+ std::to_string(info_[i].movieFrame);
+		return out;
+	}
+
+	void applyAnchors(const std::string& blob)
+	{
+		if (blob.empty() || hostfs::savestateFolderOverride.empty())
+			return;
+		int restored = 0;
+		size_t pos = 0;
+		while (pos < blob.size())
+		{
+			const size_t comma = blob.find(',', pos);
+			const std::string one = blob.substr(pos, comma == std::string::npos
+					? std::string::npos : comma - pos);
+			pos = comma == std::string::npos ? blob.size() : comma + 1;
+			const size_t eq = one.find('=');
+			if (eq == std::string::npos)
+				continue;
+			const int slot = atoi(one.substr(0, eq).c_str());
+			const u32 want = (u32)strtoul(one.substr(eq + 1).c_str(), nullptr, 10);
+			u32 have = 0;
+			// A WRITE ONLY WHERE IT DIFFERS. Undo fires on every edit, most of
+			// which move nothing, and rewriting an unchanged file on each one
+			// is churn against the user's states for no gain.
+			if (readAnchor(slot, have) && have != want && writeAnchor(slot, want))
+				restored++;
+		}
+		if (restored != 0)
+		{
+			dojo.savestate_epoch++;
+			scannedAt_ = -1000.0;
+			NOTICE_LOG(RENDERER, "ROLL ANCHORS: restored %d sidecar(s) with the undo", restored);
+		}
+	}
+
+private:
 	void trace() const
 	{
 		if (!cfgLoadBool("dojo", "RollSlotTrace", false))
@@ -258,11 +447,80 @@ SlotHost theSlotHost;
 
 void installHost()
 {
+	// THE UNDO RAILS, which is what makes rewriting the user's sidecars a
+	// reversible act rather than a one-way one. dojo captures gui_meta pre-edit
+	// inside both funnels and reapplies it on undo.
+	dojo.edit_meta_capture = []() { return theSlotHost.captureAnchors(); };
+	dojo.edit_meta_apply   = [](const std::string& blob) { theSlotHost.applyAnchors(blob); };
 	// A LOOKUP THAT CAN FAIL rather than trusting the call, the same rule the
 	// panel registration follows: an uninstalled host is invisible in exactly
 	// the same way as one that is installed and finds no states.
 	setHost(&theSlotHost);
 	NOTICE_LOG(RENDERER, "ROLL HOST: installed=%s", host() != nullptr ? "yes" : "NO");
+}
+
+/*
+	THE INTEGRATION PROBE for the anchor rewrite - `dojo:RollAnchorProbe=yes`.
+
+	A self-test cannot reach this. The whole question is whether bytes on disk
+	moved and then moved back, so the probe reads the FILE both times, never the
+	cache - the cache is the thing that would agree with itself.
+
+	Runs ONCE. Safe under scripts/rolltest.sh, which copies the clip and its
+	savestates into a temp directory per run; off by default everywhere else,
+	because it really does edit the movie it finds.
+
+	NOTE ON THE UNDO IT ASSERTS. It checks that the ANCHOR came back, not that
+	the movie shrank: undoing a resize is replayed through ApplyEdit, which
+	permits extension and not truncation, so the inserted rows survive as a
+	documented v1 limitation of absent-frame patches (dojo.cpp says so). The
+	anchor is what this feature owns.
+*/
+void anchorProbe()
+{
+	static bool done = false;
+	if (done || !cfgLoadBool("dojo", "RollAnchorProbe", false))
+		return;
+	if (dojo.session_inputs.empty() || hostfs::savestateFolderOverride.empty())
+		return;					// nothing to move, or nowhere safe to move it
+
+	std::map<u32, std::vector<int>> byFrame;
+	theSlotHost.framesToSlots(byFrame);
+	if (byFrame.empty())
+		return;					// no anchored slot yet; try again next frame
+	done = true;
+
+	const int slot = byFrame.begin()->second.front();
+	u32 before = 0;
+	if (!SlotHost::readAnchor(slot, before))
+	{
+		NOTICE_LOG(RENDERER, "ROLL ANCHORPROBE: slot %d has no sidecar on disk => FAIL", slot);
+		return;
+	}
+
+	const u32 N = 3;
+	std::map<u32, Row> whole;
+	for (const auto& kv : dojo.session_inputs)
+		whole[kv.first] = kv.second;
+	// BELOW the anchor on purpose: an insert above it would move nothing, and a
+	// probe that cannot tell "it worked" from "there was nothing to do" is the
+	// failure this tree keeps finding.
+	Resize r = insertBlanks(whole, 0, N);
+	const s64 first = dojo.ApplyEditResize(r.edit, "roll: anchor probe");
+	theSlotHost.rowsRemapped(r.remap);
+
+	u32 after = 0;
+	const bool readBack = SlotHost::readAnchor(slot, after);
+	const bool moved = readBack && after == before + N;
+
+	const bool undone = dojo.ApplyUndo();
+	u32 back = 0;
+	const bool restored = SlotHost::readAnchor(slot, back) && back == before;
+
+	NOTICE_LOG(RENDERER, "ROLL ANCHORPROBE: slot=%d first=%lld %u -> %u (want %u) undo=%s -> %u"
+			"  => %s", slot, (long long)first, before, after, before + N,
+			undone ? "yes" : "NO", back,
+			(moved && undone && restored) ? "PASS" : "FAIL");
 }
 
 }	// namespace roll

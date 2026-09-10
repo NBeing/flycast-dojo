@@ -63,6 +63,24 @@ public:
 	//! Where a row went. FALSE means it no longer exists - not "unchanged".
 	bool at(u32 row, u32& out) const;
 
+	/*
+		WHERE A ROW'S POSITION IS NOW, whether or not the row survived.
+
+		For a surviving row this is at(). For a DELETED one it is the index its
+		successor now occupies - the place the tail closed up to - which is the
+		count of rows still below it.
+
+		Needed because a savestate anchored on a deleted frame still has to be
+		drawn SOMEWHERE, and the two wrong answers are worse than this one:
+		leaving the old number points the marker at a row now holding different
+		content, and zeroing it means "no anchor at all" (a value already
+		overloaded, docs/STATES-LIFT.md §4.3) which makes the state vanish.
+
+		It does NOT claim the state is valid. The timeline guard flags it stale
+		on its own, because a resize logs an event at or below this row.
+	*/
+	u32 collapsed(u32 row) const;
+
 	//! A set of rows, remapped in place: deleted rows drop out, survivors move.
 	void applyTo(std::set<u32>& rows) const;
 

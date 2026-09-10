@@ -165,6 +165,8 @@ static void draw()
 		}
 	}
 
+	anchorProbe();		// dojo:RollAnchorProbe - one-shot, reads the real sidecars
+
 	// ---- STROKE PROBE, dojo:RollPaintProbe=yes ---------------------------
 	//
 	// WHY THIS EXISTS WHEN scripts/rolltest.sh DRIVES A REAL DRAG.
@@ -317,6 +319,10 @@ static void draw()
 			{
 				Resize r = deleteRows(wholeMovie(), sel.rows());
 				dojo.ApplyEditResize(r.edit, "roll: delete rows");
+				// The savestate anchors are row indices too. Without this they
+				// stay pointing at frames that now hold different content -
+				// wrong rather than merely suspect (docs/STATES-LIFT.md §4.4).
+				if (h != nullptr) h->rowsRemapped(r.remap);
 				// THE SELECTION FOLLOWS THE ROWS. It used to be cleared here,
 				// because a selection naming deleted frames now names other
 				// frames entirely - true, and the reason the remap exists. The
@@ -328,6 +334,7 @@ static void draw()
 			{
 				Resize r = insertBlanks(wholeMovie(), sel.lo(), (u32)sel.count());
 				dojo.ApplyEditResize(r.edit, "roll: insert blanks");
+				if (h != nullptr) h->rowsRemapped(r.remap);
 				sel.remap(r.remap);
 			}
 			ImGui::SameLine();
