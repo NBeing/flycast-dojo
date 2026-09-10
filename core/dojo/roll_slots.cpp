@@ -152,6 +152,35 @@ public:
 				moved, gone);
 	}
 
+	int slotCount() const override
+	{
+		ensureFresh();
+		return (int)info_.size();
+	}
+
+	bool slotView(int slot, SlotView& out) const override
+	{
+		ensureFresh();
+		if (slot < 0 || slot >= (int)info_.size())
+			return false;
+		const hostfs::SavestateInfo& s = info_[slot];
+		out = SlotView();
+		out.exists = s.exists;
+		if (!s.exists)
+			return true;			// in range, empty - a real answer
+		// haveFrame is the sidecar's presence, not `frame != 0`. A state saved
+		// at movie frame 0 - a power-on BASE state - is the case the overloaded
+		// zero gets wrong, and this is the whole reason the flag exists.
+		out.haveFrame = s.movieFrame != 0 || s.haveSeq;
+		out.frame     = s.movieFrame;
+		out.judged    = s.haveSeq;
+		out.stale     = slot < (int)stale_.size() && stale_[slot] != 0;
+		out.bytes     = s.size;
+		out.mtime     = s.mtime;
+		out.label     = s.label;
+		return true;
+	}
+
 	int staleNoticePhase() const override
 	{
 		ensureFresh();

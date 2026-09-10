@@ -88,6 +88,7 @@ int flycast_init(int argc, char* argv[])
 	roll::marksInstall();
 	roll::selectionInstall();
 	roll::registerPanel();
+	roll::registerStatesPanel();
 	os_CreateWindow();
 	os_SetupInput();
 

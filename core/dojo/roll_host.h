@@ -2,6 +2,7 @@
 #include "types.h"
 #include "roll_remap.h"
 #include <map>
+#include <string>
 #include <vector>
 
 /*
@@ -29,9 +30,47 @@
 namespace roll
 {
 
+/*
+	ONE SLOT, AS A TOOL SEES IT.
+
+	`[MEASURED 2026-09-09]` docs/STATES-LIFT.md - the States window asks 17
+	questions of its host and the roll's four cover about one and a half. This is
+	the READ half of the rest, kept as one struct rather than five accessors
+	because a wall of a hundred slots asks all of it at once and a per-field call
+	would be five scans.
+
+	NO EMULATOR NAMES AND NO FILE PATHS. A slot is an index; whether it is a file,
+	a snapshot in memory or a row in someone else's database is the host's
+	business, and a path leaking into a tool is what made the fork's `#` column
+	necessary - its folder numbers restart per kind, so the number on screen and
+	the number in the name disagreed.
+
+	`haveFrame` EXISTS BECAUSE ZERO IS OVERLOADED. Everywhere else in this tree a
+	recorded frame of 0 means BOTH "anchored at frame 0" and "no anchor at all"
+	(docs/STATES-LIFT.md §4.3), and a power-on BASE state is exactly the case that
+	gets wrong. A tool asking this struct can tell them apart.
+*/
+struct SlotView
+{
+	bool        exists = false;
+	bool        haveFrame = false;	//!< NOT the same as frame != 0
+	u32         frame = 0;			//!< movie index this state is anchored on
+	bool        stale = false;		//!< no longer a point on THIS timeline
+	bool        judged = false;		//!< false = too old to judge, NOT "clean"
+	u64         bytes = 0;
+	s64         mtime = 0;
+	std::string label;
+};
+
 struct Host
 {
 	virtual ~Host() = default;
+
+	//! How many slots this host addresses. A wall draws this many cells.
+	virtual int slotCount() const { return 0; }
+
+	//! Everything a tool shows about one slot, in one call. False = out of range.
+	virtual bool slotView(int slot, SlotView& out) const { (void)slot; (void)out; return false; }
 
 	// Does this slot still belong to the timeline currently being edited?
 	// A re-record past the frame a state was saved on strands it: the state is
@@ -82,5 +121,8 @@ void installHost();
 // undo, read it back again. A self-test cannot reach this - the whole question
 // is whether bytes on disk moved.
 void anchorProbe();
+
+// Registers the States panel with the registry. Idempotent.
+void registerStatesPanel();
 
 }	// namespace roll

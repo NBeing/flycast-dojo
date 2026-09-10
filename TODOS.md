@@ -200,10 +200,22 @@ through `panels::add`.
   younger.
 - [ ] **`[OPEN]` bookmarks are session-only.** The fork persists them in
   `clip.json`. Persisting means writing user files, so it is its own pass.
-- [ ] The States window. `docs/STATES-LIFT.md` — 131 real dependencies, **zero**
-  game-specific. Our 4 host questions cover ~1.5 of the 17 it needs. `[OPEN]`
-  the 100-slot wall lives in `core/rend/gui.cpp`, not `dojo_gui.cpp`, and has
-  not been lifted; only its generations pane has.
+- [x] **The States window, first slice** — `core/dojo/states_panel.cpp`, the
+  slot WALL. Reads through `roll::Host::slotView()`, which answers in slots and
+  movie frames and names no file: slot, anchored frame, clean/stale/unjudged,
+  size, when, label. Slot 0 shows as **BASE** rather than `0`, because flycast's
+  own pause menu numbers slots from ONE and would show the same file as "1"
+  (§G11). `haveFrame` is carried separately from `frame != 0`, so a power-on
+  state anchored at frame 0 is not confused with one that has no anchor (§4.3).
+  `scripts/rolltest.sh` asserts the wall and the roll's gutter agree.
+- [ ] The States window, the rest: **no thumbnails** (nothing in this tree
+  writes one, and `GetLastFrameRGB` is DX9/DX11 only — §G6), **no rename**
+  (`saveSavestateLabel`, zero callers — §G7), **no delete**
+  (`deleteSavestate`, zero callers — §G8), no generations pane, no save/load
+  actions from the wall.
+- [ ] `[OPEN]` the fork's 100-slot wall in its `core/rend/gui.cpp` has still not
+  been lifted; only its generations pane has, so the 131/17 figures describe the
+  PANE and this slice was built from the gaps survey instead.
 - [ ] Report two davidrr bugs upstream: missing `core/deps/glslang/CHANGES.md`,
   and no headless auto-play.
 
