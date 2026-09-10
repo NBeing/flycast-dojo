@@ -83,6 +83,11 @@ void Selection::release()
 	base_.clear();
 }
 
+void selectionInstall()
+{
+	remapRegister([](const Remap& m) { selection().remap(m); });
+}
+
 void Selection::remap(const Remap& m)
 {
 	if (m.isIdentity())
@@ -213,6 +218,19 @@ void selectionSelfTest()
 		s4.press(4, Mods{});
 		s4.remap(Remap::deleted({ 4 }, 10));
 		claim("a selection whose only row was deleted becomes empty", s4.empty());
+	}
+	{
+		// APPLIED ONCE, NOT TWICE. `[MEASURED 2026-09-10]` an sel.remap() sat
+		// beside a remapAll() - which already reaches the selection - for one
+		// build, and a remap applied twice shifts twice. The registry made that
+		// possible, so the claim lives here.
+		Selection s5;
+		s5.press(10, Mods{});
+		s5.remap(Remap::inserted(0, 3, 40));
+		claim("one remap moves a selection once", s5.rows() == std::set<u32>({ 13 }));
+		s5.remap(Remap::inserted(0, 3, 40));
+		claim("...and a SECOND one moves it again, which is why callers make one call",
+				s5.rows() == std::set<u32>({ 16 }));
 	}
 
 	NOTICE_LOG(RENDERER, "ROLLSEL SELFTEST: %d passed, %d failed", pass, fail);

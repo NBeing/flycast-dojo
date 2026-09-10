@@ -3,6 +3,7 @@
 #include "roll_select.h"
 #include "roll_edit.h"
 #include "roll_paint.h"
+#include "roll_marks.h"
 #include "session.h"
 #include "rend/gui.h"
 #include "movie.h"
@@ -320,23 +321,28 @@ static void draw()
 			{
 				Resize r = deleteRows(wholeMovie(), sel.rows());
 				dojo.ApplyEditResize(r.edit, "roll: delete rows");
-				// The savestate anchors are row indices too. Without this they
-				// stay pointing at frames that now hold different content -
-				// wrong rather than merely suspect (docs/STATES-LIFT.md §4.4).
-				if (h != nullptr) h->rowsRemapped(r.remap);
-				// THE SELECTION FOLLOWS THE ROWS. It used to be cleared here,
-				// because a selection naming deleted frames now names other
-				// frames entirely - true, and the reason the remap exists. The
-				// deleted rows drop out and any survivor moves with its content.
-				sel.remap(r.remap);
+				// ONE CALL, AND EXACTLY ONE. The savestate anchors on disk, the
+				// bookmarks and the selection all hold row indices and all
+				// register as holders (roll_remap.h) - a caller that has to
+				// remember three of them is the fork's five hand-called fixups
+				// with a shorter list.
+				//
+				// The selection used to be CLEARED here, because one naming
+				// deleted frames now names other frames entirely. True, and the
+				// reason the remap exists: deleted rows drop out and survivors
+				// move with their content.
+				//
+				// `[MEASURED 2026-09-10]` an sel.remap() survived beside this for
+				// one build. A remap applied TWICE shifts twice - silently, and
+				// only for whichever holder the caller happened to remember.
+				remapAll(r.remap);
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Insert blanks"))
 			{
 				Resize r = insertBlanks(wholeMovie(), sel.lo(), (u32)sel.count());
 				dojo.ApplyEditResize(r.edit, "roll: insert blanks");
-				if (h != nullptr) h->rowsRemapped(r.remap);
-				sel.remap(r.remap);
+				remapAll(r.remap);
 			}
 			ImGui::SameLine();
 			ImGui::TextDisabled("(%d rows)", (int)sel.count());
@@ -360,17 +366,44 @@ static void draw()
 			{
 				Resize r = stretchRows(wholeMovie(), sel.lo(), sel.hi(), (u32)rangeFactor);
 				dojo.ApplyEditResize(r.edit, "roll: stretch");
-				if (h != nullptr) h->rowsRemapped(r.remap);
-				sel.remap(r.remap);
+				remapAll(r.remap);
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Compress"))
 			{
 				Resize r = compressRows(wholeMovie(), sel.lo(), sel.hi(), (u32)rangeFactor);
 				dojo.ApplyEditResize(r.edit, "roll: compress");
-				if (h != nullptr) h->rowsRemapped(r.remap);
-				sel.remap(r.remap);
+				remapAll(r.remap);
 			}
+			// ---- BOOKMARKS ------------------------------------------------
+			//
+			// Deliberately NOT gated on a selection: marking where you are is
+			// something you do while looking at a frame, not after picking a
+			// range. The target is the selection's first row when there is one
+			// and the playhead otherwise, which is the same "target" rule the
+			// fork applies to its place verbs - stated here once instead of at
+			// five call sites.
+			{
+				const u32 target = haveSel ? sel.lo() : playhead;
+				char mb[48];
+				snprintf(mb, sizeof(mb), marks().has(target) ? "Unmark %u" : "Mark %u", target);
+				if (ImGui::Button(mb))
+					marks().toggle(target);
+				ImGui::SameLine();
+				u32 to = 0;
+				ImGui::BeginDisabled(!marks().prev(target, to));
+				if (ImGui::Button("<Mark") && marks().prev(target, to))
+					sel.press(to, Mods{});		// select it; seeking is the playhead's job
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				ImGui::BeginDisabled(!marks().next(target, to));
+				if (ImGui::Button("Mark>") && marks().next(target, to))
+					sel.press(to, Mods{});
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				ImGui::TextDisabled("(%d marks)", (int)marks().count());
+			}
+
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(90.f);
 			// ONE FACTOR FOR BOTH, which is what the fork does and is right:
@@ -492,8 +525,12 @@ static void draw()
 		Selection& sel = selection();
 		ImGui::PushID((int)f);
 		const bool wasSel = sel.has(f);
-		char lbl[24];
-		snprintf(lbl, sizeof(lbl), movie::has(f) ? "%u" : "(%u)", f);
+		char lbl[32];
+		// A MARKED FRAME IS FLAGGED IN THE LABEL ITSELF rather than drawn beside
+		// it: the label is the row's click target, so anything drawn separately
+		// would be a second hit region for the same row.
+		const char *mk = marks().has(f) ? "*" : " ";
+		snprintf(lbl, sizeof(lbl), movie::has(f) ? "%s%u" : "%s(%u)", mk, f);
 		// A frame with no record is a HOLE, not an end - movie.h exists to keep
 		// that distinction, and the roll must show it rather than draw zeroes.
 		if (!movie::has(f)) ImGui::PushStyleColor(ImGuiCol_Text,

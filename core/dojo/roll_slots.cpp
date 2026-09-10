@@ -2,6 +2,8 @@
 #include "dojo.h"
 #include "oslib/oslib.h"
 #include "roll_edit.h"
+#include "roll_meta.h"
+#include "roll_marks.h"
 #include "movie.h"
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
@@ -450,8 +452,19 @@ void installHost()
 	// THE UNDO RAILS, which is what makes rewriting the user's sidecars a
 	// reversible act rather than a one-way one. dojo captures gui_meta pre-edit
 	// inside both funnels and reapplies it on undo.
-	dojo.edit_meta_capture = []() { return theSlotHost.captureAnchors(); };
-	dojo.edit_meta_apply   = [](const std::string& blob) { theSlotHost.applyAnchors(blob); };
+	//
+	// THROUGH THE REGISTRY, not by assigning dojo's hooks directly. There is one
+	// setter and there are now two customers - anchors and bookmarks - so a
+	// direct assignment is a race in which whoever installs last wins and the
+	// other silently stops being restored (roll_meta.h).
+	// A ROW-INDEX HOLDER. The sidecars are row indices on disk, so they follow a
+	// renumber like anything else that holds one.
+	remapRegister([](const Remap& m) { theSlotHost.rowsRemapped(m); });
+
+	metaRegister("anchors",
+			[]() { return theSlotHost.captureAnchors(); },
+			[](const std::string& blob) { theSlotHost.applyAnchors(blob); });
+	metaInstall();
 	// A LOOKUP THAT CAN FAIL rather than trusting the call, the same rule the
 	// panel registration follows: an uninstalled host is invisible in exactly
 	// the same way as one that is installed and finds no states.
@@ -498,6 +511,12 @@ void anchorProbe()
 		return;
 	}
 
+	// A BOOKMARK RIDES ALONG, because the interesting claim is no longer "the
+	// anchor moved" but "TWO providers both survived one undo". A single
+	// provider works with no registry at all, which is how the single-setter
+	// version looked correct right up until bookmarks arrived (roll_meta.h).
+	marks().set(before, "probe");
+
 	const u32 N = 3;
 	std::map<u32, Row> whole;
 	for (const auto& kv : dojo.session_inputs)
@@ -507,20 +526,26 @@ void anchorProbe()
 	// failure this tree keeps finding.
 	Resize r = insertBlanks(whole, 0, N);
 	const s64 first = dojo.ApplyEditResize(r.edit, "roll: anchor probe");
-	theSlotHost.rowsRemapped(r.remap);
+	remapAll(r.remap);		// the anchors, the marks and the selection, in one
 
 	u32 after = 0;
 	const bool readBack = SlotHost::readAnchor(slot, after);
 	const bool moved = readBack && after == before + N;
+	const bool markMoved = marks().has(before + N) && !marks().has(before);
 
 	const bool undone = dojo.ApplyUndo();
 	u32 back = 0;
 	const bool restored = SlotHost::readAnchor(slot, back) && back == before;
+	const bool markBack = marks().has(before) && !marks().has(before + N);
+	marks().erase(before);
+	marks().erase(before + N);
 
-	NOTICE_LOG(RENDERER, "ROLL ANCHORPROBE: slot=%d first=%lld %u -> %u (want %u) undo=%s -> %u"
-			"  => %s", slot, (long long)first, before, after, before + N,
-			undone ? "yes" : "NO", back,
-			(moved && undone && restored) ? "PASS" : "FAIL");
+	NOTICE_LOG(RENDERER, "ROLL ANCHORPROBE: slot=%d first=%lld anchor %u -> %u (want %u)"
+			" mark=%s undo=%s -> anchor %u mark=%s  => %s",
+			slot, (long long)first, before, after, before + N,
+			markMoved ? "moved" : "NO", undone ? "yes" : "NO", back,
+			markBack ? "back" : "NO",
+			(moved && markMoved && undone && restored && markBack) ? "PASS" : "FAIL");
 }
 
 }	// namespace roll

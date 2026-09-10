@@ -2,6 +2,7 @@
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
 #include <algorithm>
+#include <vector>
 
 namespace roll
 {
@@ -130,6 +131,28 @@ void Remap::applyTo(std::set<u32>& rows) const
 	rows.swap(next);
 }
 
+namespace {
+std::vector<std::function<void(const Remap&)>>& holders()
+{
+	static std::vector<std::function<void(const Remap&)>> v;
+	return v;
+}
+}
+
+void remapRegister(std::function<void(const Remap&)> holder)
+{
+	holders().push_back(std::move(holder));
+}
+
+void remapAll(const Remap& m)
+{
+	if (m.isIdentity())
+		return;
+	for (const auto& h : holders())
+		if (h)
+			h(m);
+}
+
 /*
 	SELF-TEST. The claims that matter are the NEGATIVE ones - a remap that moved
 	everything by the right amount would pass every positive check here and still
@@ -220,6 +243,27 @@ void remapSelfTest()
 		std::set<u32> sel{ 2, 3 };
 		Remap::deleted({ 2, 3 }, 8).applyTo(sel);
 		claim("a selection entirely inside a deletion becomes empty", sel.empty());
+	}
+
+	// ---- every holder told, in one call ---------------------------------
+	{
+		// Registered here and left registered - the list is process-wide and
+		// these two only ever count, so they cost nothing and cannot disturb a
+		// real holder.
+		static int told = 0, identityTold = 0;
+		static bool once = false;
+		if (!once)
+		{
+			once = true;
+			remapRegister([](const Remap&) { told++; });
+			remapRegister([](const Remap&) { told++; });
+		}
+		const int before = told;
+		remapAll(Remap::inserted(5, 2, 20));
+		claim("ONE call reaches EVERY holder", told == before + 2);
+		identityTold = told;
+		remapAll(Remap::identity());
+		claim("...and an identity remap bothers nobody", told == identityTold);
 	}
 
 	// ---- stretch: a stride, not a shift ---------------------------------

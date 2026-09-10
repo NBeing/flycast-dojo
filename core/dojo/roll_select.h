@@ -71,6 +71,10 @@ public:
 	*/
 	void remap(const Remap& m);
 
+	//! Register the shared selection as a row-index holder. Idempotent by call
+	//! site: nullDC calls it once at startup, beside the other installs.
+	friend void selectionInstall();
+
 	void clear();
 	bool has(u32 row) const   { return rows_.count(row) != 0; }
 	bool empty() const        { return rows_.empty(); }
@@ -93,6 +97,7 @@ private:
 };
 
 Selection& selection();
+void selectionInstall();
 
 //! Runs under dojo:PanelSelfTest, like the other seams in this tree.
 void selectionSelfTest();

@@ -184,8 +184,22 @@ through `panels::add`.
   arms. `[OPEN]` with NO clip folder open the rewrite refuses and says so —
   the shared data path has two derivations that can disagree
   (`docs/STATES-LIFT.md` G13), and settling that is its own work.
-- [ ] Bookmarks do not exist here yet. When they do, they are a remap customer
-  by construction rather than five hand-called fixups.
+- [x] **Bookmarks**, `core/dojo/roll_marks.{h,cpp}` — a remap customer by
+  construction, panel buttons, a `*` in the frame gutter. A mark on a deleted
+  frame is DROPPED rather than slid onto its neighbour, deliberately unlike the
+  savestate anchors, which collapse: a savestate still exists and must be drawn
+  somewhere, a bookmark is only a pointer.
+- [x] **`roll_meta`** — dojo carries ONE opaque `gui_meta` blob for undo, and
+  anchors plus bookmarks are two customers for one setter. A registry owns it;
+  the blob is self-describing so an unknown provider is skipped rather than
+  misparsed.
+- [x] **`remapRegister` / `remapAll`** — holders register, callers make ONE
+  call. Found by the probe: the panel had grown three lines after every resize
+  and the probe, a fourth caller, had one of them, so the bookmark silently did
+  not move. Three lines to remember is the fork's five hand-called fixups, just
+  younger.
+- [ ] **`[OPEN]` bookmarks are session-only.** The fork persists them in
+  `clip.json`. Persisting means writing user files, so it is its own pass.
 - [ ] The States window. `docs/STATES-LIFT.md` — 131 real dependencies, **zero**
   game-specific. Our 4 host questions cover ~1.5 of the 17 it needs. `[OPEN]`
   the 100-slot wall lives in `core/rend/gui.cpp`, not `dojo_gui.cpp`, and has

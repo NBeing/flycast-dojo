@@ -1,5 +1,6 @@
 #pragma once
 #include "types.h"
+#include <functional>
 #include <set>
 #include <vector>
 
@@ -103,6 +104,29 @@ private:
 	std::vector<Span> spans_;	// sorted by `from`, non-overlapping
 	bool identity_ = false;
 };
+
+/*
+	EVERYTHING THAT HOLDS A ROW INDEX, TOLD IN ONE CALL.
+
+	`[MEASURED 2026-09-10]` this exists because I rebuilt the fork's bug one
+	holder later. The remap was introduced precisely so a structural edit would
+	not need per-tool fixups - and then the panel grew three lines after every
+	resize (the savestate anchors, the bookmarks, the selection), and the
+	in-process probe, which is a fourth caller, had only one of them. The
+	bookmark silently did not move and the probe caught it.
+
+	Three lines a caller must remember is the same defect as five hand-called
+	fixups; it is just younger. So holders REGISTER, and a caller makes ONE call.
+
+	Registration is process-wide and idempotent by install, matching the other
+	seams here: a holder that is never installed simply is not told, which is
+	visible as its state not moving rather than as a crash.
+*/
+void remapRegister(std::function<void(const Remap&)> holder);
+
+//! Tell every registered holder. The only thing a structural edit's caller
+//! needs to do besides handing the edit to the funnel.
+void remapAll(const Remap& m);
 
 //! Runs under dojo:PanelSelfTest, like the other seams in this tree.
 void remapSelfTest();

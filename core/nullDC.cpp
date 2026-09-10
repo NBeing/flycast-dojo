@@ -16,6 +16,8 @@
 #include "dojo/roll_paint.h"
 #include "dojo/roll_pattern.h"
 #include "dojo/roll_remap.h"
+#include "dojo/roll_meta.h"
+#include "dojo/roll_marks.h"
 #include "dojo/roll_host.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
@@ -80,7 +82,11 @@ int flycast_init(int argc, char* argv[])
 	roll::paintSelfTest();
 	roll::patternSelfTest();
 	roll::remapSelfTest();
+	roll::metaSelfTest();
+	roll::marksSelfTest();
 	roll::installHost();
+	roll::marksInstall();
+	roll::selectionInstall();
 	roll::registerPanel();
 	os_CreateWindow();
 	os_SetupInput();
