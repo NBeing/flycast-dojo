@@ -1948,6 +1948,39 @@ set_tests_properties(flycast.rolltest PROPERTIES
 	RUN_SERIAL TRUE
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
 
+# THE DOCK, DRIVEN BY A REAL DRAG. Registered `[2026-09-09]` after running by
+# hand only since it was written - which is the state the plan called out: it is
+# the only rig in the tree that drives real input, and a rig nobody runs is a
+# rig nobody notices breaking.
+#
+# It earned its place the same day: the piano roll's paint drag turned out to be
+# broken by `updateMousePositionWhileDragging()` in core/sdl/sdl.cpp overwriting
+# fresh motion with a stale global read, and THIS is the test that says whether
+# narrowing that function's scope broke the docking it was written for. That
+# question was answered by hand. It should not have to be again.
+add_test(NAME flycast.docktest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/docktest.sh)
+set_tests_properties(flycast.docktest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 600
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;DOCKTEST_DISPLAY=77")
+
+# ITS PAIRED FAILING ARM, which is the half that makes the pass mean something.
+# --self-test drives the identical drag against the pre-2026-09-08 behaviour,
+# where the picture was blitted full-window behind the UI and therefore must NOT
+# follow the dock; the script exits 0 only when it correctly observes that
+# failure. nbneo-rr carries 54 such twins against 119 tests, and the reason is
+# this tree's own history: a "control" that silently fails to apply runs the
+# unmodified code and passes, which is a defect wearing a lab coat.
+add_test(NAME flycast.docktest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/docktest.sh --self-test)
+set_tests_properties(flycast.docktest_can_fail PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 600
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;DOCKTEST_DISPLAY=78")
+
 # Cross-process reproducibility. Every other test here runs in ONE process, so
 # none of them can see process-level nondeterminism - both halves of their
 # comparison share it. This runs the same deterministic input in two separate

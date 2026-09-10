@@ -18,7 +18,7 @@ set -uo pipefail
 SKIP=77
 ROM="${ROM:-/home/nbee/dev/davids_fly/NoBGM_VMU.cdi}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-EXE="$HERE/../build-dojo7/flycast"
+EXE="${FLYCAST_BIN:-$HERE/../build-dojo7/flycast}"
 DISP=":${DOCKTEST_DISPLAY:-77}"
 OUT="$(mktemp -d)"
 
