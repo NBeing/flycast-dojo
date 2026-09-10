@@ -118,6 +118,28 @@ lists not silently empty.
 > denominator was a hand-maintained list; anything missing from *it* is
 > invisible to both the report and the suite.
 
+### The sandbox's defaults are not the behaviour
+
+`[MEASURED 2026-09-10]` **one default produced three wrong readings in a single
+day.** `rend.ThreadedRendering` is declared `false` (`core/cfg/option.cpp`), and
+every harness here runs in a fresh `XDG_CONFIG_HOME`, so a test machine has it
+OFF while a developer's own config usually has it on.
+
+- The step probe reported **0 of 30** frames advanced and looked like a refuted
+  hypothesis. It was single-threaded: no emulation thread, nothing to advance.
+- `scripts/selftest.sh` **passed with no X display at all** — its Xvfb never
+  started, and its 331 claims run before `os_CreateWindow`, so the prerequisite
+  it insists on was never needed.
+- A guard for `savestate.save()` from a `vblank` callback was written after
+  measuring a hang, and **broke a test that had been passing for months**: the
+  hang only happens threaded, because `Emulator::stop()` joins the emulation
+  thread only on that path.
+
+The shape is always the same — measure under whatever the sandbox defaulted to,
+then state it as *the* behaviour. **Read the flag, print it in the result, and
+run the other arm.** All three of these were caught by a control, never by
+re-reading the code.
+
 **3. Run the control.** Two runs of identical code disagreeing is the cheapest
 check available — and so is running the case where a bug would be visible.
 
