@@ -306,8 +306,12 @@ this; the counts and the evidence are there, not here.
   `Training` reads → `session::trainingEnabled()`; `MapleApplyAction`'s
   `tasWriteGrow` → `session::writeGrow()` (its first caller); `livePeer()`
   removed as a duplicate of a corrected `netplay()`. Adopted predicates 2 → 5.
-- [ ] Work §4's **11 latent disagreements** as a bug list. **#9 fixed
-  `[2026-09-10]`** — `kind()` now discriminates on whether a movie is driving
+- [x] Work §4's **11 latent disagreements** as a bug list — **all eleven done
+  `[2026-09-10]`**: six fixed, two resolved as separate questions, one
+  withdrawn as a census error, one corrected, one deleted as dead code.
+  Four of the eleven changed shape on investigation, which is the lesson: a
+  census reads call sites and cannot tell a duplicated rule from two rules that
+  resemble each other. **#9 fixed `[2026-09-10]`** — `kind()` now discriminates on whether a movie is driving
   the guest, which `maple_if.cpp` makes exact, and treats Receiving as netplay
   explicitly. Three self-test claims, one sabotage. That also deleted
   `session::livePeer()`, a predicate added a day earlier to work around the

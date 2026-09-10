@@ -143,7 +143,16 @@ void flycast_term()
 
 void dc_savestate(int index)
 {
-	if (settings.network.online)
+	// THE SAME QUESTION THE UI GATE AND THE AUTO-SAVE GATE ASK, and until
+	// 2026-09-10 all three spelled it differently (docs/SESSION-KINDS.md §4 #6).
+	// This one said `network.online`, which is not set until the handshake, so
+	// a GGPO session mid-setup could still write a state.
+	//
+	// LOADING IS DELIBERATELY NOT GUARDED: emulator.cpp does dc_loadstate(-1)
+	// to bring in the synchronised net state, which is exactly how a netplay
+	// session starts. Saving is what would desync someone else; loading is how
+	// you agree with them.
+	if (session::rollbackLive())
 		return;
 
 	Serializer ser;

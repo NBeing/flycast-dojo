@@ -20,6 +20,7 @@
 #include "luatier.h"
 #include "luawatch.h"
 #include "dojo/session.h"
+#include "dojo/session.h"
 
 #ifdef USE_LUA
 #include <lua.hpp>
@@ -755,7 +756,21 @@ static bool setMovieButtons(int frame, int player, LuaRef buttons, lua_State *L)
 // moment later, so this can still answer false on the line after a pause().
 static bool movieEditable()
 {
-	return !emu.running();
+	/*
+		TWO CONDITIONS, and this used to state only one.
+
+		`[MEASURED 2026-09-09]` docs/SESSION-KINDS.md §4 #5 found three answers to
+		"is the movie editable?" in this tree. replay.cpp's TextApply and
+		ResizeProbe have no gate, which is right where they sit - they run inside
+		Replay::Init, before the machine has started. This one answered
+		"!emu.running()" alone, so a script could rewrite the tape during a
+		PAUSED NETPLAY SESSION, where the peer holds the same tape and desyncs
+		the moment it resumes.
+
+		The piano roll's gate is the UI form of the same rule and says both
+		halves out loud; this is the scripted form, and now agrees with it.
+	*/
+	return !emu.running() && !session::netplay();
 }
 
 // "Is this frame authored at all", without decoding it. A roll asks this once

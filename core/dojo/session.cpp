@@ -78,6 +78,18 @@ bool trainingEnabled()
 bool readOnly()  { return mode() == Mode::Read; }
 
 
+bool rollbackLive()
+{
+	// Deliberately not Receiving: see the header. Same discriminator as
+	// netplay() otherwise, so the two cannot drift on the GGPO-clip case.
+	return settings.network.online || (config::GGPOEnable && !dojo.play_match);
+}
+
+bool inputDisplayMeaningful()
+{
+	return !(trainingEnabled() && config::Delay > 0);
+}
+
 bool steppable()
 {
 	return trainingEnabled() || dojo.play_match || writeGrow();
@@ -201,6 +213,58 @@ void selfTest()
 				trainingEnabled());
 
 		set("Training", wasTrain);
+		dojo.play_match = false;
+	}
+
+	// ---- SAVESTATE LEGALITY ----
+	{
+		const bool wasGGPO2 = config::GGPOEnable;
+		const bool wasOn2 = settings.network.online;
+		set("MacroMode", false); set("PlayMacro", false); set("RecordMatches", false);
+		set("Receiving", false);
+		config::GGPOEnable = false; settings.network.online = false;
+		dojo.play_match = false;
+		claim("an offline session may save", !rollbackLive());
+
+		// THE PRE-HANDSHAKE CASE, which the UI gate and the auto-save gate used
+		// to disagree about: network.online is not set until the handshake.
+		config::GGPOEnable = true;
+		claim("a GGPO session mid-setup may NOT save", rollbackLive());
+
+		// AND THE ONE THAT WAS A REAL BUG: replaying a GGPO-recorded clip
+		// offline sets GGPOEnable, and auto-save was refused for it.
+		dojo.play_match = true;
+		claim("...but replaying a GGPO-recorded clip offline may", !rollbackLive());
+
+		// Spectate is netplay, and is NOT a rollback session: nobody depends on
+		// a receiver's machine, so a snapshot of it harms no one.
+		config::GGPOEnable = false; dojo.play_match = true;
+		set("Receiving", true);
+		claim("spectate is netplay but not rollback", netplay() && !rollbackLive());
+
+		set("Receiving", false);
+		config::GGPOEnable = wasGGPO2; settings.network.online = wasOn2;
+		dojo.play_match = false;
+	}
+
+	// ---- THE INPUT DISPLAY ----
+	{
+		set("MacroMode", false); set("PlayMacro", false); set("RecordMatches", false);
+		const int wasDelay = config::Delay;
+		dojo.play_match = false;
+		set("Training", true);
+		config::Delay = 0;
+		claim("training without delay has a meaningful input display",
+				inputDisplayMeaningful());
+		config::Delay = 3;
+		// THE RULE: a display that lags the game by Delay frames is worse than
+		// none, so the overlay refuses and the toggle hides.
+		claim("training WITH delay does not", !inputDisplayMeaningful());
+		// A replay shows RECORDED input, so delay is not its problem.
+		set("Training", false);
+		dojo.play_match = true;
+		claim("a replay is unaffected by delay", inputDisplayMeaningful());
+		config::Delay = wasDelay;
 		dojo.play_match = false;
 	}
 

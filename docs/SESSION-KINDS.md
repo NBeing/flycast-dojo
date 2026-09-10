@@ -175,6 +175,17 @@ that five of them re-derive engine conditions rather than call one.
 
 These are bugs waiting, and several are live.
 
+> **`[2026-09-10]` All eleven worked.** Six were fixed (#1, #4, #5, #6, #8, #9),
+> two resolved as **two questions that were never one** (#2, #7), one
+> **withdrawn** as a census error (#3), one **corrected** — its premise was
+> wrong and the real finding is different (#10), and one was dead code deleted
+> under compiler proof (#11).
+>
+> The pattern worth carrying: **four of the eleven dissolved or changed shape on
+> investigation.** A census reads call sites; it cannot tell a duplicated rule
+> from two rules that resemble each other, and it reads one call site where
+> there are three. Every entry below now says which it turned out to be.
+
 **#9 is live and it bit this repository today.** `core/dojo/replay.cpp` sets
 `config::GGPOEnable = true` when it loads a clip that was recorded from a GGPO
 match, and `session::kind()` reads that Option. So **replaying a GGPO clip
@@ -184,10 +195,19 @@ local playback while saying "the tape is shared". No peer exists.
 `ggpo::active()` has the same flaw from the other end: its body returns true for
 `dojo.play_match && dojo.replay.ggpo_session`.
 
-**#1 — "must this run be byte-reproducible?", two lists differing by two flags.**
-`[PARTLY ADDRESSED 2026-09-10]` the stale premise is corrected in place and the
-conclusion is kept on the half of the argument that never depended on it. The
-two lists still disagree.
+**#1 — "must this run be byte-reproducible?" `[FIXED 2026-09-10]`.** One owner:
+`aica_if.cpp`'s `GetRTC_now()` calls `determinism::isDeterministicRun()`.
+
+Neither list was right, and each had a piece the other needed. `aica` carried
+**Receiving**, which `determinism` was missing and needed — a spectator replays a
+stream of inputs and must produce the same frames as the sender, so it was not
+being pinned. `determinism` was right to exclude **Transmitting**, which says
+what to do with a result rather than that a session is happening — so a solo
+player who had enabled uploads got a frozen 1/1/70 clock for no reason.
+
+The earlier stale premise (that `Transmitting` defaults true) is corrected in
+place rather than deleted, since a conclusion whose stated reason has rotted is
+worth knowing about.
 `core/determinism.cpp` omits `Receiving` and `Transmitting`;
 `core/hw/aica/aica_if.cpp` includes them. `determinism.cpp` *names* the
 disagreement and refuses to copy it — but its stated justification
@@ -199,19 +219,43 @@ premise is wrong; the conclusion may still be right for other reasons.
 superset of the other**, 240 lines apart in the same function. Different netplay
 exclusion (`GGPOEnable` versus `network.online && !ggpo_session`), different
 feature set (`Transmitting` versus `PlayMacro`), different access path (Option
-`[PARTLY ADDRESSED 2026-09-10]` the second conjunction now HAS one owner —
-`MapleApplyAction`'s local calls `session::writeGrow()`, which until then had
-zero callers while the body it was promoted from stayed live. The first is
-untouched: neither is a superset of the other, so choosing between them is a
-decision about behaviour, not a deduplication.
+`[RESOLVED 2026-09-10]` — as **two questions**, which is why neither was a
+superset of the other:
+
+  `writeGrow()` — MAY THE MOVIE GROW. A length question. `PlayMacro` is in it
+  because a macro playback extends the roll.
+  the other — SHOULD THIS FRAME BE APPENDED TO THE `.flyr`. A file question.
+  `Transmitting` is in it because uploading needs a file to upload, and its
+  third clause is documented at the site as "the replay-turned-write fix: a
+  LOADED replay in write mode (R) must keep appending to its own file".
+
+Merging them would change what lands on disk. `writeGrow()` got its first caller
+(`MapleApplyAction`'s local, which had been the live path while the predicate
+promoted out of it had none); the file question keeps its own conjunction, now
+named as such rather than looking like a stray copy.
 
 versus `cfgLoadBool`). `session::writeGrow()` copied the second; `lua.cpp`
 copied the first, and its comment cites a line number that has since rotted.
 
-**#3 — "may the pad be recorded?", the GGPO branch inverts the guard.**
-`ggpo.cpp` refuses to call `MapleRecordAction` under GGPO; `PollRecordAction`,
-reached from inside it, has a `config::GGPOEnable` arm that starts a recording.
-One of the two paths is unreachable and neither site says which.
+**#3 — ~~the GGPO branch inverts the guard~~ WITHDRAWN `[2026-09-10]`.**
+The finding said `ggpo.cpp` refuses to call `MapleRecordAction` under GGPO while
+`PollRecordAction`, "reached from inside it", has a `config::GGPOEnable` arm — so
+one path must be unreachable.
+
+It is not. `PollRecordAction` has **three** call sites, and the census read one.
+The GGPO arm is reached from a different entry point entirely:
+
+    offline   ggpo.cpp:85  -> MapleRecordAction -> PollRecordAction   (!GGPOEnable arms)
+    netplay   p2p.cpp:151  -> GGPORecordAction  -> PollRecordAction   (GGPOEnable arm)
+
+`Dojo::GGPORecordAction` is called by the GGPO backend once inputs are
+confirmed. The two guards are not an inverted pair; they are two entry points
+for two session kinds, and both are live.
+
+**The lesson is about the census method, not the code.** "Reached from inside it"
+was an inference from one call site, and a call graph read at one site looks
+exactly like a call graph read at all of them. Withdrawn rather than deleted, so
+the next reader does not re-derive it.
 
 **#4 — "does this session get pause and step?"** `[FIXED 2026-09-10]`
 `session::steppable()` names the question and adds the third arm, `writeGrow()`,
@@ -222,22 +266,65 @@ pause/step survive a Record-Movie session, and a comment in `dojo.cpp` says so
 explicitly. `gui_open_step` and `gui_open_pause` only resume for
 `Training || play_match`. A Record Movie session is in neither set.
 
-**#5 — "is the movie editable?", three answers.** See Q-a.
+**#5 — "is the movie editable?" `[FIXED 2026-09-10]`.** There were three
+answers and only one was wrong. `replay.cpp`'s `TextApply` / `ResizeProbe` have
+no gate, which is correct where they sit — inside `Replay::Init`, before the
+machine has started. `core/lua/lua.cpp`'s `movie.editable` answered
+`!emu.running()` alone, so **a script could rewrite the tape during a paused
+netplay session**, where the peer holds the same tape and desyncs on resume. It
+is `!emu.running() && !session::netplay()` now, which is the scripted form of
+the rule the piano roll's gate states in words.
 
-**#6 — "is a savestate legal?", three different conjunctions.** The UI gate uses
-`settings.network.online`; the auto-save-on-unload gate uses
-`config::GGPOEnable`. A GGPO session with `network.online` not yet set passes
-one and fails the other.
+**#6 — "is a savestate legal?" `[FIXED 2026-09-10]`.** Three conjunctions, now
+one predicate: `session::rollbackLive()` — *does someone else's emulator depend
+on the state of ours?*
+
+Deliberately **not** `netplay()`: a receiver's machine mirrors a stream, so a
+snapshot of it is of something nobody depends on. "Is there a peer" is the right
+question for the tape and the wrong one for a savestate.
+
+It fixed two things at once. A GGPO session before the handshake passed the UI
+gate and failed the auto-save gate, because `network.online` is not set until
+then. And `!config::GGPOEnable` was TRUE for a purely local replay of a
+GGPO-recorded clip (§4 #9), so **auto-save was refused for a session with no peer
+at all**. Loading stays unguarded, deliberately: `dc_loadstate(-1)` brings in the
+synchronised net state, which is how a netplay session starts.
 
 **#7 — "where does the movie end?", four spellings.** Two are reconciled by
 comment; one defends `session_inputs.size()` as the right question for the
 receive buffer.
 
-**#8 — "is the input display meaningful with delay?"** The `Delay == 0` rule is
-applied at one site and omitted at three.
+**#8 — "is the input display meaningful with delay?" `[CORRECTED and FIXED
+2026-09-10]`.** The finding said the rule is "applied at one site and omitted at
+three". The three omissions are not omissions: they call
+`show_last_inputs_overlay()`, which guards itself on its first line, so
+repeating the rule there is what would be wrong.
 
-**#10 — `Replay::Init()` is triggered from two places on identical conditions**
-(`core/nullDC.cpp` and `core/rend/gui.cpp`).
+What was real is a two-owner duplication between that guard and the **toggle
+button** that turns the display on, in different files. Both call
+`session::inputDisplayMeaningful()` now — training with delay shows the pad late,
+which is worse than no display; a replay is unaffected, since what it shows is
+recorded input rather than a live pad.
+
+**#10 — `Replay::Init()` is triggered from two places `[CORRECTED 2026-09-10]`.**
+Both sites do `if (cfgLoadBool("dojo", "Replay", false)) dojo.replay.Init();`
+and `[MEASURED]` it runs twice per session — two `LOAD REPLAY FILE` lines.
+
+**But they are not redundant, which is what "identical conditions" implies.**
+`Dojo::Reset()` runs BETWEEN them and clears `session_inputs`, so the first
+Init's work — parsing an 11,520-frame movie — is thrown away and the second is
+the one that takes effect.
+
+Established by trying to fix it. A guard keyed on the filename never fired,
+because Reset cleared the flag; re-keyed on "the same clip AND the movie is
+already loaded", it still never fired, because the movie is empty by then. A
+guard that cannot fire is dead code, so it was reverted rather than shipped.
+
+So the finding is not "one call is redundant" but **the first call is wasted**,
+and the fix is a boot-ordering change rather than a guard — Init also sets
+`savestateFolderOverride` and pins the savestate slot, which may be wanted
+before the game loads. `[OPEN]`: whether the early call is needed for those
+side effects, or can simply go.
 
 **#11 — the same key read through two mechanisms.** `config::Training` is
 registered and read by **nobody**; all 21 training sites use

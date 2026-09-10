@@ -5,6 +5,7 @@
 */
 
 #include "aica_if.h"
+#include "determinism.h"
 #include "aica_mem.h"
 #include "hw/holly/sb.h"
 #include "hw/holly/holly_intc.h"
@@ -36,8 +37,19 @@ int rtc_schid = -1;
 
 u32 GetRTC_now()
 {
-	// rtc kept static for netplay when savestate is not loaded
-	if (config::GGPOEnable || config::RecordMatches || config::Replay || config::Receiving || config::Transmitting)
+	// rtc kept static for netplay when savestate is not loaded.
+	//
+	// `[2026-09-10]` THROUGH THE ONE OWNER, docs/SESSION-KINDS.md §4 #1. This
+	// spelled its own list and it differed from determinism::isDeterministicRun()
+	// by two flags in both directions: it had Receiving, which that one was
+	// missing and needed (a spectator must reproduce the sender's run), and it
+	// had Transmitting, which means "will upload replays IF a session happens"
+	// rather than "a session is happening" - so a solo player who had enabled
+	// uploads got a frozen 1/1/70 clock for no reason.
+	//
+	// Two lists for one question do not disagree when they are written; they
+	// disagree the day one of them is changed.
+	if (determinism::isDeterministicRun())
 		// 1/1/70 00:00:00
 		return (20 * 365 + 5) * 24 * 60 * 60;
 

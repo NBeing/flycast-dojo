@@ -59,10 +59,19 @@ bool isDeterministicRun()
 	// The disagreement with aica_if.cpp is docs/SESSION-KINDS.md §4 #1 and is
 	// still open: two lists for "must this run be byte-reproducible", differing
 	// by exactly these two flags.
+	// `[2026-09-10]` RECEIVING JOINS THE LIST, and it is not a concession to
+	// aica_if.cpp's version - it is the one flag that version had right. A
+	// SPECTATOR REPLAYS A STREAM OF INPUTS and must produce the same frames as
+	// the sender, which is the definition this function exists to state. It was
+	// missing here, so a spectate session was not pinned.
+	//
+	// Transmitting still does NOT join, for the reason above: it says what to do
+	// with a result, not that a session is happening.
 	return settings.network.online
 		|| config::GGPOEnable
 		|| config::RecordMatches
-		|| config::Replay;
+		|| config::Replay
+		|| config::Receiving;
 }
 
 const char *runKind()

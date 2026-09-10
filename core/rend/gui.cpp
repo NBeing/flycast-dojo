@@ -946,7 +946,11 @@ void gui_stop_game(const std::string& message)
 
 static bool savestateAllowed()
 {
-	return !settings.content.path.empty() && !settings.network.online && !settings.naomi.multiboard;
+	// session::rollbackLive() rather than settings.network.online: the same
+	// question the auto-save gate and dc_savestate ask, spelled once
+	// (docs/SESSION-KINDS.md §4 #6).
+	return !settings.content.path.empty() && !session::rollbackLive()
+			&& !settings.naomi.multiboard;
 }
 
 void quick_map();
@@ -1212,7 +1216,11 @@ static void gui_display_commands()
 
 	}
 
-	if (session::trainingEnabled() && config::Delay == 0 || dojo.play_match)
+	// The toggle appears only where there is a display to toggle AND it would
+	// mean something. The second half is session::inputDisplayMeaningful(),
+	// which is the same rule show_last_inputs_overlay() enforces - said once
+	// now rather than in two files (docs/SESSION-KINDS.md §4 #8).
+	if ((session::trainingEnabled() || dojo.play_match) && session::inputDisplayMeaningful())
 	{
 		char disp_ico_txt[64];
 		if ((dojo.play_match && config::ShowReplayInputDisplay.get()) ||

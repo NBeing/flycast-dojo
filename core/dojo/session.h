@@ -161,6 +161,54 @@ bool writeGrow();
 */
 bool steppable();
 
+/*
+	WOULD AN INPUT DISPLAY MEAN ANYTHING IN THIS SESSION?
+
+	`[MEASURED 2026-09-09]` docs/SESSION-KINDS.md §4 #8. Training with input
+	delay shows the pad LATE - the display and the game disagree by `Delay`
+	frames, which is worse than no display, so the overlay refuses to draw.
+
+	`[CORRECTED 2026-09-10]` the census filed this as "the rule is applied at one
+	site and omitted at three". The three omissions are not omissions: they call
+	show_last_inputs_overlay(), which guards itself on its first line, so
+	repeating the rule there is what would be wrong. What IS duplicated is the
+	guard and the TOGGLE BUTTON that turns the display on - two statements of one
+	rule, in different files, which part company the day either changes.
+
+	A replay is unaffected by delay: what it shows is recorded input, not a live
+	pad, so the question only concerns training.
+*/
+bool inputDisplayMeaningful();
+
+/*
+	IS A ROLLBACK SESSION DRIVING THIS MACHINE - i.e. does someone else's
+	emulator depend on the state of ours?
+
+	NOT netplay(). The difference is spectate: a receiver's machine mirrors a
+	stream, so a savestate taken there is a snapshot of something nobody else
+	depends on. netplay() answers "is there a peer", which is the right question
+	for the tape and the wrong one for a savestate.
+
+	`[MEASURED 2026-09-09]` docs/SESSION-KINDS.md §4 #6 - "is a savestate legal?"
+	had THREE different conjunctions:
+
+	    core/rend/gui.cpp     !path.empty() && !network.online && !multiboard
+	    core/nullDC.cpp       if (network.online) return;
+	    core/emulator.cpp     ... && !multiboard && !GGPOEnable && !NaomiNetworkSupported()
+
+	The UI gate spelled netplay as `network.online`; the auto-save gate spelled
+	it `GGPOEnable`. A GGPO session before the handshake passes one and fails the
+	other, because online is not set until then.
+
+	Both spellings are wrong in the other direction too: `GGPOEnable` alone is
+	true for a purely LOCAL replay of a clip recorded from a GGPO match
+	(replay.cpp sets it when loading one, §4 #9), so auto-save was refused for a
+	session with no peer at all. The play_match discriminator is what fixes that,
+	and it is exact rather than heuristic - maple_if.cpp routes to one path or
+	the other every frame.
+*/
+bool rollbackLive();
+
 //! For the status pill, logs and the HUD. Never nullptr.
 const char *label();
 

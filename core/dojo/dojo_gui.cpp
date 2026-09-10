@@ -1150,7 +1150,7 @@ void DojoGui::display_input_str(std::string input_str, std::string prev_str)
 
 void DojoGui::show_last_inputs_overlay()
 {
-	if (session::trainingEnabled() && config::Delay > 0)
+	if (!session::inputDisplayMeaningful())
 		return;
 
 	for (int di = 0; di < 2; di++)

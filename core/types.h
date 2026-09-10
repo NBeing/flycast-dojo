@@ -209,7 +209,6 @@ struct settings_t
 	{
 		std::string PlayerName;
 		std::string OpponentName;
-		bool Training;
 		std::string P1CountryCode;
 		std::string P2CountryCode;
 		bool CardStart;

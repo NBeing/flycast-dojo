@@ -172,6 +172,22 @@ OptionString BeaconMulticastPort("BeaconMulticastPort", "52001", "dojo");
 
 Option<int> FirstTo("FirstTo", 0, "dojo");
 Option<bool> StreamTxtOutput("StreamTxtOutput", false, "dojo");
+/*
+	`[MEASURED 2026-09-10]` READ BY NOBODY. docs/SESSION-KINDS.md §4 #11: the
+	owner of this fact is session::trainingEnabled(), which reads the cfg key
+	directly, and all 34 sites go through it.
+
+	KEPT RATHER THAN DELETED, because an Option is not only a variable - it
+	round-trips its key through emu.cfg on load and save. Nothing assigns this
+	one, so it rewrites whatever it loaded; and the UI sets the key with
+	cfgSetVirtual, which is in-memory only. The two therefore never fight, but
+	deleting the Option would change what ends up in the file, and that is a
+	behaviour change dressed as a cleanup.
+
+	It is annotated instead so the next reader does not mistake a third
+	representation for the owner. The sibling that WAS dead - settings.dojo.
+	Training, written once and read never - is gone, verified by the compiler.
+*/
 Option<bool> Training("Training", false, "dojo");
 Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
 Option<bool> EnableTrainingLua("EnableTrainingLua", true, "dojo");

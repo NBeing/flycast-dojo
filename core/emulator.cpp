@@ -654,8 +654,13 @@ void Emulator::unloadGame()
 	} catch (...) { }
 	if (state == Loaded || state == Error)
 	{
+		// `!config::GGPOEnable` here was TRUE for a purely local replay of a clip
+		// recorded from a GGPO match, so auto-save was refused for a session with
+		// no peer (docs/SESSION-KINDS.md §4 #6 and #9). rollbackLive() asks
+		// whether anyone actually depends on this machine.
 		if (state == Loaded && config::AutoSaveState && !settings.content.path.empty()
-				&& !settings.naomi.multiboard && !config::GGPOEnable && !NaomiNetworkSupported())
+				&& !settings.naomi.multiboard && !session::rollbackLive()
+				&& !NaomiNetworkSupported())
 			dc_savestate(config::SavestateSlot);
 		try {
 			dc_reset(true);

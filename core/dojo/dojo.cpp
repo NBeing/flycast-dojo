@@ -2963,8 +2963,6 @@ void Dojo::Reset()
 	tas_auto::clearAll();
 	tas_auto::stopLive();
 
-	settings.dojo.Training = false;
-
 	settings.dojo.PlayerName = "";
 	settings.dojo.OpponentName = "";
 
