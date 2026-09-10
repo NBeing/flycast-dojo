@@ -80,6 +80,26 @@ void open(const char *id)
 	*p->open = true;
 }
 
+bool toggle(const char *id)
+{
+	const Panel *p = find(id);
+	if (p == nullptr)
+	{
+		// Same reasoning as open(): a hotkey bound to a panel that is not
+		// registered looks exactly like a hotkey that is not bound.
+		ERROR_LOG(RENDERER, "panels::toggle('%s') - no such panel", id != nullptr ? id : "(null)");
+		return false;
+	}
+	*p->open = !*p->open;
+	// TRACED UNCONDITIONALLY. A toggle is a deliberate user action a few times
+	// a session, not a per-frame event, so this costs nothing - and it is the
+	// only observable a test outside the process has for "the hotkey arrived".
+	// Without it, "the key is not bound", "the dispatch never ran" and "the
+	// panel toggled" are the same silence from the log.
+	NOTICE_LOG(RENDERER, "PANEL TOGGLE: %s -> %s", id, *p->open ? "open" : "closed");
+	return *p->open;
+}
+
 void visitStream(Stream s, void (*fn)(const Panel&))
 {
 	for (const Panel& p : registry)

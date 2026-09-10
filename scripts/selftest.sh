@@ -35,7 +35,17 @@ MIN_CLAIMS=300
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 EXE="${FLYCAST_BIN:-$ROOT/build-dojo7/flycast}"
-DISP="${SELFTEST_DISPLAY:-:145}"
+# THE COLON IS ADDED HERE, and the variable is a bare number - the convention
+# scripts/docktest.sh already uses and CMakeLists.txt already passes.
+#
+# `[MEASURED 2026-09-10]` this file had `${SELFTEST_DISPLAY:-:145}`, so ctest's
+# `SELFTEST_DISPLAY=145` produced `Xvfb 145`, which answers "Unrecognized option:
+# 145" and exits. The two harnesses that had this bug failed DIFFERENTLY and
+# neither said so: hotkeytest skipped with "no window", and selftest PASSED -
+# its 331 claims run inside flycast_init, before os_CreateWindow, so they never
+# needed the display the script insists on having. A prerequisite nobody can
+# see is false is not a prerequisite.
+DISP=":${SELFTEST_DISPLAY:-145}"
 
 # ---- THE JUDGE, as a function, because --self-test has to be able to run it
 # against a log this script did not produce. A judge you cannot feed is a judge

@@ -104,6 +104,27 @@ static inline bool gui_is_open()
 {
 	return gui_state != GuiState::Closed && gui_state != GuiState::VJoyEdit;
 }
+/*
+	IS THE GAME ON SCREEN, WITH NO MODAL UI OWNING THE KEYBOARD?
+
+	`!gui_is_open()` is NOT this, and the difference is the whole point:
+	gui_is_open() is true for every state but Closed, so it is also true while
+	PAUSED - and paused is exactly when a TAS user edits. A piano-roll hotkey
+	guarded on !gui_is_open() cannot be pressed at the only moment it is wanted.
+
+	`[MEASURED 2026-09-10]` scripts/hotkeytest.sh found this by pressing the key
+	and reading GuiState out of the trace, which is also how it turned up that
+	an EXHAUSTED replay sits in GuiState::ReplayEnd - a third state where these
+	must stay quiet, because seeking a movie that has ended is meaningless.
+
+	Deliberately spelled as the two states it allows rather than as a list of
+	the fifteen it does not: a state added later is refused by default, which is
+	the safe direction for something that takes keys away from a menu.
+*/
+static inline bool gui_is_closed_or_paused()
+{
+	return gui_state == GuiState::Closed || gui_state == GuiState::Paused;
+}
 static inline bool gui_is_content_browser()
 {
 	return gui_state == GuiState::Main;

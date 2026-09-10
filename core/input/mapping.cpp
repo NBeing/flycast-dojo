@@ -72,6 +72,17 @@ button_list[] =
 	{ EMU_BTN_PLAY_1, "emulator", "btn_play_1_" },
 	{ EMU_BTN_RECORD_2, "emulator", "btn_record_2_" },
 	{ EMU_BTN_PLAY_2, "emulator", "btn_play_2_" },
+	// Slots 4-6. Training::record_slot is [6] and the mapping UI has always
+	// listed these, but they were never persisted - so a binding survived
+	// exactly as long as the process. The option names continue the existing
+	// scheme rather than starting a tidier one; a rename here silently drops
+	// every binding already on disk.
+	{ EMU_BTN_RECORD_3, "emulator", "btn_record_3_" },
+	{ EMU_BTN_PLAY_3, "emulator", "btn_play_3_" },
+	{ EMU_BTN_RECORD_4, "emulator", "btn_record_4_" },
+	{ EMU_BTN_PLAY_4, "emulator", "btn_play_4_" },
+	{ EMU_BTN_RECORD_5, "emulator", "btn_record_5_" },
+	{ EMU_BTN_PLAY_5, "emulator", "btn_play_5_" },
 	{ EMU_BTN_PLAY_RND, "emulator", "btn_play_rnd_" },
 	{ EMU_BTN_SELECT_SLOT, "emulator", "btn_select_slot_" },
 	{ EMU_BTN_PLAY_SLOT, "emulator", "btn_play_slot_" },
@@ -101,6 +112,15 @@ button_list[] =
 	{ EMU_CMB_1_5, "emulator", "cmb_1_5_" },
 	{ EMU_CMB_2_4, "emulator", "cmb_2_4_" },
 	{ EMU_CMB_A_START, "emulator", "cmb_a_start_" },
+
+	// TAS actions. Named for what they DO rather than for the key they happen
+	// to default to: an option called btn_f11 would be a lie the first time
+	// somebody rebinds it, and this file is what emu.cfg is keyed on.
+	{ EMU_BTN_PIANO_ROLL, "emulator", "btn_piano_roll" },
+	{ EMU_BTN_SLOT_PICKER, "emulator", "btn_slot_picker" },
+	{ EMU_BTN_SAVESTATE_SLOT_NEXT, "emulator", "btn_savestate_slot_next" },
+	{ EMU_BTN_SAVESTATE_SLOT_PREV, "emulator", "btn_savestate_slot_prev" },
+	{ EMU_BTN_GEN_ARCHIVE, "emulator", "btn_gen_archive" },
 };
 
 static struct
@@ -406,6 +426,11 @@ std::shared_ptr<InputMapping> InputMapping::LoadMapping(const std::string& name)
 	mapping->load(fp);
 	std::fclose(fp);
 	loaded_mappings[name] = mapping;
+	// WHICH FILE IS ACTUALLY IN FORCE. There are up to four candidate names
+	// (instance/per-game/arcade), and a mapping that silently fell back to the
+	// defaults is indistinguishable from one that loaded - which is a support
+	// question as often as it is a test one.
+	NOTICE_LOG(INPUT, "INPUT MAPPING: loaded %s", path.c_str());
 
 	if (mapping->is_dirty())
 	{

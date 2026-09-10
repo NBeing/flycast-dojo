@@ -20,8 +20,10 @@
 #include "gamepad_device.h"
 #include "dojo/session.h"
 #include "cfg/cfg.h"
+#include "cfg/option.h"
 #include "oslib/oslib.h"
 #include "rend/gui.h"
+#include "rend/panel.h"
 #include "emulator.h"
 #include "hw/maple/maple_devs.h"
 #include "mouse.h"
@@ -124,6 +126,24 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 	}
 	else
 	{
+		/*
+			EVERY EMULATOR ACTION THAT DISPATCHES, under dojo:HotkeyTrace.
+
+			`[MEASURED 2026-09-10]` scripts/hotkeytest.sh needed to tell three
+			states apart that are all SILENCE from outside: the key never
+			reached the emulator, the key arrived but is bound to nothing, and
+			the key arrived and its action declined to run (every case below is
+			guarded on `pressed`, and most on !gui_is_open()). Without this the
+			harness reports "the binding never reached the dispatch" for all
+			three, which is a wrong diagnosis two times out of three.
+
+			Off by default: this is one line per hotkey press, but the combos
+			route through here too and a held combo is not rare.
+		*/
+		if (cfgLoadBool("dojo", "HotkeyTrace", false))
+			NOTICE_LOG(INPUT, "HOTKEY: id=0x%x %s guistate=%d open=%s", (unsigned)key,
+					pressed ? "down" : "up", (int)gui_state,
+					gui_is_open() ? "yes" : "no");
 		switch (key)
 		{
 		case EMU_BTN_ESCAPE:
@@ -202,6 +222,110 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 				dojo.training.TogglePlayback(2);
 			}
 			break;
+		/*
+			SLOTS 4, 5 AND 6, which existed everywhere except here.
+
+			`[MEASURED 2026-09-10]` Training::record_slot is `[6]`, and the
+			Controller Mapping window has offered "Record Slot 4/5/6" and "Play
+			Slot 4/5/6" in both its button tables all along. Binding one did
+			nothing and the binding was forgotten on restart: the ids were in
+			the enum and in the two UI tables, but in neither mapping.cpp's
+			persistence table nor this switch.
+
+			A hotkey needs FIVE files to agree - the enum, mapping.cpp, both
+			gui.cpp tables, and this switch - and nothing checked that they did.
+			scripts/hotkeyaudit.py does now, which is how these were found.
+		*/
+		case EMU_BTN_RECORD_3:
+			if (pressed && !gui_is_open() && session::trainingEnabled())
+			{
+				dojo.training.ToggleRecording(3);
+			}
+			break;
+		case EMU_BTN_PLAY_3:
+			if (pressed && !gui_is_open() && session::trainingEnabled())
+			{
+				dojo.training.TogglePlayback(3);
+			}
+			break;
+		case EMU_BTN_RECORD_4:
+			if (pressed && !gui_is_open() && session::trainingEnabled())
+			{
+				dojo.training.ToggleRecording(4);
+			}
+			break;
+		case EMU_BTN_PLAY_4:
+			if (pressed && !gui_is_open() && session::trainingEnabled())
+			{
+				dojo.training.TogglePlayback(4);
+			}
+			break;
+		case EMU_BTN_RECORD_5:
+			if (pressed && !gui_is_open() && session::trainingEnabled())
+			{
+				dojo.training.ToggleRecording(5);
+			}
+			break;
+		case EMU_BTN_PLAY_5:
+			if (pressed && !gui_is_open() && session::trainingEnabled())
+			{
+				dojo.training.TogglePlayback(5);
+			}
+			break;
+		/*
+			THE TAS ACTIONS.
+
+			`!gui_is_open()` on all of them, matching every other hotkey here:
+			a key pressed with the settings window up belongs to that window.
+
+			The two panel toggles go through panels::toggle rather than
+			touching a bool, because the registry is the one owner of "is it
+			open" - core/rend/panel.h exists because the fork being ported from
+			had FOUR mechanisms for that one fact. A panel that failed to
+			register logs loudly instead of doing nothing quietly.
+		*/
+		case EMU_BTN_PIANO_ROLL:
+			if (pressed && gui_is_closed_or_paused())
+				panels::toggle("pianoroll");
+			break;
+		case EMU_BTN_SLOT_PICKER:
+			if (pressed && gui_is_closed_or_paused())
+				panels::toggle("states");
+			break;
+		/*
+			SLOT CYCLING WRAPS, and it goes through hostfs::clampSavestateSlot
+			rather than doing its own arithmetic - that function is the one
+			owner of the range, and config::SavestateSlot persists across games
+			(oslib.h), so an out-of-range value written here would follow the
+			user into a different ROM.
+		*/
+		case EMU_BTN_SAVESTATE_SLOT_NEXT:
+		case EMU_BTN_SAVESTATE_SLOT_PREV:
+			if (pressed && gui_is_closed_or_paused())
+			{
+				const int n    = hostfs::MAX_SAVESTATE_SLOTS;
+				const int step = (key == EMU_BTN_SAVESTATE_SLOT_NEXT) ? 1 : n - 1;
+				const int was  = hostfs::currentSavestateSlot();	// read BEFORE the set, or the trace says "5 -> 5"
+				const int slot = (was + step) % n;
+				config::SavestateSlot.set(slot);
+				// Held in a named string rather than built inside the call.
+				// The temporary would in fact live long enough, but a reader
+				// has to prove that to themselves every time they pass it.
+				const std::string msg = slot == 0 ? std::string("Savestate slot BASE")
+						: "Savestate slot " + std::to_string(slot);
+				gui_display_notification(msg.c_str(), 1500);
+				// The notification is on screen only; this is what a harness
+				// outside the process can read.
+				NOTICE_LOG(INPUT, "HOTKEY SLOT: %d -> %d", was, slot);
+			}
+			break;
+		case EMU_BTN_GEN_ARCHIVE:
+			// Self-guarding: it says so itself when there is no clip open, so
+			// there is no second copy of that condition here to drift from it.
+			if (pressed && gui_is_closed_or_paused())
+				dojo.ArchiveGeneration();
+			break;
+
 		case EMU_BTN_PLAY_RND:
 			if (pressed && !gui_is_open() && session::trainingEnabled())
 			{
@@ -594,7 +718,20 @@ void GamepadDevice::load_system_mappings()
 	{
 		std::shared_ptr<GamepadDevice> gamepad = GetGamepad(i);
 		if (!gamepad->find_mapping())
+		{
+			// The other half of the pair: "no file, using built-in defaults" is
+			// a different fact from "loaded a file", and only saying one of
+			// them leaves the other as silence.
+			// NAMES THE FILE IT LOOKED FOR, not just the device. The filename
+			// is api_name() + "_" + name() with nine characters substituted
+			// (make_mapping_filename), so reconstructing it outside the process
+			// means reimplementing that - and a harness that guessed it wrong
+			// would report "the hotkey did not fire" for a file nobody read.
+			NOTICE_LOG(INPUT, "INPUT MAPPING: %s has no mapping file (wanted %s) - built-in defaults",
+					gamepad->name().c_str(),
+					gamepad->make_mapping_filename(false, settings.platform.system).c_str());
 			gamepad->resetMappingToDefault(settings.platform.isArcade(), true);
+		}
 	}
 }
 

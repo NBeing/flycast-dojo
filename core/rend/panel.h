@@ -138,6 +138,21 @@ const Panel *find(const char *id);
 //! feature with a panel attached, and the feature keeps its own tick.
 void open(const char *id);
 
+/*
+	Flip a panel, and answer where it landed.
+
+	SEPARATE FROM open(), because they are wanted by different callers for
+	different reasons and collapsing them loses one. A feature that starts a
+	session needs the window SHOWN (open); a hotkey needs it flipped. A single
+	"open(id, bool)" would push the caller into tracking a state the registry
+	already owns, which is the shape this whole header exists to refuse.
+
+	Returns the new state so a caller can report it without asking again, and
+	false for a panel that is not registered - a hotkey bound to a panel that
+	failed to register is indistinguishable from one that is not bound at all.
+*/
+bool toggle(const char *id);
+
 //! THE DRAW LOOP. Opens a window for every open panel whose stream mask
 //! includes `s`, calls its body, and closes it. Panels that declared the other
 //! stream are skipped, not drawn twice.

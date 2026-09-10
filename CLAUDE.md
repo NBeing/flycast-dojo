@@ -151,6 +151,25 @@ boundary, or mark it open.
 > A suite that goes green because its prerequisites are missing is reporting on
 > the machine rather than on the code.
 
+> `[MEASURED 2026-09-10]` **ctest breaks this rule by default, and did.** It
+> printed `100% tests passed, 0 tests failed out of 15` and exited 0, with
+> `The following tests did not run: 4 - flycast.hotkeytest (Skipped)` in between.
+> The test had never run once: `CMakeLists.txt` passed a bare display number
+> and the script expected a leading colon, so its `Xvfb 147` answered
+> "Unrecognized option: 147" and exited.
+>
+> **The same one-character bug was in `scripts/selftest.sh`, and that one
+> PASSED** — its 331 claims run inside `flycast_init`, before `os_CreateWindow`,
+> so they never needed the display the script insists on having. One bug, two
+> harnesses, two different silent wrongs: one skipped and read as green, one
+> passed for a reason adjacent to the intended one, and its stated prerequisite
+> was a claim nobody could see was false.
+>
+> `SKIP_RETURN_CODE` is right and stays — a machine without a ROM genuinely
+> cannot run those, and calling that a failure trains people to ignore it. The
+> **summary** is what was wrong. `scripts/checks.sh` runs the suite and exits 2
+> on any skip; use it rather than bare `ctest` when the answer matters.
+
 > `[MEASURED 2026-09-06]` The conformance suite prints the *reason* beside every
 > skip. flycast reports three: `main` states no size because the SH4 space is
 > not a flat buffer; there is no `probe.unmapped` because unmapped reads answer

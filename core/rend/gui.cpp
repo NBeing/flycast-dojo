@@ -1691,7 +1691,22 @@ const Mapping dcButtons[] = {
 	{ EMU_CMB_LT_RT, "LT+RT" },
 	{ EMU_CMB_2_4, "X+B" },
 	{ EMU_CMB_4_5, "X+Y" },
-	{ EMU_CMB_1_4, "X+A" },
+	/*
+		`[REMOVED 2026-09-10]` EMU_CMB_1_4 was here, ALSO labelled "X+A", so
+		this list showed two identical rows and no way to tell them apart.
+
+		They are not a typo. `[SOURCE]` gamepad_device.cpp dispatches
+		EMU_CMB_X_A to comboAssign(port, pressed, { DC_BTN_X, DC_BTN_A }) and
+		EMU_CMB_1_4 to the same two buttons in the other order - one combo
+		declared twice, once with Dreamcast naming and once with arcade naming.
+		EMU_CMB_Y_B / EMU_CMB_2_5 are the same pair (scripts/hotkeyaudit.py
+		found both by comparing what they DISPATCH TO, not their names).
+
+		The id and its persistence row are deliberately KEPT: a user may have
+		cmb_1_4_ bound in emu.cfg, and deleting the id would silently discard
+		that binding. It still fires; it is simply no longer offered for a new
+		one, because the row above it does the identical thing.
+	*/
 	{ EMU_CMB_1_5, "Y+A" },
 	{ EMU_CMB_1_2, "A+B" },
 	{ EMU_CMB_1_3, "A+C" },
@@ -1702,6 +1717,13 @@ const Mapping dcButtons[] = {
 	{ EMU_CMB_2_3, "B+C" },
 	{ EMU_CMB_3_6, "C+Z" },
 	{ EMU_CMB_A_START, "A+Start" },
+
+	{ EMU_BTN_NONE, "TAS" },
+	{ EMU_BTN_PIANO_ROLL, "Piano Roll" },
+	{ EMU_BTN_SLOT_PICKER, "States Window" },
+	{ EMU_BTN_SAVESTATE_SLOT_NEXT, "Next Savestate Slot" },
+	{ EMU_BTN_SAVESTATE_SLOT_PREV, "Previous Savestate Slot" },
+	{ EMU_BTN_GEN_ARCHIVE, "Archive Generation" },
 
 	{ EMU_BTN_NONE, nullptr }
 };
@@ -1801,6 +1823,13 @@ const Mapping arcadeButtons[] = {
 	{ EMU_CMB_X_Y_LT, "1+2+LT" },
 	{ EMU_CMB_A_B_RT, "4+5+RT" },
 	{ EMU_CMB_LT_RT, "LT+RT" },
+
+	{ EMU_BTN_NONE, "TAS" },
+	{ EMU_BTN_PIANO_ROLL, "Piano Roll" },
+	{ EMU_BTN_SLOT_PICKER, "States Window" },
+	{ EMU_BTN_SAVESTATE_SLOT_NEXT, "Next Savestate Slot" },
+	{ EMU_BTN_SAVESTATE_SLOT_PREV, "Previous Savestate Slot" },
+	{ EMU_BTN_GEN_ARCHIVE, "Archive Generation" },
 
 	{ EMU_BTN_NONE, nullptr }
 };

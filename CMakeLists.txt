@@ -1969,6 +1969,65 @@ set_tests_properties(flycast.rolltest PROPERTIES
 # fresh motion with a stale global read, and THIS is the test that says whether
 # narrowing that function's scope broke the docking it was written for. That
 # question was answered by hand. It should not have to be again.
+# PRESS A BOUND KEY AND PROVE THE ACTION RAN.
+#
+# `[MEASURED 2026-09-10]` nothing in this tree drove a hotkey end to end. 53
+# actions could be bound and the only evidence any of them worked was that the
+# code compiled - which docs/HOTKEYS.md had to cite as the reason a hotkey
+# REGISTRY would be an unverifiable refactor.
+#
+# It writes its OWN mapping file, into a filename it reads out of the
+# emulator's log rather than guessing: the keyboard SDL enumerates here is not
+# called "Keyboard", and a hardcoded name passes on one machine and fails on
+# every other. It presses WHILE PAUSED, which is the state that matters and the
+# state `!gui_is_open()` excludes. Its control is an unbound key, which must do
+# nothing - without that, an emulator running every action on every keypress
+# satisfies all three positive claims.
+#
+# No _can_fail twin: the control runs on every pass and is the same assertion a
+# twin would make. Sabotaging the guard back to !gui_is_open() was run by hand
+# and correctly reports "the key REACHED the dispatch and the action did not
+# run", with the trace.
+add_test(NAME flycast.hotkeytest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/hotkeytest.sh)
+set_tests_properties(flycast.hotkeytest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 400
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;HOTKEYTEST_DISPLAY=147")
+
+# DO THE FIVE FILES THAT MUST AGREE ABOUT A HOTKEY ACTUALLY AGREE?
+#
+# A hotkey is not one declaration, it is five: the id in gamepad.h, a row in
+# mapping.cpp so it PERSISTS, a row in each of gui.cpp's two button tables so it
+# is BINDABLE, and a case in gamepad_device.cpp so it DOES something. Each file
+# is self-consistent and complete-looking on its own, so nothing could see a
+# hotkey that had four of the five.
+#
+# `[MEASURED 2026-09-10]` its first run found six: EMU_BTN_RECORD_3/4/5 and
+# EMU_BTN_PLAY_3/4/5. Training::record_slot is [6], the Controller Mapping
+# window has always offered "Record Slot 4/5/6", and binding one did nothing and
+# was forgotten on restart. It also found the two combo ids that dispatch to the
+# identical button set as another id, which is why dcButtons showed two rows
+# both reading "X+A".
+#
+# Source-level on purpose: the property is that five tables agree, the tables
+# are file-static, and a runtime check would need surface added for the test's
+# sole benefit. No emulator, no display, well under a second.
+add_test(NAME flycast.hotkeyaudit
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/hotkeyaudit.py)
+set_tests_properties(flycast.hotkeyaudit PROPERTIES TIMEOUT 60)
+
+# ITS PAIRED ARM: four sabotages, each deleting ONE site's row for a known-good
+# action, plus a stale-exemption arm (the exemption list is the one place a real
+# gap could hide permanently, so "we would notice" is demonstrated), plus the
+# control - an untouched tree must still PASS, or the audit is not
+# discriminating, it is only saying no. Each sabotage asserts it APPLIED before
+# trusting its result.
+add_test(NAME flycast.hotkeyaudit_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/hotkeyaudit.py --self-test)
+set_tests_properties(flycast.hotkeyaudit_can_fail PROPERTIES TIMEOUT 60)
+
 # EVERY IN-PROCESS SELF-TEST, and the cheapest entry here by a wide margin:
 # no ROM, no input, no window manager, ~14 s for 331 claims across 17 suites.
 #

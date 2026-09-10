@@ -99,6 +99,35 @@ enum DreamcastKey
 	EMU_CMB_2_4,
 	EMU_CMB_A_START,
 
+	/*
+		TAS ACTIONS, adopted from the TAS fork.
+
+		FIVE, not its eighteen, and the difference is deliberate: an id here
+		must have something to dispatch to TODAY. The fork's remaining thirteen
+		include an input visualizer, a frame-skip test and an AVI toggle whose
+		features do not exist in this tree - and a bindable key that does
+		nothing, silently, is precisely the defect scripts/hotkeyaudit.py was
+		written to catch (it found six of them on its first run).
+
+		Every one of these must appear in FOUR more places or it is half-wired:
+		mapping.cpp (persistence), both gui.cpp button tables (bindability), and
+		gamepad_device.cpp (dispatch). The audit enforces that.
+
+		NO DEFAULT KEYS, deliberately. `[SOURCE]` the fork defaults these to F2,
+		F4, F5, F8 and F9 - and in THIS tree every one of those is already bound
+		to a training action (EMU_BTN_RECORD_1, PLAY, PLAY_1, SAVESTATE,
+		LOADSTATE). That fork repurposed flycast-dojo's training hotkeys for
+		TAS; this one keeps training, so adopting its defaults would silently
+		take five keys away from every existing user. They ship bindable and
+		unbound, and both panels are reachable from the View menu regardless -
+		the hotkey is a convenience here, not the only door.
+	*/
+	EMU_BTN_PIANO_ROLL,				// toggle the piano roll panel -- TAS
+	EMU_BTN_SLOT_PICKER,			// toggle the States wall (savestate slots 0-99) -- TAS
+	EMU_BTN_SAVESTATE_SLOT_NEXT,	// next savestate slot -- TAS
+	EMU_BTN_SAVESTATE_SLOT_PREV,	// previous savestate slot -- TAS
+	EMU_BTN_GEN_ARCHIVE,			// archive the clip into the next gen_NN folder -- TAS
+
 	// Real axes
 	DC_AXIS_TRIGGERS	= 0x1000000,
 	DC_AXIS_LT,
