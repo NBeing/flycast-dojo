@@ -1,7 +1,9 @@
 #pragma once
 #include "roll_edit.h"
 #include "roll_profile.h"
+#include "roll_pattern.h"
 #include <map>
+#include <vector>
 
 /*
 	A PAINT STROKE: the roll's central gesture.
@@ -61,11 +63,30 @@ public:
 	//! will do.
 	bool touches(u32 row) const;
 
+	/*
+		ARM A PATTERN, so a stroke STAMPS instead of setting one column.
+
+		Same gesture, same phase, same gap - only the payload changes, which is
+		the whole point of docs/ROLL-EDIT-MODEL.md §2: the brush and the paint
+		are one function once the payload has a name. There is no second stroke
+		class and no second loop.
+
+		SET-VS-ERASE DOES NOT APPLY WHILE ARMED. A pattern says what to write on
+		every frame it fires; asking the anchor cell whether to set or clear
+		would make the same brush mean two different things depending on where
+		it was started. Alt still erases, by arming nothing.
+
+		An empty vector disarms, which is why there is no separate disarm().
+	*/
+	void arm(const std::vector<Cell>& cells, bool merge);
+	bool armed() const { return !brush_.empty(); }
+
 	//! The stroke as a funnel-ready edit: the WHOLE movie, because ApplyEdit
 	//! refuses a map that does not cover it. Frames past the end are created.
 	Edit build(const std::map<u32, Row>& all) const;
 
 private:
+	std::vector<CellOp> brush_;		// empty = single-column mode
 	bool active_ = false;
 	bool on_ = true;
 	int  player_ = 0, col_ = 0, step_ = 1;

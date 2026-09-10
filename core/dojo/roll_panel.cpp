@@ -442,6 +442,22 @@ static void draw()
 				dojo.ApplyEditResize(r.edit, "roll: compress");
 				remapAll(r.remap);
 			}
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(90.f);
+			// ONE FACTOR FOR BOTH, which is what the fork does and is right:
+			// stretch x2 then compress /2 is the round trip a user expects, and
+			// two separate fields make that a coincidence rather than a rule.
+			ImGui::InputInt("x / \xc3\xb7", &rangeFactor);
+			rangeFactor = rangeFactor < 2 ? 2 : (rangeFactor > 16 ? 16 : rangeFactor);
+			}
+			ImGui::EndDisabled();
+			// MASH AND BOOKMARKS LIVE OUTSIDE THE SELECTION GATE.
+			//
+			// Their BUTTONS need a selection and say so individually; the pattern
+			// FIELD does not, and having it greyed out until you selected something
+			// meant you could not type the pattern you were about to select rows
+			// for. Marking a frame needs no selection at all - it takes the
+			// playhead - so it has no business behind that gate either.
 			// ---- MASH: A PATTERN, WRITTEN OUT ----------------------------
 			//
 			// The same applyPattern the paint stroke uses, with a longer track.
@@ -481,6 +497,29 @@ static void draw()
 					}
 				}
 				ImGui::EndDisabled();
+				ImGui::SameLine();
+				// ARM THE SAME PATTERN AS A BRUSH, so a drag stamps it instead
+				// of setting one column. Same gesture, same phase, same gap -
+				// only the payload changes, which is the claim
+				// docs/ROLL-EDIT-MODEL.md §2 makes about these being one tool.
+				// Not gated on a selection: a brush is armed to be dragged.
+				if (ImGui::Button(paint().armed() ? "Unbrush" : "Brush"))
+				{
+					if (paint().armed())
+						paint().arm({}, false);
+					else
+					{
+						std::vector<Cell> cells;
+						mashErr.clear();
+						if (parsePattern(mashText, cells, mashErr) && !cells.empty())
+							paint().arm(cells, mashMerge);
+					}
+				}
+				if (paint().armed())
+				{
+					ImGui::SameLine();
+					ImGui::TextColored(TAS_FOCUS_RING, "brush armed");
+				}
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!haveSel);
 				if (ImGui::Button("Fill"))
@@ -539,15 +578,6 @@ static void draw()
 				ImGui::TextDisabled("(%d marks)", (int)marks().count());
 			}
 
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(90.f);
-			// ONE FACTOR FOR BOTH, which is what the fork does and is right:
-			// stretch x2 then compress /2 is the round trip a user expects, and
-			// two separate fields make that a coincidence rather than a rule.
-			ImGui::InputInt("x / \xc3\xb7", &rangeFactor);
-			rangeFactor = rangeFactor < 2 ? 2 : (rangeFactor > 16 ? 16 : rangeFactor);
-			}
-			ImGui::EndDisabled();
 		}
 	}
 	ImGui::Separator();

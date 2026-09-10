@@ -177,10 +177,16 @@ through `panels::add`.
   when it is wanted. The fork's two "Fill" buttons disagree about untouched
   lanes and one wipes the other player; here an empty track means leave that
   lane alone, and a claim pins it.
-- [ ] Remaining edit tools: brush/stamp (a pattern armed and painted by drag —
-  `Paint` would carry a Pattern instead of a column) and the staged buffer
-  (a second document with its own op queue and its own undo). Both are UI over
-  machinery that now exists.
+- [x] **Brush / stamp** — `Paint::arm()`. The stroke carries a pattern instead
+  of a column: same gesture, same phase, same gap, only the payload changes.
+  No second stroke class and no second loop. Set-vs-erase deliberately does not
+  apply while armed — a pattern says what to write, and asking the anchor cell
+  would make one brush mean two things depending on where it started.
+- [ ] The staged buffer — a second DOCUMENT (a macro, an immutable baseline and
+  an ordered op queue replayed from it, which is what makes lossy ops
+  reversible), not a staging area for the movie. `docs/ROLL-EDIT-MODEL.md` §5.
+  Note the hazard recorded there: in the fork the same button row edits
+  whichever document is active, and there are two undo systems on one key.
 - [x] **Structural edits return a ROW REMAP.** `core/dojo/roll_remap.{h,cpp}`;
   `deleteRows`/`insertBlanks` return `Resize { edit, remap }` with the edit
   DERIVED from the remap, so there is one owner of "where did row f go".

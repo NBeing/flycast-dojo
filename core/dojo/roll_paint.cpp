@@ -1,5 +1,7 @@
 #include "roll_paint.h"
 #include "tasmacro.h"
+#include "roll_notation.h"
+#include <string>
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
 
@@ -37,10 +39,27 @@ bool Paint::touches(u32 row) const
 	return d % (u32)step_ == 0;
 }
 
+void Paint::arm(const std::vector<Cell>& cells, bool merge)
+{
+	brush_.clear();
+	for (Cell c : cells)
+		// MERGE IS THE MASK: an overdub masks only the bits it carries and so
+		// cannot clear anything; a stamp masks every bit the profile models.
+		brush_.push_back(CellOp{ c, merge ? c : cellAll() });
+}
+
 Edit Paint::build(const std::map<u32, Row>& all) const
 {
 	if (!active_)
 		return Edit(all.begin(), all.end());
+	if (!brush_.empty())
+	{
+		// ARMED: the same applyPattern the mash uses, on this stroke's lane.
+		Pattern pat;
+		pat.tracks.resize((size_t)player_ + 1);
+		pat.tracks[(size_t)player_] = brush_;
+		return applyPattern(all, anchor_, last_, pat, step_ - 1);
+	}
 	// DELEGATED, not reimplemented. roll_edit's paintColumn() is the same rule
 	// as a pure function - phase anchored at the anchor, gap rows skipped, whole
 	// movie returned - and it was written independently to the same conclusions.
@@ -179,6 +198,30 @@ void paintSelfTest()
 	claim("an inactive stroke is the movie unchanged",
 			idle.build(movie).size() == movie.size()
 			&& !rowHas(idle.build(movie)[3], 0, prof.cols[up]));
+
+	// ---- ARMED: the brush ------------------------------------------------
+	{
+		std::vector<Cell> cells;
+		std::string err;
+		parsePattern("2 8", cells, err);		// down, up
+		Paint p;
+		p.arm(cells, false);
+		claim("arming makes the stroke a brush", p.armed());
+		p.begin(4, 0, up, false, false, 0);
+		p.extendTo(7);
+		Edit e = p.build(movie);
+		auto lane0 = [&](u32 f) {
+			auto it = e.find(f);
+			return it == e.end() ? (Cell)0 : cellOf(it->second, 0);
+		};
+		// FRAME ORDER, tiled, exactly as the mash writes it - and NOT decided by
+		// what the anchor cell held.
+		claim("an armed stroke stamps the pattern in frame order",
+				lane0(4) == cells[0] && lane0(5) == cells[1]
+				&& lane0(6) == cells[0] && lane0(7) == cells[1]);
+		p.arm({}, false);
+		claim("arming nothing disarms", !p.armed());
+	}
 
 	NOTICE_LOG(RENDERER, "ROLLPAINT SELFTEST: %d passed, %d failed", pass, fail);
 }
