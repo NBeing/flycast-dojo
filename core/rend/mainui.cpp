@@ -256,6 +256,100 @@ static void stepProbe()
 				tStart / advanced, tFrame / advanced, tStop / advanced);
 }
 
+/*
+	DOES gui_loadState() ACTUALLY LOAD FROM HERE, OR IS IT REFUSED?
+
+	`dojo:LoadProbe=gui` or `=raw`, fires once. Off unless set.
+
+	THE QUESTION. core/lua/lua.cpp records four ways of loading a savestate from
+	this point that all WEDGE, including `emu.stop(); dc_loadstate(); start();`
+	- and concludes that the same call is fine via gui_loadState(), so the
+	difference must be the path.
+
+	But gui_loadState() opens with `if (gui_state == GuiState::Closed &&
+	savestateAllowed())` and has no else. In any other state it does NOTHING,
+	and DOING NOTHING DOES NOT WEDGE. "It worked" and "it was refused" are the
+	same evidence from outside, which is a defect this tree has shipped four
+	times (CLAUDE.md doctrine rule 1). So the comparison has to assert the state
+	it ran in before it means anything.
+
+	This probe reports, for either path: the GuiState it ran in, whether the
+	guard would have refused, and the frame number BEFORE and AFTER. A load that
+	took moves the frame number; a refusal does not; a wedge never reaches the
+	second log line at all, which is the third outcome the earlier note could
+	not distinguish.
+*/
+static void loadProbe()
+{
+	const std::string mode = cfgLoadStr("dojo", "LoadProbe", "");
+	if (mode.empty())
+		return;
+	static int  stage = 0;
+	static std::chrono::steady_clock::time_point loadedAt;
+	static u32  afterLoad = 0;
+
+	// STAGE 2: DID THE MACHINE KEEP RUNNING? That is what "wedge" means, and
+	// returning from the call does not answer it. Reported a full second later,
+	// from a drain that only happens if the render thread is still turning.
+	if (stage == 1)
+	{
+		if (std::chrono::duration<double>(
+				std::chrono::steady_clock::now() - loadedAt).count() < 1.0)
+			return;
+		stage = 2;
+		const u32 now = dojo.frame_number.load();
+		NOTICE_LOG(COMMON, "LOAD PROBE: 1 s later frame %u -> %u  => %s",
+				afterLoad, now, now != afterLoad ? "STILL RUNNING" : "WEDGED");
+		return;
+	}
+	// GATE WELL PAST THE SAVESTATE'S OWN FRAME. `[MEASURED 2026-09-10]` an
+	// earlier gate of 300 fired while the machine was still sitting on the
+	// frame AutoSeekState had just loaded, so a successful load and a refusal
+	// both read as "NO CHANGE" - the fixture could not discriminate.
+	if (stage != 0 || dojo.frame_number.load() < 10400 || dojo.session_inputs.empty())
+		return;
+	stage = 1;
+
+	// THE SLOT IS ITS OWN KNOB. `[MEASURED 2026-09-10]` passing
+	// `config:Dreamcast.SavestateSlot=7` on the command line does NOT reach
+	// here: Replay::Init does `cfgSetVirtual("config", "Dreamcast.SavestateSlot",
+	// "0")` on every replay boot, deliberately, so a clip always opens on BASE.
+	// Two probe arms meant to load different states therefore ran the identical
+	// configuration and produced identical passing output. Only the `slot=` in
+	// the line below made that visible.
+	const int slot = cfgLoadInt("dojo", "LoadProbeSlot", (int)config::SavestateSlot);
+	const u32  before = dojo.frame_number.load();
+	const int  state  = (int)gui_state;
+	// The guard's own two conditions, read HERE so the report says whether the
+	// path under test would even have run - not inferred from the outcome.
+	const bool closed = gui_state == GuiState::Closed;
+	NOTICE_LOG(COMMON, "LOAD PROBE: mode=%s guistate=%d closed=%s slot=%d frame=%u"
+			" - about to try", mode.c_str(), state, closed ? "yes" : "no",
+			slot, before);
+
+	if (mode == "gui")
+	{
+		config::SavestateSlot.set(slot);	// gui_loadState reads the option
+		gui_loadState();
+	}
+	else
+	{
+		try {
+			emu.stop();
+			dc_loadstate(slot);
+			emu.start();
+		} catch (const std::exception& e) {
+			NOTICE_LOG(COMMON, "LOAD PROBE: raw threw - %s", e.what());
+		}
+	}
+	// REACHING THIS LINE AT ALL is the first result; the frame number is the
+	// second. A wedge prints the line above and never this one.
+	afterLoad = dojo.frame_number.load();
+	loadedAt  = std::chrono::steady_clock::now();
+	NOTICE_LOG(COMMON, "LOAD PROBE: returned. frame %u -> %u  => %s",
+			before, afterLoad, afterLoad != before ? "LOADED" : "NO CHANGE");
+}
+
 bool mainui_rend_frame()
 {
 	FC_PROFILE_SCOPE;
@@ -269,6 +363,7 @@ bool mainui_rend_frame()
 	// here is safe - see core/deferred.h for what is not.
 	deferred::drain();
 	stepProbe();		// dojo:StepProbe=N - off unless set
+	loadProbe();		// dojo:LoadProbe=gui|raw - off unless set
 
 	// TAS test harness: -config dojo:AutoSeekState=N automates the
 	// "Play a Movie -> F3" step. Once playback is actually running (~2 s in),

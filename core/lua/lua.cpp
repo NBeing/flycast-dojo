@@ -570,6 +570,41 @@ static void luaSavestateSlot(int index, bool load)
 	if (index < 0 || index >= (int)hostfs::MAX_SAVESTATE_SLOTS)
 		throw std::runtime_error("savestate slot must be between 0 and "
 				+ std::to_string(hostfs::MAX_SAVESTATE_SLOTS - 1));
+	/*
+		NOT FROM THE EMULATION THREAD - BUT ONLY WHEN THE STOP WOULD JOIN.
+
+		`[MEASURED 2026-09-10]` a `vblank` callback calling
+		flycast.savestate.save(3), with a marker written before the call and one
+		after so a hang and a no-show cannot look alike:
+
+		  rend.ThreadedRendering=yes  -> only the FIRST marker ever appears
+		  rend.ThreadedRendering=no   -> "RETURNED ok=true", emulator runs on
+
+		The asymmetry is in Emulator::stop(), which calls checkStatus(true) ->
+		threadResult.get() ONLY on the threaded path. Single-threaded there is
+		no separate thread to join, so the same call is perfectly safe - and
+		scripts/tests/slots.lua has been saving and loading from a vblank
+		callback all along, because ThreadedRendering DEFAULTS TO FALSE.
+
+		`[CORRECTED 2026-09-10]` the first version of this guard refused
+		unconditionally and broke that test. Measuring the threaded case and
+		generalising it to both was the error; the control - a configuration
+		where the call is known to work - is what caught it.
+
+		refuseOnEmuThread() was written for this hazard and covered only
+		startGame and stopGame. The four bindings that funnel through here
+		(savestate.save/load, emulator.saveState/loadState) had no guard at all.
+
+		THROWS rather than returning quietly: a script that asked to save and
+		got silence would reasonably believe it had.
+	*/
+	if (config::ThreadedRendering
+			&& refuseOnEmuThread(load ? "savestate.load" : "savestate.save"))
+		throw std::runtime_error(std::string(load ? "savestate.load" : "savestate.save")
+				+ " cannot be called from a vblank callback while threaded rendering "
+				"is on: stopping the emulator joins the thread the callback is running "
+				"on. Use savestate.restoreLater() / snapshotLater(), or call it from a "
+				"draw callback.");
 	pausing::Scoped guard(pausing::MODAL);
 	if (load)
 		dc_loadstate(index);
@@ -2463,25 +2498,44 @@ static void luaRegister(lua_State *L)
 				.addFunction("saveSlotLater", std::function<void()>([]() {
 					deferred::post([]() { gui_saveState(); });
 				}))
-				// NO savestate.loadLater HERE - IT DID NOT WORK, and shipping
-				// a binding that wedges the emulator would be worse than not
-				// shipping one. What was tried, all from deferred::drain() at
-				// the top of mainui_rend_frame - the same point gui_loadState()
-				// is called from by the auto-seek block, i.e. the one place
-				// known to be safe: [MEASURED 2026-09-07]
-				//
-				//   dc_loadstate + pausing::Scoped(MODAL)      wedges
-				//   dc_loadstate + explicit emu.stop()/start() wedges
-				//   the same, with rend.ThreadedRendering=no   wedges
-				//   dc_loadstate with NO stop at all           wedges
-				//
-				// The last one is the informative one: the load alone wedges
-				// from the main thread while the identical call from a `vblank`
-				// callback is fine. So the deferred point is not automatically
-				// safe for this - loading there races the running emulation
-				// thread, and stopping first fails for a separate reason not yet
-				// identified. Two problems, tangled. See
-				// docs/SPIKE-machine-pool.md.
+				/*
+					`[CORRECTED 2026-09-10]` THE WEDGE WAS A BAD STATE, NOT A
+					BAD PLACE - and this note used to say the opposite.
+
+					It read: "dc_loadstate + explicit emu.stop()/start() wedges"
+					from deferred::drain(), along with three variants, concluding
+					that "the deferred point is not automatically safe for this".
+
+					Re-measured, with the fixture named and the state asserted:
+
+					  slot saved NORMALLY  -> loads, frame 10400 -> 9928, and one
+					                          second later 9928 -> 9988: RUNNING
+					  slot saved FROM THE   -> loads, then 10401 -> 10401 one
+					  EMULATION THREAD         second later: WEDGED
+
+					Same call, same place, same config; threaded and single-
+					threaded both. Only the fixture differs. The note's own
+					author predicted this - "if a fixture saved HERE loads
+					without wedging, the wedge was a bad state, not a bad place"
+					- and could not test it.
+
+					Two things had to be right before the pair meant anything.
+					The probe reports the SLOT it used, which is how it was
+					caught that `config:Dreamcast.SavestateSlot=7` never arrives:
+					Replay::Init does cfgSetVirtual(...,"0") on every replay boot,
+					so both arms had been running the identical configuration and
+					agreeing for that reason. And it gates past the savestate's
+					own frame, because a load onto the frame you are already on
+					is indistinguishable from a refusal.
+
+					SO loadLater IS NO LONGER BLOCKED by this. It is still not
+					here, for a smaller reason: a new binding wants a test, and
+					the probe that measured this is a probe rather than one.
+
+					AND THE REAL BUG WAS UPSTREAM OF IT. Saving from the
+					emulation thread is what produces the bad state - see
+					luaSavestateSlot, which now refuses exactly that.
+				*/
 
 			.endNamespace()
 

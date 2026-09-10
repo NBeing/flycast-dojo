@@ -1064,6 +1064,38 @@ void Emulator::vblank()
 	// to go, or already-compiled code keeps the old answer.
 	determinism::refreshCodegen();
 	EventManager::event(Event::VBlank);
+
+	/*
+		TORN-FIXTURE PROBE, dojo:SaveProbe=<slot>. Off unless set.
+
+		Writes a savestate FROM HERE - the emulation thread, mid-frame - which
+		is the one thing core/lua/lua.cpp's wedge investigation identified as
+		the likely cause and never tested: "the probe's fixture was saved from a
+		`vblank` callback ... so dc_savestate may have read a machine that was
+		still running."
+
+		This exists to MAKE A BAD STATE ON PURPOSE. Loading a normally-saved
+		state from the deferred point was measured on 2026-09-10 and works
+		(docs/STEP-GRANULARITY.md's sibling investigation); if a state saved
+		here then wedges on load, the wedge was the fixture rather than the
+		place, and that is a fact worth having before shipping a load binding.
+	*/
+	{
+		static const int saveProbeSlot = cfgLoadInt("dojo", "SaveProbe", -1);
+		static bool saveProbeDone = false;
+		if (saveProbeSlot >= 0 && !saveProbeDone && dojo.frame_number.load() > 10400)
+		{
+			saveProbeDone = true;
+			NOTICE_LOG(COMMON, "SAVE PROBE: writing slot %d from the EMULATION "
+					"thread at frame %u", saveProbeSlot, dojo.frame_number.load());
+			try {
+				dc_savestate(saveProbeSlot);
+				NOTICE_LOG(COMMON, "SAVE PROBE: returned");
+			} catch (const std::exception& e) {
+				NOTICE_LOG(COMMON, "SAVE PROBE: threw - %s", e.what());
+			}
+		}
+	}
 	// Time out if a frame hasn't been rendered for 50 ms
 	if (sh4_sched_now64() - startTime <= 10000000)
 		return;
