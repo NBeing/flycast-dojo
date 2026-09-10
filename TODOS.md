@@ -213,7 +213,10 @@ this; the counts and the evidence are there, not here.
   them would have silently changed behaviour wherever the toggle is set under a
   higher kind. A self-test claim pins the difference and a sabotage confirms it.
 - [ ] Migrate against the denominator (170), so a missed site is loud. A partial
-  migration reads exactly like a complete one.
+  migration reads exactly like a complete one. **Progress `[2026-09-10]`:** 34
+  `Training` reads → `session::trainingEnabled()`; `MapleApplyAction`'s
+  `tasWriteGrow` → `session::writeGrow()` (its first caller); `livePeer()`
+  removed as a duplicate of a corrected `netplay()`. Adopted predicates 2 → 5.
 - [ ] Work §4's **11 latent disagreements** as a bug list. **#9 fixed
   `[2026-09-10]`** — `kind()` now discriminates on whether a movie is driving
   the guest, which `maple_if.cpp` makes exact, and treats Receiving as netplay

@@ -49,10 +49,11 @@ order to decide something. Assignments, declarations and comments are excluded.
 | `session::macro()` | 0 |
 | `session::netplay()` | 1 — `core/dojo/roll_panel.cpp` |
 | `session::readOnly()` | 0 (was 1; that caller was the bug above) |
-| `session::writeGrow()` | 0 |
+| `session::writeGrow()` | 1 `[2026-09-10]` |
 | `session::label()` | 0 |
 
-**2 decision sites adopted against 170 raw.** `writeGrow()` was written
+**2 decision sites adopted against 170 raw** at the time of the census;
+**5 as of `[2026-09-10]`**, plus 34 raw `Training` reads migrated to one owner. `writeGrow()` was written
 specifically to promote `tasWriteGrow` out of `MapleApplyAction`'s body; that
 local still exists at `core/dojo/dojo.cpp` and is still the live code path:
 
@@ -198,6 +199,12 @@ premise is wrong; the conclusion may still be right for other reasons.
 superset of the other**, 240 lines apart in the same function. Different netplay
 exclusion (`GGPOEnable` versus `network.online && !ggpo_session`), different
 feature set (`Transmitting` versus `PlayMacro`), different access path (Option
+`[PARTLY ADDRESSED 2026-09-10]` the second conjunction now HAS one owner —
+`MapleApplyAction`'s local calls `session::writeGrow()`, which until then had
+zero callers while the body it was promoted from stayed live. The first is
+untouched: neither is a superset of the other, so choosing between them is a
+decision about behaviour, not a deduplication.
+
 versus `cfgLoadBool`). `session::writeGrow()` copied the second; `lua.cpp`
 copied the first, and its comment cites a line number that has since rotted.
 
