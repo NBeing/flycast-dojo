@@ -46,6 +46,12 @@ static bool statesOpen = false;
 //! hundred cells of which one is occupied is a worse view than one row.
 static bool showEmpty = false;
 
+// ONE EDIT BUFFER AND A ROW, not a buffer per slot. A hundred slots would be a
+// hundred buffers kept in step with a scan that changes underneath them; one
+// buffer can only ever be stale about the row it is on.
+static int  editRow = -1;
+static char editBuf[80] = {};
+
 static std::string whenText(s64 mtime)
 {
 	if (mtime <= 0)
@@ -171,12 +177,92 @@ static void draw()
 		ImGui::TextUnformatted(v.exists ? whenText(v.mtime).c_str() : "-");
 
 		ImGui::TableNextColumn();
-		if (v.exists && !v.label.empty())
-			ImGui::TextUnformatted(v.label.c_str());
-		else if (v.exists)
-			ImGui::TextDisabled("(unnamed)");
+		if (!v.exists)
+		{
+			// Nothing to name. The host refuses it too, so this is agreement
+			// rather than the UI guessing at the rule.
+		}
+		else if (editRow == i)
+		{
+			ImGui::SetNextItemWidth(-1.f);
+			ImGui::PushID(i);
+			// Committed on Enter or on losing focus, NOT per keystroke: a
+			// sidecar write per character would be a file write per character.
+			if (ImGui::InputText("##label", editBuf, sizeof(editBuf),
+					ImGuiInputTextFlags_EnterReturnsTrue)
+				|| ImGui::IsItemDeactivatedAfterEdit())
+			{
+				if (!h->setSlotLabel(i, editBuf))
+					// SAID, not swallowed. The host refuses when there is no
+					// clip folder, and a rename that silently did nothing would
+					// look exactly like one that worked until the next refresh.
+					ImGui::TextDisabled("refused");
+				editRow = -1;
+			}
+			else if (ImGui::IsItemDeactivated())
+				editRow = -1;		// Escape, or clicked away without editing
+			ImGui::PopID();
+		}
+		else
+		{
+			ImGui::PushID(i);
+			if (v.label.empty()) ImGui::TextDisabled("(unnamed)");
+			else                 ImGui::TextUnformatted(v.label.c_str());
+			if (ImGui::IsItemHovered())
+				ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+			{
+				editRow = i;
+				snprintf(editBuf, sizeof(editBuf), "%s", v.label.c_str());
+			}
+			ImGui::PopID();
+		}
 	}
 	ImGui::EndTable();
+
+	/*
+		LABEL PROBE, `dojo:StatesLabelProbe=yes`. One shot.
+
+		Naming a slot is the first WRITE in the host interface, and the only way
+		to know it landed is to make the round trip the UI makes: write, force a
+		rescan, read back through slotView(). Reading back the string we just
+		passed in would prove nothing - that is the cache agreeing with itself,
+		the mistake that cost an afternoon on the drag trace.
+
+		Safe under scripts/rolltest.sh, which copies the clip and its savestates
+		into a temp directory per run. Off by default: it renames a real slot.
+	*/
+	{
+		static bool probed = false;
+		if (!probed && occupied > 0 && cfgLoadBool("dojo", "StatesLabelProbe", false))
+		{
+			probed = true;
+			int slot = -1;
+			SlotView v0;
+			for (int i = 0; i < n; i++)
+				if (h->slotView(i, v0) && v0.exists) { slot = i; break; }
+
+			const std::string was = v0.label;
+			const char *want = "probe label";
+			const bool wrote = h->setSlotLabel(slot, want);
+
+			SlotView v1;
+			const bool readBack = h->slotView(slot, v1) && v1.label == want;
+
+			// Put it back, and check THAT too - an empty label must remove the
+			// sidecar rather than leave an empty one, which is the one branch of
+			// saveSavestateLabel a happy path never exercises.
+			const bool restored = h->setSlotLabel(slot, was);
+			SlotView v2;
+			const bool back = h->slotView(slot, v2) && v2.label == was;
+
+			NOTICE_LOG(RENDERER, "STATES LABELPROBE: slot=%d wrote=%s readback=%s"
+					" restored=%s back=%s (was \"%s\")  => %s",
+					slot, wrote ? "yes" : "NO", readBack ? "yes" : "NO",
+					restored ? "yes" : "NO", back ? "yes" : "NO", was.c_str(),
+					(wrote && readBack && restored && back) ? "PASS" : "FAIL");
+		}
+	}
 
 	// `dojo:StatesTrace=yes` - the wall as one line, logged on CHANGE. An empty
 	// wall is what "no states" and "the host answered nothing" both look like.

@@ -75,6 +75,7 @@ XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	-config dojo:RollSlotTrace=yes \
 	-config dojo:RollAnchorProbe=yes \
 	-config dojo:Panel.states=yes -config dojo:StatesTrace=yes \
+	-config dojo:StatesLabelProbe=yes \
 	-config window:width=1000 -config window:height=800 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 &
 FC=$!
@@ -459,6 +460,18 @@ if [ -z "${occ:-}" ] || [ "$occ" -lt 1 ]; then
 	echo "FAIL rolltest - the States wall found no state, and this clip has one"
 	exit 1
 fi
+
+# ---- naming a slot reaches the disk and comes back ---------------------------
+lp=$(tr -d '\0' < "$OUT/out.log" | grep -a "STATES LABELPROBE:" | tail -1)
+if [ -z "$lp" ]; then
+	echo "rolltest: SKIP - the label probe never ran (no occupied slot)"
+	exit $SKIP
+fi
+echo "  ${lp##*N\[RENDERER\]: }"
+case "$lp" in
+	*PASS*) ;;
+	*) echo "FAIL rolltest - naming a slot did not survive the round trip"; exit 1 ;;
+esac
 
 # ---- the multi-row stroke, proved in process --------------------------------
 # NOT a duplicate of the click test and NOT a self-test: it drives the real

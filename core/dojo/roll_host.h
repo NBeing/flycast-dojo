@@ -72,6 +72,19 @@ struct Host
 	//! Everything a tool shows about one slot, in one call. False = out of range.
 	virtual bool slotView(int slot, SlotView& out) const { (void)slot; (void)out; return false; }
 
+	/*
+		Name a slot, or clear its name with an empty string.
+
+		THE FIRST WRITE IN THIS INTERFACE, and the default REFUSES rather than
+		silently doing nothing - a host that cannot name slots should make a
+		tool's rename fail visibly, not appear to work until the next refresh.
+
+		Naming is the safest write there is here: it touches a sidecar and never
+		the state, so the worst outcome is a lost label.
+	*/
+	virtual bool setSlotLabel(int slot, const std::string& label)
+	{ (void)slot; (void)label; return false; }
+
 	// Does this slot still belong to the timeline currently being edited?
 	// A re-record past the frame a state was saved on strands it: the state is
 	// still a valid machine, but it is no longer a point on THIS movie.

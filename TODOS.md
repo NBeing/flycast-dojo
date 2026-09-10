@@ -208,9 +208,18 @@ through `panels::add`.
   (§G11). `haveFrame` is carried separately from `frame != 0`, so a power-on
   state anchored at frame 0 is not confused with one that has no anchor (§4.3).
   `scripts/rolltest.sh` asserts the wall and the roll's gutter agree.
+- [x] **Rename a slot** (§G7) — `Host::setSlotLabel()`, the first WRITE in that
+  interface, with a default that REFUSES rather than silently doing nothing. It
+  gave `hostfs::saveSavestateLabel` its first caller. `dojo:StatesLabelProbe`
+  makes the round trip the UI makes — write, force a rescan, read back through
+  `slotView()` — because reading back the string just passed in is the cache
+  agreeing with itself.
+- [x] **§G2 — `savestate_epoch` is bumped where a state is written.** `dojo.h`
+  described it as "bumped on every savestate write" and it was bumped in two
+  places, neither of them one. The half-second safety tick was covering for it,
+  which is to say the fallback was hiding the defect it was added for.
 - [ ] The States window, the rest: **no thumbnails** (nothing in this tree
-  writes one, and `GetLastFrameRGB` is DX9/DX11 only — §G6), **no rename**
-  (`saveSavestateLabel`, zero callers — §G7), **no delete**
+  writes one, and `GetLastFrameRGB` is DX9/DX11 only — §G6), **no delete**
   (`deleteSavestate`, zero callers — §G8), no generations pane, no save/load
   actions from the wall.
 - [ ] `[OPEN]` the fork's 100-slot wall in its `core/rend/gui.cpp` has still not

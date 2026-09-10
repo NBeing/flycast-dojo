@@ -192,6 +192,14 @@ void dc_savestate(int index)
 	// land on. SaveStateFrame/LoadStateFrame came across in dojo.cpp but their
 	// only callers live here, so they sat defined and unreachable.
 	dojo.SaveStateFrame(filename);
+	// `[CORRECTED 2026-09-10]` and the epoch, which is what every slot view
+	// watches to know its scan is out of date. dojo.h describes this field as
+	// "bumped on every savestate write" and it was bumped in exactly two places,
+	// neither of them a savestate write (docs/STATES-LIFT.md G2). The States
+	// wall and the roll's gutter therefore showed a new state only when their
+	// half-second safety tick came round - which is what that tick was added to
+	// cover, so the fallback was hiding the defect it was written for.
+	dojo.savestate_epoch++;
 	NOTICE_LOG(SAVESTATE, "Saved state to %s size %d", filename.c_str(), (int)ser.size());
 	gui_display_notification("State saved", 1000);
 }

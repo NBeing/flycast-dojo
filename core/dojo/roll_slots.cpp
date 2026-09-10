@@ -181,6 +181,25 @@ public:
 		return true;
 	}
 
+	bool setSlotLabel(int slot, const std::string& label) override
+	{
+		ensureFresh();
+		if (slot < 0 || slot >= (int)info_.size() || !info_[slot].exists)
+			return false;			// naming a slot that holds nothing is a mistake, not a no-op
+		if (hostfs::savestateFolderOverride.empty())
+		{
+			// The same refusal the anchor rewrite makes, for the same reason:
+			// with no clip folder the read and write derivations of the path can
+			// name different directories (docs/STATES-LIFT.md G13).
+			NOTICE_LOG(RENDERER, "ROLL SLOTS: no clip folder - refusing to name slot %d", slot);
+			return false;
+		}
+		hostfs::saveSavestateLabel(slot, label);
+		dojo.savestate_epoch++;		// the wall re-reads on the next draw
+		scannedAt_ = -1000.0;
+		return true;
+	}
+
 	int staleNoticePhase() const override
 	{
 		ensureFresh();
