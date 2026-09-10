@@ -57,4 +57,9 @@ struct Host
 Host *host();
 void setHost(Host *h);
 
+// Install the one this emulator provides (core/dojo/roll_slots.cpp). Separate
+// from setHost so a test can still substitute a fake, and so the production
+// host is a thing something CALLS rather than a static that hopes to be linked.
+void installHost();
+
 }	// namespace roll

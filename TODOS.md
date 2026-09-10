@@ -147,9 +147,25 @@ through `panels::add`.
   which traces the guilty function. **An instrument built on the defect will
   confirm the defect.** `scripts/rolltest.sh` now drives an 8-step drag and
   asserts the span; `scripts/docktest.sh` still passes.
-- [ ] Remaining edit tools from the lift's 37 symbols: brush/stamp, stretch,
-  repeat, the staged-buffer tools.
-- [ ] The States window. Ranked by the user alongside the roll, above branches.
+- [x] **The production `roll::Host` exists.** `core/dojo/roll_slots.cpp`. Until
+  2026-09-09 `setHost()` was called only by a self-test, so the savestate gutter
+  had never shown a real slot — the third self-tested-seam-with-no-customer of
+  the day. It carries the scan cache and the staleness memoisation the surveys
+  said it needs (`docs/STATES-LIFT.md` G1, G3), and `scripts/rolltest.sh`
+  asserts a real anchored slot with a failing arm.
+- [ ] Remaining edit tools — but **not 32 pieces of work**. See
+  `docs/ROLL-EDIT-MODEL.md`: name the cell and the pattern first and nine tools
+  collapse onto one function (mash, fill, brush, stamp, paint are the same
+  loop written four times); stretch/compress/reverse/clear are fully generic.
+- [ ] **Structural edits should return a ROW REMAP.** `docs/ROLL-EDIT-MODEL.md`
+  §3. The fork writes selection-shifting five times and gets two of them wrong,
+  and hand-calls bookmark fixups from five sites with nothing enforcing it. Same
+  fact each time. It is also the fix for `docs/STATES-LIFT.md` §4.4, where a
+  resize leaves a savestate's anchored frame **wrong** rather than suspect.
+- [ ] The States window. `docs/STATES-LIFT.md` — 131 real dependencies, **zero**
+  game-specific. Our 4 host questions cover ~1.5 of the 17 it needs. `[OPEN]`
+  the 100-slot wall lives in `core/rend/gui.cpp`, not `dojo_gui.cpp`, and has
+  not been lifted; only its generations pane has.
 - [ ] Report two davidrr bugs upstream: missing `core/deps/glslang/CHANGES.md`,
   and no headless auto-play.
 

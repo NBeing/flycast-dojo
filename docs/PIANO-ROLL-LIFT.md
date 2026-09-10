@@ -54,6 +54,10 @@ only if it is *defined* elsewhere in `dojo_gui.cpp`, outside the lifted range.
 
 ## The conclusion
 
+**Only 4 of 161 symbols touch flycast directly** — `[CORRECTED 2026-09-09]`
+five, in fact: the fork also has `gui_slot_frame`, which `roll_host.h` carries
+as `slotFrame` and this count missed.
+
 **Only 4 of 161 symbols touch flycast directly**, and all four ask savestate
 questions: which slots are stale, what frame each state sits at. **Four more are
 the MvC2 coupling**, and they are a column table plus a canon-to-packet mapping —
@@ -70,11 +74,18 @@ reason to measure before planning.
 
 ## Not yet answered
 
-- The same lift has not been run on the States window; its coupling is assumed
-  similar and that assumption is untested.
-- 37 edit-tool symbols is the largest cluster and none of it has been read yet -
-  it may itself split into generic (insert/delete/repeat) and profile-shaped
-  (what a "mash" pattern means for a given game).
+- ~~The same lift has not been run on the States window~~ **DONE for its
+  generations pane `[MEASURED 2026-09-09]`, see `docs/STATES-LIFT.md`.** The
+  assumption held and then some: 131 real dependencies and **zero**
+  game-specific symbols, against this roll's four. `[OPEN]` the 100-slot wall
+  itself lives in `core/rend/gui.cpp`, not `dojo_gui.cpp`, and has not been
+  lifted.
+- ~~37 edit-tool symbols is the largest cluster and none of it has been read
+  yet~~ **ANSWERED `[MEASURED 2026-09-09]`, see `docs/ROLL-EDIT-MODEL.md`.** It
+  splits, but not as guessed: ~25 generic row/column operations, **3 profile
+  chokepoints**, and ~9 generic bodies with one profile-shaped payload threaded
+  through them. Mash, fill, brush, stamp and our own paint are ONE function
+  written four times.
 - The lift proves what the roll REFERENCES. It does not prove the referenced
   code is portable; a symbol that turns out to reach into `dojo` globals moves
   from "the roll itself" to "host".

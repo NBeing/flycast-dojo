@@ -72,6 +72,7 @@ XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	-config dojo:Transmitting=no -config dojo:Receiving=no \
 	-config dojo:Panel.pianoroll=yes -config dojo:RollSelTrace=yes \
 	-config dojo:RollPaintTrace=yes -config dojo:RollPaintProbe=yes \
+	-config dojo:RollSlotTrace=yes \
 	-config window:width=1000 -config window:height=800 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 &
 FC=$!
@@ -291,6 +292,24 @@ fi
 # COUNT, so a count-only assertion passed through both.
 if [ "$span" -lt 4 ]; then
 	echo "FAIL rolltest - an 8-step drag committed only $span row(s) ($lo..$hi); the stroke stopped extending"
+	exit 1
+fi
+
+# ---- the savestate gutter has a REAL host -----------------------------------
+# The clip this script picks is required to have a .state beside it, so "no
+# slot is anchored" is a failure and not a fact about the machine. Until
+# 2026-09-09 there was no production roll::Host at all - setHost() was called
+# only by a self-test - so the gutter had never shown a real slot and the panel
+# printed "No host installed". Silence here is that state returning.
+slots=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL SLOTS:" | tail -1)
+if [ -z "$slots" ]; then
+	echo "FAIL rolltest - the roll never reported a slot scan; no host is installed"
+	exit 1
+fi
+echo "  ${slots##*N\[RENDERER\]: }"
+anch=$(echo "$slots" | sed -n 's/.*anchored=\([0-9]*\).*/\1/p')
+if [ -z "${anch:-}" ] || [ "$anch" -lt 1 ]; then
+	echo "FAIL rolltest - the host scanned slots but anchored none, and this clip has a savestate"
 	exit 1
 fi
 

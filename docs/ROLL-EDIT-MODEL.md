@@ -1,0 +1,164 @@
+# The roll's edit model — the design, before the port
+
+`[MEASURED 2026-09-09]` A survey of all ~37 edit-tool symbols in the fork's
+`show_piano_roll` (`flycast-rr-oracle/core/dojo/dojo_gui.cpp`, 13141–16972 —
+3,831 lines in one function). `docs/PIANO-ROLL-LIFT.md` counted them and left
+the important question open:
+
+> 37 edit-tool symbols is the largest cluster and none of it has been read yet -
+> it may itself split into generic (insert/delete/repeat) and profile-shaped
+> (what a "mash" pattern means for a given game).
+
+It does split. **Not where that guess said.**
+
+---
+
+## 1. The finding
+
+| | count |
+|---|---|
+| generic row/column arithmetic — same meaning on any game, any emulator | ~25 |
+| **profile chokepoints** | **3** |
+| generic bodies with ONE profile-shaped payload threaded through | ~9 |
+| host — savestates, files, clipboard, the funnel | ~12 |
+
+The three chokepoints. Everything profile-shaped reaches the game through one
+of them:
+
+1. **the column table** — 11 columns bound to Dreamcast bits and MvC2 names
+2. **the canon ↔ packet mapping** — including the trigger duality, where a
+   trigger is both a byte (`>= 0x20`) and a `kcode` bit
+3. **the notation parsers** — five dialects of the same 11 bits, including
+   `"MP"` meaning LP and a keyboard alphabet `P1: WSADZXCVBNM, P2: TGFHUIOJKLP`
+
+Everything else that *looks* game-coupled is coupled only because a `u16` canon
+word passes through it.
+
+## 2. The abstraction that falls out
+
+**One function, written four times.** These are the same operation:
+
+    tasMashPlace2          tile two canon tracks over a row range, every Nth row
+    tasFillRowsWithMacro   cycle a clip's frames across a selection
+    the brush stroke       stamp a canon pattern down a drag, every Nth row
+    our paintColumn        set one column down a drag, every Nth row
+
+The shared shape: **a periodic payload, applied to a row range, at a phase
+anchored somewhere, with a combine rule.** They differ only in what the payload
+is — two canon tracks, a clip's frames, a brush pattern, a single column bit —
+and the type system never named it, so the loop got written four times and
+drifted four ways (§4).
+
+So the model is three concepts, not thirty-seven verbs:
+
+**A CELL IS OPAQUE TO THE TOOL.** A tool never asks what a cell means. The
+profile owns `combine(cell, cell, merge)`, `subtract(cell, mask)` and
+`flip(cell)`. That is where SOCD cleaning belongs — up+down is illegal on this
+hardware, a pad fact and not arithmetic — along with "a direction replaces but
+buttons OR", and a trigger's two representations.
+
+**A PATTERN IS A PERIODIC SEQUENCE OF CELLS PER LANE.** Length L, tiled;
+`step = gap + 1`; a phase anchor. Mash, brush, stamp, fill, autofire and our
+paint are all "apply this pattern here" with different patterns. Note there is
+no symbol named `autofire` anywhere in the fork — it is a cadence dial on the
+brush, `{ ALL 60Hz, 2ND 30Hz, 3RD 20Hz }`, which is exactly `gap`.
+
+**A ROW IS N LANES, NOT TWO PLAYERS.** `sizeof(FrameInputs) * 2` appears **60+
+times** in the fork. Lane count is derivable — row size over record size — and
+the tools that look player-specific (clone P1→P2, swap lanes, the "player is
+empty" sentinels computed as `index / NCOLS`) are lane arithmetic once named.
+
+## 3. The second abstraction: a structural edit returns a REMAP
+
+The fork's structural tools each hand-maintain everything that holds a row
+index. Selection shifting is written **five times**, and **two of the five are
+wrong** — they shift unconditionally instead of only past the insert point, so
+inserting at frame 500 slides a selection at rows 10–20 forward for no reason.
+Bookmarks are worse: `tasBookmarksOnInsert` / `tasBookmarksOnDelete` must be
+called by hand by every structural tool, from five sites, and **nothing enforces
+it**.
+
+Every one of those is the same fact — *frame f is now frame g* — recomputed by
+each caller. So an insert / delete / stretch / compress should RETURN that
+mapping, and everything holding a row index applies it: the selection,
+bookmarks, and **savestate anchors, which are row indices too**.
+
+That last one is not a bonus. `docs/STATES-LIFT.md` §G9 records that a resize
+renumbers `session_inputs` and never rewrites any `.frame` sidecar, so an
+anchored state's frame becomes **wrong**, not merely suspect — and nothing in
+the tree distinguishes those two conditions. The remap is the fix for both, and
+it is the reason to settle this design before porting either window.
+
+## 4. What NOT to port — inherited bugs, with evidence
+
+Named here because each is something our version could quietly acquire by
+copying the shape.
+
+**The brush stamps backwards on an upward drag.** The fired-row ordinal is
+`d / step` where `d` is the ABSOLUTE distance from the anchor, so dragging up
+from row 100 writes pattern index 0,1,2… at rows 100,99,98 — the pattern plays
+in reverse frame order. A quarter-circle-forward brush dragged upward stamps a
+quarter-circle-back shape. **Our paint is immune only because it is
+single-column**: every fired row gets the same value, so the generic path cannot
+see the bug. It becomes reachable the moment a pattern payload lands.
+
+**REPLACE-mode brush zeroes the rows it skips.** Non-fired rows are written with
+`0` and `merge=false`, wiping what was there; in MERGE mode they are left alone.
+Same gesture, opposite destructiveness, decided by a switch in another panel.
+Our stroke already states the opposite rule and must keep it: *gap rows are
+SKIPPED, NOT INVERTED*.
+
+**"Success" stopped meaning "changed".** A merge that finds nothing to do
+returns the target frame — success, no timeline event — so every caller that
+branches on `first >= 0` to report "placed N frames" lies. Our funnel has the
+mirror ambiguity: `ApplyEdit` returns −1 for *refused*, for *nothing changed*,
+and for *hit a locked range*. Three outcomes, one value.
+
+**Six tools, five hole policies.** A movie with holes is a legitimate state —
+`core/dojo/movie.h` exists to keep hole and end distinct — and the fork's tools
+disagree: clear skips holes, replace materialises them, delete counts them as
+frames, reverse and stretch materialise them as neutral, compress counts them
+for bookmarks but not for content. The toast always reports the selection size,
+never what was actually touched. **We declare one policy and state it once.**
+
+**Three answers to "what does a gapped selection mean".** Stretch, compress and
+apply-queue refuse it; reverse, delete, clear, swap, flip and fill allow it;
+copy and repeat allow it and silently drop the gaps.
+
+**Two undo systems on one key.** The movie has a patch stack (one `ApplyEdit` =
+one undo, capped at 128, with a documented redo hole where redoing a delete
+zeroes the tail instead of re-shrinking). The staged buffer has a separate op
+queue with pop-based undo. Ctrl+Z means different things depending on focus.
+
+**Insert-before versus insert-after in one gesture handler.** The same gutter
+drag over the same `lo..hi` inserts at `lo` with one modifier and at `hi + 1`
+with another.
+
+## 5. The staged buffer is a second document, not a staging area
+
+Worth separating from "edit-then-apply", which is what the name suggests. The
+fork's staged buffer holds *a macro, an immutable baseline, and an ordered op
+queue*, replayed from the baseline on every change — which is what makes lossy
+operations (compress) reversible. The movie is byte-typed; the buffer is
+canon-typed; **the same button row edits whichever is active**. A real idea
+worth having, and a real hazard worth not acquiring by accident.
+
+## 6. What this changes about the port
+
+The remaining ~32 unported symbols are not 32 pieces of work:
+
+- **stretch, compress, reverse, clear, the tail splice** — fully generic, and
+  three of them exist in the fork in three type systems each. Small once rows
+  are opaque.
+- **mash, fill, brush, stamp, paint** — ONE function under a pattern payload.
+  We have its generic core already, in `roll_paint` + `paintColumn`.
+- **clone-lane, swap-lanes, flip** — lane arithmetic plus one profile call.
+- **replace (find one column, write another)** — generic given the `Column`
+  concept we already have.
+- **notation, parsers, the sequence library** — profile and chrome, and the
+  place to be most careful, since five dialects is where the game leaks in.
+
+Order that follows: name the cell and the pattern first, because nine tools
+collapse onto them; then make structural edits return a remap, because that is
+what the selection, bookmarks and savestate anchors all need, and it is the
+join with the States window.
