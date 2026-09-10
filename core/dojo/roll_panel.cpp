@@ -5,6 +5,7 @@
 #include "roll_paint.h"
 #include "roll_marks.h"
 #include "roll_notation.h"
+#include "roll_staged.h"
 #include "roll_pattern.h"
 #include "session.h"
 #include "rend/gui.h"
@@ -546,6 +547,63 @@ static void draw()
 				{
 					ImGui::SameLine();
 					ImGui::TextColored(TAS_P2_COL, "%s", mashErr.c_str());
+				}
+			}
+
+			// ---- THE STAGED BUFFER ----------------------------------------
+			//
+			// A SECOND DOCUMENT with its own controls, deliberately. In the fork
+			// the same button row edits whichever document is active - "if
+			// (stagedActive) stagedTogOp(TXK_SWAP) else tasSwapSelPlayers(...)" -
+			// so a button means two things depending on state elsewhere on
+			// screen. These are its own buttons and they only ever touch it.
+			//
+			// The op queue is edited HERE and never by Ctrl+Z. The fork has two
+			// undo systems on one key; this has one, and the queue has buttons.
+			{
+				Staged& st = staged();
+				ImGui::BeginDisabled(!haveSel);
+				if (ImGui::Button("Stage"))
+					st.load(wholeMovie(), sel.rows());
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				if (st.empty())
+					ImGui::TextDisabled("(nothing staged)");
+				else
+				{
+					// BASELINE AND RESULT BOTH, because the difference is the
+					// point: 6 -> 2 after a compress says the four are still
+					// there to come back.
+					ImGui::Text("%d frames (from %d), %d op%s",
+							(int)st.size(), (int)st.baseSize(), (int)st.ops().size(),
+							st.ops().size() == 1 ? "" : "s");
+					ImGui::SameLine();
+					if (ImGui::Button("Swap"))     st.push(Step{ Op::SwapLanes });
+					ImGui::SameLine();
+					if (ImGui::Button("Flip"))     st.push(Step{ Op::Flip });
+					ImGui::SameLine();
+					if (ImGui::Button("Rev"))      st.push(Step{ Op::Reverse });
+					ImGui::SameLine();
+					if (ImGui::Button("x N"))      st.push(Step{ Op::Stretch, rangeFactor });
+					ImGui::SameLine();
+					if (ImGui::Button("/ N"))      st.push(Step{ Op::Compress, rangeFactor });
+					ImGui::SameLine();
+					ImGui::BeginDisabled(st.ops().empty());
+					// UNDO OP, not undo: it pops the recipe and replays from the
+					// baseline, so a compress gives its frames back.
+					if (ImGui::Button("Undo op"))  st.pop();
+					ImGui::SameLine();
+					if (ImGui::Button("Clear ops")) st.clearOps();
+					ImGui::EndDisabled();
+					ImGui::SameLine();
+					if (ImGui::Button("Place"))
+					{
+						const u32 at = haveSel ? sel.lo() : playhead;
+						Edit e = st.place(wholeMovie(), at, mashMerge);
+						dojo.ApplyEdit(e, "roll: place staged");
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Unload"))   st.unload();
 				}
 			}
 

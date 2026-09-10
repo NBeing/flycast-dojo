@@ -182,11 +182,14 @@ through `panels::add`.
   No second stroke class and no second loop. Set-vs-erase deliberately does not
   apply while armed — a pattern says what to write, and asking the anchor cell
   would make one brush mean two things depending on where it started.
-- [ ] The staged buffer — a second DOCUMENT (a macro, an immutable baseline and
-  an ordered op queue replayed from it, which is what makes lossy ops
-  reversible), not a staging area for the movie. `docs/ROLL-EDIT-MODEL.md` §5.
-  Note the hazard recorded there: in the fork the same button row edits
-  whichever document is active, and there are two undo systems on one key.
+- [x] **The staged buffer** — `core/dojo/roll_staged.{h,cpp}`. A clip, an
+  immutable baseline, and an ordered op queue replayed from it, which is what
+  makes a LOSSY op reversible: compress by 3, pop the op, the frames come back
+  because they were never dropped. An undo stack remembers what a document USED
+  to be; an op queue remembers what was ASKED FOR, so the recipe can be edited.
+  Both fork hazards avoided by construction — the ops have their own buttons
+  rather than sharing the movie's, and the queue is never on Ctrl+Z.
+  `place()` builds a Pattern, making it `applyPattern`'s sixth customer.
 - [x] **Structural edits return a ROW REMAP.** `core/dojo/roll_remap.{h,cpp}`;
   `deleteRows`/`insertBlanks` return `Resize { edit, remap }` with the edit
   DERIVED from the remap, so there is one owner of "where did row f go".
