@@ -1288,6 +1288,7 @@ if(NOT LIBRETRO)
 	core/dojo/roll_paint.cpp
 	core/dojo/roll_marks.cpp
 	core/dojo/roll_notation.cpp
+	core/dojo/roll_library.cpp
 	core/dojo/roll_meta.cpp
 	core/dojo/roll_pattern.cpp
 	core/dojo/roll_remap.cpp
@@ -1968,6 +1969,41 @@ set_tests_properties(flycast.rolltest PROPERTIES
 # fresh motion with a stale global read, and THIS is the test that says whether
 # narrowing that function's scope broke the docking it was written for. That
 # question was answered by hand. It should not have to be again.
+# EVERY IN-PROCESS SELF-TEST, and the cheapest entry here by a wide margin:
+# no ROM, no input, no window manager, ~14 s for 331 claims across 17 suites.
+#
+# `[MEASURED 2026-09-10]` NOTHING RAN THESE. `dojo:PanelSelfTest=yes` has been
+# accumulating suites for weeks - the session-kind census, the whole roll edit
+# model, the remap holders, the Lua tier ladder - and the only way to execute
+# any of it was to pick the option out of the rofi launcher by hand.
+#
+# The harness asserts a FLOOR on suites and claims, not just "0 failed". Every
+# suite opens with `if (!cfgLoadBool("dojo", "PanelSelfTest", false)) return;`,
+# so a dropped call in flycast_init, a typo'd key, or a deleted suite all
+# produce a clean green empty log - identical to a passing run from outside.
+add_test(NAME flycast.selftest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/selftest.sh)
+set_tests_properties(flycast.selftest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 300
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;SELFTEST_DISPLAY=145")
+
+# ITS PAIRED ARM - and here the thing under test is the JUDGE, since the judge
+# is the part that can silently stop discriminating. Three canned logs it must
+# reject (a real failure, an empty run, hollowed-out suites) and one it must
+# ACCEPT. `[MEASURED 2026-09-10]` the control earned its place immediately: the
+# first fixtures named their suites SUITE1..SUITE20, the judge's pattern is
+# `[A-Z]+ SELFTEST:`, and the digit meant nothing matched - so all three
+# sabotage arms were being rejected for having zero suites rather than for the
+# reason each was written to test. Only "a clean run is still accepted" could
+# see it. That is why the script asserts the REJECTION REASON, not the verdict.
+add_test(NAME flycast.selftest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/selftest.sh --self-test)
+set_tests_properties(flycast.selftest_can_fail PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 120)
+
 add_test(NAME flycast.docktest
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/docktest.sh)
 set_tests_properties(flycast.docktest PROPERTIES

@@ -19,6 +19,7 @@
 #include "dojo/roll_meta.h"
 #include "dojo/roll_marks.h"
 #include "dojo/roll_notation.h"
+#include "dojo/roll_library.h"
 #include "dojo/roll_staged.h"
 #include "lua/luatier.h"
 #include "lua/luawatch.h"
@@ -89,6 +90,7 @@ int flycast_init(int argc, char* argv[])
 	roll::metaSelfTest();
 	roll::marksSelfTest();
 	roll::notationSelfTest();
+	roll::librarySelfTest();
 	roll::stagedSelfTest();
 	luatier::selfTest();
 	luawatch::selfTest();

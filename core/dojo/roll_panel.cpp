@@ -7,6 +7,7 @@
 #include "roll_notation.h"
 #include "roll_staged.h"
 #include "roll_pattern.h"
+#include "roll_library.h"
 #include "session.h"
 #include "rend/gui.h"
 #include "movie.h"
@@ -16,6 +17,8 @@
 #include "input/gamepad.h"
 #include "imgui.h"
 #include <cstring>
+#include <cctype>
+#include <system_error>
 #include <cmath>
 #include <string>
 #include "log/LogManager.h"
@@ -362,6 +365,70 @@ static void draw()
 		}
 	}
 
+	// ---- LIBRARY PROBE, dojo:RollLibProbe=yes ----------------------------
+	//
+	// The self-test in roll_library.cpp proves the MODULE - it never touches
+	// the movie, the funnel or the disk the panel writes to. A self-test proves
+	// a module, never its integration (CLAUDE.md), and this tree has already
+	// shipped two features that compiled, linked and were unreachable.
+	//
+	// So this one goes the whole way: write a sequence to the real library
+	// folder, scan it back the way the panel does, place it through
+	// Dojo::ApplyEdit, read the movie, and undo. Every step is one the panel
+	// takes and the self-test cannot.
+	{
+		static bool libProbed = false;
+		if (!libProbed && movie::authored() && cfgLoadBool("dojo", "RollLibProbe", false))
+		{
+			libProbed = true;
+			std::error_code lec;
+			ghc::filesystem::create_directories(libraryDir(), lec);
+			const std::string path = libraryDir() + "/__probe.txt";
+
+			// A gap in the middle, so replace and overdub would DIFFER here -
+			// a probe over a solid sequence cannot tell which one ran.
+			Sequence sq;
+			sq.name = "probe";
+			sq.tags = { "probe" };
+			sq.lanes.resize(2);
+			sq.lanes[0] = { cellWith(0, prof.cols[0], true), 0,
+					cellWith(0, prof.cols[0], true) };
+			std::string err;
+			const bool wrote = libraryWrite(path, sq, err);
+
+			// SCANNED BACK, not reused: the panel never places the object it
+			// wrote, it places one it read off the disk.
+			const std::vector<Sequence> lib = libraryScan();
+			const Sequence *found = nullptr;
+			for (const Sequence& e : lib)
+				if (e.file == "__probe.txt")
+					found = &e;
+
+			const u32 f = movie::end() > 24 ? movie::end() - 24 : 0;
+			s64 first = -1;
+			bool placed = false, undone = false;
+			if (found != nullptr && found->length() == 3)
+			{
+				Edit e2 = applyPattern(wholeMovie(), f, f + 2, patternReplacing(*found), 0);
+				first = dojo.ApplyEdit(e2, "roll: library probe");
+				auto lane = [&](u32 fr) {
+					auto it = dojo.session_inputs.find(fr);
+					return it == dojo.session_inputs.end() ? (Cell)0 : cellOf(it->second, 0);
+				};
+				placed = cellHas(lane(f), prof.cols[0]) && lane(f + 1) == 0
+						&& cellHas(lane(f + 2), prof.cols[0]);
+				undone = dojo.ApplyUndo();
+			}
+			libraryDelete(path, err);
+			NOTICE_LOG(RENDERER, "ROLL LIBPROBE: wrote=%s scanned=%s len=%d first=%lld"
+					" placed=%s undo=%s  => %s",
+					wrote ? "yes" : "NO", found != nullptr ? "yes" : "NO",
+					found != nullptr ? (int)found->length() : -1, (long long)first,
+					placed ? "yes" : "NO", undone ? "yes" : "NO",
+					(wrote && found != nullptr && placed && undone) ? "PASS" : "FAIL");
+		}
+	}
+
 	// ---- EDITS -----------------------------------------------------------
 	//
 	// THE GATE IS TWO CONDITIONS AND BOTH ARE STATED, not one silently
@@ -660,6 +727,130 @@ static void draw()
 				ImGui::EndDisabled();
 				ImGui::SameLine();
 				ImGui::TextDisabled("(%d marks)", (int)marks().count());
+			}
+
+			// ---- THE SEQUENCE LIBRARY -------------------------------------
+			//
+			// NO RESCAN BUTTON. The folder is the index (roll_library.h), so a
+			// .txt dropped into data/snippets must simply appear - the fork
+			// needs its "Rescan - dropped-in .txt self-register" button only
+			// because a JSON index beside the folder can disagree with it.
+			//
+			// The scan is therefore on a TIMER, not on a click: often enough
+			// that a copied-in file shows up on its own, rarely enough that the
+			// panel is not stat-ing a directory sixty times a second.
+			{
+				static std::vector<Sequence> lib;
+				static double libAt = -1e9;
+				static int    libSel = -1;
+				static bool   libReplace = true;
+				static char   libName[64] = "";
+				static std::string libErr;
+
+				const double now = ImGui::GetTime();
+				if (now - libAt > 2.0)
+				{
+					libAt = now;
+					lib = libraryScan();
+					if (libSel >= (int)lib.size())
+						libSel = -1;
+				}
+
+				ImGui::SeparatorText("Sequences");
+				ImGui::SetNextItemWidth(140.f);
+				ImGui::InputText("##seqname", libName, sizeof(libName));
+				ImGui::SameLine();
+				ImGui::BeginDisabled(!haveSel || libName[0] == 0);
+				if (ImGui::Button("Save selection"))
+				{
+					libErr.clear();
+					std::error_code lec;
+					ghc::filesystem::create_directories(libraryDir(), lec);
+					// The NAME is the user's; the FILENAME is derived, because a
+					// title and a path are different facts and a title may hold
+					// characters a path may not.
+					std::string file;
+					for (const char *c = libName; *c != 0; c++)
+						file += (isalnum((unsigned char)*c) || *c == '-' || *c == '_')
+								? *c : '_';
+					const Sequence sq = sequenceOfRows(wholeMovie(), sel.rows(), libName);
+					const std::string path = libraryDir() + "/" + file + ".txt";
+
+					// SAME NAME IS AN UPDATE; A DIFFERENT NAME THAT COLLIDES IS
+					// REFUSED. Two titles can sanitise onto one filename ("j.
+					// 214" and "j 214" both become j__214), and silently
+					// overwriting a combo because its path happened to match is
+					// not a thing to discover later. Re-saving under the title
+					// already in the file is the ordinary edit, so that goes
+					// through.
+					Sequence there;
+					std::string ignored;
+					if (libraryRead(path, there, ignored) && there.name != sq.name)
+						libErr = "\"" + there.name + "\" already uses that filename";
+					else if (libraryWrite(path, sq, libErr))
+					{
+						libAt = -1e9;		// show it now rather than in two seconds
+						libName[0] = 0;
+					}
+				}
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				ImGui::TextDisabled("(%d in library)", (int)lib.size());
+
+				if (ImGui::BeginListBox("##seqlib", ImVec2(-FLT_MIN, 4 * ImGui::GetTextLineHeightWithSpacing())))
+				{
+					for (int i = 0; i < (int)lib.size(); i++)
+					{
+						char row[192];
+						std::string tags;
+						for (size_t t = 0; t < lib[i].tags.size(); t++)
+							tags += (t != 0 ? "," : "") + lib[i].tags[t];
+						snprintf(row, sizeof(row), "%s  (%d f)%s%s", lib[i].name.c_str(),
+								(int)lib[i].length(), tags.empty() ? "" : "  ", tags.c_str());
+						if (ImGui::Selectable(row, libSel == i))
+							libSel = i;
+					}
+					ImGui::EndListBox();
+				}
+
+				const bool haveSeq = libSel >= 0 && libSel < (int)lib.size()
+						&& !lib[libSel].empty();
+				const u32  at = haveSel ? sel.lo() : playhead;
+				ImGui::BeginDisabled(!haveSeq);
+				char pb[64];
+				snprintf(pb, sizeof(pb), "Place at %u", at);
+				if (ImGui::Button(pb))
+				{
+					const Sequence& sq = lib[libSel];
+					const Pattern pat = libReplace ? patternReplacing(sq)
+							: patternOverdubbing(sq);
+					Edit e = applyPattern(wholeMovie(), at,
+							at + (u32)sq.length() - 1, pat, 0);
+					dojo.ApplyEdit(e, libReplace ? "roll: place sequence"
+							: "roll: overdub sequence");
+				}
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				// The two placements, as a choice made HERE, at the gesture.
+				// A sequence does not record which it is (roll_library.h).
+				if (ImGui::RadioButton("replace", libReplace))  libReplace = true;
+				ImGui::SameLine();
+				if (ImGui::RadioButton("overdub", !libReplace)) libReplace = false;
+				ImGui::SameLine();
+				ImGui::BeginDisabled(!haveSeq);
+				if (ImGui::Button("Delete##seq"))
+				{
+					libErr.clear();
+					libraryDelete(libraryDir() + "/" + lib[libSel].file, libErr);
+					libSel = -1;
+					libAt  = -1e9;
+				}
+				ImGui::EndDisabled();
+				if (!libErr.empty())
+				{
+					ImGui::SameLine();
+					ImGui::TextColored(TAS_P2_COL, "%s", libErr.c_str());
+				}
 			}
 
 		}

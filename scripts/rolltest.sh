@@ -76,6 +76,7 @@ XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	-config dojo:RollAnchorProbe=yes \
 	-config dojo:RollMashProbe=yes \
 	-config dojo:RollMarkProbe=yes \
+	-config dojo:RollLibProbe=yes \
 	-config window:width=1000 -config window:height=800 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 &
 FC=$!
@@ -462,6 +463,24 @@ if [ -n "$mp" ]; then
 		*) echo "FAIL rolltest - a bookmark did not survive save and reload"; exit 1 ;;
 	esac
 fi
+
+# ---- the sequence library, end to end ---------------------------------------
+# The module has a 34-claim self-test, and a self-test proves a MODULE, never
+# its integration. This arm is the other half: the probe writes a .txt into the
+# real library folder, SCANS IT BACK the way the panel does, places it through
+# Dojo::ApplyEdit and reads the movie. A sequence placed from the object that
+# was just written in memory would prove nothing about the disk round trip.
+lib=$(tr -d '\0' < "$OUT/out.log" | grep -a "ROLL LIBPROBE:" | tail -1)
+if [ -z "$lib" ]; then
+	# A SKIPPED CHECK IS NOT A PASSING ONE.
+	echo "rolltest: SKIP - the library probe never ran (no movie, or the panel never drew)"
+	exit $SKIP
+fi
+echo "  ${lib##*N\[RENDERER\]: }"
+case "$lib" in
+	*PASS*) ;;
+	*) echo "FAIL rolltest - a sequence did not survive write -> scan -> place -> undo"; exit 1 ;;
+esac
 
 # ---- the multi-row stroke, proved in process --------------------------------
 # NOT a duplicate of the click test and NOT a self-test: it drives the real

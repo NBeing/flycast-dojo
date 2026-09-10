@@ -97,12 +97,26 @@ one-shot integration checks that run inside a real session against a real movie.
 | `dojo:RollMashProbe` | parser → pattern → funnel |
 | `dojo:RollAnchorProbe` | a resize moves a `.frame` sidecar on disk AND a bookmark, and one undo brings both back |
 | `dojo:RollMarkProbe` | bookmarks survive save and reload, read from the FILE |
+| `dojo:RollLibProbe` | a sequence written to disk, **scanned back**, placed through the funnel and undone |
 | `dojo:StatesLabelProbe` | naming a slot round-trips through the disk |
 | `dojo:StatesDeleteProbe` | a delete takes, is visible through a rescan, raises a deletion notice, and an empty slot is refused |
 | `dojo:StatesGenProbe` | taking a generation registers it in the library and a tag on it sticks |
 
 **Harnesses**: `scripts/rolltest.sh` drives real clicks and drags;
-`scripts/statestest.sh` reads traces with no mouse at all. Both are in ctest.
+`scripts/statestest.sh` reads traces with no mouse at all;
+`scripts/selftest.sh` runs every in-process suite with no ROM at all. All three
+are in ctest, and `selftest` has a paired arm against its own judge.
+
+`[MEASURED 2026-09-10]` that last one closed a gap worth naming. The tree had
+**331 claims across 17 self-test suites** and no way to run them except picking
+`dojo:PanelSelfTest=yes` out of the rofi launcher by hand. They now run on every
+`ctest`, in about 14 seconds, because they all live in `flycast_init` before a
+game is loaded.
+
+The harness asserts a **floor on suites and claims**, not merely "0 failed".
+Every suite opens with `if (!cfgLoadBool("dojo", "PanelSelfTest", false))
+return;`, so a dropped call, a typo'd key or a deleted suite produces a clean
+green *empty* log — which from outside is indistinguishable from a passing run.
 
 ### Two things the harnesses learned the hard way
 
@@ -140,6 +154,59 @@ rewriting `.frame` sidecars) · `dojo:MarksPersist=no`.
 
 ## What is not here yet
 
-The generations pane, save/load from the wall, thumbnails (nothing in this tree writes one —
-`GetLastFrameRGB` is DX9/DX11 only), the input/hotkey system, and the
-sequence library. `TODOS.md` carries them.
+The generations pane, save/load from the wall, thumbnails (nothing in this tree
+writes one — `GetLastFrameRGB` is DX9/DX11 only), and the input/hotkey system.
+`TODOS.md` carries them.
+
+## The sequence library
+
+`core/dojo/roll_library.{h,cpp}` — saved input sequences you can stamp anywhere:
+a combo, a mash pattern, a menu-navigation snippet. **`data/snippets/*.txt`, and
+the folder is the whole index.**
+
+`[SOURCE]` the fork keeps a JSON index *beside* the folder (`root["snippets"]`)
+and therefore needs a **"Rescan `data/snippets/` — dropped-in .txt
+self-register"** button in its UI. That button is the defect rather than a
+feature: two things claim to know what sequences exist, so a file copied in is
+invisible until someone presses it, and an entry whose `.txt` was deleted
+elsewhere lingers — the fork has an explicit *"The .txt is gone from
+data/snippets/"* error for exactly that case. `CLAUDE.md` §4, one owner per fact.
+
+So the metadata lives **in the file**, as a leading comment block:
+
+```
+# name: Ruby Heart bnb
+# tags: combo, midscreen
+WC
+X
+```
+
+This costs nothing, because the codec already did the work. `[SOURCE]`
+`tas_macro::FromText`: *"a line whose only content is the comment is an
+ANNOTATION, not a frame (a header comment block must not shift the combo)"*. A
+header therefore reads as zero frames in a codec written before this file
+existed, and a six-year archive file with no header loads with its stem as its
+name — the right default rather than a migration.
+
+**A blank line is a frame.** `ToText` writes a neutral frame as an empty line, so
+a header reader that skipped blanks as decoration would silently eat a sequence
+that *opens* on neutral, and every placement of it would land one frame early.
+The header ends at the first line that is not a comment, blank included.
+
+**An all-neutral lane is ABSENT, not neutral** — and that is a fact about the
+format, not a choice: a CE file that never mentions a P2 letter and one whose P2
+is deliberately neutral are the *same bytes*. Reading them as present is how the
+fork got a Fill that wipes the other player on every row it touches
+(`ROLL-EDIT-MODEL.md` §4).
+
+**Placement has no merge flag either.** `patternReplacing()` and
+`patternOverdubbing()` differ only in the mask they build, which is the same rule
+`roll_pattern.h` states one level down — and the semantics fall out of it rather
+than being written:
+
+| | mask | a neutral frame in the sequence |
+|---|---|---|
+| replacing | `cellAll()` | **clears** what it lands on — a combo's gaps are part of the combo |
+| overdubbing | each step's own bits | **touches nothing** — input under the gap survives |
+
+A sequence does not record which it "is". The gesture that places it decides.
