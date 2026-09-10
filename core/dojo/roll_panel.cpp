@@ -274,7 +274,7 @@ static void draw()
 	// refuse every edit on such a clip while telling the user the tape is
 	// shared, with nothing on the other end. docs/SESSION-KINDS.md #9.
 	const bool paused   = gui_state == GuiState::Paused;
-	const bool writable = !session::livePeer();
+	const bool writable = !session::netplay();
 	const bool editable = paused && writable;
 	static int paintGap = 0;		// 0 = every row, 1 = every 2nd, 2 = every 3rd
 	static int rangeFactor = 2;		// stretch xN / compress /N, shared deliberately

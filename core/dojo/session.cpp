@@ -14,7 +14,27 @@ Kind kind()
 	// PRECEDENCE, in the order the header declares it. Netplay first: an online
 	// session is online whatever else is set, and every TAS answer below would
 	// be wrong about who is driving the guest.
-	if (config::GGPOEnable || settings.network.online)
+	//
+	// SPECTATE IS NETPLAY even though a movie drives the guest: the frames come
+	// off a socket and there is a sender on the other end.
+	if (cfgLoadBool("dojo", "Receiving", false))
+		return Kind::Netplay;
+
+	// `[CORRECTED 2026-09-10]` this read `config::GGPOEnable || network.online`,
+	// and that was WRONG for a purely local session. replay.cpp sets
+	// config::GGPOEnable = true when it loads a clip that was RECORDED from a
+	// GGPO match, so replaying such a clip offline reported Kind::Netplay -
+	// replaying() was false for it, and the one gate built on netplay() disabled
+	// every edit tool while telling the user "the tape is shared". No peer
+	// existed. docs/SESSION-KINDS.md §4 #9.
+	//
+	// A MOVIE DRIVING THE GUEST IS THE DISCRIMINATOR, and it is exact rather
+	// than heuristic: core/hw/maple/maple_if.cpp routes
+	// `if (dojo.play_match) MapleApplyAction(...) else ggpo::getInput(...)` -
+	// one or the other, every frame - so play_match and a live rollback session
+	// are mutually exclusive. Before the handshake network.online is still
+	// false, which is why the GGPOEnable arm has to stay.
+	if (settings.network.online || (config::GGPOEnable && !dojo.play_match))
 		return Kind::Netplay;
 
 	// The macro pair before Replay, because a macro PLAYBACK also sets
@@ -46,14 +66,6 @@ bool macro()     { const Kind k = kind(); return k == Kind::RecordMacro || k == 
 bool netplay()   { return kind() == Kind::Netplay; }
 bool readOnly()  { return mode() == Mode::Read; }
 
-bool livePeer()
-{
-	// Spectate first: its frames come off a socket while play_match is true, so
-	// the movie test below would wrongly call it a local session.
-	if (cfgLoadBool("dojo", "Receiving", false))
-		return true;
-	return settings.network.online && !dojo.play_match;
-}
 
 bool writeGrow()
 {
@@ -148,6 +160,40 @@ void selfTest()
 	claim("label() reflects the kind", std::strcmp(label(), "RECORD MOVIE") == 0);
 	dojo.play_match = true;
 	claim("...and changes with it", std::strcmp(label(), "REPLAY") == 0);
+
+	// ---- THE NETPLAY ARM, which had a live bug ----
+	//
+	// These are the claims docs/SESSION-KINDS.md §4 #9 is about, and the first
+	// of them FAILED before 2026-09-10.
+	{
+		const bool wasGGPO = config::GGPOEnable;
+		const bool wasRecv = cfgLoadBool("dojo", "Receiving", false);
+		set("MacroMode", false); set("PlayMacro", false); set("RecordMatches", false);
+		set("Receiving", false);
+
+		// replay.cpp sets config::GGPOEnable when it loads a clip that was
+		// RECORDED from a GGPO match. Replaying one offline is a LOCAL session.
+		config::GGPOEnable = true;
+		dojo.play_match = true;
+		claim("replaying a GGPO-recorded clip offline is a REPLAY, not netplay",
+				kind() == Kind::Replay && !netplay());
+
+		// The same flag with no movie driving IS a rollback session - before the
+		// handshake, settings.network.online is still false, so this arm has to
+		// stay or a real GGPO boot would read as JustPlay.
+		dojo.play_match = false;
+		claim("GGPO with no movie driving is netplay", kind() == Kind::Netplay);
+
+		// Spectate: a movie drives the guest, but the frames come off a socket
+		// and there is a sender on the other end.
+		config::GGPOEnable = false;
+		dojo.play_match = true;
+		set("Receiving", true);
+		claim("spectate is netplay even though a movie drives", kind() == Kind::Netplay);
+
+		set("Receiving", wasRecv);
+		config::GGPOEnable = wasGGPO;
+	}
 
 	set("MacroMode", wasMacro); set("PlayMacro", wasPlay); set("RecordMatches", wasRecord);
 	dojo.play_match = wasPlayM;

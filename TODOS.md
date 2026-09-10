@@ -207,13 +207,21 @@ this; the counts and the evidence are there, not here.
   kind in the tree.
 - [ ] Migrate against the denominator (170), so a missed site is loud. A partial
   migration reads exactly like a complete one.
-- [ ] Work §4's **11 latent disagreements** as a bug list. #9 is live: replaying
-  a clip recorded from a GGPO match reports `Kind::Netplay` offline, because
-  `replay.cpp` sets `config::GGPOEnable` when it loads one.
-- [ ] **[OPEN]** §6 — permitting edits during a paused replay bypasses two
-  guards in `dojo.cpp` written as `!play_match`: the locked-range filter and the
-  structural-edit refusal. The gate correction was right in direction and opened
-  a path those guards assumed closed. Not resolved.
+- [ ] Work §4's **11 latent disagreements** as a bug list. **#9 fixed
+  `[2026-09-10]`** — `kind()` now discriminates on whether a movie is driving
+  the guest, which `maple_if.cpp` makes exact, and treats Receiving as netplay
+  explicitly. Three self-test claims, one sabotage. That also deleted
+  `session::livePeer()`, a predicate added a day earlier to work around the
+  defect: fixing `kind()` made the two identical, and a synonym would have been
+  two owners of one question. **10 remain.**
+- [x] §6 — the two `!play_match` guards in `dojo.cpp`. Both said "edits require
+  `!play_match` so replay never reaches this", which stopped being true when the
+  roll's gate was corrected. The clause was standing in for "the UI cannot get
+  here", not for a rule about locks — a locked range protects frames whatever
+  kind of session edits them, and a paused replay is exactly when a user relies
+  on that. Now `!history_replay` alone. **Inert today** either way, since
+  `gui_locked_ranges()` is a stub (§G10), which is why it had to be found by
+  reading rather than by a test.
 
 ## Known bugs
 

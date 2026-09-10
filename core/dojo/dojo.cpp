@@ -1447,10 +1447,20 @@ s64 Dojo::ApplyEdit(const std::map<u32, std::vector<u8>>& edited, const char *so
 
 	// TAS timeline-lock (R7): drop any changed frame that lands in a LOCKED savestate range - a write
 	// into a protected range behaves like PROTECT (never recorded). Every in-place UI edit verb (paint
-	// / macro place / paste / Input-Sender Replace+Append / sequences) funnels here; edits require
-	// !play_match so replay never reaches this. undo/redo (history_replay) passes through so a pre-lock
-	// edit can always be reverted.
-	if (!history_replay && !play_match && (!locked_slots.empty() || base_prelock))
+	// / macro place / paste / Input-Sender Replace+Append / sequences) funnels here. undo/redo
+	// (history_replay) passes through so a pre-lock edit can always be reverted.
+	//
+	// `[CORRECTED 2026-09-10]` this also required !play_match, and said so: "edits require
+	// !play_match so replay never reaches this". That stopped being true when the piano roll's
+	// gate was corrected to permit editing a PAUSED replay - which is re-recording, the feature.
+	// The clause was standing in for "the UI cannot get here", not for a rule about locks: a
+	// locked range protects frames whatever kind of session is editing them, and a paused replay
+	// is precisely when a user would rely on that.
+	//
+	// Inert today either way - gui_locked_ranges() is a stub returning empty until the lock UI is
+	// ported (docs/SESSION-KINDS.md G10) - which is why this had to be fixed by reading rather
+	// than by being caught.
+	if (!history_replay && (!locked_slots.empty() || base_prelock))
 	{
 		std::vector<std::pair<u32, u32>> lr;
 		gui_locked_ranges(lr);			// compute the ranges ONCE (not once per changed frame)
@@ -1551,9 +1561,13 @@ s64 Dojo::ApplyEditResize(const std::map<u32, std::vector<u8>>& edited, const ch
 
 	// TAS timeline-lock (R7): a structural edit renumbers frames from the first touched frame
 	// onward, dragging any locked range whose end is past it. Refuse ONLY then - an edit entirely
-	// after every lock is safe (covers manual forward locks AND the pre-BASE auto-lock). UI-only /
-	// !play_match, and undo/redo (history_replay) passes through, so sync stays identical.
-	if (!history_replay && !play_match)
+	// after every lock is safe (covers manual forward locks AND the pre-BASE auto-lock). undo/redo
+	// (history_replay) passes through, so sync stays identical.
+	//
+	// `[CORRECTED 2026-09-10]` the !play_match clause is gone for the reason above: a structural
+	// edit during a paused replay renumbers exactly the same frames and must respect the same
+	// locks.
+	if (!history_replay)
 	{
 		std::vector<std::pair<u32, u32>> lr;
 		gui_locked_ranges(lr);
