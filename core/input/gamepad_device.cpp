@@ -19,6 +19,7 @@
 
 #include "gamepad_device.h"
 #include "hotkeys.h"
+#include "hold_repeat.h"
 #include "dojo/session.h"
 #include "cfg/cfg.h"
 #include "cfg/option.h"
@@ -183,10 +184,35 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 				gui_open_pause();
 			break;
 		case EMU_BTN_STEP:
-			// NOT WHILE TYPING. Deliberately only that - a menu being open is
-			// still fine for these four, exactly as before.
-			if (pressed && !gui_keyboard_captured())
+			/*
+				TAP FOR ONE FRAME, HOLD TO SCRUB.
+
+				THE RELEASE IS HANDLED FIRST AND UNCONDITIONALLY, before any
+				guard. `[SOURCE]` the TAS fork: "A GUARD MUST NEVER SWALLOW A
+				RELEASE. The release is what clears a hold; letting
+				gui_keyboard_captured() eat it latches the hold forever. That is
+				exactly what stranded the scrub at End of Replay: the
+				End-of-Replay window takes keyboard focus, so the Space keyup
+				was dropped, step_held stayed true, and mainui spun on a dead
+				movie." A window taking focus between the press and the release
+				is not hypothetical - it is what that window does.
+
+				The repeats themselves come from the frame loop, which is the
+				only thing that knows time has passed.
+			*/
+			if (!pressed)
+			{
+				hotkeys::stepHold().release();
+				break;
+			}
+			if (gui_keyboard_captured())
+				break;
+			if (hotkeys::stepHold().press(os_GetSeconds()) > 0)
+			{
+				if (cfgLoadBool("dojo", "HotkeyTrace", false))
+					NOTICE_LOG(INPUT, "HOTKEY STEP: tap");
 				gui_open_step();
+			}
 			break;
 
 		// training

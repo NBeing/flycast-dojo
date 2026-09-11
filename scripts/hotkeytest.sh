@@ -191,6 +191,7 @@ bind5 = 60:btn_gen_archive
 # into the code's high bits.
 bind6 = 65599:btn_fforward
 bind7 = 59:btn_hotkey_help
+bind8 = 58:btn_step
 CFG
 done
 
@@ -237,7 +238,35 @@ WID=$(xdotool search --name "Flycast" 2>/dev/null | head -1)
 xdotool windowactivate "$WID" 2>/dev/null
 sleep 1
 
-log() { tr -d '\0' < "$OUT/out.log"; }
+# THE LOG, FLATTENED ONCE TO A FILE - never piped into a matcher.
+#
+# `[MEASURED 2026-09-10]` this was `log() { tr -d '\0' < "$OUT/out.log"; }` and
+# every check was `log | grep -aq ...`. Under `set -o pipefail` that is a RACE:
+# grep -q exits the instant it matches, tr takes SIGPIPE, and the PIPELINE
+# reports 141 - failure - even though the match succeeded. Whether it happens
+# depends on whether tr finished writing first, which depends on HOW BIG THE LOG
+# IS, which has nothing to do with what is being checked.
+#
+# It showed up as a sabotage failing the wrong claim: the broken build logged 54
+# scrub events instead of 10, the bigger log lost the race, and seven actions
+# that are plainly in the log were reported as never reaching the dispatch.
+#
+# `[CORRECTED 2026-09-11]` the first write-up of this said the passing runs were
+# "green by luck". THAT IS BACKWARDS, and measuring it settles it:
+#
+#     cat big.txt | grep -q MATCH   -> 141   (a match, reported as failure)
+#     cat big.txt | grep -q NOPE    -> 1     (correct)
+#
+# pipefail can only turn a success into a failure, never the reverse. So this
+# race produces FALSE FAILURES - loud ones - and the harm is flakiness and
+# misattribution, not a check that silently agrees with everything.
+#
+# CLAUDE.md already carries this family - "$? was reading tail at the end of a
+# pipeline". Same trap, other end of the pipe. There is no pipeline now.
+flatten() { tr -d '\0' < "$OUT/out.log" > "$OUT/flat.log"; }
+log() { flatten; cat "$OUT/flat.log"; }
+has() { flatten; grep -aq "$1" "$OUT/flat.log"; }
+countOf() { flatten; grep -ac "$1" "$OUT/flat.log" || true; }
 
 # EMU_BTN_PIANO_ROLL's value, counted out of gamepad.h. The trace prints the id
 # as a hex number and a literal here would rot the first time an id is inserted
@@ -272,7 +301,7 @@ GUISTATE_PAUSED=$((${GUISTATE_PAUSED:-0} - 1))
 
 # THE INSTRUMENT IS VERIFIED FIRST. If the panel is already open before any key
 # is pressed, every claim below is meaningless - and it would read as a pass.
-if log | grep -aq "PANEL TOGGLE:"; then
+if has "PANEL TOGGLE:"; then
 	echo "FAIL hotkeytest - a panel toggled before any key was sent"
 	cleanup; exit 1
 fi
@@ -291,7 +320,7 @@ press() { xdotool key "$1"; sleep 1.5; }
 # Closed. A piano-roll hotkey written that way cannot be pressed at the only
 # moment it is wanted, and only pressing it while paused can show that.
 press F9
-if ! log | grep -aq "HOTKEY: .*guistate=$GUISTATE_PAUSED"; then
+if ! has "HOTKEY: .*guistate=$GUISTATE_PAUSED"; then
 	# THE INSTRUMENT, CHECKED BEFORE THE CLAIM. Without this, "the toggle did
 	# not fire because the guard is wrong" and "the toggle did not fire because
 	# the key never arrived" are the same silence.
@@ -332,6 +361,28 @@ xdotool keyup F6;      sleep 1.5
 
 press F7	# THE CONTROL: bound to nothing in the mapping above
 
+# ---- TAP vs HOLD, LAST ---------------------------------------------------
+# "Tap for one frame - hold to scrub in slow motion" `[SOURCE]` the TAS fork's
+# help text for EMU_BTN_STEP. The two halves are one claim: a tap that advanced
+# many, or a hold that advanced one, are both the feature not working, and
+# either alone is satisfied by a step key that does nothing at all.
+#
+# LAST, AND THAT IS NOT TIDINESS. `[MEASURED 2026-09-10]` a latched hold does
+# not merely keep scrubbing - it runs the movie to its end, which puts the
+# emulator in GuiState::ReplayEnd where every hotkey is correctly refused. With
+# this arm in the middle, sabotaging release() failed the run at "bound keys
+# that never reached the dispatch" instead of at the latch check written for it:
+# a real failure, attributed to the wrong cause. Nothing after this arm can be
+# poisoned by it now.
+press F1		# a TAP
+xdotool keydown F1; sleep 1.5; xdotool keyup F1; sleep 1.5
+# THE LATCH CHECK. "It scrubbed a lot" is satisfied BY a latch, so counting
+# frames cannot be the whole claim. Sample the total twice with the key long
+# since up: a hold that was released cannot have moved between them.
+scrubA=$(countOf "HOTKEY STEP: scrub")
+sleep 1.5
+scrubB=$(countOf "HOTKEY STEP: scrub")
+
 sleep 1
 toggles=$(log | grep -a "PANEL TOGGLE:" | sed 's/.*PANEL TOGGLE: /  /')
 slots=$(log | grep -a "HOTKEY SLOT:" | sed 's/.*HOTKEY SLOT: /  /')
@@ -350,12 +401,12 @@ for a in EMU_BTN_PIANO_ROLL EMU_BTN_SAVESTATE_SLOT_NEXT EMU_BTN_SLOT_PICKER \
 		echo "FAIL hotkeytest - $a is not in gamepad.h; this check is not checking it"
 		exit 1
 	fi
-	log | grep -aq "HOTKEY: id=0x$id " || missing="$missing $a"
+	has "HOTKEY: id=0x$id " || missing="$missing $a"
 done
 # The chord's target. Bound ONLY as Shift+F6, so seeing it at all proves the
 # modifier reached the mapping layer packed into the code.
 chordId=$(idof EMU_BTN_FFORWARD)
-log | grep -aq "HOTKEY: id=0x$chordId " || missing="$missing EMU_BTN_FFORWARD(chord)"
+has "HOTKEY: id=0x$chordId " || missing="$missing EMU_BTN_FFORWARD(chord)"
 if [ -n "$missing" ]; then
 	echo "FAIL hotkeytest - bound keys that never reached the dispatch:$missing"
 	log | grep -a "HOTKEY:" | tail -8 | sed 's/^/    /'
@@ -376,7 +427,7 @@ if [ "$nopen" -lt 1 ]; then
 	# guard refused it. A message that names one cause for three faults is a
 	# wrong diagnosis three times out of four, and the trace it needs to tell
 	# them apart is already in the log.
-	if log | grep -aq "HOTKEY: id=0x$(printf '%x' $((0x3000000 + PIANO_ROLL_OFF)))"; then
+	if has "HOTKEY: id=0x$(printf '%x' $((0x3000000 + PIANO_ROLL_OFF)))"; then
 		echo "FAIL hotkeytest - the key REACHED the dispatch and the action did not run;"
 		echo "                  the guard refused it. Last states seen:"
 		log | grep -a "HOTKEY:" | tail -3 | sed 's/^/                  /'
@@ -405,7 +456,7 @@ fi
 bound=""
 for a in EMU_BTN_PIANO_ROLL EMU_BTN_SAVESTATE_SLOT_NEXT EMU_BTN_SLOT_PICKER \
 		EMU_BTN_SAVESTATE_SLOT_PREV EMU_BTN_GEN_ARCHIVE EMU_BTN_PAUSE \
-		EMU_BTN_FFORWARD EMU_BTN_HOTKEY_HELP; do
+		EMU_BTN_FFORWARD EMU_BTN_HOTKEY_HELP EMU_BTN_STEP; do
 	bound="$bound 0x$(idof "$a")"
 done
 saw=$(log | grep -aoE "HOTKEY: id=0x[0-9a-f]+" | sed 's/.*id=//' | sort -u)
@@ -426,7 +477,7 @@ echo "  no action fired that was not bound ($(printf '%s\n' "$saw" | wc -l) dist
 # whenever a modifier happened to be held, holding Shift during play would eat
 # game inputs, and that is what makes this the claim worth having.
 gaId=$(idof EMU_BTN_GEN_ARCHIVE)
-gaDown=$(log | grep -ac "HOTKEY: id=0x$gaId down")
+gaDown=$(countOf "HOTKEY: id=0x$gaId down")
 if [ "$gaDown" -ne 2 ]; then
 	echo "FAIL hotkeytest - an unbound chord did not fall back to the plain key:"
 	echo "                  expected 2 presses of EMU_BTN_GEN_ARCHIVE (F3, then shift+F3), saw $gaDown"
@@ -439,8 +490,8 @@ echo "  an unbound chord fell through to the plain key"
 # fast-forward means the emulator never returns to normal speed.
 stuck=""
 for id in $saw; do
-	d=$(log | grep -ac "HOTKEY: id=$id down")
-	u=$(log | grep -ac "HOTKEY: id=$id up")
+	d=$(countOf "HOTKEY: id=$id down")
+	u=$(countOf "HOTKEY: id=$id up")
 	[ "$d" -eq "$u" ] || stuck="$stuck $id(down=$d,up=$u)"
 done
 if [ -n "$stuck" ]; then
@@ -460,6 +511,28 @@ if ! printf '%s\n' "$toggles" | grep -aq "hotkeys -> open"; then
 	exit 1
 fi
 echo "  the hotkey cheat sheet opened"
+
+# TAP vs HOLD, from the emulator's own trace of what the step key did.
+taps=$(countOf "HOTKEY STEP: tap")
+scrub=$(log | grep -aoE "HOTKEY STEP: scrub \+[0-9]+" | sed 's/.*+//' | awk '{n+=$1} END {print n+0}')
+if [ "$taps" -lt 1 ]; then
+	echo "FAIL hotkeytest - the step key never registered a tap"
+	exit 1
+fi
+if [ "$scrub" -lt 2 ]; then
+	echo "FAIL hotkeytest - holding the step key scrubbed $scrub frames; a hold that"
+	echo "                  advances one frame is a tap, which is the feature missing"
+	exit 1
+fi
+if [ "$scrubA" -ne "$scrubB" ]; then
+	echo "FAIL hotkeytest - the scrub kept going after the key came up"
+	echo "                  ($scrubA scrub events, then $scrubB a second later)"
+	echo "                  a hold whose release was lost latches forever - which is"
+	echo "                  what stranded the fork's scrub at End of Replay"
+	exit 1
+fi
+echo "  the step key taps ($taps) and scrubs ($scrub frames while held)"
+echo "  ...and the scrub stopped when the key came up ($scrubA events, still $scrubB)"
 
 # ...AND HAS SOMETHING TO SHOW. The panel falls back to "No keyboard that can
 # name its keys" when it finds no device able to name a scancode, and an open

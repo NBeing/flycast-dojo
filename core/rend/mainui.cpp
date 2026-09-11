@@ -19,6 +19,7 @@
 
 #include "mainui.h"
 #include "deferred.h"
+#include "input/hold_repeat.h"
 #include "emulator.h"
 #include "cfg/option.h"
 #include <chrono>
@@ -362,6 +363,30 @@ bool mainui_rend_frame()
 	// auto-seek block below, which is the evidence that stopping the emulator
 	// here is safe - see core/deferred.h for what is not.
 	deferred::drain();
+	/*
+		THE SCRUB'S REPEATS. The dispatch presses and releases the hold; only
+		this loop knows time has passed.
+
+		HERE rather than in the emulation thread: gui_open_step() is the same
+		call the hotkey makes, and it is safe from this point for the same
+		reason everything else in this function is - outside the ImGui frame and
+		outside the emulation loop.
+
+		COUNTED, NOT ONE PER FRAME. tick() answers how many repeats came due,
+		so a slow frame owes the ones it missed instead of silently halving the
+		scrub rate.
+	*/
+	{
+		const int due = hotkeys::stepHold().tick(os_GetSeconds());
+		if (due > 0)
+		{
+			if (cfgLoadBool("dojo", "HotkeyTrace", false))
+				NOTICE_LOG(INPUT, "HOTKEY STEP: scrub +%d", due);
+			for (int i = 0; i < due; i++)
+				gui_open_step();
+		}
+	}
+
 	stepProbe();		// dojo:StepProbe=N - off unless set
 	loadProbe();		// dojo:LoadProbe=gui|raw - off unless set
 

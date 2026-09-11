@@ -1,4 +1,6 @@
 #include "hold_repeat.h"
+#include "cfg/cfg.h"
+#include "log/LogManager.h"
 #include <cmath>
 
 namespace hotkeys
@@ -75,6 +77,13 @@ void HoldRepeat::release()
 	fired_ = 0;
 }
 
+HoldRepeat& stepHold()
+{
+	static HoldRepeat h(cfgLoadInt("dojo", "HoldStepDelay", 300) / 1000.0,
+			(double)cfgLoadInt("dojo", "HoldStepRate", 8));
+	return h;
+}
+
 }	// namespace hotkeys
 
 // ---- SELF-TEST ------------------------------------------------------------
@@ -91,8 +100,6 @@ void HoldRepeat::release()
 // rate and the delay can be exercised in microseconds and no claim depends on
 // how fast the machine running it is.
 
-#include "cfg/cfg.h"
-#include "log/LogManager.h"
 
 namespace hotkeys
 {

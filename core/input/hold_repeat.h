@@ -67,6 +67,20 @@ private:
 	int    fired_ = 0;
 };
 
+/*
+	THE FRAME-ADVANCE HOLD, shared by the two places that need it.
+
+	The dispatch presses and releases it; the frame loop ticks it. A file-static
+	in either would leave the other unable to reach it, and a copy in each is
+	two machines disagreeing about whether a key is down.
+
+	`dojo:HoldStepDelay` seconds before the scrub starts (default 0.3 - long
+	enough that a quick tap cannot slide two frames, which is the debounce the
+	TAS fork records needing) and `dojo:HoldStepRate` frames per second once it
+	does (default 8 - "slow motion", not fast-forward).
+*/
+HoldRepeat& stepHold();
+
 //! Runs under dojo:PanelSelfTest, like the other seams in this tree.
 void holdRepeatSelfTest();
 
