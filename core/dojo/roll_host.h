@@ -206,4 +206,7 @@ void anchorProbe();
 // Registers the States panel with the registry. Idempotent.
 void registerStatesPanel();
 
+//! The hotkey cheat sheet: every TAS action and its LIVE binding. Idempotent.
+void registerHotkeyPanel();
+
 }	// namespace roll

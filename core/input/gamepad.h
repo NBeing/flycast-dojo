@@ -127,6 +127,7 @@ enum DreamcastKey
 	EMU_BTN_SAVESTATE_SLOT_NEXT,	// next savestate slot -- TAS
 	EMU_BTN_SAVESTATE_SLOT_PREV,	// previous savestate slot -- TAS
 	EMU_BTN_GEN_ARCHIVE,			// archive the clip into the next gen_NN folder -- TAS
+	EMU_BTN_HOTKEY_HELP,			// toggle the on-screen hotkey cheat sheet -- TAS
 
 	// Real axes
 	DC_AXIS_TRIGGERS	= 0x1000000,

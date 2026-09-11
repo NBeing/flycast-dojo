@@ -29,6 +29,7 @@ static const Action ACTIONS[] = {
 	{ EMU_BTN_SAVESTATE_SLOT_NEXT,  "btn_savestate_slot_next",  "Next Savestate Slot"     },
 	{ EMU_BTN_SAVESTATE_SLOT_PREV,  "btn_savestate_slot_prev",  "Previous Savestate Slot" },
 	{ EMU_BTN_GEN_ARCHIVE,          "btn_gen_archive",          "Archive Generation"      },
+	{ EMU_BTN_HOTKEY_HELP,          "btn_hotkey_help",          "Hotkey List"             },
 };
 
 const Action *all()   { return ACTIONS; }

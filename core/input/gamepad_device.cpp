@@ -302,6 +302,10 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 			if (pressed && gui_hotkey_allowed())
 				panels::toggle("states");
 			break;
+		case EMU_BTN_HOTKEY_HELP:
+			if (pressed && gui_hotkey_allowed())
+				panels::toggle("hotkeys");
+			break;
 		/*
 			SLOT CYCLING WRAPS, and it goes through hostfs::clampSavestateSlot
 			rather than doing its own arithmetic - that function is the one

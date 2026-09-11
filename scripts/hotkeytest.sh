@@ -156,6 +156,7 @@ bind5 = 60:btn_gen_archive
 # two together - one ordinary number, which is the point of packing the modifier
 # into the code's high bits.
 bind6 = 65599:btn_fforward
+bind7 = 59:btn_hotkey_help
 CFG
 done
 
@@ -277,6 +278,7 @@ press F12
 press shift+F5	# btn_slot_picker - bound ONLY as a chord
 press F4	# btn_savestate_slot_prev
 press F3	# btn_gen_archive
+press F2	# btn_hotkey_help - toggles the cheat sheet panel
 # ---- CHORDS -------------------------------------------------------------
 # `[PORTED 2026-09-10]` keyboard chords, from the TAS fork, where they are what
 # makes ~30 TAS actions fit on one keyboard.
@@ -325,7 +327,7 @@ if [ -n "$missing" ]; then
 	log | grep -a "HOTKEY:" | tail -8 | sed 's/^/    /'
 	exit 1
 fi
-echo "  all 6 bound actions reached the dispatch"
+echo "  all 7 bound actions reached the dispatch"
 
 nopen=$(printf '%s\n' "$toggles" | grep -ac "pianoroll -> open")
 nclosed=$(printf '%s\n' "$toggles" | grep -ac "pianoroll -> closed")
@@ -369,7 +371,7 @@ fi
 bound=""
 for a in EMU_BTN_PIANO_ROLL EMU_BTN_SAVESTATE_SLOT_NEXT EMU_BTN_SLOT_PICKER \
 		EMU_BTN_SAVESTATE_SLOT_PREV EMU_BTN_GEN_ARCHIVE EMU_BTN_PAUSE \
-		EMU_BTN_FFORWARD; do
+		EMU_BTN_FFORWARD EMU_BTN_HOTKEY_HELP; do
 	bound="$bound 0x$(idof "$a")"
 done
 saw=$(log | grep -aoE "HOTKEY: id=0x[0-9a-f]+" | sed 's/.*id=//' | sort -u)
@@ -413,5 +415,28 @@ if [ -n "$stuck" ]; then
 	exit 1
 fi
 echo "  every action that went down came back up"
-echo "PASS hotkeytest - six bound actions all reached the dispatch WHILE PAUSED, the roll toggled open then closed, the slot went 0 -> 1, and nothing fired that was not bound"
+
+# THE CHEAT SHEET OPENED. Reaching the dispatch is not the same as the panel
+# appearing - the registry could enumerate it, the key could arrive, and
+# panels::toggle could still be pointed at an id nobody registered, which logs
+# loudly and does nothing.
+if ! printf '%s\n' "$toggles" | grep -aq "hotkeys -> open"; then
+	echo "FAIL hotkeytest - the hotkey cheat sheet never opened"
+	printf '%s\n' "$toggles" | sed 's/^/    /'
+	exit 1
+fi
+echo "  the hotkey cheat sheet opened"
+
+# ...AND HAS SOMETHING TO SHOW. The panel falls back to "No keyboard that can
+# name its keys" when it finds no device able to name a scancode, and an open
+# panel saying that looks exactly like a working one from out here.
+sheet=$(log | grep -a "HOTKEY PANEL: reading bindings" | tail -1)
+case "$sheet" in
+	*"[(none)]"*|"")
+		echo "FAIL hotkeytest - the cheat sheet opened but found no keyboard to read"
+		[ -n "$sheet" ] && echo "    ${sheet##*N\[RENDERER\]: }"
+		exit 1 ;;
+esac
+echo "  ${sheet##*N\[RENDERER\]: }"
+echo "PASS hotkeytest - seven bound actions all reached the dispatch WHILE PAUSED, the roll toggled open then closed, the slot went 0 -> 1, and nothing fired that was not bound"
 exit 0
