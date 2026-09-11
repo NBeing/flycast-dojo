@@ -37,12 +37,23 @@
 --- frame (9928) and failed the LANDING claim with a WRONG frame. Instead it did
 --- not move at all.
 ---
---- `[NARROWED 2026-09-10]` it was not refused. gui_loadState() now warns when
---- its `gui_state == Closed && savestateAllowed()` guard turns it away, and
---- that run logged NO warning - so the call went through the guard and did the
---- stop/load/start. Which leaves dc_loadstate(0) being a no-op in that context,
---- while the same load from a C++ probe moved the machine 10400 -> 9928. Not
---- established.
+--- `[NARROWED 2026-09-10]` three explanations are ruled out, each by a log line
+--- that is absent from the sabotage run:
+---
+---   NOT REFUSED.   gui_loadState() warns when its `gui_state == Closed &&
+---                  savestateAllowed()` guard turns it away. No warning - so
+---                  the call went through and did the stop/load/start.
+---   NOT THE SLOT.  the sabotage logs the slot it used: 0, as intended.
+---   NOT A MISSING FILE. dc_loadstate RETURNS EARLY on one it cannot open,
+---                  with "Failed to load state - could not open %s" and a
+---                  "Save state not found" notification. Neither appears.
+---
+--- So slot 0 was opened and loaded, and the movie index stayed at 10529 anyway,
+--- while the identical load from a C++ probe moved a machine 10400 -> 9928.
+--- Still not established. The remaining suspect is how dojo.frame_number is
+--- restored - it comes from the .frame sidecar rather than the state blob - but
+--- that is a guess, and this note is a list of what is KNOWN not to be the
+--- cause rather than a theory about what is.
 ---
 --- The test is sound either way - a broken loadSlotLater fails it both times -
 --- but the diagnosis it prints for a wrong-slot bug is less precise than

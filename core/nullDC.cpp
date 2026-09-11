@@ -359,6 +359,16 @@ void dc_loadstate(int index, std::string filename)
 
 		if ( f == NULL )
 		{
+			// `[MEASURED 2026-09-10]` THIS RETURNS, IT DOES NOT THROW - and the
+			// same is true of the malloc and I/O failures below. gui_loadState()
+			// wraps this call in a try/catch, so a caller reading that function
+			// would reasonably expect a failed load to surface as an exception.
+			// It does not: the machine is simply left alone, and the only trace
+			// is this line plus a notification that is gone in two seconds.
+			//
+			// That is why "the load did nothing" is a reachable state at all,
+			// and it cost a while to rule out while chasing an unrelated
+			// question (scripts/tests/deferredslot.lua's [OPEN] note).
 			WARN_LOG(SAVESTATE, "Failed to load state - could not open %s for reading", filename.c_str());
 			gui_display_notification("Save state not found", 2000);
 			return;
