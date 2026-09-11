@@ -555,7 +555,6 @@ extern Option<bool> ShowTrainingGameOverlay;
 extern Option<bool> EnableTrainingLua;
 extern Option<bool> AutoLoadTrainingNetState;
 extern Option<bool> AutoLoadNetState;
-extern OptionString DojoServerIP;
 extern OptionString DojoServerPort;
 
 extern Option<bool> Transmitting;

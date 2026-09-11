@@ -193,7 +193,19 @@ Option<bool> ShowTrainingGameOverlay("ShowTrainingGameOverlay", true, "dojo");
 Option<bool> EnableTrainingLua("EnableTrainingLua", true, "dojo");
 Option<bool> AutoLoadTrainingNetState("AutoLoadTrainingNetState", false, "dojo");	// TAS: netplay leftover
 Option<bool> AutoLoadNetState("AutoLoadNetState", false, "dojo");	// TAS: blocked headless boots
-OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo");
+/*
+	`[REMOVED 2026-09-10]` OptionString DojoServerIP("ServerIP", "127.0.0.1", "dojo").
+
+	Declared here, externed in option.h, and referenced NOWHERE ELSE in the
+	tree - so it was a line in the user's emu.cfg that looked like a setting,
+	persisted like a setting, and did nothing. Dojo netplay reads SpectatorIP,
+	RelayServer and RelayKey instead, all through the raw cfg API.
+
+	Found by scripts/configaudit.py on its first run. Removal cannot change
+	behaviour, because nothing read it; what changes is that the key stops
+	being written, and a line already in somebody's emu.cfg is simply ignored
+	as it always was.
+*/
 OptionString DojoServerPort("ServerPort", "6000", "dojo");
 
 /*

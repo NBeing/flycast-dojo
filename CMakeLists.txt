@@ -1996,6 +1996,33 @@ set_tests_properties(flycast.hotkeytest PROPERTIES
 	RUN_SERIAL TRUE
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;HOTKEYTEST_DISPLAY=147")
 
+# IS EVERY REGISTERED CONFIG OPTION ACTUALLY READ?
+#
+# An Option in core/cfg/option.cpp is REGISTERED: it has a default, it is loaded
+# from and saved to the user's emu.cfg, and it is a line in that file. A key
+# nothing reads is a lie the user can edit - it looks like a setting, persists
+# like one, and does nothing.
+#
+# `[MEASURED 2026-09-10]` its first run found DojoServerIP("ServerIP") declared,
+# externed, and referenced nowhere; dojo netplay uses SpectatorIP / RelayServer
+# / RelayKey. Removed.
+#
+# It also freezes the set of options read through the RAW cfgLoad* API instead
+# of through config:: - two mechanisms for one key, which
+# docs/SESSION-KINDS.md §4 #11 records for Training. Five exist; a sixth fails.
+add_test(NAME flycast.configaudit
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/configaudit.py)
+set_tests_properties(flycast.configaudit PROPERTIES TIMEOUT 120)
+
+# ITS PAIRED ARM. Two sabotages and a control. The second sabotage is the one
+# that matters: a comment mentioning an option must NOT count as a read. The
+# first version of this check grepped raw text, so config::Training's only two
+# mentions - both in comments SAYING IT IS READ BY NOBODY - counted as reads and
+# the audit called it healthy.
+add_test(NAME flycast.configaudit_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/configaudit.py --self-test)
+set_tests_properties(flycast.configaudit_can_fail PROPERTIES TIMEOUT 120)
+
 # DO THE FIVE FILES THAT MUST AGREE ABOUT A HOTKEY ACTUALLY AGREE?
 #
 # A hotkey is not one declaration, it is five: the id in gamepad.h, a row in
