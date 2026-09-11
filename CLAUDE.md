@@ -191,6 +191,12 @@ boundary, or mark it open.
 > cannot run those, and calling that a failure trains people to ignore it. The
 > **summary** is what was wrong. `scripts/checks.sh` runs the suite and exits 2
 > on any skip; use it rather than bare `ctest` when the answer matters.
+>
+> It earned that the same day. `[MEASURED 2026-09-10]` one suite run in seven
+> had `flycast.crossprocess` skip on its own — "run1: 0 samples, run2: 12
+> samples", three immediate re-runs clean, an intermittent slow boot. ctest
+> printed `100% tests passed`. A coverage hole that opens at random is exactly
+> the kind a green summary hides forever.
 
 > `[MEASURED 2026-09-06]` The conformance suite prints the *reason* beside every
 > skip. flycast reports three: `main` states no size because the SH4 space is

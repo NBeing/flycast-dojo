@@ -4831,6 +4831,26 @@ void gui_loadState()
 			gui_stop_game(e.what());
 		}
 	}
+	else
+	{
+		/*
+			SAY WHY IT DID NOTHING. This had no else at all, so a refusal and a
+			completed load were the same silence - to the user pressing the
+			button, and to anything reading the log.
+
+			`[MEASURED 2026-09-10]` that cost real time twice in one day.
+			scripts/tests/deferredslot.lua could not tell a wrong-slot bug from
+			a refusal, because both look like "the machine did not move"; and
+			the C++ probe that preceded it had to grow a `closed=` field before
+			its results meant anything, for the same reason.
+
+			WARN rather than NOTICE: reaching here means somebody asked for a
+			load and did not get one.
+		*/
+		WARN_LOG(COMMON, "gui_loadState: refused - guistate=%d (needs Closed=%d), allowed=%s",
+				(int)gui_state, (int)GuiState::Closed,
+				savestateAllowed() ? "yes" : "no");
+	}
 }
 
 void gui_saveState()
@@ -4845,6 +4865,26 @@ void gui_saveState()
 		} catch (const FlycastException& e) {
 			gui_stop_game(e.what());
 		}
+	}
+	else
+	{
+		/*
+			SAY WHY IT DID NOTHING. This had no else at all, so a refusal and a
+			completed save were the same silence - to the user pressing the
+			button, and to anything reading the log.
+
+			`[MEASURED 2026-09-10]` that cost real time twice in one day.
+			scripts/tests/deferredslot.lua could not tell a wrong-slot bug from
+			a refusal, because both look like "the machine did not move"; and
+			the C++ probe that preceded it had to grow a `closed=` field before
+			its results meant anything, for the same reason.
+
+			WARN rather than NOTICE: reaching here means somebody asked for a
+			save and did not get one.
+		*/
+		WARN_LOG(COMMON, "gui_saveState: refused - guistate=%d (needs Closed=%d), allowed=%s",
+				(int)gui_state, (int)GuiState::Closed,
+				savestateAllowed() ? "yes" : "no");
 	}
 }
 

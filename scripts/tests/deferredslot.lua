@@ -34,11 +34,20 @@
 ---
 --- Both break the same two claims, and one of those is `[OPEN]`: sabotage B
 --- loads slot 0 instead of 5, so the machine should have jumped to slot 0's
---- frame (9928) and failed the LANDING claim with a wrong frame. It did not
---- move at all, and why slot 0 does not move it here is not established. The
---- test is sound either way - a broken loadSlotLater fails it both times - but
---- the diagnosis it prints for a wrong-slot bug is less precise than intended,
---- and that is worth knowing before trusting the message rather than the code.
+--- frame (9928) and failed the LANDING claim with a WRONG frame. Instead it did
+--- not move at all.
+---
+--- `[NARROWED 2026-09-10]` it was not refused. gui_loadState() now warns when
+--- its `gui_state == Closed && savestateAllowed()` guard turns it away, and
+--- that run logged NO warning - so the call went through the guard and did the
+--- stop/load/start. Which leaves dc_loadstate(0) being a no-op in that context,
+--- while the same load from a C++ probe moved the machine 10400 -> 9928. Not
+--- established.
+---
+--- The test is sound either way - a broken loadSlotLater fails it both times -
+--- but the diagnosis it prints for a wrong-slot bug is less precise than
+--- intended, and that is worth knowing before trusting the message over the
+--- code.
 
 local t = dofile(os.getenv("FLYCAST_TESTLIB"))
 

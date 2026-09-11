@@ -145,6 +145,9 @@ version = 3
 bind0 = 63:btn_piano_roll
 bind1 = 69:btn_savestate_slot_next
 bind2 = 66:btn_pause
+bind3 = 62:btn_slot_picker
+bind4 = 61:btn_savestate_slot_prev
+bind5 = 60:btn_gen_archive
 CFG
 done
 
@@ -203,6 +206,17 @@ PIANO_ROLL_OFF=$(sed -n '/EMU_BUTTONS *= *0x3000000,/,/Real axes/p' "$ROOT/core/
 [ -n "${PIANO_ROLL_OFF:-}" ] || {
 	echo "hotkeytest: SKIP - could not find EMU_BTN_PIANO_ROLL in gamepad.h"; cleanup; exit $SKIP; }
 
+# EVERY ACTION'S ID, counted out of gamepad.h - the trace prints them as hex
+# and a literal here would rot the first time an id is inserted above one.
+# EMU_BUTTONS is 0x3000000 and the enumerators that follow it are consecutive.
+idof() {	# $1 = EMU_BTN_* name -> its id in hex, or empty
+	local off
+	off=$(sed -n '/EMU_BUTTONS *= *0x3000000,/,/Real axes/p' "$ROOT/core/input/gamepad.h" \
+		| sed -n 's/^[[:space:]]\{1,\}\(EMU_[A-Z0-9_]*\),.*/\1/p' \
+		| grep -an "^$1\$" | cut -d: -f1)
+	[ -n "$off" ] && printf '%x' $((0x3000000 + off))
+}
+
 # GuiState::Paused's ORDINAL, counted out of the header rather than written as
 # a number here. The trace prints the enum as an int, and a literal would be
 # silently wrong the first time a state is inserted above Paused.
@@ -246,6 +260,15 @@ fi
 press F6
 press F6
 press F12
+# THE OTHER THREE TAS ACTIONS. `dojo:HotkeyTrace` logs EVERY action that
+# reaches the dispatch with its id, so breadth here costs one keypress each and
+# needs no per-action observable - no panel trace for one, no slot trace for
+# another, no archive log for a third. That is what makes covering all of them
+# affordable, and coverage is what a hotkey REGISTRY would need before its
+# migration could be trusted (docs/HOTKEYS.md).
+press F5	# btn_slot_picker
+press F4	# btn_savestate_slot_prev
+press F3	# btn_gen_archive
 press F7	# THE CONTROL: bound to nothing in the mapping above
 
 sleep 1
@@ -254,6 +277,26 @@ slots=$(log | grep -a "HOTKEY SLOT:" | sed 's/.*HOTKEY SLOT: /  /')
 [ -n "$toggles" ] && echo "$toggles"
 [ -n "$slots" ]   && echo "$slots"
 cleanup
+
+# EVERY BOUND ACTION MUST HAVE REACHED THE DISPATCH. One line per action, and
+# the id is derived, so a renamed or reordered enumerator fails loudly here
+# rather than silently checking nothing.
+missing=""
+for a in EMU_BTN_PIANO_ROLL EMU_BTN_SAVESTATE_SLOT_NEXT EMU_BTN_SLOT_PICKER \
+		EMU_BTN_SAVESTATE_SLOT_PREV EMU_BTN_GEN_ARCHIVE EMU_BTN_PAUSE; do
+	id=$(idof "$a")
+	if [ -z "$id" ]; then
+		echo "FAIL hotkeytest - $a is not in gamepad.h; this check is not checking it"
+		exit 1
+	fi
+	log | grep -aq "HOTKEY: id=0x$id " || missing="$missing $a"
+done
+if [ -n "$missing" ]; then
+	echo "FAIL hotkeytest - bound keys that never reached the dispatch:$missing"
+	log | grep -a "HOTKEY:" | tail -8 | sed 's/^/    /'
+	exit 1
+fi
+echo "  all 6 bound actions reached the dispatch"
 
 nopen=$(printf '%s\n' "$toggles" | grep -ac "pianoroll -> open")
 nclosed=$(printf '%s\n' "$toggles" | grep -ac "pianoroll -> closed")
@@ -286,13 +329,29 @@ if [ "$nslot" -lt 1 ]; then
 	echo "FAIL hotkeytest - F12 did not advance the savestate slot"
 	exit 1
 fi
-# THE CONTROL, and it is the whole reason this test means anything. An
-# emulator that ran every action on every keypress - or a harness whose
-# xdotool went somewhere else and whose greps matched leftovers - would
-# satisfy all three claims above. Exactly two toggles may have happened.
-if [ "$ntot" -ne 2 ]; then
-	echo "FAIL hotkeytest - $ntot panel toggles for 2 bound presses; an unbound key is firing actions"
+# THE CONTROL, and it is the whole reason this test means anything.
+#
+# NOT a count of toggles - a count is satisfied by the wrong actions firing the
+# right number of times. The trace names every action that reached the dispatch,
+# so the check is a SET COMPARISON: exactly the six ids that were bound, and
+# nothing else. An emulator running every action on every keypress, or a harness
+# whose keys went somewhere else and whose greps matched leftovers, shows up as
+# an id that is not in the mapping file.
+bound=""
+for a in EMU_BTN_PIANO_ROLL EMU_BTN_SAVESTATE_SLOT_NEXT EMU_BTN_SLOT_PICKER \
+		EMU_BTN_SAVESTATE_SLOT_PREV EMU_BTN_GEN_ARCHIVE EMU_BTN_PAUSE; do
+	bound="$bound 0x$(idof "$a")"
+done
+saw=$(log | grep -aoE "HOTKEY: id=0x[0-9a-f]+" | sed 's/.*id=//' | sort -u)
+extra=""
+for id in $saw; do
+	case " $bound " in *" $id "*) ;; *) extra="$extra $id" ;; esac
+done
+if [ -n "$extra" ]; then
+	echo "FAIL hotkeytest - actions fired that were never bound:$extra"
+	echo "                  bound were:$bound"
 	exit 1
 fi
-echo "PASS hotkeytest - F6 toggled the roll open then closed WHILE PAUSED, F12 advanced the slot 0 -> 1, and an unbound key did neither"
+echo "  no action fired that was not bound ($(printf '%s\n' "$saw" | wc -l) distinct ids seen)"
+echo "PASS hotkeytest - six bound actions all reached the dispatch WHILE PAUSED, the roll toggled open then closed, the slot went 0 -> 1, and nothing fired that was not bound"
 exit 0

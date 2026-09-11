@@ -217,6 +217,27 @@ and is clearly where this ends up. `[UPDATED 2026-09-10]` the stated blocker —
 it rather than one without, and it is the next piece of this work rather than an
 open question.
 
-What it still wants first is breadth. The audit covers the **shape** of all 53
-actions; the test covers the **behaviour** of three. A migration that silently
-broke the fourth would pass both.
+`[UPDATED 2026-09-10]` the breadth is there now. `hotkeytest` binds and presses
+**six** actions and checks them through `dojo:HotkeyTrace`, which logs every
+action reaching the dispatch with its id - so covering an action costs one
+keypress and needs no per-action observable (no panel trace for one, no slot
+trace for another, no archive log for a third).
+
+Its control is a **set comparison**, not a count: exactly the six ids that were
+bound reached the dispatch, and nothing else. A count is satisfied by the wrong
+actions firing the right number of times; an emulator running every action on
+every keypress, or a harness whose keys went elsewhere and whose greps matched
+leftovers, shows up as an id that is not in the mapping file.
+
+**The two harnesses catch the same defect from opposite ends.** Deleting
+`EMU_BTN_GEN_ARCHIVE`'s row from `mapping.cpp`:
+
+```
+hotkeyaudit.py   EMU_BTN_GEN_ARCHIVE  missing from persist          (0.1 s, source)
+hotkeytest.sh    bound keys that never reached the dispatch: …      (50 s, runtime)
+```
+
+The static one is fast and checks the shape; the runtime one proves the shape
+translates into behaviour. Six of 53 actions are covered behaviourally and all
+53 structurally, which is the position a registry migration can be attempted
+from.

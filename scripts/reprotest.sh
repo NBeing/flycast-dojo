@@ -121,6 +121,17 @@ one_run() {
 		exit $SKIP
 	fi
 	[ -f "$LOG" ] || { echo "reprotest: SKIP - no lua log from $label" >&2; exit $SKIP; }
+	# `[MEASURED 2026-09-10]` THIS SKIPS INTERMITTENTLY. One suite run in seven
+	# reported "run1: 0 samples, run2: 12 samples" and skipped; three immediate
+	# re-runs passed. The run simply did not reach its sampling point inside
+	# --timeout, which under load it sometimes will not.
+	#
+	# Left as a SKIP rather than retried: a retry would make an intermittently
+	# broken run indistinguishable from a slow one, and this harness exists to
+	# tell differences apart. What was added instead is scripts/checks.sh, which
+	# refuses to report a suite green when anything skipped - without it this
+	# came out of ctest as "100% tests passed" and the coverage hole was
+	# invisible. That gate caught this on the day it was written.
 	# The Lua console indents every line it writes, so anchoring on ^REPRO
 	# silently matched nothing and the run looked empty. Extract the record
 	# itself rather than assuming a column.
