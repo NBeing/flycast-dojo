@@ -18,6 +18,7 @@
  */
 
 #include "gamepad_device.h"
+#include "hotkeys.h"
 #include "dojo/session.h"
 #include "cfg/cfg.h"
 #include "cfg/option.h"
@@ -795,6 +796,27 @@ bool GamepadDevice::find_mapping(int system /* = settings.platform.system */)
 					input_mapper = std::make_shared<InputMapping>(*input_mapper);
 				perGameMapping = perGame;
 				rumblePower = input_mapper->rumblePower;
+				/*
+					WHAT THE TAS ACTIONS ARE ACTUALLY BOUND TO, once, per device.
+
+					Bounded by the registry (five rows today), so this cannot
+					become a wall. It answers a support question directly - "is
+					my key bound, and to what" - and it is the only place a
+					CHORD's name is printed outside the settings window, which
+					is what makes `get_button_name`'s modifier decoding
+					observable from a harness rather than only by eye.
+				*/
+				if (cfgLoadBool("dojo", "HotkeyTrace", false))
+					for (int i = 0; i < hotkeys::count(); i++)
+					{
+						const u32 code = input_mapper->get_button_code(0, hotkeys::all()[i].id);
+						if (code == (u32)-1)
+							continue;
+						const char *nm = get_button_name(code);
+						NOTICE_LOG(INPUT, "HOTKEY BOUND: [%s] %-24s %s (code %u)",
+								name().c_str(), hotkeys::all()[i].label,
+								nm != nullptr ? nm : "?", code);
+					}
 				return true;
 			}
 			if (!perGame)

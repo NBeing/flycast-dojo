@@ -64,6 +64,12 @@ public:
 
 	const char *get_button_name(u32 code) override
 	{
+		// THIS override is the one that runs on a real keyboard, so the chord
+		// prefix has to be applied here too - see KeyboardDevice::chordName,
+		// which is the single owner of the rule and calls back into this
+		// function for the plain key.
+		if ((code & InputMapping::KEY_MOD_MASK) != 0)
+			return chordName(code);
 		const char *name = SDL_GetKeyName(SDL_GetKeyFromScancode((SDL_Scancode)code));
 		if (name[0] == 0)
 			return nullptr;

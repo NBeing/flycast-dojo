@@ -145,7 +145,11 @@ version = 3
 bind0 = 63:btn_piano_roll
 bind1 = 69:btn_savestate_slot_next
 bind2 = 66:btn_pause
-bind3 = 62:btn_slot_picker
+# BOUND ONLY AS A CHORD: 62 is F5, +0x10000 is Shift. The States window has no
+# plain-key binding here on purpose - so "all 6 bound actions reached the
+# dispatch" cannot pass unless the modifier survived the whole path, and the
+# emulator's own HOTKEY BOUND line has to print it as "Shift+F5".
+bind3 = 65598:btn_slot_picker
 bind4 = 61:btn_savestate_slot_prev
 bind5 = 60:btn_gen_archive
 # A CHORD: Shift+F6. 63 is F6, 0x10000 (65536) is KEY_MOD_SHIFT, so 65599 is the
@@ -270,7 +274,7 @@ press F12
 # another, no archive log for a third. That is what makes covering all of them
 # affordable, and coverage is what a hotkey REGISTRY would need before its
 # migration could be trusted (docs/HOTKEYS.md).
-press F5	# btn_slot_picker
+press shift+F5	# btn_slot_picker - bound ONLY as a chord
 press F4	# btn_savestate_slot_prev
 press F3	# btn_gen_archive
 # ---- CHORDS -------------------------------------------------------------

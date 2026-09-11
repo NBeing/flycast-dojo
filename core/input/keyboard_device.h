@@ -259,8 +259,47 @@ protected:
 	}
 
 public:
+	/*
+		A CHORD NAMES ITSELF - and this lives in ONE place, called by every
+		get_button_name override, because there is more than one.
+
+		`[MEASURED 2026-09-10]` the first version of this put the decoding in
+		KeyboardDevice::get_button_name alone. SDLKeyboardDevice OVERRIDES that
+		(sdl_keyboard.h), so on the device that actually names keys the code
+		compiled, linked and WAS NEVER REACHED - a bound Shift+F5 still printed
+		as `? (code 65598)`. Caught only by making the emulator print the name
+		and looking at it; the code read correctly the whole time.
+
+		Returns nullptr when the plain key has no name, because an unnamed key
+		under a modifier is still unnamed - and the caller's fallback prints the
+		raw code, which is the honest answer.
+
+		The buffer is thread_local: this hands back a const char* by contract,
+		the caller renders it immediately, and a chord is the only case that has
+		to compose anything.
+	*/
+	const char *chordName(u32 code)
+	{
+		static thread_local std::string chord;
+		chord.clear();
+		if (code & InputMapping::KEY_MOD_CTRL)
+			chord += "Ctrl+";
+		if (code & InputMapping::KEY_MOD_SHIFT)
+			chord += "Shift+";
+		if (code & InputMapping::KEY_MOD_ALT)
+			chord += "Alt+";
+		// Virtual, so the subclass names the plain key its own way.
+		const char *base = get_button_name(code & ~InputMapping::KEY_MOD_MASK);
+		if (base == nullptr)
+			return nullptr;
+		chord += base;
+		return chord.c_str();
+	}
+
 	const char *get_button_name(u32 code) override
 	{
+		if ((code & InputMapping::KEY_MOD_MASK) != 0)
+			return chordName(code);
 		switch (code)
 		{
 		case 0x04:
