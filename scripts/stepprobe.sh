@@ -73,7 +73,11 @@ run() {	# $1 label, then extra -config args
 	kill -0 "$XP" 2>/dev/null && kill -9 "$XP" 2>/dev/null
 	tr -d '\0' < "$w/out.log" | grep -a "STEP PROBE" | sed "s/.*N\[COMMON\]: /  /" \
 		| sed "s/^/[$label] /"
-	tr -d '\0' < "$w/out.log" | grep -aq "STEP PROBE" \
+	# Flattened to a file first: a `tr | grep -q` pipeline under pipefail
+	# reports failure when the match succeeds early (see hotkeytest.sh), which
+	# here would print "it never fired" about a probe that did.
+	tr -d '\0' < "$w/out.log" > "$w/flat.log"
+	grep -aq "STEP PROBE" "$w/flat.log" \
 		|| echo "[$label]   (no probe line - it never fired)"
 }
 
@@ -86,10 +90,10 @@ run noaudio   -config config:rend.ThreadedRendering=yes -config config:audio.bac
 rc=0
 # THE TWO SHAPE CLAIMS. Not the milliseconds - those are a fact about the
 # machine - but the two outcomes docs/STEP-GRANULARITY.md reasons from.
-grep -aq "\[threaded\].*$FRAMES/$FRAMES frames advanced" "$OUT/threaded/out.log" 2>/dev/null \
-	|| grep -a "STEP PROBE:" "$OUT/threaded/out.log" 2>/dev/null | grep -aq "$FRAMES/$FRAMES frames advanced" \
+# ONE grep each, for the pipefail reason above.
+grep -aq "STEP PROBE:.*$FRAMES/$FRAMES frames advanced" "$OUT/threaded/out.log" 2>/dev/null \
 	|| { echo "FAIL stepprobe - threaded did not advance every frame"; rc=1; }
-grep -a "STEP PROBE:" "$OUT/single/out.log" 2>/dev/null | grep -aq "0/$FRAMES frames advanced" \
+grep -aq "STEP PROBE:.*0/$FRAMES frames advanced" "$OUT/single/out.log" 2>/dev/null \
 	|| { echo "FAIL stepprobe - single-threaded advanced a frame; the document says it cannot"; rc=1; }
 [ $rc -eq 0 ] && echo "PASS stepprobe - threaded advances every frame, single-threaded advances none"
 exit $rc

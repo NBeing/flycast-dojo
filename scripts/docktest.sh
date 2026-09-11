@@ -218,7 +218,11 @@ xdotool key --clearmodifiers Escape; sleep 2.5
 # (8 Loading -> 0 Closed), which every run has - so the gate passed on a run
 # where Escape had done nothing at all. Commands(1) and Settings(2) are the two
 # states Escape can produce.
-if ! grep -a "TAS GUISTATE" "$OUT/out.log" | grep -qE '\-> (1|2)$'; then
+# ONE grep, not two in a pipeline. `[MEASURED 2026-09-11]` under `set -o
+# pipefail` a `... | grep -q` reports 141 when the match succeeds early enough
+# that the upstream grep takes SIGPIPE mid-write - so a passing condition reads
+# as a failing one, depending on log size. See scripts/hotkeytest.sh.
+if ! grep -aE 'TAS GUISTATE.*-> (1|2)$' "$OUT/out.log" >/dev/null; then
 	echo "  menu:   SKIPPED - Escape never changed the GUI state, so nothing was"
 	echo "          tested; not reporting a pass for a phase that did not run"
 	echo "PASS docktest - docking narrowed the game ($bg -> $ag px wide)"

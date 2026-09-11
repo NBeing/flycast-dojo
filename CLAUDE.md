@@ -77,6 +77,28 @@ you trust it.** A check that cannot fail reads exactly like a passing one.
 > printed `exit=0` for all five, including the ones that had just printed their
 > error. The script was fine; `$?` was reading `tail` at the end of a pipeline.
 
+> `[MEASURED 2026-09-11]` The same family, at the other end of the pipe.
+> **`something | grep -q PATTERN` under `set -o pipefail` reports 141 when the
+> match SUCCEEDS**: `grep -q` exits the instant it matches, the upstream takes
+> SIGPIPE mid-write, and pipefail hands back its failure.
+>
+> ```
+> cat big.txt | grep -q MATCH   -> 141   (a match, reported as failure)
+> cat big.txt | grep -q NOPE    -> 1     (correct)
+> ```
+>
+> Whether it fires depends on whether the upstream finished writing first —
+> that is, **on how big the input is**, which has nothing to do with what is
+> being checked. `scripts/hotkeytest.sh` had eleven of these; a sabotage run
+> whose log grew from 10 to 54 events lost the race and failed the WRONG CLAIM,
+> naming seven actions that were plainly in the log.
+>
+> pipefail can only turn a success into a failure, never the reverse, so this
+> produces **false failures** — flaky and misattributed, not silently agreeable.
+> That is the safe direction and it is still worth removing. **Write the log to
+> a file once and grep the FILE**, or use a single `grep` with the whole
+> pattern. A `grep -q` reading a file directly has no pipeline and is fine.
+
 > `[MEASURED 2026-09-05]` The blank-video check parsed `YSTDEV` out of ffmpeg's
 > `signalstats`. **That key does not exist** — the filter emits
 > `YMIN/YLOW/YAVG/YHIGH/YMAX` and no standard deviation. The grep matched
