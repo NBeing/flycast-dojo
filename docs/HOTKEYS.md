@@ -148,12 +148,12 @@ adopted the moment one lands.
 toggle on purpose: it is always on. Never breaking sync is the northstar, so it
 is not a thing to leave off by accident."*
 
-### What the remaining thirteen actually cost
+### What the remaining twelve actually cost
 
 | action | cost | notes |
 |---|---|---|
 | `PAUSE`, `FFORWARD`, `MENU`, `ESCAPE` | **free** | already dispatchable here; they need a registry row and nothing else |
-| `HOTKEY_HELP` — the on-screen cheat sheet | **~165 lines, self-contained** | the cheapest high-value item in the list |
+| ~~`HOTKEY_HELP`~~ | **LANDED** | it was the cheapest high-value item, and it cost 3 edits |
 | `TAS_UI` — blanket show/hide | cheap per window | but it is a convention every panel must adopt |
 | `STEP` hold-to-scrub | ~65 lines | we have `gui_open_step()`; the scrub is additive |
 | `SAVESTATE` hold-to-overwrite-BASE | medium | take the slot-0 half; the fork-point half drags in a 633-line branch model |
@@ -171,12 +171,10 @@ from the same move (the overlay still says *"Settings > TAS to rebind"* after th
 editor moved into Controller Mapping), and `HotkeyPeekOnShift` is read but has no
 switch anywhere. Those are artefacts of that fork's history, not of the workflow.
 
-## Not done, and why
+## The six TAS actions that landed
 
-## The five TAS actions that landed
-
-`[2026-09-10]` Five of the fork's eighteen, and the cut is the point: **an id
-must have something to dispatch to today.**
+`[UPDATED 2026-09-10]` Six of the fork's eighteen, and the cut is the point: **an
+id must have something to dispatch to today.**
 
 | action | does | via |
 |---|---|---|
@@ -185,8 +183,71 @@ must have something to dispatch to today.**
 | `EMU_BTN_SAVESTATE_SLOT_NEXT` | next slot, wrapping | `hostfs::currentSavestateSlot()` |
 | `EMU_BTN_SAVESTATE_SLOT_PREV` | previous slot, wrapping | as above |
 | `EMU_BTN_GEN_ARCHIVE` | archive the clip into `gen_NN` | `Dojo::ArchiveGeneration()` |
+| `EMU_BTN_HOTKEY_HELP` | toggle the cheat sheet | `panels::toggle("hotkeys")` |
 
-The remaining thirteen are held back because their **features** are not in this
+### The registry, and what it cost the sixth action
+
+`core/input/hotkeys.h`. One row carries an action's **persistence and both of
+its settings-window rows**, so adding one is **3 edits instead of 5** — the enum
+id, the registry row, the dispatch case.
+
+`EMU_BTN_HOTKEY_HELP` is the measurement: it is the first action to arrive after
+the registry existed, and it cost exactly those three. That is the argument
+against building the registry — *the audit already catches the drift, this is
+only elegance* — answered by the next thing to land.
+
+**Three fields, because three things read them.** No `run` pointer and no guard
+enum: dispatch is still the switch, so a field for it would be a field nothing
+reads, which is the defect `scripts/configaudit.py` exists to find.
+
+**Combos stay out.** 23 of them, they synthesise *guest* input, they take a
+port, and they are the only rows whose two labels differ (`"X+A"` against
+`"1+4"`). **Dispatch stays a switch too** — its 52 cases are two regular
+families plus a dozen singletons, so it is not the tangle its size suggests, but
+only seven have a test. **The exit condition is coverage, not taste.**
+
+### Keyboard chords
+
+`InputMapping::KEY_MOD_SHIFT/CTRL/ALT` — modifier flags in the code's high bits,
+above every scancode, so a chord is one ordinary number that the map, the mapping
+file and every lookup already handle. `bind6 = 65599:btn_fforward` is Shift+F6.
+
+Both of the fork's safety rules came across, because both are load-bearing:
+
+1. **The chord is only used if actually bound**, else the raw key goes out — so
+   holding Shift while playing can never eat a game input.
+2. **A key releases with the code it pressed with**, else letting go of the
+   modifier first strands the target down forever.
+
+Each has its own test arm, and breaking one breaks a *different* claim: rule 1
+gives *"an unbound chord did not fall back to the plain key"*; rule 2 gives
+`0x3000002(down=2,up=0)` — fast-forward pressed twice and never released.
+
+`[MEASURED 2026-09-10]` **the naming half shipped broken and unreachable.** A
+bound chord printed as `[65599]`; the fix went into
+`KeyboardDevice::get_button_name`, which `SDLKeyboardDevice` **overrides**, so it
+compiled, linked and never ran. The rule now lives once in
+`KeyboardDevice::chordName()`, called by both overrides. Caught only by making
+the emulator print the name and reading it.
+
+### The cheat sheet
+
+A panel enumerating the registry, with **every key looked up live** — the fork's
+reason: *"so this display can never drift from reality."* One owner per fact; a
+cheat sheet with its own copy of the bindings lies the first time anyone rebinds.
+
+*"Is it a keyboard"* cannot be asked by name — this machine has one device called
+`Keyboard` and another called `Kinesis Freestyle2 PC - KB800`, and the second
+cannot name a scancode at all. The panel asks what decides the answer: *can you
+name scancode 58?*
+
+Not in this cut: drag-to-reorder, the pinned overlay arm, Shift-to-peek, pad
+chips, the F11 row. The panel registry already gives docking, persistence and a
+View-menu entry, and six rows sort themselves.
+
+### Still held back
+
+The remaining twelve are held back because their **features** are not in this
 tree: an input visualizer, a frame-skip test, an AVI toggle behind permanently
 false guards. A bindable key that silently does nothing is the exact defect the
 audit was written to catch, and shipping thirteen more of them to look complete
