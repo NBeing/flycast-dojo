@@ -2046,6 +2046,31 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 	if (!movie::has(dojo.frame_number)
 			|| tas_sit->second.size() < sizeof(FrameInputs) * MAX_PLAYERS)
 	{
+		/*
+			BEFORE THE MOVIE STARTS IS NOT THE END OF IT.
+
+			`[MEASURED 2026-09-11]` a clip recorded FROM A SAVESTATE has frames
+			numbered from where the recording began - scripts/recordtest.sh
+			makes one running 9948..10007, which is an ordinary TAS artifact
+			since recording a segment is what a savestate is for. Replaying it
+			asked `!movie::has(0)`, got false, and declared the movie FINISHED
+			one second in. Worse, it then wedged: AutoSeekState waits for
+			GuiState::Closed to do the seek that would have moved the playhead
+			to 9948, and ReplayEnd never gives it back.
+
+			`movie::has()` answers false for all three of "before the start",
+			"a hole in the middle" and "past the end", and the caller here means
+			only the last. So ask the question that distinguishes them, and do
+			the obvious thing: move the playhead to where the movie actually is.
+		*/
+		if (movie::beforeStart(dojo.frame_number))
+		{
+			const u32 first = movie::begin();
+			NOTICE_LOG(NETWORK, "TAS: movie starts at frame %u, playhead at %u - seeking",
+					first, dojo.frame_number.load());
+			dojo.frame_number = first;
+			return;
+		}
 		if (dojo.play_match && !macroReadSession)	// macro READ pauses at the roll's end (armed above), not ReplayEnd
 		{
 			if (gui_state != GuiState::ReplayEnd)

@@ -21,6 +21,7 @@
 #include "dojo/roll_notation.h"
 #include "dojo/roll_library.h"
 #include "input/hold_repeat.h"
+#include "dojo/movie.h"
 #include "dojo/roll_staged.h"
 #include "lua/luatier.h"
 #include "lua/luawatch.h"
@@ -93,6 +94,7 @@ int flycast_init(int argc, char* argv[])
 	roll::notationSelfTest();
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
+	movie::movieSelfTest();
 	roll::stagedSelfTest();
 	luatier::selfTest();
 	luawatch::selfTest();

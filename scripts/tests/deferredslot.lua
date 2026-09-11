@@ -55,6 +55,13 @@
 --- that is a guess, and this note is a list of what is KNOWN not to be the
 --- cause rather than a theory about what is.
 ---
+--- `[2026-09-11]` A RELIABLE REPRODUCTION EXISTS NOW, which this note did not
+--- have: scripts/recordtest.sh replays a clip recorded from a savestate, the
+--- auto-seek loads slot 0, and NO FRAME ADVANCES AFTER IT. The process stays
+--- alive, so it is a stall rather than a crash, and it is identical with
+--- rend.ThreadedRendering on and off. docs/TEST-PLAN.md carries it as the item
+--- blocking every re-record test.
+---
 --- The test is sound either way - a broken loadSlotLater fails it both times -
 --- but the diagnosis it prints for a wrong-slot bug is less precise than
 --- intended, and that is worth knowing before trusting the message over the

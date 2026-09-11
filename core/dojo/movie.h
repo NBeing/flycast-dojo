@@ -31,6 +31,8 @@
 */
 #pragma once
 #include "dojo.h"
+#include <map>
+#include <vector>
 
 namespace movie
 {
@@ -54,5 +56,36 @@ inline bool has(u32 frame)
 //! Is `frame` at or past the frontier? `>=` rather than `==` so a seek that
 //! lands beyond the end is caught rather than stepped over.
 inline bool atEnd(u32 frame) { return frame >= end(); }
+
+/*
+	WHERE THE MOVIE STARTS - the fact this namespace did not have.
+
+	`[MEASURED 2026-09-11]` everything here assumed 0, and a clip recorded FROM
+	A SAVESTATE does not start at 0: scripts/recordtest.sh produces one whose
+	frames run 9948..10007, which is an ordinary TAS artifact - recording a
+	segment is what a savestate is for. Replaying it asked `!movie::has(0)`,
+	got false, and declared the movie finished ONE SECOND IN, before the seek
+	that would have moved the playhead to 9948 could run. The seek waits for
+	GuiState::Closed and ReplayEnd never gives it back, so the session hung.
+
+	THREE STATES, NOT TWO. `has()` answers false for all of "before the movie
+	starts", "a hole in the middle" and "past the end", and a caller that means
+	the last of those cannot tell them apart. That conflation is the bug.
+
+	A PURE FUNCTION OVER A MAP, so it can be tested with synthetic frames and
+	no emulator - the same split roll_edit.h uses for its transforms, and the
+	reason those have 50 claims.
+*/
+u32 firstFrame(const std::map<u32, std::vector<u8>>& frames);
+
+//! The movie's first authored frame; 0 when there is nothing authored.
+inline u32 begin() { return firstFrame(dojo.session_inputs); }
+
+//! Is `frame` BEFORE the movie starts? Not a hole and not the end - a playhead
+//! that has not reached the recording yet, which is where a seek belongs.
+inline bool beforeStart(u32 frame) { return authored() && frame < begin(); }
+
+//! Runs under dojo:PanelSelfTest, like the other seams in this tree.
+void movieSelfTest();
 
 }	// namespace movie
