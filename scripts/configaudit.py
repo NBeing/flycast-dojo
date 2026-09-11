@@ -25,6 +25,16 @@ raw read owns its own default, and nothing makes them agree.
 docs/SESSION-KINDS.md §4 #11 records exactly this for `Training`. The existing
 five are listed by name below so the SET IS FROZEN: a sixth fails.
 
+ALSO SURVEYED AND REJECTED, so nobody repeats it: "is any raw cfg key read with
+TWO DIFFERENT DEFAULTS", which would mean behaviour depending on which path read
+it first. `[MEASURED 2026-09-10]` 112 distinct raw keys, 7 with more than one
+default, and essentially all of them benign - `"no"` versus `false` is the same
+value through cfgLoadStr and cfgLoadBool, and every window:* case is a
+platform-specific fallback in files that never both run (x11.cpp, sdl.cpp,
+dispmanx.cpp). A check there would carry more exemptions than findings, which is
+how an audit becomes a thing people skim past. The lens that found the two real
+audits in this tree does not generalise to this one.
+
 COMMENTS AND STRINGS ARE STRIPPED FIRST, and that is not tidiness. `[MEASURED
 2026-09-10]` the first version of this check grepped raw text, so
 `config::Training`'s only two mentions - both in comments SAYING IT IS READ BY
