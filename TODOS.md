@@ -641,6 +641,34 @@ emulator, two sabotages.
 
 ## Testing
 
+### [x] The suite, and the gate on it `[2026-09-10]`
+
+    scripts/checks.sh          # ctest, and it EXITS 2 ON A SKIP
+
+**Use this rather than bare `ctest`.** `[MEASURED 2026-09-10]` ctest reports a
+skip as green: `100% tests passed, 0 tests failed out of 15`, exit 0, with
+`flycast.hotkeytest (Skipped)` in between — and that test had never run once.
+`SKIP_RETURN_CODE` is right and stays (a machine with no ROM genuinely cannot
+run those); the **summary** was what lied. The gate caught a second one the same
+day: `flycast.crossprocess` skipping on its own, one run in seven.
+
+**17 entries**, up from 10 at the start of that session. Seven are `_can_fail`
+twins or carry their own control arm. The cheap ones first:
+
+| entry | s | what it is |
+|---|---|---|
+| `configaudit` (+`_can_fail`) | 0.1 | every registered option is read somewhere |
+| `hotkeyaudit` (+`_can_fail`) | 0.1 | the five files that must agree about a hotkey do |
+| `selftest` (+`_can_fail`) | 16 | **331 claims across 17 in-process suites**, no ROM |
+| `hotkeytest` | 50 | presses six bound keys, while PAUSED, and proves each ran |
+| `rolltest` / `statestest` / `docktest` | 30-90 | real clicks and drags, private Xvfb |
+| `flycast.lua` | ~200 | the Lua tests, `deferredslot` among them |
+| `crossprocess` ×2, `coldboot_pair`, `flyrframes` | | determinism and boot residue |
+
+`scripts/stepprobe.sh` is a MEASUREMENT harness rather than a test and is
+deliberately not in ctest: its milliseconds are a fact about the machine. It
+asserts only the two shape claims `docs/STEP-GRANULARITY.md` reasons from.
+
 ### [x] Integration tests — `shell/linux/integration-tests`
 Five cases, each reproducing a defect that actually shipped. `--fast` runs the
 two that need no ROM or display. **A skip exits 2, not 0.**

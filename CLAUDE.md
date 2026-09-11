@@ -368,6 +368,18 @@ Three documents, all kept current:
   belongs. Read this one first; it is the only document that can tell you an
   addition is in the wrong layer, which is the most common way to be wrong here.
 
+And run the suite through its gate, never bare `ctest`:
+
+    scripts/checks.sh          # exits 2 on a SKIP - see doctrine rule 5
+
+Four more documents answer questions that cost a lot to settle, so read the
+relevant one before re-deriving it: `docs/ROLL.md` (the piano roll, its probes
+and the sequence library), `docs/HOTKEYS.md` (the five files a hotkey needs, and
+the two audits), `docs/STEP-GRANULARITY.md` (what a counterfactual costs and why
+it cannot be made cheaper without breaking the renderer coupling), and
+`docs/SESSION-KINDS.md` (what kind of session this is, and the census of places
+that disagreed).
+
 Both mark what is **verified**, what is **reasoned**, and what was **never
 run**. The three unverified items have stayed explicitly unverified across many
 sessions rather than quietly becoming "done": DX9/DX11 capture on real Windows,
