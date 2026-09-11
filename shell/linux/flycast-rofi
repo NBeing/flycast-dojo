@@ -522,6 +522,7 @@ Play)
     # die() quotes back on a failed launch.
     launch "$dev" -config dojo:RecordMatches=yes \
                   -config dojo:Panel.pianoroll=yes -config dojo:Panel.states=yes \
+                  -config dojo:Panel.hotkeys=yes \
                   -config dojo:RollSelTrace=yes -config dojo:RollPaintTrace=yes \
                   -config dojo:StatesTrace=yes \
                   "$GAME"
@@ -540,6 +541,7 @@ Play)
     dev="$(need_bin "$DEV_BIN" "the build-tree flycast" FLYCAST_DEV_BIN)" || exit 1
     term_run "flycast panel self-tests" \
         "'$dev' -config dojo:RecordMatches=yes -config dojo:Panel.pianoroll=yes \
+         -config dojo:Panel.hotkeys=yes \
                 -config dojo:PanelSelfTest=yes -config dojo:RollEditProbe=yes \
                 -config dojo:RollPaintProbe=yes '$GAME' 2>&1 \
          | grep -aE 'SELFTEST|ROLL PROBE|ROLL PAINTPROBE|passed|failed'"
@@ -564,6 +566,7 @@ Play)
     launch "$dev" -config dojo:Replay=yes -config "dojo:ReplayFilename=$replay" \
                   "${seek[@]}" \
                   -config dojo:Panel.pianoroll=yes -config dojo:Panel.states=yes \
+                  -config dojo:Panel.hotkeys=yes \
                   -config dojo:RollSelTrace=yes -config dojo:RollPaintTrace=yes \
                   -config dojo:StatesTrace=yes \
                   "$GAME"

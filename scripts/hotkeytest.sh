@@ -100,13 +100,47 @@ nohup Xvfb "$DISP" -screen 0 320x240x24 >"$OUT/xvfb0.log" 2>&1 & XPID=$!
 sleep 2
 XDG_CONFIG_HOME="$OUT/config" XDG_DATA_HOME="$OUT/data" DISPLAY="$DISP" "$EXE" \
 	-config dojo:UiIni=no -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
-	-config dojo:AutoLoadNetState=no "$ROM" > "$OUT/probe.log" 2>&1 & PC=$!
+	-config dojo:AutoLoadNetState=no -config dojo:HotkeyTrace=yes \
+	"$ROM" > "$OUT/probe.log" 2>&1 & PC=$!
 sleep 10
 kill "$PC" 2>/dev/null; kill "$XPID" 2>/dev/null
 sleep 2
 kill -0 "$PC" 2>/dev/null    && kill -9 "$PC" 2>/dev/null
 kill -0 "$XPID" 2>/dev/null  && kill -9 "$XPID" 2>/dev/null
 sleep 1
+
+# ---------------------------------------------------------------------------
+# THE DEFAULTS ARM, and it is here because its absence hid a real defect.
+#
+# `[MEASURED 2026-09-10]` every TAS action shipped UNBOUND. The registry, the
+# audit, this test and the cheat sheet all worked, over six actions nobody could
+# press - and THIS TEST COULD NOT SEE IT, because it writes its own mapping file
+# below. A fixture that supplies the precondition cannot detect the precondition
+# missing.
+#
+# The probe pass above ran with an EMPTY config directory, so its log is exactly
+# the out-of-the-box state. Read the defaults out of it.
+defaults=$(tr -d '\0' < "$OUT/probe.log" | grep -a "HOTKEY BOUND: \[Keyboard\]")
+if [ -z "$defaults" ]; then
+	echo "hotkeytest: SKIP - the probe logged no default bindings at all"
+	exit $SKIP
+fi
+unbound=$(printf '%s\n' "$defaults" | grep -ac "unbound" || true)
+echo "  out of the box, on a fresh config:"
+printf '%s\n' "$defaults" | sed 's/.*HOTKEY BOUND: /    /'
+ndef=$(printf '%s\n' "$defaults" | wc -l)
+if [ "$ndef" -lt 6 ]; then
+	echo "FAIL hotkeytest - only $ndef TAS actions are bound by default; a hotkey"
+	echo "                  nobody can press is a hotkey that does not exist"
+	exit 1
+fi
+# AND THEY MUST BE NAMEABLE. A default stored as a chord that cannot be rendered
+# would show in the settings window and the cheat sheet as a raw number.
+if printf '%s\n' "$defaults" | grep -aq " ? (code"; then
+	echo "FAIL hotkeytest - a default binding has no name:"
+	printf '%s\n' "$defaults" | grep -a " ? (code" | sed 's/^/    /'
+	exit 1
+fi
 
 # Only KEYBOARDS get the binding. A mouse has no F11, and writing a mapping
 # file for one would replace its defaults with two keys it cannot produce.

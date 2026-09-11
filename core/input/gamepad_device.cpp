@@ -731,6 +731,42 @@ void GamepadDevice::load_system_mappings()
 	for (int i = 0; i < GetGamepadCount(); i++)
 	{
 		std::shared_ptr<GamepadDevice> gamepad = GetGamepad(i);
+		/*
+			WHAT THE TAS ACTIONS ARE ACTUALLY BOUND TO, once, per device.
+
+			AFTER the if/else below, not inside find_mapping, and that is the
+			whole point. `[MEASURED 2026-09-10]` the first version logged from
+			find_mapping's SUCCESS path, so it only ever reported bindings that
+			came from a FILE - and the one thing worth checking is the
+			out-of-the-box state, which takes the other branch entirely
+			(resetMappingToDefault). The trace could not see the case it was
+			added to test.
+
+			Bounded by the registry, so it cannot become a wall. It answers "is
+			my key bound, and to what" directly, and it is the only place a
+			CHORD's name is printed outside the settings window.
+		*/
+		auto traceBindings = [](const std::shared_ptr<GamepadDevice>& g) {
+			if (!cfgLoadBool("dojo", "HotkeyTrace", false))
+				return;
+			const std::shared_ptr<InputMapping> m = g->get_input_mapping();
+			if (m == nullptr)
+				return;
+			for (int i = 0; i < hotkeys::count(); i++)
+			{
+				const u32 code = m->get_button_code(0, hotkeys::all()[i].id);
+				const char *nm = code == (u32)-1 ? nullptr : g->get_button_name(code);
+				// UNBOUND IS PRINTED, not skipped. A missing line and a missing
+				// binding look the same, and the missing binding is the defect.
+				if (code == (u32)-1)
+					NOTICE_LOG(INPUT, "HOTKEY BOUND: [%s] %-24s unbound",
+							g->name().c_str(), hotkeys::all()[i].label);
+				else
+					NOTICE_LOG(INPUT, "HOTKEY BOUND: [%s] %-24s %s (code %u)",
+							g->name().c_str(), hotkeys::all()[i].label,
+							nm != nullptr ? nm : "?", code);
+			}
+		};
 		if (!gamepad->find_mapping())
 		{
 			// The other half of the pair: "no file, using built-in defaults" is
@@ -746,6 +782,7 @@ void GamepadDevice::load_system_mappings()
 					gamepad->make_mapping_filename(false, settings.platform.system).c_str());
 			gamepad->resetMappingToDefault(settings.platform.isArcade(), true);
 		}
+		traceBindings(gamepad);
 	}
 }
 
@@ -800,27 +837,6 @@ bool GamepadDevice::find_mapping(int system /* = settings.platform.system */)
 					input_mapper = std::make_shared<InputMapping>(*input_mapper);
 				perGameMapping = perGame;
 				rumblePower = input_mapper->rumblePower;
-				/*
-					WHAT THE TAS ACTIONS ARE ACTUALLY BOUND TO, once, per device.
-
-					Bounded by the registry (five rows today), so this cannot
-					become a wall. It answers a support question directly - "is
-					my key bound, and to what" - and it is the only place a
-					CHORD's name is printed outside the settings window, which
-					is what makes `get_button_name`'s modifier decoding
-					observable from a harness rather than only by eye.
-				*/
-				if (cfgLoadBool("dojo", "HotkeyTrace", false))
-					for (int i = 0; i < hotkeys::count(); i++)
-					{
-						const u32 code = input_mapper->get_button_code(0, hotkeys::all()[i].id);
-						if (code == (u32)-1)
-							continue;
-						const char *nm = get_button_name(code);
-						NOTICE_LOG(INPUT, "HOTKEY BOUND: [%s] %-24s %s (code %u)",
-								name().c_str(), hotkeys::all()[i].label,
-								nm != nullptr ? nm : "?", code);
-					}
 				return true;
 			}
 			if (!perGame)

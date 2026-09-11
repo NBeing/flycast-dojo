@@ -74,6 +74,42 @@ public:
 		set_button(EMU_BTN_LOADSTATE, 66);		// F9
 		set_button(EMU_BTN_PLAY_RND, 67);		// F10
 
+		/*
+			THE TAS ACTIONS: DAVID'S KEY, PLUS SHIFT.
+
+			`[FIXED 2026-09-10]` these shipped UNBOUND, which made every one of
+			them unreachable - a registry, an audit, a test and a cheat sheet
+			over six actions nobody could press. The cheat sheet was the
+			punchline: a panel whose entire content read "unbound" six times.
+
+			The reasoning that produced that was "the fork defaults these to
+			F2/F4/F5/F8/F9 and every one of those is a TRAINING binding here",
+			which is true (F1-F10 above are all taken) - and then it stopped,
+			instead of looking for keys that are free. CHORDS ARE WHY THIS IS
+			EASY NOW: Shift+F1..F10 are entirely unused, and the modifier layer
+			was built two commits before this gap was noticed.
+
+			So each action takes the fork's own key with Shift added. Anyone
+			moving between the two forks keeps their muscle memory, and nothing
+			collides with training, which owns the bare function keys here.
+
+			SAVESTATE_SLOT_PREV and PIANO_ROLL have no default in the fork.
+			Prev takes Ctrl+F2, symmetric with Shift+F2 for next - the same key,
+			the other modifier. The piano roll takes the fork's F5 slot, which
+			is free here because its TAS_UI action is not ported.
+
+			F11 IS NOT AVAILABLE. `[MEASURED 2026-09-10]` core/sdl/sdl.cpp
+			intercepts it for fullscreen and consumes the key DOWN, so a hotkey
+			bound there receives only the release and every case is guarded on
+			`pressed`. It is not bindable in this emulator at all.
+		*/
+		set_button(EMU_BTN_SAVESTATE_SLOT_NEXT, 59 | InputMapping::KEY_MOD_SHIFT);	// Shift+F2, as the fork's F2
+		set_button(EMU_BTN_SAVESTATE_SLOT_PREV, 59 | InputMapping::KEY_MOD_CTRL);	// Ctrl+F2, the other half of the pair
+		set_button(EMU_BTN_SLOT_PICKER,         61 | InputMapping::KEY_MOD_SHIFT);	// Shift+F4, as the fork's F4
+		set_button(EMU_BTN_PIANO_ROLL,          62 | InputMapping::KEY_MOD_SHIFT);	// Shift+F5
+		set_button(EMU_BTN_GEN_ARCHIVE,         65 | InputMapping::KEY_MOD_SHIFT);	// Shift+F8, as the fork's F8
+		set_button(EMU_BTN_HOTKEY_HELP,         66 | InputMapping::KEY_MOD_SHIFT);	// Shift+F9, as the fork's F9
+
 		set_button(EMU_BTN_PAUSE, 54);			// ,
 		set_button(EMU_BTN_STEP, 55);			// .
 
