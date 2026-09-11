@@ -63,14 +63,25 @@ anchors, bookmarks, the States wall, hotkeys and chords, the edit funnel,
 docking, boot residue, cross-process determinism, the Lua interface and its
 conformance suite.
 
-**Not covered at all** — measured, `grep -rl` against `scripts/` returns nothing:
+**Not covered.** `[CORRECTED 2026-09-11]` the first version of this section
+listed four subsystems and was wrong about three of them, because it asked
+`grep -rl <symbol> scripts/` — whether a NAME appears in a harness — instead of
+whether behaviour is asserted. Most coverage here lives in C++ probes and
+self-tests that the harnesses only read a verdict from, so the symbol is never
+in `scripts/` at all. A proxy again, and a bad one.
 
-| subsystem | why it matters |
+What the better question — *does a claim or a probe assert this?* — answers:
+
+| subsystem | verdict |
 |---|---|
-| **rewind + re-record** | `LoadStateFrame`, `divergence_open`, `stale_tail_from`, `IsStateStale`. **This is what the studio IS.** 128 lines, reachable, unverified |
-| **the staged buffer** | a second document with its own op queue; compress is only reversible because of it |
-| **undo / redo** | every edit captures undo through the funnel; nothing presses it |
-| **generations restore** | archiving is covered, restoring is not — and restore is the half that can lose work |
+| **rewind + re-record** | **genuinely uncovered.** `LoadStateFrame` runs on every state load, so it is exercised; none of its RULES is asserted — no truncate on a WRITE load, a rewind is not itself a re-record, a state saved before a rewind below it is stale |
+| the staged buffer | **covered** — `ROLLSTAGED SELFTEST`, 18 claims |
+| undo / redo | **covered** — `ROLL ANCHORPROBE`, `PAINTPROBE`, `MASHPROBE` and `LIBPROBE` each drive a real edit through the funnel and assert `undo=yes` with restoration |
+| generations restore | **does not exist.** There is no restore function; `StatesGenProbe` covers taking one. It is a feature to build, not a test to write, and calling it untested confused the two |
+
+So there is ONE real hole, and it is the one that matters most: the re-record
+rules. That is a smaller and sharper answer than the first version gave, and it
+is the reason this section now says what instrument produced it.
 
 **Exists but does not run:** `isotest.sh`, `replay-bindings-test.sh`, and until
 now `recordtest.sh`. `stepprobe.sh` is deliberately out — it is a measurement
@@ -142,11 +153,14 @@ The round trip that proves the lot: record a segment, rewind into it,
 re-record different input, and require the movie to replay to the *new* hashes
 while the frames outside the retry keep the *old* ones.
 
-### 3. Undo, staged, generations restore — tier 1 first
+### 3. Generations RESTORE — a feature, not a test
 
-All three have pure cores that can be claimed against synthetic values before
-any UI is driven. The panel probes (`dojo:Roll*Probe`) then carry them through
-the real funnel, which is the split that already works for edits and the library.
+`[CORRECTED 2026-09-11]` this item used to read "undo, staged, generations
+restore — tier 1 first". Undo and the staged buffer are already covered, and
+generations restore has nothing to test because it has not been built: taking a
+generation works and is probed, restoring one does not exist. Build it the way
+the rest of this tree is built - a pure core claimed at tier 1, then a probe
+carrying it through the real funnel - and the test comes with it.
 
 ### 4. Register `isotest` and `replay-bindings-test`, or delete them
 
