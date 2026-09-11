@@ -97,11 +97,23 @@ and the caller meant only the last. `movie::firstFrame()` and `beforeStart()`
 now separate them, and the playhead seeks instead. Verified: with the auto-seek
 out of the way the clip replays to `movie exhausted` at 10007.
 
-**STILL BLOCKING — the auto-seek's state load stalls the machine.** `[OPEN]`
-With `AutoSeekState=0`, `gui_loadState()` runs, logs `Loaded state ver 843`, and
-**no frame advances after it**. The process stays alive; it is a stall, not a
-crash. Reproduced deterministically, and NOT threading-dependent — identical
-with `rend.ThreadedRendering` on and off.
+**STILL BLOCKING — the auto-seek's state load leaves the guest SPINNING.**
+`[OPEN]` With `AutoSeekState=0`, the movie index stops advancing after the load
+and never moves again. What it is NOT, each measured rather than assumed:
+
+| ruled out | evidence |
+|---|---|
+| the load threw | `gui_loadState` traces `running yes -> stopped yes -> restarted yes` |
+| the emulator is stopped | `emu.running()` is true; `gui_loadState` completed its restart |
+| a deadlock | **197% CPU, main thread 99.4% in `R`, 30 threads** — it spins |
+| threading | identical with `rend.ThreadedRendering` on and off |
+| the movie | with `AutoSeekState=-1` the same clip replays to `movie exhausted` |
+| `LoadStateFrame` | completes, takes its normal branch, logs the seek |
+
+So the SH4 executes flat out and never reaches a maple poll — `frame_number` is
+incremented in `Dojo::MapleApplyAction`, so a guest that never polls is a movie
+that never advances. The next question is what the guest is looping on, and the
+tool for it is a debugger or an exec trace rather than another log line.
 
     scripts/recordtest.sh          # records 60 frames from 9948, then hangs in replay
 

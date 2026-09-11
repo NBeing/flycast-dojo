@@ -4846,11 +4846,30 @@ void gui_loadState()
 	const LockGuard lock(guiMutex);
 	if (gui_state == GuiState::Closed && savestateAllowed())
 	{
+		/*
+			TRACED THROUGH, because "the machine stopped after a load" and "the
+			load threw" and "start() never ran" are the same silence from
+			outside. `[MEASURED 2026-09-11]` docs/TEST-PLAN.md carries a
+			reproducible stall here - gui_loadState logs its load and then no
+			frame ever advances - and three hypotheses were eliminated without
+			finding the cause. This is the instrument that was missing.
+
+			A load is a deliberate user action a few times a session, so this
+			costs nothing and answers a support question directly.
+		*/
+		const bool wasRunning = emu.running();
 		try {
 			emu.stop();
+			const bool stopped = !emu.running();
 			dc_loadstate(config::SavestateSlot);
 			emu.start();
+			NOTICE_LOG(COMMON, "gui_loadState: slot %d, running %s -> stopped %s -> restarted %s",
+					(int)config::SavestateSlot, wasRunning ? "yes" : "no",
+					stopped ? "yes" : "NO", emu.running() ? "yes" : "NO");
 		} catch (const FlycastException& e) {
+			// SAY IT BEFORE STOPPING THE GAME. gui_stop_game tears down enough
+			// that the reason can be hard to find afterwards.
+			ERROR_LOG(COMMON, "gui_loadState: threw - %s", e.what());
 			gui_stop_game(e.what());
 		}
 	}

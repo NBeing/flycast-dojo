@@ -58,9 +58,13 @@
 --- `[2026-09-11]` A RELIABLE REPRODUCTION EXISTS NOW, which this note did not
 --- have: scripts/recordtest.sh replays a clip recorded from a savestate, the
 --- auto-seek loads slot 0, and NO FRAME ADVANCES AFTER IT. The process stays
---- alive, so it is a stall rather than a crash, and it is identical with
---- rend.ThreadedRendering on and off. docs/TEST-PLAN.md carries it as the item
---- blocking every re-record test.
+--- alive and SPINNING - 197% CPU, the main thread at 99.4% in R - so the SH4 is
+--- executing and simply never reaches a maple poll, which is where
+--- Dojo::MapleApplyAction increments the movie index. Not a deadlock, not a
+--- stopped emulator (gui_loadState traces running -> stopped -> restarted), not
+--- the movie (the same clip replays to "movie exhausted" with the seek off),
+--- and not threading. docs/TEST-PLAN.md carries the full elimination table and
+--- lists it as the item blocking every re-record test.
 ---
 --- The test is sound either way - a broken loadSlotLater fails it both times -
 --- but the diagnosis it prints for a wrong-slot bug is less precise than
