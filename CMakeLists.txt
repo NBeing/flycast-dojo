@@ -1287,6 +1287,7 @@ if(NOT LIBRETRO)
 	core/dojo/roll_edit.cpp
 	core/dojo/roll_paint.cpp
 	core/dojo/roll_marks.cpp
+	core/input/hotkeys.cpp
 	core/dojo/roll_notation.cpp
 	core/dojo/roll_library.cpp
 	core/dojo/roll_meta.cpp

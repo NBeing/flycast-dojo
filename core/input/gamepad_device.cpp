@@ -141,9 +141,10 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 			route through here too and a held combo is not rare.
 		*/
 		if (cfgLoadBool("dojo", "HotkeyTrace", false))
-			NOTICE_LOG(INPUT, "HOTKEY: id=0x%x %s guistate=%d open=%s", (unsigned)key,
+			NOTICE_LOG(INPUT, "HOTKEY: id=0x%x %s guistate=%d open=%s typing=%s", (unsigned)key,
 					pressed ? "down" : "up", (int)gui_state,
-					gui_is_open() ? "yes" : "no");
+					gui_is_open() ? "yes" : "no",
+					gui_keyboard_captured() ? "yes" : "no");
 		switch (key)
 		{
 		case EMU_BTN_ESCAPE:
@@ -162,20 +163,28 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 				settings.input.fastForwardMode = !settings.input.fastForwardMode && !settings.network.online && !settings.naomi.multiboard;
 			break;
 		case EMU_BTN_LOADSTATE:
-			if (pressed)
+			// NOT WHILE TYPING. Deliberately only that - a menu being open is
+			// still fine for these four, exactly as before.
+			if (pressed && !gui_keyboard_captured())
 				gui_loadState();
 			break;
 		case EMU_BTN_SAVESTATE:
-			if (pressed)
+			// NOT WHILE TYPING. Deliberately only that - a menu being open is
+			// still fine for these four, exactly as before.
+			if (pressed && !gui_keyboard_captured())
 				gui_saveState();
 			break;
 
 		case EMU_BTN_PAUSE:
-			if (pressed)
+			// NOT WHILE TYPING. Deliberately only that - a menu being open is
+			// still fine for these four, exactly as before.
+			if (pressed && !gui_keyboard_captured())
 				gui_open_pause();
 			break;
 		case EMU_BTN_STEP:
-			if (pressed)
+			// NOT WHILE TYPING. Deliberately only that - a menu being open is
+			// still fine for these four, exactly as before.
+			if (pressed && !gui_keyboard_captured())
 				gui_open_step();
 			break;
 
@@ -285,11 +294,11 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 			register logs loudly instead of doing nothing quietly.
 		*/
 		case EMU_BTN_PIANO_ROLL:
-			if (pressed && gui_is_closed_or_paused())
+			if (pressed && gui_hotkey_allowed())
 				panels::toggle("pianoroll");
 			break;
 		case EMU_BTN_SLOT_PICKER:
-			if (pressed && gui_is_closed_or_paused())
+			if (pressed && gui_hotkey_allowed())
 				panels::toggle("states");
 			break;
 		/*
@@ -301,7 +310,7 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 		*/
 		case EMU_BTN_SAVESTATE_SLOT_NEXT:
 		case EMU_BTN_SAVESTATE_SLOT_PREV:
-			if (pressed && gui_is_closed_or_paused())
+			if (pressed && gui_hotkey_allowed())
 			{
 				const int n    = hostfs::MAX_SAVESTATE_SLOTS;
 				const int step = (key == EMU_BTN_SAVESTATE_SLOT_NEXT) ? 1 : n - 1;
@@ -322,7 +331,7 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 		case EMU_BTN_GEN_ARCHIVE:
 			// Self-guarding: it says so itself when there is no clip open, so
 			// there is no second copy of that condition here to drift from it.
-			if (pressed && gui_is_closed_or_paused())
+			if (pressed && gui_hotkey_allowed())
 				dojo.ArchiveGeneration();
 			break;
 

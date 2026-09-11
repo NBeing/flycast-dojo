@@ -18,6 +18,7 @@
  */
 #include <cmath>
 #include "mapping.h"
+#include "hotkeys.h"
 #include "cfg/ini.h"
 #include "stdclass.h"
 
@@ -113,14 +114,9 @@ button_list[] =
 	{ EMU_CMB_2_4, "emulator", "cmb_2_4_" },
 	{ EMU_CMB_A_START, "emulator", "cmb_a_start_" },
 
-	// TAS actions. Named for what they DO rather than for the key they happen
-	// to default to: an option called btn_f11 would be a lie the first time
-	// somebody rebinds it, and this file is what emu.cfg is keyed on.
-	{ EMU_BTN_PIANO_ROLL, "emulator", "btn_piano_roll" },
-	{ EMU_BTN_SLOT_PICKER, "emulator", "btn_slot_picker" },
-	{ EMU_BTN_SAVESTATE_SLOT_NEXT, "emulator", "btn_savestate_slot_next" },
-	{ EMU_BTN_SAVESTATE_SLOT_PREV, "emulator", "btn_savestate_slot_prev" },
-	{ EMU_BTN_GEN_ARCHIVE, "emulator", "btn_gen_archive" },
+	// TAS actions are NOT here: core/input/hotkeys.h owns them, and the two
+	// lookups below consult it. One row there gives an action its persistence
+	// and both of its settings-window rows.
 };
 
 static struct
@@ -235,6 +231,10 @@ using namespace emucfg;
 
 static DreamcastKey getKeyId(const std::string& name)
 {
+	// The TAS registry first - it is the smaller list and the one that grows.
+	for (int i = 0; i < hotkeys::count(); i++)
+		if (name == hotkeys::all()[i].cfg)
+			return hotkeys::all()[i].id;
 	for (u32 i = 0; i < std::size(button_list); i++)
 		if (name == button_list[i].option)
 			return button_list[i].id;
@@ -467,6 +467,9 @@ void InputMapping::set_dirty()
 
 static const char *getKeyName(DreamcastKey key)
 {
+	for (int i = 0; i < hotkeys::count(); i++)
+		if (key == hotkeys::all()[i].id)
+			return hotkeys::all()[i].cfg;
 	for (u32 i = 0; i < std::size(button_list); i++)
 		if (key == button_list[i].id)
 			return button_list[i].option.c_str();

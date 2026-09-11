@@ -125,6 +125,29 @@ static inline bool gui_is_closed_or_paused()
 {
 	return gui_state == GuiState::Closed || gui_state == GuiState::Paused;
 }
+/*
+	MAY A KEY FIRE AN EMULATOR ACTION RIGHT NOW?
+
+	`gui_is_closed_or_paused()` is not this, and the gap was a live defect.
+	`[SOURCE]` keyboard_device.h forwards keys to gamepad_btn_input EVEN WHEN
+	CAPTURED ("chat: disable the keyboard controller. Only accept emu keys"),
+	and gui_keyboard_captured() is true whenever io.WantTextInput is - "TYPING
+	ALWAYS CAPTURES, wherever it happens". Neither fact is wrong on its own;
+	together they mean that typing a clip tag, a bookmark label or a sequence
+	name reached every TAS hotkey.
+
+	R, P and Space are letters. So is every key somebody might bind.
+
+	THE RULE IS "IS SOMEBODY TYPING", NOT "IS A MENU OPEN", and the TAS fork
+	states it outright: the hotkeys "must keep working while frame-advance-Paused
+	(an 'open' state), but typing tags/notes must never reach them (R/P/Space are
+	letters!)". Those are two different questions and only one of them is about
+	GuiState.
+*/
+static inline bool gui_hotkey_allowed()
+{
+	return gui_is_closed_or_paused() && !gui_keyboard_captured();
+}
 static inline bool gui_is_content_browser()
 {
 	return gui_state == GuiState::Main;

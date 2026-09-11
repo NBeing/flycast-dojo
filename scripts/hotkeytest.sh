@@ -148,6 +148,10 @@ bind2 = 66:btn_pause
 bind3 = 62:btn_slot_picker
 bind4 = 61:btn_savestate_slot_prev
 bind5 = 60:btn_gen_archive
+# A CHORD: Shift+F6. 63 is F6, 0x10000 (65536) is KEY_MOD_SHIFT, so 65599 is the
+# two together - one ordinary number, which is the point of packing the modifier
+# into the code's high bits.
+bind6 = 65599:btn_fforward
 CFG
 done
 
@@ -269,6 +273,23 @@ press F12
 press F5	# btn_slot_picker
 press F4	# btn_savestate_slot_prev
 press F3	# btn_gen_archive
+# ---- CHORDS -------------------------------------------------------------
+# `[PORTED 2026-09-10]` keyboard chords, from the TAS fork, where they are what
+# makes ~30 TAS actions fit on one keyboard.
+press shift+F6	# BOUND chord -> btn_fforward, and NOT btn_piano_roll
+press shift+F3	# UNBOUND chord -> must fall back to plain F3, btn_gen_archive
+
+# RULE 2: RELEASE WITH THE CODE YOU PRESSED WITH.
+# Let go of the modifier BEFORE the key. Without the rule the press goes out as
+# Shift+F6 and the release as plain F6 - so the chord's action is never told it
+# was released and stays held forever, while a release arrives for a key that
+# was never pressed. xdotool's `key shift+F6` cannot show this; the events have
+# to be ordered by hand.
+xdotool keydown shift; sleep 0.2
+xdotool keydown F6;    sleep 0.2
+xdotool keyup shift;   sleep 0.2
+xdotool keyup F6;      sleep 1.5
+
 press F7	# THE CONTROL: bound to nothing in the mapping above
 
 sleep 1
@@ -291,6 +312,10 @@ for a in EMU_BTN_PIANO_ROLL EMU_BTN_SAVESTATE_SLOT_NEXT EMU_BTN_SLOT_PICKER \
 	fi
 	log | grep -aq "HOTKEY: id=0x$id " || missing="$missing $a"
 done
+# The chord's target. Bound ONLY as Shift+F6, so seeing it at all proves the
+# modifier reached the mapping layer packed into the code.
+chordId=$(idof EMU_BTN_FFORWARD)
+log | grep -aq "HOTKEY: id=0x$chordId " || missing="$missing EMU_BTN_FFORWARD(chord)"
 if [ -n "$missing" ]; then
 	echo "FAIL hotkeytest - bound keys that never reached the dispatch:$missing"
 	log | grep -a "HOTKEY:" | tail -8 | sed 's/^/    /'
@@ -339,7 +364,8 @@ fi
 # an id that is not in the mapping file.
 bound=""
 for a in EMU_BTN_PIANO_ROLL EMU_BTN_SAVESTATE_SLOT_NEXT EMU_BTN_SLOT_PICKER \
-		EMU_BTN_SAVESTATE_SLOT_PREV EMU_BTN_GEN_ARCHIVE EMU_BTN_PAUSE; do
+		EMU_BTN_SAVESTATE_SLOT_PREV EMU_BTN_GEN_ARCHIVE EMU_BTN_PAUSE \
+		EMU_BTN_FFORWARD; do
 	bound="$bound 0x$(idof "$a")"
 done
 saw=$(log | grep -aoE "HOTKEY: id=0x[0-9a-f]+" | sed 's/.*id=//' | sort -u)
@@ -353,5 +379,35 @@ if [ -n "$extra" ]; then
 	exit 1
 fi
 echo "  no action fired that was not bound ($(printf '%s\n' "$saw" | wc -l) distinct ids seen)"
+
+# RULE 1, THE SAFETY ONE: an UNBOUND chord must fall through to the plain key.
+# Shift+F3 is bound to nothing, so it has to arrive as plain F3 - btn_gen_archive
+# - which was pressed once already, making TWO. If the raw key were swallowed
+# whenever a modifier happened to be held, holding Shift during play would eat
+# game inputs, and that is what makes this the claim worth having.
+gaId=$(idof EMU_BTN_GEN_ARCHIVE)
+gaDown=$(log | grep -ac "HOTKEY: id=0x$gaId down")
+if [ "$gaDown" -ne 2 ]; then
+	echo "FAIL hotkeytest - an unbound chord did not fall back to the plain key:"
+	echo "                  expected 2 presses of EMU_BTN_GEN_ARCHIVE (F3, then shift+F3), saw $gaDown"
+	exit 1
+fi
+echo "  an unbound chord fell through to the plain key"
+
+# RULE 2's claim: every action that went DOWN also came back UP. A chord whose
+# release was misrouted leaves its target down forever, which in the case of
+# fast-forward means the emulator never returns to normal speed.
+stuck=""
+for id in $saw; do
+	d=$(log | grep -ac "HOTKEY: id=$id down")
+	u=$(log | grep -ac "HOTKEY: id=$id up")
+	[ "$d" -eq "$u" ] || stuck="$stuck $id(down=$d,up=$u)"
+done
+if [ -n "$stuck" ]; then
+	echo "FAIL hotkeytest - actions went down more often than they came up:$stuck"
+	echo "                  a chord released under a different code strands its target"
+	exit 1
+fi
+echo "  every action that went down came back up"
 echo "PASS hotkeytest - six bound actions all reached the dispatch WHILE PAUSED, the roll toggled open then closed, the slot went 0 -> 1, and nothing fired that was not bound"
 exit 0

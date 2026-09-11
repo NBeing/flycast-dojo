@@ -57,6 +57,23 @@ public:
 		else
 			return EMU_BTN_NONE;
 	}
+	/*
+		KEYBOARD CHORDS: a modifier held with a key, as one bindable code.
+
+		The modifier flags live in the code's HIGH BITS, above every scancode
+		(which are bytes), so a chord is just a number the existing map, the
+		existing mapping file and the existing lookup all handle unchanged -
+		`bind0 = 65599:btn_piano_roll` is Shift+F6.
+
+		`[PORTED 2026-09-10]` from the TAS fork, where this is what makes ~30 TAS
+		actions fit on one keyboard. Adopted with its two safety rules, which are
+		the two bugs a naive version has; see KeyboardDevice::chordCode.
+	*/
+	static constexpr u32 KEY_MOD_SHIFT = 0x10000;
+	static constexpr u32 KEY_MOD_CTRL  = 0x20000;
+	static constexpr u32 KEY_MOD_ALT   = 0x40000;
+	static constexpr u32 KEY_MOD_MASK  = KEY_MOD_SHIFT | KEY_MOD_CTRL | KEY_MOD_ALT;
+
 	void clear_button(u32 port, DreamcastKey id);
 	void set_button(u32 port, DreamcastKey id, u32 code);
 	void set_button(DreamcastKey id, u32 code) { set_button(0, id, code); }

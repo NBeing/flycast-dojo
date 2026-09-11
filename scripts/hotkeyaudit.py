@@ -62,6 +62,21 @@ EXEMPT = {
 SITES = ('persist', 'dcButtons', 'arcadeButtons', 'dispatch')
 
 
+def strip(src):
+    """Comments and string literals out.
+
+    `[MEASURED 2026-09-10]` scripts/configaudit.py needed this because
+    config::Training's only two mentions in the tree are COMMENTS SAYING IT IS
+    READ BY NOBODY, and the prose counted as a read. The same hazard lives here:
+    this file greps for `{ EMU_BTN_X,` and several of the sources it greps carry
+    comments recording ids that were REMOVED - gui.cpp's retired EMU_CMB_1_4 row
+    among them. Strings are stripped too, but the table patterns below look for
+    a quote, so stripping runs before those and they use the raw text.
+    """
+    src = re.sub(r'/\*.*?\*/', ' ', src, flags=re.S)
+    return re.sub(r'//[^\n]*', ' ', src)
+
+
 def table(text, name):
     m = re.search(re.escape(name) + r'\[\]\s*=\s*\{(.*?)\n\};', text, re.S)
     if m is None:
@@ -77,10 +92,11 @@ def audit(root, quiet=False, exempt=None):
         with open(os.path.join(root, p)) as f:
             return f.read()
 
-    enum = read('core/input/gamepad.h')
-    mapping = read('core/input/mapping.cpp')
-    gui = read('core/rend/gui.cpp')
-    disp = read('core/input/gamepad_device.cpp')
+    enum = strip(read('core/input/gamepad.h'))
+    mapping = strip(read('core/input/mapping.cpp'))
+    gui = strip(read('core/rend/gui.cpp'))
+    disp = strip(read('core/input/gamepad_device.cpp'))
+    reg = strip(read('core/input/hotkeys.cpp'))
 
     ids = []
     seen = set()
@@ -97,12 +113,33 @@ def audit(root, quiet=False, exempt=None):
     dc = table(gui, 'dcButtons')
     arc = table(gui, 'arcadeButtons')
 
+    # THE REGISTRY, core/input/hotkeys.cpp. `[2026-09-10]` one row there gives
+    # an action its persistence AND both of its settings-window rows, so for
+    # anything listed in it those three sites are satisfied BY CONSTRUCTION -
+    # which is the point of the registry and why this check has to understand
+    # it rather than report the move as five regressions (it did, first run).
+    #
+    # What the registry does NOT give an action is a DISPATCH case. That is
+    # still checked, so a registry row with nothing behind it fails here.
+    registered = set(re.findall(r'\{\s*(EMU_BTN_\w+)\s*,\s*"', reg))
+
     problems = []
+    # NON-VACUITY FOR THE REGISTRY ITSELF. If hotkeys.cpp stopped parsing, every
+    # action in it would fall back to the three text greps, find nothing, and be
+    # reported as broken - noisy but safe. The reverse is the danger: a registry
+    # that parses to a name with no cfg or label would satisfy the three sites
+    # here while writing nothing anywhere, so the rows are checked for shape.
+    for row in re.findall(r'\{\s*(EMU_BTN_\w+)\s*,([^}]*)\}', reg):
+        name, rest = row
+        if rest.count('"') < 4:
+            problems.append((name, 'registry row is missing its cfg name or its label'))
+
     for i in ids:
+        inReg = i in registered
         have = {
-            'persist':       re.search(r'\{\s*' + i + r'\s*,\s*"', mapping) is not None,
-            'dcButtons':     re.search(r'\{\s*' + i + r'\s*,', dc) is not None,
-            'arcadeButtons': re.search(r'\{\s*' + i + r'\s*,', arc) is not None,
+            'persist':       inReg or re.search(r'\{\s*' + i + r'\s*,\s*"', mapping) is not None,
+            'dcButtons':     inReg or re.search(r'\{\s*' + i + r'\s*,', dc) is not None,
+            'arcadeButtons': inReg or re.search(r'\{\s*' + i + r'\s*,', arc) is not None,
             'dispatch':      ('case ' + i + ':') in disp,
         }
         ex = exempt.get(i, set())
@@ -146,7 +183,8 @@ def self_test():
         tmp = tempfile.mkdtemp()
         try:
             for f in ('core/input/gamepad.h', 'core/input/mapping.cpp',
-                      'core/rend/gui.cpp', 'core/input/gamepad_device.cpp'):
+                      'core/rend/gui.cpp', 'core/input/gamepad_device.cpp',
+                      'core/input/hotkeys.cpp'):
                 os.makedirs(os.path.join(tmp, os.path.dirname(f)), exist_ok=True)
                 shutil.copy(os.path.join(ROOT, f), os.path.join(tmp, f))
             p = os.path.join(tmp, path)

@@ -99,6 +99,78 @@ actions in the enum. An enum that stopped parsing would otherwise report
 the arm fails as "the sabotage patched nothing" rather than passing over
 unmodified source — `CLAUDE.md`'s control-that-fails-to-apply.
 
+## The fork's hotkey list read as a specification `[2026-09-10]`
+
+Its eighteen actions are not a wish list against our feature set — they are a
+**TAS workflow described by someone expert at it**, and the help strings are
+requirements rather than documentation. Surveyed in full; what follows is what
+came back, ordered by what it costs us.
+
+### A live defect it exposed, now fixed
+
+**`gui_is_closed_or_paused()` was the wrong question.** The fork gates its
+hotkeys on whether somebody is *typing*, not on whether a menu is open:
+
+> *"the TAS hotkeys below are gated on `gui_keyboard_captured()` (an ImGui text
+> field is active), NOT `gui_is_open()` — they must keep working while
+> frame-advance-Paused (an 'open' state), but typing tags/notes must never reach
+> them (R/P/Space are letters!)"*
+
+Ours did not ask. `[SOURCE]` `keyboard_device.h` forwards keys to
+`gamepad_btn_input` **even when captured**, and `gui_keyboard_captured()` is true
+whenever `io.WantTextInput` is — so typing a clip tag, a bookmark label or a
+sequence name reached every TAS hotkey. `gui_hotkey_allowed()` is the rule now,
+and the four base actions (`LOADSTATE`, `SAVESTATE`, `PAUSE`, `STEP`), which were
+bare `if (pressed)` with no state check at all, are gated on typing too — only on
+typing, so a menu being open is still fine for them exactly as before.
+
+`[MEASURED]` no regression: all 20 hotkey events in `hotkeytest` report
+`typing=no` and every claim still passes. `[OPEN]` the positive case — that
+typing *blocks* a hotkey — is reasoned from those two source facts and not
+tested, because focusing a text field needs a click at a position, which is the
+steering this tree has been burned by before.
+
+### Rules worth adopting before we need them
+
+**A guard must never swallow a release.** Every hold-capable action handles
+`!pressed` first and *unconditionally*, then checks the guard. The fork learned
+this the expensive way:
+
+> *"letting `gui_keyboard_captured()` eat it latches the hold forever … the
+> End-of-Replay window takes keyboard focus, so the Space keyup was dropped,
+> `step_held` stayed true … and on BASE a latched hold would have gone on to
+> OVERWRITE it."*
+
+We have no hold-based hotkey yet, so this costs nothing today and must be
+adopted the moment one lands.
+
+**Some things are deliberately not options.** *"No 'verify savestate loads'
+toggle on purpose: it is always on. Never breaking sync is the northstar, so it
+is not a thing to leave off by accident."*
+
+### What the remaining thirteen actually cost
+
+| action | cost | notes |
+|---|---|---|
+| `PAUSE`, `FFORWARD`, `MENU`, `ESCAPE` | **free** | already dispatchable here; they need a registry row and nothing else |
+| `HOTKEY_HELP` — the on-screen cheat sheet | **~165 lines, self-contained** | the cheapest high-value item in the list |
+| `TAS_UI` — blanket show/hide | cheap per window | but it is a convention every panel must adopt |
+| `STEP` hold-to-scrub | ~65 lines | we have `gui_open_step()`; the scrub is additive |
+| `SAVESTATE` hold-to-overwrite-BASE | medium | take the slot-0 half; the fork-point half drags in a 633-line branch model |
+| `LOADSTATE` seek-vs-rewind | **large** | ~120 lines and it *is* the re-recording core |
+| `TOGGLE_READONLY` | **large** | a three-way cycle that is the movie mode model |
+| `INPUT_VIZ` | large, game-coupled | ~390 lines, and it reads MvC2 guest RAM |
+| `FST_NEXT` | ~550 lines | defer |
+| `AVI_TOGGLE` | largest | 963 + ~480 lines plus ffmpeg |
+
+### And what NOT to port
+
+`tas_pad_sel` is dead in the fork — declared, read once, never assigned outside
+its own clamp; a leftover of a panel that was removed. Several strings are stale
+from the same move (the overlay still says *"Settings > TAS to rebind"* after the
+editor moved into Controller Mapping), and `HotkeyPeekOnShift` is read but has no
+switch anywhere. Those are artefacts of that fork's history, not of the workflow.
+
 ## Not done, and why
 
 ## The five TAS actions that landed

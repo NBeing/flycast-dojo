@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "gui.h"
+#include "input/hotkeys.h"
 #include "dojo/session.h"
 #include "osd.h"
 #include "cfg/cfg.h"
@@ -1718,12 +1719,7 @@ const Mapping dcButtons[] = {
 	{ EMU_CMB_3_6, "C+Z" },
 	{ EMU_CMB_A_START, "A+Start" },
 
-	{ EMU_BTN_NONE, "TAS" },
-	{ EMU_BTN_PIANO_ROLL, "Piano Roll" },
-	{ EMU_BTN_SLOT_PICKER, "States Window" },
-	{ EMU_BTN_SAVESTATE_SLOT_NEXT, "Next Savestate Slot" },
-	{ EMU_BTN_SAVESTATE_SLOT_PREV, "Previous Savestate Slot" },
-	{ EMU_BTN_GEN_ARCHIVE, "Archive Generation" },
+	// The TAS block is appended from core/input/hotkeys.h - see withTasActions().
 
 	{ EMU_BTN_NONE, nullptr }
 };
@@ -1824,12 +1820,7 @@ const Mapping arcadeButtons[] = {
 	{ EMU_CMB_A_B_RT, "4+5+RT" },
 	{ EMU_CMB_LT_RT, "LT+RT" },
 
-	{ EMU_BTN_NONE, "TAS" },
-	{ EMU_BTN_PIANO_ROLL, "Piano Roll" },
-	{ EMU_BTN_SLOT_PICKER, "States Window" },
-	{ EMU_BTN_SAVESTATE_SLOT_NEXT, "Next Savestate Slot" },
-	{ EMU_BTN_SAVESTATE_SLOT_PREV, "Previous Savestate Slot" },
-	{ EMU_BTN_GEN_ARCHIVE, "Archive Generation" },
+	// The TAS block is appended from core/input/hotkeys.h - see withTasActions().
 
 	{ EMU_BTN_NONE, nullptr }
 };
@@ -2136,6 +2127,36 @@ static void controller_mapping_popup(const std::shared_ptr<GamepadDevice>& gamep
 		{
 			gamepad->save_mapping(map_system);
 		}
+		/*
+			THE WALKED LIST IS THE TABLE PLUS THE REGISTRY.
+
+			`[2026-09-10]` the TAS rows used to be written out in BOTH tables,
+			identically, because an emulator action names itself and a layout
+			has no opinion about it - only button COMBOS differ between the
+			Dreamcast and arcade lists ("X+A" against "1+4"). So they lived in
+			three files at once; now they live in core/input/hotkeys.h and this
+			loop is handed them.
+
+			Copied into a vector rather than rendered in a second loop: the row
+			body below is ~40 lines of ImGui with a Map button and a popup, and
+			a second copy of it is exactly the drift this change exists to
+			remove.
+		*/
+		static std::vector<Mapping> walkList;
+		auto withTasActions = [](const Mapping *table) {
+			std::vector<Mapping> v;
+			for (const Mapping *m = table; m->name != nullptr || m->key != EMU_BTN_NONE; m++)
+			{
+				if (m->name == nullptr)
+					break;
+				v.push_back(*m);
+			}
+			v.push_back({ EMU_BTN_NONE, "TAS" });
+			for (int i = 0; i < hotkeys::count(); i++)
+				v.push_back({ hotkeys::all()[i].id, hotkeys::all()[i].label });
+			v.push_back({ EMU_BTN_NONE, nullptr });
+			return v;
+		};
 		const Mapping *systemMapping = dcButtons;
 		if (item_current_map_idx == 0)
 		{
@@ -2149,6 +2170,8 @@ static void controller_mapping_popup(const std::shared_ptr<GamepadDevice>& gamep
 			map_system = DC_PLATFORM_NAOMI;
 			systemMapping = arcadeButtons;
 		}
+		walkList = withTasActions(systemMapping);
+		systemMapping = walkList.data();
 
 		if (item_current_map_idx != last_item_current_map_idx)
 		{

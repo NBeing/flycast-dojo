@@ -20,6 +20,7 @@
 #include "types.h"
 #include "cfg/option.h"
 #include "gamepad_device.h"
+#include <map>
 #include "rend/gui.h"
 #include <memory>
 
@@ -92,6 +93,66 @@ protected:
 		return std::make_shared<KeyboardInputMapping>();
 	}
 
+	/*
+		KEYBOARD CHORDS - Shift+F6 and friends, as one bindable code.
+
+		`[PORTED 2026-09-10]` from the TAS fork. A chord is the key's scancode
+		with modifier flags OR'd into its high bits (InputMapping::KEY_MOD_*),
+		so the map, the mapping file and every lookup handle it unchanged.
+
+		TWO RULES, and they are the whole design - both are bugs a naive version
+		has, and the fork's own comment names them:
+
+		  1. THE CHORD IS ONLY USED IF IT IS ACTUALLY BOUND. Otherwise the raw
+		     key is sent, exactly as before. So holding Shift while playing can
+		     never stop a game input registering - which is the failure that
+		     would make this unshippable, since Shift is a perfectly ordinary
+		     thing to be holding.
+
+		  2. A KEY RELEASES WITH WHATEVER CODE IT PRESSED WITH. Letting go of
+		     the modifier before the key would otherwise send a release for a
+		     code nobody is holding, and strand the real one down forever.
+
+		`_chordSent` is what rule 2 needs: the code each physical key went out
+		with, remembered until it comes back up.
+	*/
+	u32 modifierFlags() const
+	{
+		u32 f = 0;
+		if (_modifier_keys & (DC_KBMOD_LEFTSHIFT | DC_KBMOD_RIGHTSHIFT))
+			f |= InputMapping::KEY_MOD_SHIFT;
+		if (_modifier_keys & (DC_KBMOD_LEFTCTRL | DC_KBMOD_RIGHTCTRL))
+			f |= InputMapping::KEY_MOD_CTRL;
+		if (_modifier_keys & (DC_KBMOD_LEFTALT | DC_KBMOD_RIGHTALT))
+			f |= InputMapping::KEY_MOD_ALT;
+		return f;
+	}
+
+	//! The code to hand the mapping layer for this physical key, right now.
+	u32 chordCode(u8 keycode, bool pressed)
+	{
+		if (!pressed)
+		{
+			// RULE 2. An unknown key releasing as itself is the right answer
+			// for anything that was down before this code existed.
+			auto it = _chordSent.find(keycode);
+			if (it == _chordSent.end())
+				return keycode;
+			const u32 sent = it->second;
+			_chordSent.erase(it);
+			return sent;
+		}
+		u32 sent = keycode;
+		const u32 mods = modifierFlags();
+		// RULE 1. `get_button_id` answering EMU_BTN_NONE means nothing is bound
+		// to this chord, so the plain key goes out untouched.
+		if (mods != 0 && input_mapper != nullptr
+				&& input_mapper->get_button_id(0, keycode | mods) != EMU_BTN_NONE)
+			sent = keycode | mods;
+		_chordSent[keycode] = sent;
+		return sent;
+	}
+
 	void input(u8 keycode, bool pressed, int modifier_keys)
 	{
 		const int port = maple_port();
@@ -108,7 +169,7 @@ protected:
 			if (bypass_kb)
 			{
 				set_maple_port(-1);
-				gamepad_btn_input(keycode, pressed);
+				gamepad_btn_input(chordCode(keycode, pressed), pressed);
 				set_maple_port(port);
 				return;
 			}
@@ -182,7 +243,7 @@ protected:
 		{
 			// chat: disable the keyboard controller. Only accept emu keys (menu, escape...)
 			set_maple_port(-1);
-			gamepad_btn_input(keycode, pressed);
+			gamepad_btn_input(chordCode(keycode, pressed), pressed);
 			set_maple_port(port);
 		}
 		// Do not map keyboard keys to gamepad buttons unless the GUI is open
@@ -191,7 +252,10 @@ protected:
 				|| port == (int)std::size(kb_key)
 				|| (settings.platform.isConsole() && config::MapleMainDevices[port] != MDT_Keyboard)
 				|| (settings.platform.isArcade() && !settings.input.keyboardGame))
-			gamepad_btn_input(keycode, pressed);
+			// ALL THREE dispatch sites go through chordCode, not just this one.
+			// A chord that worked in the menu and not in chat would be a bug
+			// nobody could describe.
+			gamepad_btn_input(chordCode(keycode, pressed), pressed);
 	}
 
 public:
@@ -493,6 +557,11 @@ public:
 	}
 
 private:
+	//! Rule 2's memory: what code each physical key was dispatched with, kept
+	//! until it is released. Small and short-lived - at most the number of keys
+	//! actually held down.
+	std::map<u8, u32> _chordSent;
+
 	void setFlag(int& v, u32 bitmask, bool set)
 	{
 		if (set)
