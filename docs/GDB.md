@@ -87,6 +87,56 @@ Two flags are load-bearing and are the same ones `scripts/testrun.sh` passes:
 > Both "gdb is slow here" hypotheses formed while chasing the above were wrong,
 > and the un-debugged control found the real cause in one minute.
 
+## What it found on 2026-09-11: the guest stops polling maple
+
+The `[OPEN]` that blocks every re-record test (`docs/TEST-PLAN.md`) was carried
+for two days as "a state load wedges the emulator". gdb narrowed it to something
+much more specific, and every step is an idiom from this file.
+
+**A conditional breakpoint on the movie clock, keyed on a counter the load
+bumps.** `Dojo::LoadStateFrame` does `load_seq++`, so a breakpoint that is only
+live *after* a load needs no timing at all:
+
+    -ex "break Dojo::MapleApplyAction if dojo.load_seq > 0"
+
+`[MEASURED]` It **never fires**. The load completes at 2.6 s, the movie reaches
+frame 9949, and in the remaining ~117 s the maple poll that advances the movie
+is not reached once. Combined with `ps` showing **197% CPU, main thread 99.4% in
+`R`**, the guest is executing flat out and never performing another maple DMA.
+
+### Three fixtures that measured nothing first
+
+Worth recording, because each read plausibly:
+
+- **`interrupt` does not work under `-batch`.** `run &` then `interrupt` answers
+  *"Selected thread is running."* and every subsequent command fails. Nor does
+  wrapping it in Python: `time.sleep()` blocks gdb's event loop, so the stop
+  event is never processed. **A breakpoint stops synchronously; use one.**
+- **A conditional breakpoint on a per-BLOCK function is the performance trap
+  this file says a per-FRAME one is not.** `break bm_GetCodeByVAddr if …` with an
+  ignore count of 400 000 never arrived in 220 s. `Dojo::MapleApplyAction` runs
+  once per frame and is fine; `bm_GetCodeByVAddr` runs thousands of times per
+  frame and gdb round-trips on each.
+- **An `ignore` count has to suit the clip.** `ignore 1 3000` on
+  `Emulator::vblank` never fired — on a 60-frame clip, boot is ~1200 vblanks and
+  the movie adds 60. The control failed identically, which is how it was caught:
+  a control that fails the same way as the experiment is measuring neither.
+
+### The next step, and what is already known about it
+
+`p_sh4rcb->cntx.pc` is the guest PC (`Sh4cntx` is a macro for `sh4rcb.cntx`,
+`core/hw/sh4/sh4_if.h`), but reading it from host gdb requires a stop, and the
+question is *which loop* rather than one address.
+
+flycast ships its own SH4 debugger - `core/debug/gdb_server.cpp`, default port
+**3263**, enabled by `config::GDB` at `nullDC.cpp:110`. `[MEASURED 2026-09-11]`
+it IS compiled into `build-dojo7/flycast` (`info functions debugger::init` finds
+it), and `gdb-multiarch` on this machine does speak `sh4`. What did not work is
+turning it on from the command line: `-config config:Debug.GDBEnabled=yes`
+leaves port 3263 refusing connections, while the same `-config` syntax
+demonstrably works for other options in the same section. So the remaining work
+is *how that option is plumbed*, not whether the tool exists.
+
 ## Idioms that work
 
 ### Stop at a specific movie frame

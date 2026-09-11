@@ -121,10 +121,22 @@ and never moves again. What it is NOT, each measured rather than assumed:
 | the movie | with `AutoSeekState=-1` the same clip replays to `movie exhausted` |
 | `LoadStateFrame` | completes, takes its normal branch, logs the seek |
 
-So the SH4 executes flat out and never reaches a maple poll — `frame_number` is
-incremented in `Dojo::MapleApplyAction`, so a guest that never polls is a movie
-that never advances. The next question is what the guest is looping on, and the
-tool for it is a debugger or an exec trace rather than another log line.
+`[NARROWED 2026-09-11, gdb]` and now measured directly rather than inferred:
+
+    break Dojo::MapleApplyAction if dojo.load_seq > 0     -> NEVER FIRES
+
+`LoadStateFrame` bumps `load_seq`, so that breakpoint is live only after a load
+and needs no timing. It does not fire once in ~117 s. **The guest performs no
+further maple DMA after the state load** - it is not that the movie counter is
+stuck while frames go by; the poll that would advance it never happens.
+
+The remaining question is which loop the guest is in. flycast ships its own SH4
+debugger (`core/debug/gdb_server.cpp`, port 3263) and it IS compiled into this
+binary, and `gdb-multiarch` here speaks `sh4` - but `-config
+config:Debug.GDBEnabled=yes` leaves the port refusing connections while the same
+syntax works for other options. **The next step is how that option is plumbed**,
+which is a much smaller question than the one this started as. docs/GDB.md
+carries the detail, including three gdb fixtures that measured nothing.
 
     scripts/recordtest.sh          # records 60 frames from 9948, then hangs in replay
 
