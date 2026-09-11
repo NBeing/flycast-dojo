@@ -250,7 +250,7 @@ View-menu entry, and six rows sort themselves.
 The remaining twelve are held back because their **features** are not in this
 tree: an input visualizer, a frame-skip test, an AVI toggle behind permanently
 false guards. A bindable key that silently does nothing is the exact defect the
-audit was written to catch, and shipping thirteen more of them to look complete
+audit was written to catch, and shipping twelve more of them to look complete
 would be the worst possible use of it.
 
 **`EMU_BTN_TOGGLE_READONLY` is held back for a different reason** — it is
