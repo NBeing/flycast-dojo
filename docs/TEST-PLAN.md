@@ -284,6 +284,16 @@ invalidation list on the continuing machine does **not** close the gap, and this
 reading is clean rather than seek-contaminated. `sh4_int_resetcache()` is an
 empty function, so the dynarec's culprit cannot be the culprit here.
 
+What the interpreter's cause is NOT, each measured with the seek guard in place
+so the readings are clean:
+
+| ruled out | evidence |
+|---|---|
+| `dc_loadstate`'s invalidation list | mask 255 diverges, frame 69, `restarted 0x`, instants 53/53 |
+| `verifyLoadedStateIdempotent` perturbing the restored machine (it runs on load only, and each `dc_serialize` calls `sh4_sched_ffts`, which *writes*) | `-config dojo:VerifyState=no` diverges identically, frame 69, same hashes |
+| the seek artifact that produced the withdrawn 1b | `restarted 0x` on every run above |
+| the two passes sampling different instants | 53/53 frames seen equally often |
+
 **One defect, two causes; one found.** Said out loud rather than generalised from
 one arm, because the dynarec bisect alone reads like a complete answer. Note this
 is NOT the withdrawn 1b: that was restore-vs-restore and is now measured clean at

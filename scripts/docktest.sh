@@ -21,6 +21,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 EXE="${FLYCAST_BIN:-$HERE/../build-dojo7/flycast}"
 DISP=":${DOCKTEST_DISPLAY:-77}"
 OUT="$(mktemp -d)"
+XPID=""		# the private Xvfb, killed by PID - see cleanup()
 
 # --self-test runs the SAME drag against the pre-2026-09-08 behaviour, where the
 # picture was blitted full-window behind the UI. There the game must NOT follow
@@ -67,7 +68,11 @@ IPID=0
 # defect and left three emulators running across one debugging session.
 cleanup() {
 	[ "$FC" -ne 0 ] && { kill -- -"$FC" 2>/dev/null || kill "$FC" 2>/dev/null; }
-	sleep 1; pkill -f "Xvfb $DISP" 2>/dev/null
+	# BY PID, NOT BY NAME - the same rule as the i3 below, for the same reason.
+	# `pkill -f "Xvfb $DISP"` is display-scoped and so LOOKS safe, but it is one
+	# typo'd variable away from matching every Xvfb on the machine, and the
+	# failure mode is the user losing their session. There is a PID; use it.
+	sleep 1; [ -n "$XPID" ] && kill "$XPID" 2>/dev/null
 	# THE TEST'S OWN i3, BY PID, NEVER BY NAME.
 	#
 	# This was leaking one i3 per run - started but never stopped - and the
@@ -83,11 +88,16 @@ cleanup() {
 	# "PID-scoped process handling in all automation"; this is that rule applied
 	# to the window manager and not only to the emulator.
 	[ "$IPID" -ne 0 ] && kill "$IPID" 2>/dev/null
+	# AND THE SANDBOX. `[MEASURED 2026-09-12]` this leaked one mktemp directory
+	# per run - 30 of them were found lying in /tmp, which is how the leak was
+	# noticed at all. DOCKTEST_KEEP=1 to inspect a failure.
+	[ "${DOCKTEST_KEEP:-0}" = 1 ] || rm -rf "$OUT"
 	return 0
 }
 trap cleanup EXIT
 
 Xvfb "$DISP" -screen 0 1400x900x24 >/dev/null 2>&1 &
+XPID=$!
 sleep 2
 # A WINDOW MANAGER, because keyboard focus does not exist without one.
 # [MEASURED 2026-09-08] with bare Xvfb, `xdotool key Escape` goes nowhere - SDL
