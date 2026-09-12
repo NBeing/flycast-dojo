@@ -2453,6 +2453,22 @@ static void luaRegister(lua_State *L)
 				// is not taken yet. Collect it with takeSnapshot(), which
 				// answers nil until it is ready.
 				.addFunction("snapshotLater", std::function<void()>([]() {
+					/*
+						GATED LIKE save/load, and `[MEASURED 2026-09-12]` it was
+						not. The tier table says `{ "savestate.", Tier::Full }`,
+						which reads as covering this whole namespace - but the
+						table only says what a name NEEDS; enforcement is per
+						call site, and there were exactly two. An observer-tier
+						script was refused savestate.load and could restore the
+						machine through this instead.
+
+						That is the tree's oldest trap wearing a new hat: the
+						prefix entry makes the hole look closed, so nothing about
+						reading the table tells you it is open.
+					*/
+					if (!luatier::allow("savestate.snapshotLater"))
+						throw std::runtime_error("savestate.snapshotLater needs the full tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
 					deferred::post([]() { aroundStopped(snapshotNow); });
 				}))
 				// The snapshot, once taken, and it is HANDED OVER rather than
@@ -2470,6 +2486,22 @@ static void luaRegister(lua_State *L)
 				// caller that needs to know waits for the machine to come back,
 				// e.g. by watching frame.count().
 				.addFunction("restoreLater", std::function<void(std::string)>([](std::string blob) {
+					/*
+						GATED LIKE save/load, and `[MEASURED 2026-09-12]` it was
+						not. The tier table says `{ "savestate.", Tier::Full }`,
+						which reads as covering this whole namespace - but the
+						table only says what a name NEEDS; enforcement is per
+						call site, and there were exactly two. An observer-tier
+						script was refused savestate.load and could restore the
+						machine through this instead.
+
+						That is the tree's oldest trap wearing a new hat: the
+						prefix entry makes the hole look closed, so nothing about
+						reading the table tells you it is open.
+					*/
+					if (!luatier::allow("savestate.restoreLater"))
+						throw std::runtime_error("savestate.restoreLater needs the full tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
 					if (blob.empty())
 						throw std::runtime_error("empty savestate string");
 					deferred::post([blob]() {
@@ -2501,6 +2533,22 @@ static void luaRegister(lua_State *L)
 					no-argument form used to do.
 				*/
 				.addFunction("loadSlotLater", std::function<void(int)>([](int index) {
+					/*
+						GATED LIKE save/load, and `[MEASURED 2026-09-12]` it was
+						not. The tier table says `{ "savestate.", Tier::Full }`,
+						which reads as covering this whole namespace - but the
+						table only says what a name NEEDS; enforcement is per
+						call site, and there were exactly two. An observer-tier
+						script was refused savestate.load and could restore the
+						machine through this instead.
+
+						That is the tree's oldest trap wearing a new hat: the
+						prefix entry makes the hole look closed, so nothing about
+						reading the table tells you it is open.
+					*/
+					if (!luatier::allow("savestate.loadSlotLater"))
+						throw std::runtime_error("savestate.loadSlotLater needs the full tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
 					deferred::post([index]() {
 						const int was = config::SavestateSlot;
 						if (index >= 0)
@@ -2516,6 +2564,22 @@ static void luaRegister(lua_State *L)
 				// machine that was still running. If a fixture saved HERE loads
 				// without wedging, the wedge was a bad state, not a bad place.
 				.addFunction("saveSlotLater", std::function<void(int)>([](int index) {
+					/*
+						GATED LIKE save/load, and `[MEASURED 2026-09-12]` it was
+						not. The tier table says `{ "savestate.", Tier::Full }`,
+						which reads as covering this whole namespace - but the
+						table only says what a name NEEDS; enforcement is per
+						call site, and there were exactly two. An observer-tier
+						script was refused savestate.load and could restore the
+						machine through this instead.
+
+						That is the tree's oldest trap wearing a new hat: the
+						prefix entry makes the hole look closed, so nothing about
+						reading the table tells you it is open.
+					*/
+					if (!luatier::allow("savestate.saveSlotLater"))
+						throw std::runtime_error("savestate.saveSlotLater needs the full tier; this session grants "
+								+ std::string(luatier::name(luatier::granted())));
 					deferred::post([index]() {
 						const int was = config::SavestateSlot;
 						if (index >= 0)

@@ -43,6 +43,10 @@ void dc_loadstate(int index = 0);
 void dc_loadstate(std::string filename);
 void dc_loadstate(int index, std::string filename);
 void dc_loadstate(Deserializer& deser);
+//! dojo:PostSaveInvalidate - clear derived host state on a LIVE machine, to find
+//! which entry of dc_loadstate's invalidation list a continuing machine keeps
+//! that a restored one does not. Diagnostic; off unless the config is set.
+void dc_invalidateDerived(u32 mask);
 
 std::string get_savestate_file_path(int index, bool writable);
 std::string get_net_savestate_file_path(bool writable);

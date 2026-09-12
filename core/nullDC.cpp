@@ -262,6 +262,12 @@ void dc_savestate(int index)
 	// cover, so the fallback was hiding the defect it was written for.
 	dojo.savestate_epoch++;
 	NOTICE_LOG(SAVESTATE, "Saved state to %s size %d", filename.c_str(), (int)ser.size());
+	// dojo:PostSaveInvalidate - off unless set. See dc_invalidateDerived.
+	{
+		const int mask = cfgLoadInt("dojo", "PostSaveInvalidate", 0);
+		if (mask != 0)
+			dc_invalidateDerived((u32)mask);
+	}
 	gui_display_notification("State saved", 1000);
 }
 

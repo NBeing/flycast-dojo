@@ -248,17 +248,40 @@ padding change was reverted; it fixed nothing.
 **Which side is odd, and it is not the one the name suggests.** The
 `RD_BOTH_RESTORED=1` control makes the two passes differ in *nothing* - both
 restored from the same slot - and they agree 56/56. So the restore is not lossy
-at reproducing. The odd one out is the **continuing** machine: one that was saved
-and carried on differs from one restored out of that save.
+at reproducing. The odd one out is the **continuing** machine.
 
-Next step follows directly. The save does not capture, or the load discards,
-host residue the continuing machine still carries, worth two SH4 cycles within
-about five frames. The suspects are exactly `dc_loadstate`'s invalidation list -
-`custom_texture.Terminate()`, the ARM recompiler flush, `mmu_flush_table()`,
-`bm_Reset()`, `memwatch::reset()`, `mmu_set_state()`, `sh4_cpu.ResetCache()`,
-`KillTex` - every one of which the restored machine has cleared and the
-continuing one does not. `sh4_int_resetcache()` is empty, so for the interpreter
-arm that one is already out.
+**BISECTED `[MEASURED 2026-09-12]`.** `dojo:PostSaveInvalidate=<mask>` applies
+`dc_loadstate`'s invalidation list to the LIVE machine right after its save, so
+the continuing machine ends up in the same condition as a restored one. Six runs:
+
+| mask | entries | result |
+|---|---|---|
+| 255 | all | **56/56 identical** |
+| 15 | custom_texture, ARM flush, `mmu_flush_table`, `bm_Reset` | diverges |
+| 240 | memwatch, `mmu_set_state`, `ResetCache`, `KillTex` | **identical** |
+| 48 | memwatch, `mmu_set_state` | diverges |
+| 192 | `ResetCache`, `KillTex` | **identical** |
+| **64** | **`sh4_cpu.ResetCache()` alone** | **identical** |
+
+So on the dynarec the residue is the **block cache**. `sh4_cpu.ResetCache()` is
+`bm_ResetCache()`, and `[SOURCE]` `core/hw/sh4/dyna/blockmanager.cpp` charges
+`Sh4cntx.cycle_counter -= 100` when a block has to be found or compiled. **JIT
+cache warmth is billed to the guest's cycle budget**, so the same machine state
+runs at different speeds depending on host-side compilation history - which a
+savestate neither captures nor could.
+
+**AND IT IS NOT THE WHOLE STORY.** Under `-config config:Dynarec.Enabled=no`,
+mask 255 does **not** fix it - the interpreter still diverges at frame 69, and
+its `sh4_cpu.ResetCache` is an empty function, so it was never the cause there.
+There are at least two independent causes; only the dynarec one is identified.
+Said out loud rather than generalised from one arm, because the dynarec bisect
+alone reads like a complete answer.
+
+Deciding what to do about the dynarec one is a judgement call rather than a bug
+fix: the `-= 100` exists so a guest does not spin while blocks compile, and
+removing it changes SH4 timing for everyone. Options are to stop charging host
+work to the guest, to charge it a constant, or to accept it and have re-record
+compare something other than a whole-machine hash.
 
 ### 2. The re-record claims, on top of it
 

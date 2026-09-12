@@ -69,6 +69,28 @@ flycast_callbacks.vblank = function()
 	report("...while reading and drawing are still allowed",
 		st.can("memory.read") and st.can("ui.text"))
 
+	--- AND THE DEFERRED ROUTE TO THE SAME POWER IS REFUSED TOO.
+	---
+	--- `[MEASURED 2026-09-12]` it was not. The tier table carries
+	--- `{ "savestate.", Tier::Full }`, which reads as covering the namespace,
+	--- but the table only says what a name NEEDS - enforcement is per call site
+	--- and there were exactly TWO, save and load. snapshotLater, restoreLater,
+	--- loadSlotLater and saveSlotLater had none, so an observer refused
+	--- savestate.load could restore the machine through loadSlotLater instead
+	--- and the refusal counter never moved.
+	---
+	--- These four are the pooling/deferred route, which is the one that will
+	--- GROW, so the claim is written per binding rather than as "the namespace
+	--- is gated" - a future fifth binding must fail this, not inherit it.
+	for _, name in ipairs({ "snapshotLater", "restoreLater", "loadSlotLater", "saveSlotLater" }) do
+		local n0 = st.refusals()
+		local arg = (name == "restoreLater") and "" or 0
+		local ok = pcall(flycast.savestate[name], arg)
+		report("an observer is REFUSED savestate." .. name, not ok)
+		report("...and savestate." .. name .. "'s refusal is counted",
+			st.refusals() == n0 + 1, tostring(st.refusals()) .. " vs " .. tostring(n0))
+	end
+
 	--- IRREVERSIBLE. A script that could widen its own tier would not be
 	--- declaring anything.
 	local okAgain = pcall(st.declare, "full")

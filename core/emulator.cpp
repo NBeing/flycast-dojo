@@ -820,6 +820,57 @@ void Emulator::stepRange(u32 from, u32 to)
 	stop();
 }
 
+/*
+	THE INVALIDATION LIST, APPLIED ON DEMAND. `dojo:PostSaveInvalidate=<mask>`,
+	off unless set.
+
+	`[MEASURED 2026-09-12]` scripts/tests/open/replay_determinism.lua shows that
+	two RESTORED machines walk identical paths (56/56 frames) while a machine
+	that was saved and CONTINUED drifts from one restored out of that save - two
+	SH4 cycles in cycle_counter within about five frames, then into guest RAM.
+	The difference has to be host residue: everything below is state living
+	OUTSIDE the blob that a load clears and a continuing machine keeps.
+
+	This probe lets the same clearing be applied to the continuing machine right
+	after its save, one entry at a time. If a bit makes the divergence go away,
+	that entry is the residue - which turns eight suspects into at most eight
+	runs instead of a reading of eight subsystems.
+
+	A DIAGNOSTIC, NOT A FIX. It mutates a live machine on purpose and is off by
+	default; whatever it finds has to be fixed where the asymmetry is, not here.
+*/
+void dc_invalidateDerived(u32 mask)
+{
+	if (mask & 1)
+		custom_texture.Terminate();
+	if (mask & 2)
+	{
+#if FEAT_AREC == DYNAREC_JIT
+		aica::arm::recompiler::flush();
+#endif
+	}
+	if (mask & 4)
+		mmu_flush_table();
+	if (mask & 8)
+	{
+#if FEAT_SHREC != DYNAREC_NONE
+		bm_Reset();
+#endif
+	}
+	if (mask & 16)
+	{
+		memwatch::unprotect();
+		memwatch::reset();
+	}
+	if (mask & 32)
+		mmu_set_state();
+	if (mask & 64)
+		sh4_cpu.ResetCache();
+	if (mask & 128)
+		KillTex = true;
+	NOTICE_LOG(SAVESTATE, "POSTSAVE INVALIDATE: applied mask 0x%x to the live machine", mask);
+}
+
 void dc_loadstate(Deserializer& deser)
 {
 	custom_texture.Terminate();
