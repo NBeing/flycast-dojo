@@ -270,10 +270,24 @@ cache warmth is billed to the guest's cycle budget**, so the same machine state
 runs at different speeds depending on host-side compilation history - which a
 savestate neither captures nor could.
 
-**AND IT IS NOT THE WHOLE STORY.** Under `-config config:Dynarec.Enabled=no`,
-mask 255 does **not** fix it, and the interpreter turns out to have a *different
-and worse* defect - see 1b. Said out loud rather than generalised from one arm,
-because the dynarec bisect alone reads like a complete answer.
+**AND IT IS NOT THE WHOLE STORY** - re-measured `[2026-09-12]` after the seek
+artifact in 1b was found, because the first version of this paragraph rested on a
+run with no guard:
+
+    interpreter + mask 255 (the WHOLE list):
+      the measurement ran uninterrupted   restarted 0x, final run clean
+      the two passes sampled the same instants   53/53 frames seen equally often
+      a restored machine walks the same path     FAIL, frame 69, same two hashes
+
+So with the SH4 interpreted, clearing every entry of `dc_loadstate`'s
+invalidation list on the continuing machine does **not** close the gap, and this
+reading is clean rather than seek-contaminated. `sh4_int_resetcache()` is an
+empty function, so the dynarec's culprit cannot be the culprit here.
+
+**One defect, two causes; one found.** Said out loud rather than generalised from
+one arm, because the dynarec bisect alone reads like a complete answer. Note this
+is NOT the withdrawn 1b: that was restore-vs-restore and is now measured clean at
+70/70. This is continuing-vs-restored, which fails on both CPU cores.
 
 Deciding what to do about the dynarec one is a judgement call rather than a bug
 fix: the `-= 100` exists so a guest does not spin while blocks compile, and
