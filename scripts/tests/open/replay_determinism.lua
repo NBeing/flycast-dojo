@@ -33,11 +33,30 @@
 ---   It is Sh4Context::cycle_counter, SERMAP offset sh4.cntx + 308, and the two
 ---   runs read 188 and 186. Two SH4 cycles of phase.
 ---
---- Three things it is NOT, each measured rather than argued:
+--- AND WHICH SIDE IS ODD `[MEASURED 2026-09-12]`, from the RD_BOTH_RESTORED
+--- control: with BOTH passes restored from the same slot, 56/56 frames are
+--- identical, hash for hash. A restore reproduces itself perfectly. The
+--- asymmetry is the CONTINUING machine - one that was saved and carried on
+--- differs from one restored out of that save.
+---
+--- That inverts the diagnosis. The restore is not lossy at reproducing; the
+--- save does not capture, or the load discards, host residue the continuing
+--- machine still has. The suspects are exactly dc_loadstate's invalidation
+--- list - custom_texture, the ARM recompiler flush, mmu_flush_table, bm_Reset,
+--- memwatch, mmu_set_state, sh4_cpu.ResetCache, KillTex - every one of which
+--- the restored machine has cleared and the continuing one does not.
+---
+--- Three more things it is NOT, each measured rather than argued:
 ---
 ---   NOT a regression from the 2026-09-12 scheduler work. The tree as it stood
 ---   before that commit fails identically, with the same two hashes.
 ---   NOT a race. The same two hashes on two different builds.
+---   NOT the inputs. The two passes are asserted to receive the same kcode on
+---   every shared frame - 56/56 - so the movie playhead, which is host state and
+---   NOT part of a savestate, is delivering identically. Without that claim the
+---   whole result would be ambiguous: two machines byte-identical at frame N
+---   cannot diverge at N+5 unless something outside the blob feeds them, and a
+---   mis-seeked playhead is the obvious candidate. It is not that.
 ---   NOT the dynarec. -config config:Dynarec.Enabled=no diverges too, at frame
 ---   69 with its own pair of hashes - so it is not compiled-block boundaries
 ---   shifting after dc_loadstate resets the block cache, which was the leading
@@ -65,7 +84,9 @@ local SPAN  = 70		-- frames compared on each pass
 local n, stage = 0, 1
 local prevFrame, steady = -1, 0
 local savedAt = 0
+local reloaded = false
 local passA, passB = {}, {}
+local inA,   inB   = {}, {}
 local aCount, bCount = 0, 0
 
 --- THE BLOB AT THE FIRST SHARED FRAME, from each pass. A hash says the two
@@ -79,6 +100,13 @@ local aCount, bCount = 0, 0
 --- known until a run has been done: keeping a blob per frame would be ~28 MB
 --- each. So run once to learn the frame, then again pointing here.
 local blobWant = tonumber(os.getenv("RD_BLOB_FRAME") or "") or nil
+
+--- RD_BOTH_RESTORED=1 restores the slot before pass A as well, so the two
+--- passes differ in NOTHING - not even in having been restored. It is the
+--- control that says which half is odd: if both-restored agrees, a restore
+--- reproduces itself and the asymmetry is the continuing machine; if it still
+--- diverges, the noise is host-side and is not about restoring at all.
+local bothRestored = os.getenv("RD_BOTH_RESTORED") == "1"
 local blobFrame, blobA, blobB = nil, nil, nil
 
 --- FIRST DIFFERING OFFSET, coarse then fine. A byte loop over ~28 MB in Lua is
@@ -128,9 +156,18 @@ local function firstDiff(a, b)
 	return nil
 end
 
-local function sample(into)
+local function sample(into, inputs)
 	local f = flycast.frame.count()
 	if into[f] == nil then
+		--- THE INPUT IS RECORDED BESIDE THE HASH, and it is the control that
+		--- decides what the divergence MEANS. Two machines byte-identical at
+		--- frame N cannot diverge at N+5 unless something outside the blob
+		--- feeds them, and the movie playhead is exactly that: kcode comes from
+		--- the replay stream, whose position is host state and is NOT part of a
+		--- savestate. If the inputs differ, the emulator is deterministic and
+		--- the seek put the playhead somewhere else - a completely different
+		--- bug from "the emulator does not reproduce".
+		inputs[f] = flycast.input.getButtons(1)
 		into[f] = ss.hash()
 		return true
 	end
@@ -163,6 +200,11 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage == 2 then
+		if bothRestored and savedAt > 0 and f >= savedAt + 5 and not reloaded then
+			reloaded = true
+			ss.loadSlotLater(SLOT)
+			return
+		end
 		-- LET THE DEFERRED SAVE LAND. It runs at the next drain, not here. Kept
 		-- SHORT on purpose: pass A has to start sampling close to the save, or
 		-- the two passes only overlap far downstream and "first divergence" can
@@ -173,7 +215,7 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage == 3 then					-- PASS A: forward from the save
-		if sample(passA) then
+		if sample(passA, inA) then
 			aCount = aCount + 1
 			if blobA == nil and (blobWant == nil or f == blobWant) then
 				blobFrame = f; blobA = ss.tostring()
@@ -192,7 +234,7 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage == 5 then					-- PASS B: forward from the restore
-		if sample(passB) then
+		if sample(passB, inB) then
 			bCount = bCount + 1
 			if f == blobFrame and blobB == nil then blobB = ss.tostring() end
 		end
@@ -223,6 +265,23 @@ flycast_callbacks.vblank = function()
 				end
 			end
 		end
+		--- DID THEY GET THE SAME INPUTS? Asserted BEFORE the path claim, because
+		--- if this fails the path claim is about a different experiment.
+		local inCommon, inSame, firstInBad = 0, 0, nil
+		for f2, v in pairs(inA) do
+			if inB[f2] ~= nil then
+				inCommon = inCommon + 1
+				if inB[f2] == v then inSame = inSame + 1
+				elseif firstInBad == nil or f2 < firstInBad then firstInBad = f2 end
+			end
+		end
+		t.check("the two passes received the same inputs",
+				firstInBad == nil and inCommon > 0,
+				firstInBad and ("first differing input at frame " .. firstInBad
+						.. ": " .. string.format("0x%x", inA[firstInBad])
+						.. " vs " .. string.format("0x%x", inB[firstInBad]))
+					or (inSame .. "/" .. inCommon .. " frames identical"))
+
 		t.check("the two passes cover the same frames",
 				common >= SPAN / 2, common .. " frames in common")
 

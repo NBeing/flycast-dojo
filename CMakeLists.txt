@@ -2119,6 +2119,24 @@ set_tests_properties(flycast.selftest_can_fail PROPERTIES
 # emulator defect from its own misalignment. This compares two passes in one
 # process, so nothing differs but the restore.
 #
+# THE CONTROL FOR THE OPEN DEFECT BELOW, and a claim nothing else in the tree
+# makes: two restores of the SAME state walk the SAME path. `[MEASURED
+# 2026-09-12]` 56/56 frames identical, hash for hash, with the inputs asserted
+# identical too. pool_determinism compares states right after a restore; this
+# runs them forward.
+#
+# It is the half that says which side is odd. With RD_BOTH_RESTORED=1 the two
+# passes differ in NOTHING and agree; without it, one pass is a machine that was
+# saved and CONTINUED and the two diverge. So restoring reproduces itself
+# perfectly, and what is not captured is residue the continuing machine carries.
+add_test(NAME flycast.restore_determinism
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/testrun.sh --timeout 200
+			${CMAKE_CURRENT_SOURCE_DIR}/scripts/tests/open/replay_determinism.lua)
+set_tests_properties(flycast.restore_determinism PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 400
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;RD_BOTH_RESTORED=1")
+
 # JUDGED BY scripts/openarm.sh, NOT BY ctest's WILL_FAIL. `[MEASURED
 # 2026-09-12]` WILL_FAIL was the first version and inverts ANY non-zero exit, so
 # a crash, a Lua error or a missing ROM would all have reported the defect as

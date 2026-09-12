@@ -230,6 +230,8 @@ state hash is how every one of its claims is judged - but a very small target.
 |---|---|
 | a regression from the 2026-09-12 scheduler fix | the tree before that commit fails identically, the same two hashes |
 | a race | the same two hashes on two different builds |
+| the movie playhead (host state, not in a savestate) delivering different inputs | the test asserts the same `kcode` on every shared frame - 56/56 |
+| restoring being lossy at reproducing | with `RD_BOTH_RESTORED=1`, two restores of the same slot are **56/56 identical**, so a restore reproduces itself perfectly - registered as `flycast.restore_determinism` and green |
 | the dynarec's block boundaries shifting after `dc_loadstate` resets the block cache | `-config config:Dynarec.Enabled=no` diverges too, at frame 69, with its own hashes - and the flag was verified to apply, since `-config Dynarec.Enabled=no` without the section prefix is silently rejected |
 
 **`[CORRECTED 2026-09-12]`** the first reading of that offset said **424**, inside
@@ -243,13 +245,20 @@ block used came from a **different serialization** than the one
 SERMAP's `END` against the blob length before trusting any offset from it.** The
 padding change was reverted; it fixed nothing.
 
-Next step: find where those two cycles come from. `cycle_counter` is serialized
-(offset 308 is well inside the 448 bytes written) and the frames before the
-divergence are identical including it, so something between the restore and the
-fifth frame after it spends a different number of cycles. It is not the CPU core.
-The remaining suspects are the paths `dc_loadstate` runs that a normal frame does
-not - `sh4_cpu.ResetCache()`, `bm_Reset()`, `mmu_set_state()` - and
-`Emulator::start()`'s resume.
+**Which side is odd, and it is not the one the name suggests.** The
+`RD_BOTH_RESTORED=1` control makes the two passes differ in *nothing* - both
+restored from the same slot - and they agree 56/56. So the restore is not lossy
+at reproducing. The odd one out is the **continuing** machine: one that was saved
+and carried on differs from one restored out of that save.
+
+Next step follows directly. The save does not capture, or the load discards,
+host residue the continuing machine still carries, worth two SH4 cycles within
+about five frames. The suspects are exactly `dc_loadstate`'s invalidation list -
+`custom_texture.Terminate()`, the ARM recompiler flush, `mmu_flush_table()`,
+`bm_Reset()`, `memwatch::reset()`, `mmu_set_state()`, `sh4_cpu.ResetCache()`,
+`KillTex` - every one of which the restored machine has cleared and the
+continuing one does not. `sh4_int_resetcache()` is empty, so for the interpreter
+arm that one is already out.
 
 ### 2. The re-record claims, on top of it
 
