@@ -281,45 +281,61 @@ removing it changes SH4 timing for everyone. Options are to stop charging host
 work to the guest, to charge it a constant, or to accept it and have re-record
 compare something other than a whole-machine hash.
 
-### 1b. `[OPEN 2026-09-12]` the interpreter is not reproducible at all
+### 1b. `[WITHDRAWN 2026-09-12]` "the interpreter is not reproducible at all"
 
-Worse than 1a, and separate from it.
+**This item was wrong and is retracted the same day it was written.** It is kept
+rather than deleted because the way it was wrong is worth more than the claim was.
 
-    RD_BOTH_RESTORED=1 TESTRUN_EXTRA_CONFIG="-config config:Dynarec.Enabled=no" \
-      scripts/testrun.sh --timeout 900 scripts/tests/open/replay_determinism.lua
+It reported that two passes differing in nothing diverged at the first frame they
+shared when the SH4 is interpreted, and offered four supporting measurements: the
+inputs matched, the sampling instants matched at the divergence frame, disabling
+the per-frame hashing changed nothing, and the result reproduced exactly - the
+same two hashes across separate runs.
 
-Two passes that differ in **nothing** - both restored from the same slot, both
-fed the same inputs - diverge at the **first frame they share**.
+All four were true. The conclusion was still wrong, because a fifth thing was
+happening that none of them could see:
 
-| | |
-|---|---|
-| dynarec, both restored | **58/58 identical** |
-| interpreter, both restored | diverges at the first shared frame |
-| what differs | 2 bytes: `sh4.cntx` + 240 (`spc`, the saved PC) and ~1.9 MB into **guest RAM** |
-| deterministic? | yes - the same two hashes on separate runs |
+    Saved  .../NoBGM_VMU_6.state            <- pass A's save
+    Loaded .../NoBGM_VMU_6.state            <- pass A's restore
+    Loaded .../NoBGM_VMU.state  27934131    <- slot 0. Nobody asked for this.
+    Loaded .../NoBGM_VMU_6.state            <- pass B's restore
 
-So the guest has *computed something different* from an identical starting state
-with identical inputs. Not a rounding of cycle accounting like 1a; a different
-execution.
+`[SOURCE]` `scripts/testrun.sh:254` passes `-config dojo:AutoSeekState=0` to
+**every** Lua test, and that seek fires on **wall clock** - about two seconds in -
+not on a frame count. On the dynarec it lands before this test's stages. Under
+the interpreter the emulator is far slower, the same two seconds is far fewer
+frames, and it landed in the middle of pass A, loading slot 0 and jumping the
+machine somewhere else in the movie. Samples either side of that jump come from
+two different timelines.
 
-**It is not the restore.** `slots.lua` under the interpreter passes 7/0 with a
-byte-identical round trip (`1940689189 -> 1940689189`), so the state comes back
-correctly and the divergence happens while running forward.
+**Reproducibility was the trap.** A seek at a fixed wall-clock offset reproduces
+perfectly, so "the same two hashes on separate runs" - which had been treated as
+ruling out timing noise - was equally consistent with the artifact. What found it
+was reading the emulator's own log for events *the test had not caused*, rather
+than reading the test's verdict.
 
-The natural suspicion is host-timing leaking into emulation, since the
-interpreter runs far slower than real time and the dynarec does not - but
-the divergence is deterministic, which argues against timing noise and for
-something systematically different between the two passes. Unresolved.
+**Fixed in the harness, not worked around.** `AutoSeekState` cannot simply be
+turned off: `-config dojo:AutoSeekState=-1` makes this test TIME OUT, because
+without the seek the machine is still booting and never reaches steady playback -
+the seek is how a test gets in-game at all. So the test now detects a backwards
+jump in the movie index, which nothing else produces, and **restarts the whole
+experiment**; each pass's own deliberate restore is excluded so it cannot
+self-trigger. The dynarec arm reports `restarted 0x`, which is what says the
+confound was interpreter-specific rather than everywhere.
 
-**`[CORRECTED 2026-09-12]` the first run of this control was not evidence.**
-`RD_BOTH_RESTORED` issued pass A's restore and then let the stage gate fall
-through without waiting for it, because `loadSlotLater` is deferred - so pass A
-could sample frames from *before* its own restore. On the dynarec that raced
-benignly and read 56/56; on the slower interpreter it produced a divergence that
-was an artifact of the test not being in the state it claimed. Fixed with an
-explicit wait, and the interpreter result above is from after that fix - it is
-the same divergence, with the same hashes, so the conclusion survived. CLAUDE.md
-rule 1: a test's first assertion is that it is running in the state it says.
+**Re-measured with the guard, and the retraction is confirmed by a positive
+result, not just by doubt:**
+
+    restarted 1x after a seek; final run clean
+    the two passes sampled the same instants   70/70 frames seen equally often
+    a restored machine walks the same path     70/70 frames identical
+
+The interpreter reproduces itself perfectly. It restarted once - exactly where
+the seek used to corrupt the reading - and the clean run agrees on every frame.
+
+**1a survives this.** Re-run with the guard: `restarted 0x` (so the seek never
+touched that arm), sampling instants 56/56 equal, the same divergence at frame
+71, the same two hashes.
 
 ### 2. The re-record claims, on top of it
 

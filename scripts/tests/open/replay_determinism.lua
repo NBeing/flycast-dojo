@@ -87,6 +87,37 @@ local savedAt = 0
 local reloaded = false
 local passA, passB = {}, {}
 local inA,   inB   = {}, {}
+--- HOW MANY VBLANKS EACH MOVIE FRAME SAW, per pass. The movie index ticks when
+--- the guest polls maple, not once per vblank, so a frame can be seen twice.
+--- sample() keeps the FIRST sighting - which is only the same MOMENT in both
+--- passes if both passes saw that frame the same number of times. If they did
+--- not, "the hashes differ at frame N" is a statement about two different
+--- instants and says nothing about the emulator.
+local seenA, seenB = {}, {}
+
+--- DID ANYTHING RELOAD THE MACHINE WHILE WE WERE SAMPLING?
+---
+--- `[MEASURED 2026-09-12]` scripts/testrun.sh passes `-config
+--- dojo:AutoSeekState=0` to EVERY Lua test, and that seek is triggered on WALL
+--- CLOCK - about two seconds in - not on a frame. On the dynarec it lands
+--- before this test's stages; interpreted, the emulator runs far slower, the
+--- same two seconds is far fewer frames, and it landed in the MIDDLE of pass A,
+--- loading slot 0 and jumping the machine somewhere else entirely.
+---
+--- The samples on either side of that jump are from two different timelines,
+--- and comparing them produced a confident, reproducible, completely wrong
+--- conclusion: "the interpreter is not reproducible at all". It was reproducible
+--- - the test was measuring a seek.
+---
+--- A seek runs the movie index BACKWARDS, which nothing else here does, so it
+--- is cheap to notice - and the right response is to START OVER, not to fail.
+--- The seek is part of how testrun gets a test in-game at all: disabling it
+--- (`-config dojo:AutoSeekState=-1`) makes this test TIME OUT, because without
+--- it the machine is still booting and never reaches steady playback. So the
+--- experiment is restarted instead, and the claim below exists to catch a jump
+--- that arrives after the measurement is already complete.
+local jumpedAt = nil
+local lastSeen = nil
 local aCount, bCount = 0, 0
 
 --- THE BLOB AT THE FIRST SHARED FRAME, from each pass. A hash says the two
@@ -107,6 +138,16 @@ local blobWant = tonumber(os.getenv("RD_BLOB_FRAME") or "") or nil
 --- reproduces itself and the asymmetry is the continuing machine; if it still
 --- diverges, the noise is host-side and is not about restoring at all.
 local bothRestored = os.getenv("RD_BOTH_RESTORED") == "1"
+
+--- RD_NO_HASH=1 stops the per-frame hashing and compares only the two blobs at
+--- RD_BLOB_FRAME. It exists because the measurement is not free: ss.hash()
+--- serializes ~28 MB, and `[SOURCE]` sh4_mmr.cpp calls sh4_sched_ffts() before
+--- writing the SH4 context on every serialize - so a "read-only" hash writes to
+--- Sh4cntx.sh4_sched_next and sh4_sched_ffb. On the dynarec that is lost in the
+--- noise; interpreted, the emulator is slow enough that it may not be. If the
+--- blobs agree with hashing off and disagree with it on, the instrument is the
+--- defect and not the emulator.
+local noHash = os.getenv("RD_NO_HASH") == "1"
 local blobFrame, blobA, blobB = nil, nil, nil
 
 --- FIRST DIFFERING OFFSET, coarse then fine. A byte loop over ~28 MB in Lua is
@@ -156,8 +197,14 @@ local function firstDiff(a, b)
 	return nil
 end
 
-local function sample(into, inputs)
+local function sample(into, inputs, seen)
 	local f = flycast.frame.count()
+	if lastSeen ~= nil and f < lastSeen then
+		jumpedAt = f
+		return "jumped"
+	end
+	lastSeen = f
+	seen[f] = (seen[f] or 0) + 1
 	if into[f] == nil then
 		--- THE INPUT IS RECORDED BESIDE THE HASH, and it is the control that
 		--- decides what the divergence MEANS. Two machines byte-identical at
@@ -168,7 +215,7 @@ local function sample(into, inputs)
 		--- the seek put the playhead somewhere else - a completely different
 		--- bug from "the emulator does not reproduce".
 		inputs[f] = flycast.input.getButtons(1)
-		into[f] = ss.hash()
+		into[f] = noHash and 0 or ss.hash()
 		return true
 	end
 	-- REPEATS ARE DROPPED, NOT OVERWRITTEN. `[MEASURED 2026-09-12]` the movie
@@ -177,6 +224,19 @@ local function sample(into, inputs)
 	-- silently compares different moments; keeping the FIRST compares the same
 	-- one on both passes.
 	return false
+end
+
+--- START THE WHOLE EXPERIMENT AGAIN. Everything measured so far came from a
+--- timeline that no longer exists.
+local restarts = 0
+local function restart()
+	restarts = restarts + 1
+	passA, passB, inA, inB, seenA, seenB = {}, {}, {}, {}, {}, {}
+	aCount, bCount = 0, 0
+	blobA, blobB, blobFrame = nil, nil, nil
+	savedAt, reloaded, lastSeen, jumpedAt = 0, false, nil, nil
+	prevFrame, steady = -1, 0
+	stage = 1
 end
 
 local prevVblank = flycast_callbacks and flycast_callbacks.vblank
@@ -204,6 +264,7 @@ flycast_callbacks.vblank = function()
 			reloaded = true
 			ss.loadSlotLater(SLOT)
 			stage = 25				-- and WAIT for it, see below
+			lastSeen = nil			-- pass A's own restore is not a stray seek
 			return
 		end
 		-- LET THE DEFERRED SAVE LAND. It runs at the next drain, not here. Kept
@@ -233,7 +294,9 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage == 3 then					-- PASS A: forward from the save
-		if sample(passA, inA) then
+		local r = sample(passA, inA, seenA)
+		if r == "jumped" then restart(); return end
+		if r then
 			aCount = aCount + 1
 			if blobA == nil and (blobWant == nil or f == blobWant) then
 				blobFrame = f; blobA = ss.tostring()
@@ -242,6 +305,7 @@ flycast_callbacks.vblank = function()
 		if aCount < SPAN then return end
 		stage = 4
 		ss.loadSlotLater(SLOT)
+		lastSeen = nil			-- pass B's own restore is not a stray seek
 		return
 	end
 
@@ -252,7 +316,9 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage == 5 then					-- PASS B: forward from the restore
-		if sample(passB, inB) then
+		local r = sample(passB, inB, seenB)
+		if r == "jumped" then restart(); return end
+		if r then
 			bCount = bCount + 1
 			if f == blobFrame and blobB == nil then blobB = ss.tostring() end
 		end
@@ -283,6 +349,30 @@ flycast_callbacks.vblank = function()
 				end
 			end
 		end
+		--- NOTHING MAY RELOAD THE MACHINE UNDER US. First, because every claim
+		--- after it is void if this one fails.
+		t.check("the measurement ran uninterrupted",
+				jumpedAt == nil,
+				("restarted " .. restarts .. "x after a seek; "
+					.. (jumpedAt and ("still jumped at " .. jumpedAt) or "final run clean")))
+
+		--- DID THEY SEE EACH FRAME THE SAME NUMBER OF TIMES? Asserted before
+		--- everything else, because if not, every comparison below is between
+		--- two different moments and the verdict is meaningless either way.
+		local seenCommon, seenSame, firstSeenBad = 0, 0, nil
+		for f2, c in pairs(seenA) do
+			if seenB[f2] ~= nil then
+				seenCommon = seenCommon + 1
+				if seenB[f2] == c then seenSame = seenSame + 1
+				elseif firstSeenBad == nil or f2 < firstSeenBad then firstSeenBad = f2 end
+			end
+		end
+		t.check("the two passes sampled the same instants",
+				firstSeenBad == nil and seenCommon > 0,
+				firstSeenBad and ("frame " .. firstSeenBad .. " seen "
+						.. seenA[firstSeenBad] .. "x then " .. seenB[firstSeenBad] .. "x")
+					or (seenSame .. "/" .. seenCommon .. " frames seen equally often"))
+
 		--- DID THEY GET THE SAME INPUTS? Asserted BEFORE the path claim, because
 		--- if this fails the path claim is about a different experiment.
 		local inCommon, inSame, firstInBad = 0, 0, nil
