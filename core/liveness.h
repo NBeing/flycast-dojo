@@ -1,5 +1,6 @@
 #pragma once
 #include "types.h"
+#include "frame_clock.h"
 
 #include <functional>
 #include <mutex>
@@ -60,8 +61,17 @@ class Watch
 public:
 	explicit Watch(double graceSeconds) : grace_(graceSeconds) {}
 
-	//! A state was just loaded. `frames` is the machine's completed-frame count.
-	void arm(u64 frames, double now);
+	/*
+		A state was just loaded.
+
+		`frames::Vblank` AND NOT A u64. The clock matters and the difference is
+		not cosmetic: ggpo::confirmedFrame() is incremented three lines away in
+		the same function and EXCLUDES re-simulated frames, so a machine busy
+		re-simulating - which is running - would read as not advancing. The type
+		is what stops the wrong counter being passed here later by someone who
+		reasonably assumes a frame is a frame (core/frame_clock.h).
+	*/
+	void arm(frames::Vblank frames, double now);
 
 	/*
 		Has it moved? Call every frame; it is cheap and answers Quiet almost
@@ -72,7 +82,7 @@ public:
 		under thousands - which is the same reason the panel traces in this tree
 		log on change rather than per frame.
 	*/
-	Verdict check(u64 frames, double now, bool running);
+	Verdict check(frames::Vblank frames, double now, bool running);
 
 	bool armed() const;
 
@@ -83,7 +93,7 @@ private:
 	mutable std::mutex mtx_;
 	double grace_;
 	bool   armed_ = false;
-	u64    at_ = 0;
+	frames::Vblank at_;
 	double when_ = 0;
 };
 
@@ -127,11 +137,32 @@ Watch& stateWatch();
 	`if (config::FixedFrequency != 0)`, and a watchdog that exists only under a
 	video setting is the same defect wearing a different hat.
 
-	`frames` and `running` are read FROM that thread, so both must be safe to
-	call from any thread. Passed in rather than included so this unit stays a
-	pure function of numbers and keeps needing no emulator to test.
+	`frames`, `running` and `cycles` are read FROM that thread, so all three must
+	be safe to call from any thread. Passed in rather than included so this unit
+	stays a pure function of numbers and keeps needing no emulator to test.
+
+	`cycles` IS DIAGNOSIS, NOT JUDGEMENT - it never reaches Watch, which stays a
+	rule over four values. It answers the question a bare "not advancing" leaves
+	open, and the two answers are different bugs:
+
+	  SH4 cycles advanced, frames did not
+	      the guest is executing and the SPG is not firing. rend_vblank() is
+	      called from spg.cpp's scanline-0 handler on sh4_sched timing, with no
+	      condition on it, so this means a SCHEDULED EVENT did not survive the
+	      load. `[SOURCE]` verifyLoadedStateIdempotent's own comment names "a
+	      SCIF timer reschedule" as one of two real desyncs found here, so that
+	      family has form.
+
+	  neither advanced
+	      the machine is not executing at all, and emu.running() saying yes
+	      makes that a different fault entirely.
+
+	A torn read is acceptable and expected: `[SOURCE]` sh4_sched_now64() is
+	`sh4_sched_ffb - Sh4cntx.sh4_sched_next`, two plain words off-thread. The
+	question asked of it is "did this move by millions", which no tear changes.
 */
-void startWatchdog(std::function<u64()> frames, std::function<bool()> running);
+void startWatchdog(std::function<frames::Vblank()> frames, std::function<bool()> running,
+		std::function<u64()> cycles);
 
 //! Stops it. Called from flycast_term so the thread cannot outlive the logger.
 void stopWatchdog();

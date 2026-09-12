@@ -1311,6 +1311,8 @@ if(NOT LIBRETRO)
 	core/dojo/hotkey_panel.cpp
 	core/input/hold_repeat.cpp
 	core/dojo/movie.cpp
+	core/frame_clock.cpp
+	core/frame_clock.h
 	core/liveness.cpp
 			core/dojo/dojo_settings.h
 			core/dojo/session.cpp
@@ -2102,6 +2104,18 @@ set_tests_properties(flycast.selftest PROPERTIES
 add_test(NAME flycast.selftest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/selftest.sh --self-test)
 set_tests_properties(flycast.selftest_can_fail PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 120)
+
+# THE FRAME-CLOCK TYPE BARRIER, which no in-process suite can reach: the whole
+# point of core/frame_clock.h is that mixing two clocks DOES NOT BUILD, and code
+# that does not build cannot be run. Four snippets the compiler must refuse and
+# one it must accept - the accept arm is the control, because four rejections
+# are also what a broken include path produces. No _can_fail twin: this script
+# already contains both directions, which is what a twin would add.
+add_test(NAME flycast.clocktest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/clocktest.sh)
+set_tests_properties(flycast.clocktest PROPERTIES
 	SKIP_RETURN_CODE 77
 	TIMEOUT 120)
 

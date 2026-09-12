@@ -1,6 +1,8 @@
 #ifndef LIBRETRO
 #include "types.h"
 #include "emulator.h"
+#include "frame_clock.h"
+#include "hw/sh4/sh4_sched.h"
 #include "hw/mem/addrspace.h"
 #include "cfg/cfg.h"
 #include "cfg/option.h"
@@ -96,6 +98,7 @@ int flycast_init(int argc, char* argv[])
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();
+	frames::frameClockSelfTest();
 	liveness::livenessSelfTest();
 	/*
 		START THE WATCHDOG HERE, beside the self-tests, because this is after
@@ -103,8 +106,9 @@ int flycast_init(int argc, char* argv[])
 		The two lambdas are the only coupling the pure unit has to an emulator.
 	*/
 	liveness::startWatchdog(
-			[] { return framesCompleted.load(); },
-			[] { return emu.running(); });
+			[] { return frames::vblank(); },
+			[] { return emu.running(); },
+			[] { return sh4_sched_now64(); });
 	roll::stagedSelfTest();
 	luatier::selfTest();
 	luawatch::selfTest();
@@ -443,7 +447,7 @@ void dc_loadstate(int index, std::string filename)
 			auto-seek, the Lua bindings, the States wall and the replay seek all
 			arrive at dc_loadstate. Arming at a caller would cover that caller.
 		*/
-		liveness::stateWatch().arm(framesCompleted.load(), os_GetSeconds());
+		liveness::stateWatch().arm(frames::vblank(), os_GetSeconds());
 		// Never breaking sync is the point, so this defaults on wherever the
 		// run has to be reproducible rather than being something to remember.
 		if (cfgLoadBool("dojo", "VerifyState", determinism::isDeterministicRun()))

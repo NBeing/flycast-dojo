@@ -38,7 +38,6 @@ void dc_exit();
 void dc_savestate(int index = 0);
 //! Frames the machine has actually finished. See its definition for why a
 //! cycle counter will not do.
-extern std::atomic<u64> framesCompleted;
 
 void dc_loadstate(int index = 0);
 void dc_loadstate(std::string filename);

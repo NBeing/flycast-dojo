@@ -17,6 +17,7 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "emulator.h"
+#include "frame_clock.h"
 #include "dojo/session.h"
 #include "pause.h"
 #include "determinism.h"
@@ -1057,11 +1058,10 @@ bool Emulator::render()
 	instructions would have called the machine healthy. What stopped was frames
 	finishing.
 */
-std::atomic<u64> framesCompleted{0};
 
 void Emulator::vblank()
 {
-	framesCompleted.fetch_add(1, std::memory_order_relaxed);
+	frames::countVblank();
 	// Counted before dispatch so an observer sees the number of the frame it is
 	// being told about. Re-simulated frames are excluded here rather than in the
 	// counter, which is what keeps it monotonic.

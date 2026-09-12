@@ -5,18 +5,36 @@ as "the" frame number is how three separate alignment bugs got written in one
 day. This file says what each clock means, what it is measured to do, and which
 question each one answers.
 
+> **`core/frame_clock.h` is the owner now `[2026-09-11]`, not this file.** Each
+> clock is its own C++ TYPE - `frames::Movie`, `frames::Delivered`,
+> `frames::Vblank` - so mixing two is a compile error instead of a
+> plausible-looking number, and the type at a call site says which clock the
+> caller is on. `scripts/clocktest.sh` hands the compiler four mixtures and
+> requires it to refuse each, plus one legal snippet it must accept.
+>
+> This document became prose ABOUT code rather than the only place the
+> distinction lived, because prose cannot be checked and this one drifted the
+> first time it was tested - see the correction below.
+
 Everything marked `[MEASURED]` was observed on 2026-09-08 in a single-player
 replay run (`scripts/tests`, MvC2 clip, auto-seek to state 0).
 
 ## The three clocks
 
-| clock | Lua | C++ | answers | resets on |
-|---|---|---|---|---|
-| **movie index** | `flycast.frame.count()` | `dojo.frame_number` | *where are we in the movie* | a movie opens |
-| **delivered-frame clock** | `flycast.frame.confirmed()` | `ggpo::confirmedFrame()` | *has a frame passed* | `startSession()` — **netplay only** |
-| **callback count** | your own `n = n + 1` | — | *how many times was I called* | never (script-local) |
+`[CORRECTED 2026-09-11]` **There are four, not three.** This table previously
+ended "There is no fourth clock for *frames since this boot*", and one was added
+the day before without this file noticing - which is the entire argument for the
+types. The old advice, deriving it from `confirmed()` as a delta, is still
+correct from Lua, where there is no binding for the fourth.
 
-There is no fourth clock for "frames since this boot". Derive it:
+| clock | Lua | C++ type | reads | answers | resets on |
+|---|---|---|---|---|---|
+| **movie index** | `flycast.frame.count()` | `frames::Movie` | `dojo.frame_number` | *where are we in the movie* | a movie opens |
+| **delivered** | `flycast.frame.confirmed()` | `frames::Delivered` | `ggpo::confirmedFrame()` | *has a frame been handed over* | `startSession()` — **netplay only** |
+| **vblank** | — | `frames::Vblank` | `frames::vblank()` | *did the machine complete a frame* | never |
+| **callback count** | your own `n = n + 1` | — | — | *how many times was I called* | never (script-local) |
+
+From Lua, "frames since this boot" is still a derived number:
 
     -- frames since THIS boot, correct across an in-process restart
     if base == nil then base = flycast.frame.confirmed() end
@@ -56,6 +74,29 @@ the other, under `#else // LIBRETRO` (`ggpo.cpp:1094`), returns
 in this table are the same number.** Do not assume the distinction holds
 everywhere.
 
+### vblank — `frames::vblank()`
+
+Every vblank since the PROCESS started, re-simulated frames included, never
+reset. `[SOURCE]` incremented by `frames::countVblank()` at the top of
+`Emulator::vblank()`, which `rend_vblank()` calls unconditionally from spg.cpp's
+scanline-0 handler on `sh4_sched` timing - so it advances whenever the SH4 does,
+with no dependency on what the guest code is doing.
+
+**It is not `delivered` with a different name**, though the two are incremented
+three lines apart in the same function. `delivered` excludes re-simulated frames
+and resets in `startSession()`. The difference reads as a quibble until it
+bites: `core/liveness.cpp` asks "did this machine survive the state load", and a
+machine busy re-simulating is ALIVE - `delivered` would call it dead.
+
+This is the right clock for *is the machine running at all*, and the wrong one
+for anything that indexes the movie or has to agree with a netplay peer.
+
+`[MEASURED 2026-09-11]` What it caught the week it was added: after an auto-seek
+state load, zero vblanks in 3 s while the SH4 advanced **3,422,661,312 cycles**.
+Since `rend_vblank()` has no condition on it, cycles-without-frames means a
+SCHEDULED EVENT did not survive the load, not that the guest is in a bad loop -
+a distinction no other counter in this table can draw.
+
 ### callback count
 
 Script-local, and `[MEASURED]` equal to `confirmed()` deltas in a single-player
@@ -92,6 +133,15 @@ All three were written on one day, by reaching for whichever counter was nearest
    150 − 142 = 8 ≈ 10: it had hit the documented startup offset exactly, and the
    number was reported as though the two boots agreed on a frame when in truth
    the movie index had barely started.
+
+## What the types do not cover
+
+`dojo.frame_number` is still a bare `std::atomic<u32>` read directly in dozens
+of places inside `core/dojo/`. Those were not converted: the movie engine is the
+one component where "the frame number" is unambiguous, and a mechanical rewrite
+of that many sites buys type safety where confusion was never the problem while
+risking a real behaviour change. **New code outside `core/dojo/` uses
+`frames::movie()`**, which is the same number with its clock attached.
 
 ## Related
 
