@@ -1050,8 +1050,18 @@ bool Emulator::render()
 	return rend_single_frame(true); // FIXME stop flag?
 }
 
+/*
+	COMPLETED FRAMES. `[2026-09-11]` the observable the liveness watch needs, and
+	it has to be this rather than a cycle count: in the defect that motivated it
+	the SH4 was executing flat out at 99% CPU, so anything counting cycles or
+	instructions would have called the machine healthy. What stopped was frames
+	finishing.
+*/
+std::atomic<u64> framesCompleted{0};
+
 void Emulator::vblank()
 {
+	framesCompleted.fetch_add(1, std::memory_order_relaxed);
 	// Counted before dispatch so an observer sees the number of the frame it is
 	// being told about. Re-simulated frames are excluded here rather than in the
 	// counter, which is what keeps it monotonic.

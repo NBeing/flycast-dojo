@@ -22,6 +22,7 @@
 #include "dojo/roll_library.h"
 #include "input/hold_repeat.h"
 #include "dojo/movie.h"
+#include "liveness.h"
 #include "dojo/roll_staged.h"
 #include "lua/luatier.h"
 #include "lua/luawatch.h"
@@ -95,6 +96,15 @@ int flycast_init(int argc, char* argv[])
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();
+	liveness::livenessSelfTest();
+	/*
+		START THE WATCHDOG HERE, beside the self-tests, because this is after
+		the config load (it reads dojo:LoadGraceSeconds) and before any frame.
+		The two lambdas are the only coupling the pure unit has to an emulator.
+	*/
+	liveness::startWatchdog(
+			[] { return framesCompleted.load(); },
+			[] { return emu.running(); });
 	roll::stagedSelfTest();
 	luatier::selfTest();
 	luawatch::selfTest();
@@ -159,6 +169,10 @@ void SaveSettings()
 
 void flycast_term()
 {
+	// BEFORE anything it might log through. A detached thread that outlives
+	// LogManager crashes on the way out, and an exit crash reads as a bug in
+	// whatever ran last rather than in the watchdog.
+	liveness::stopWatchdog();
 	gui_cancel_load();
 	lua::term();
 	emu.term();
@@ -423,6 +437,13 @@ void dc_loadstate(int index, std::string filename)
 		// other half of the .frame sidecar written in dc_savestate. Before the
 		// verify probe, so a failed seek is visible ahead of a hash mismatch.
 		dojo.LoadStateFrame(filename);
+		/*
+			ARM THE LIVENESS WATCH. Here rather than in gui_loadState, because
+			this is the one place EVERY load passes through - the hotkey, the
+			auto-seek, the Lua bindings, the States wall and the replay seek all
+			arrive at dc_loadstate. Arming at a caller would cover that caller.
+		*/
+		liveness::stateWatch().arm(framesCompleted.load(), os_GetSeconds());
 		// Never breaking sync is the point, so this defaults on wherever the
 		// run has to be reproducible rather than being something to remember.
 		if (cfgLoadBool("dojo", "VerifyState", determinism::isDeterministicRun()))

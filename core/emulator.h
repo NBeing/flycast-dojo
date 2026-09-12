@@ -36,6 +36,10 @@ void dc_reset(bool hard); // for tests only
 void flycast_term();
 void dc_exit();
 void dc_savestate(int index = 0);
+//! Frames the machine has actually finished. See its definition for why a
+//! cycle counter will not do.
+extern std::atomic<u64> framesCompleted;
+
 void dc_loadstate(int index = 0);
 void dc_loadstate(std::string filename);
 void dc_loadstate(int index, std::string filename);
@@ -184,7 +188,19 @@ private:
 		Error,
 		Terminated,
 	};
-	State state = Uninitialized;
+	/*
+		ATOMIC BECAUSE A WATCHDOG READS IT. `core/liveness.cpp` polls
+		`emu.running()` from its own thread to decide whether a machine that is
+		not advancing has FAILED to advance or was simply never asked to, and
+		`[MEASURED 2026-09-11]` the thread it would otherwise have run on is the
+		SH4 itself - mainui_rend_frame -> Emulator::render -> recSh4_Run - so a
+		wedged guest is exactly the case where that thread never comes back.
+
+		Free here: every use in this tree is a comparison or an assignment (no
+		`switch (state)`), loads on x86-64 are a plain mov, and the six writes
+		happen at start/stop rather than in a loop.
+	*/
+	std::atomic<State> state{Uninitialized};
 	std::future<void> threadResult;
 	bool resetRequested = false;
 	bool singleStep = false;

@@ -214,6 +214,27 @@ leaves port 3263 refusing connections, while the same `-config` syntax
 demonstrably works for other options in the same section. So the remaining work
 is *how that option is plumbed*, not whether the tool exists.
 
+### Interrupting a wedge, when there is nothing to break ON
+
+`[MEASURED 2026-09-11]` The recipe above needs a `break <where>`, which assumes
+you know where. For "it is stuck and I do not know where", send `SIGINT` to
+**gdb** after a delay and let the remaining `-ex` commands run:
+
+    gdb -batch -nx -ex "set pagination off" -ex "set confirm off" \
+      -ex "handle SIGSEGV nostop noprint pass" \
+      -ex "handle SIGBUS  nostop noprint pass" \
+      -ex "run" -ex "thread apply all bt 14" --args ./build-dojo7/flycast ... &
+    GP=$!; sleep 14; kill -INT $GP
+
+`run` returns when the interrupt stops the inferior, and the batch continues to
+the backtrace. Nothing is typed and no display is touched.
+
+**Attaching to a running flycast does not work on this machine.** `[MEASURED
+2026-09-11]` `/proc/sys/kernel/yama/ptrace_scope` is **1**, so `gdb -p <pid>`
+against a process gdb did not start produces no stacks and no obvious error -
+it looks exactly like "gdb found nothing to say". Launch under gdb instead; do
+not conclude anything from an empty `thread apply all bt`.
+
 ## Idioms that work
 
 ### Stop at a specific movie frame
@@ -284,14 +305,34 @@ caller instead.
 
 ## What it has found here
 
-Two things in its first session, both invisible to the tests that were passing:
+Three things, all invisible to the tests that were passing:
 
-1. **A template that was never a template.** `dojocfg::writeThrough`'s `const T& v`
+1. **A watchdog asleep on the thread it was watching.** `core/liveness.cpp` was
+   written to report a savestate that restores bytes but leaves a machine that
+   does not run. Its eight unit claims were green, it compiled, it linked, and
+   against the exact defect it was built for it emitted **no verdict at all** -
+   not Alive, not Dead, nothing. The stack answered it in one interrupt:
+
+       Emulator::render -> Emulator::run -> recSh4_Run -> X64Dynarec::mainloop
+
+   on **Thread 1**. With single-threaded rendering the UI loop runs the guest
+   inline until it yields a frame, so `mainui_rend_frame()` - where the check
+   had been put - never returns once the guest stops finishing frames. The
+   check was arming on one thread and being polled from the thread the failure
+   suspends. It now has its own thread (`liveness::startWatchdog`).
+
+   Two further things only the stack could have told you: `ps -L` showed the
+   main thread at 98% CPU, so the usual "blocked thread sits at 0%" reasoning
+   said it was *working*; and with `ThreadedRendering=yes` the UI thread is
+   separate and the check fires correctly, so the bug was invisible in half the
+   configurations.
+
+2. **A template that was never a template.** `dojocfg::writeThrough`'s `const T& v`
    was never read, so every instantiation was byte-identical, the linker folded
    them, and gdb reported a `std::string` call arriving in `writeThrough<bool>`.
    No compiler warning (unused *template* parameters draw none) and no test
    failure (behaviour identical either way). Fixed in `d3c372bf0`.
-2. **A `.flyr` is not a header followed by frames at all.** gdb read 11520 movie
+3. **A `.flyr` is not a header followed by frames at all.** gdb read 11520 movie
    keys from a 324,175-byte clip, which did not divide the way
    `scripts/testrun.sh` assumed. Chasing that discrepancy is what turned up the
    real layout: a stream of messages, each 12 bytes of header plus a body, with
@@ -305,5 +346,7 @@ Two things in its first session, both invisible to the tests that were passing:
    the stream and counts DISTINCT frame numbers - a re-record appends override
    batches, so counting records inflates exactly the clips edited most.
 
-Both are the same lesson from opposite directions: source-reading tells you
-intent, the built artifact tells you truth.
+The last two are the same lesson from opposite directions: source-reading tells
+you intent, the built artifact tells you truth. The first is a third direction -
+a unit test tells you a rule is right, and says nothing about whether the rule
+is ever consulted.

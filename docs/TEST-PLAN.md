@@ -41,10 +41,22 @@ writing it.
 | tier | what | cost | TDD |
 |---|---|---|---|
 | **0 — audits** | source-level consistency (`hotkeyaudit`, `configaudit`) | **0.1 s** | always red-first |
-| **1 — self-tests** | 344 claims, 18 in-process suites, **no ROM** | **16 s** | always red-first |
+| **1 — self-tests** | 352 claims, 20 in-process suites, **no ROM** | **16 s** | always red-first |
 | **2 — Lua** | `flycast.lua`, a booted emulator driven by script | ~250 s | arm first |
 | **3 — input/UI** | `rolltest`, `statestest`, `hotkeytest`, `docktest` — real clicks and keys on a private Xvfb | 30–90 s each | arm first |
 | **4 — round trips** | record → replay → compare; cross-process determinism | 5–10 min | arm first |
+
+**`[MEASURED 2026-09-11]` Tier 1 cannot see a feature that is never called, and
+that is not a theoretical limit.** The liveness watchdog shipped eight green
+tier-1 claims while emitting no verdict at all against the defect it was built
+for, because the check had been put in `mainui_rend_frame()` and in
+single-threaded rendering that loop *is* the SH4 - a wedged guest never returns
+to it. A pure unit proves a RULE is right. It is silent on whether anything
+consults the rule, and it cannot see a thread at all. Every tier-1 suite whose
+subject is wired into a running emulator therefore wants one cheap tier-2 or
+tier-3 arm that asserts the WIRING through an observable the feature produces:
+`flycast.livetest` is the pattern - one healthy load, assert the verdict exists
+AND that nothing cried wolf.
 
 Tier 1 is where most new work belongs and where it is nearly free. The pattern
 that makes it possible is **a pure function over a value**: `roll_edit`'s
@@ -56,7 +68,7 @@ them costs 90 seconds to check.
 
 ## Where we actually are
 
-**17 ctest entries**, 7 of them `_can_fail` twins or carrying their own control.
+**19 ctest entries**, 8 of them `_can_fail` twins or carrying their own control.
 
 **Covered:** the piano roll's edit model, the sequence library, savestate
 anchors, bookmarks, the States wall, hotkeys and chords, the edit funnel,
@@ -74,6 +86,7 @@ What the better question — *does a claim or a probe assert this?* — answers:
 
 | subsystem | verdict |
 |---|---|
+| **state liveness** | **covered `[2026-09-11]`** — `LIVENESS SELFTEST` (8 claims) for the rule, `flycast.livetest` for the wiring, and it was verified against the real wedge: Dead at +4.7 s on the auto-seek load, silent on a run with no load, Alive on a healthy one. Three arms, because "Dead after every load" satisfies the first two |
 | **rewind + re-record** | **genuinely uncovered.** `LoadStateFrame` runs on every state load, so it is exercised; none of its RULES is asserted — no truncate on a WRITE load, a rewind is not itself a re-record, a state saved before a rewind below it is stale |
 | the staged buffer | **covered** — `ROLLSTAGED SELFTEST`, 18 claims |
 | undo / redo | **covered** — `ROLL ANCHORPROBE`, `PAINTPROBE`, `MASHPROBE` and `LIBPROBE` each drive a real edit through the funnel and assert `undo=yes` with restoration |

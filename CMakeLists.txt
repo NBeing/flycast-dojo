@@ -1311,6 +1311,7 @@ if(NOT LIBRETRO)
 	core/dojo/hotkey_panel.cpp
 	core/input/hold_repeat.cpp
 	core/dojo/movie.cpp
+	core/liveness.cpp
 			core/dojo/dojo_settings.h
 			core/dojo/session.cpp
 			core/dojo/session.h
@@ -2103,6 +2104,32 @@ add_test(NAME flycast.selftest_can_fail
 set_tests_properties(flycast.selftest_can_fail PROPERTIES
 	SKIP_RETURN_CODE 77
 	TIMEOUT 120)
+
+# THE LIVENESS WATCHDOG'S WIRING, which its eight self-test claims cannot see.
+# `[MEASURED 2026-09-11]` those claims were green while the feature emitted no
+# verdict at all against the defect it was written for: the check had been put
+# in mainui_rend_frame(), and in single-threaded rendering that loop IS the SH4,
+# so a wedged guest never returns to it. A unit test of a watchdog cannot tell
+# you it is running on the thread the failure suspends.
+add_test(NAME flycast.livetest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/livetest.sh)
+set_tests_properties(flycast.livetest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 600
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
+# ITS PAIRED ARM, and the thing under test is the JUDGE. Four canned logs: one
+# with no verdict (the feature unwired), one crying wolf on a healthy load, one
+# doing both, and one clean run it must ACCEPT. `[MEASURED 2026-09-11]` the
+# control paid for itself on its first run - "dead but never alive" was being
+# rejected as "silent", the right answer for the wrong reason, which is the
+# exact failure mode selftest.sh's fixtures had. Needs no build and no display.
+add_test(NAME flycast.livetest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/livetest.sh --self-test)
+set_tests_properties(flycast.livetest_can_fail PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 60)
 
 add_test(NAME flycast.docktest
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/docktest.sh)
