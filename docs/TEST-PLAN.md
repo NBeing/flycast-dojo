@@ -271,17 +271,55 @@ runs at different speeds depending on host-side compilation history - which a
 savestate neither captures nor could.
 
 **AND IT IS NOT THE WHOLE STORY.** Under `-config config:Dynarec.Enabled=no`,
-mask 255 does **not** fix it - the interpreter still diverges at frame 69, and
-its `sh4_cpu.ResetCache` is an empty function, so it was never the cause there.
-There are at least two independent causes; only the dynarec one is identified.
-Said out loud rather than generalised from one arm, because the dynarec bisect
-alone reads like a complete answer.
+mask 255 does **not** fix it, and the interpreter turns out to have a *different
+and worse* defect - see 1b. Said out loud rather than generalised from one arm,
+because the dynarec bisect alone reads like a complete answer.
 
 Deciding what to do about the dynarec one is a judgement call rather than a bug
 fix: the `-= 100` exists so a guest does not spin while blocks compile, and
 removing it changes SH4 timing for everyone. Options are to stop charging host
 work to the guest, to charge it a constant, or to accept it and have re-record
 compare something other than a whole-machine hash.
+
+### 1b. `[OPEN 2026-09-12]` the interpreter is not reproducible at all
+
+Worse than 1a, and separate from it.
+
+    RD_BOTH_RESTORED=1 TESTRUN_EXTRA_CONFIG="-config config:Dynarec.Enabled=no" \
+      scripts/testrun.sh --timeout 900 scripts/tests/open/replay_determinism.lua
+
+Two passes that differ in **nothing** - both restored from the same slot, both
+fed the same inputs - diverge at the **first frame they share**.
+
+| | |
+|---|---|
+| dynarec, both restored | **58/58 identical** |
+| interpreter, both restored | diverges at the first shared frame |
+| what differs | 2 bytes: `sh4.cntx` + 240 (`spc`, the saved PC) and ~1.9 MB into **guest RAM** |
+| deterministic? | yes - the same two hashes on separate runs |
+
+So the guest has *computed something different* from an identical starting state
+with identical inputs. Not a rounding of cycle accounting like 1a; a different
+execution.
+
+**It is not the restore.** `slots.lua` under the interpreter passes 7/0 with a
+byte-identical round trip (`1940689189 -> 1940689189`), so the state comes back
+correctly and the divergence happens while running forward.
+
+The natural suspicion is host-timing leaking into emulation, since the
+interpreter runs far slower than real time and the dynarec does not - but
+the divergence is deterministic, which argues against timing noise and for
+something systematically different between the two passes. Unresolved.
+
+**`[CORRECTED 2026-09-12]` the first run of this control was not evidence.**
+`RD_BOTH_RESTORED` issued pass A's restore and then let the stage gate fall
+through without waiting for it, because `loadSlotLater` is deferred - so pass A
+could sample frames from *before* its own restore. On the dynarec that raced
+benignly and read 56/56; on the slower interpreter it produced a divergence that
+was an artifact of the test not being in the state it claimed. Fixed with an
+explicit wait, and the interpreter result above is from after that fix - it is
+the same divergence, with the same hashes, so the conclusion survived. CLAUDE.md
+rule 1: a test's first assertion is that it is running in the state it says.
 
 ### 2. The re-record claims, on top of it
 

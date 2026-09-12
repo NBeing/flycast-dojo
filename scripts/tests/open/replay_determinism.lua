@@ -203,6 +203,7 @@ flycast_callbacks.vblank = function()
 		if bothRestored and savedAt > 0 and f >= savedAt + 5 and not reloaded then
 			reloaded = true
 			ss.loadSlotLater(SLOT)
+			stage = 25				-- and WAIT for it, see below
 			return
 		end
 		-- LET THE DEFERRED SAVE LAND. It runs at the next drain, not here. Kept
@@ -210,6 +211,23 @@ flycast_callbacks.vblank = function()
 		-- the two passes only overlap far downstream and "first divergence" can
 		-- no longer tell an unfaithful restore from a slow drift.
 		if f < savedAt + 5 then return end
+		stage = 3
+		return
+	end
+
+	if stage == 25 then
+		--- WAIT FOR PASS A'S OWN RESTORE TO LAND, exactly as stage 4 does for
+		--- pass B's. loadSlotLater is DEFERRED - it runs at the next drain, not
+		--- here - so without this the stage-2 gate below can fall through and
+		--- pass A starts sampling frames from BEFORE its restore.
+		---
+		--- `[MEASURED 2026-09-12]` that race was real and it was silently
+		--- benign on the dynarec (56/56 identical, by luck of timing) and wrong
+		--- on the slower interpreter, where it reported a divergence at the
+		--- first shared frame that was an artifact of the two passes not
+		--- actually being in the state the test claimed. CLAUDE.md rule 1: a
+		--- test's first assertion is that it is running in the state it says.
+		if f > savedAt + 10 then return end
 		stage = 3
 		return
 	end
