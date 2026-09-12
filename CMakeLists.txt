@@ -66,7 +66,17 @@ option(LIBRETRO "Build libretro core" OFF)
 option(USE_OPENGL "Use OpenGL API" ON)
 option(USE_VIDEOCORE "RPI: use the legacy Broadcom GLES libraries" OFF)
 option(APPLE_BREAKPAD "macOS: Build breakpad client and dump symbols" OFF)
-option(ENABLE_GDB_SERVER "Build with GDB debugging support" OFF)
+# ON in this fork, where upstream has it off. `[MEASURED 2026-09-11]` the SH4
+# debugger is what turned a two-day "a state load wedges the emulator" into
+# "the guest is looping at 0x8c191c90 reading main RAM through an indirect
+# call" - see docs/GDB.md. An hour went into the option that enables it before
+# noticing the feature simply was not built.
+#
+# It adds one source file and a define, and does NOTHING at runtime unless
+# `Debug.GDBEnabled` is set - which is off by default. For a tree whose whole
+# subject is re-recording and savestate fidelity, a guest debugger that needs a
+# reconfigure to reach is a tool nobody reaches for.
+option(ENABLE_GDB_SERVER "Build with GDB debugging support" ON)
 option(ENABLE_DC_PROFILER "Build with support for target machine (SH4) profiler" OFF)
 option(ENABLE_FC_PROFILER "Build with support for host app (Flycast) profiler" OFF)
 

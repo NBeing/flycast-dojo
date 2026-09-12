@@ -122,7 +122,84 @@ Worth recording, because each read plausibly:
   the movie adds 60. The control failed identically, which is how it was caught:
   a control that fails the same way as the experiment is measuring neither.
 
-### The next step, and what is already known about it
+### The guest is in a normal loop, not waiting on hardware
+
+`[MEASURED 2026-09-11]` with the SH4 stub up (see below), the guest PC sampled
+eight times while the movie is stalled at frame 9949:
+
+    8c191c90  8c1921c4  8c191cc0  8c191c92
+    8c191cca  8c18f7fa  8c18f7fa  8c191cc0
+
+A ~2.5 KB range, so it is looping in real game code rather than off in the
+weeds. Disassembling it:
+
+    8c191c90:  mov.l 0x8c191cfc,r1   ! 8c32ea9c
+    8c191c92:  mov.l @r1,r2
+    8c191c94:  tst   r2,r2
+    8c191c96:  bt    0x8c191cac
+    ...
+    8c18f7f6:  jsr   @r1
+    8c18f7fe:  rts
+
+**Every address it reads is main RAM** (`0x8c32…`), not a hardware register
+(`0xa05f…`, `0xff…`). So it is not polling maple, or any device, for a flag that
+never arrives. It is walking a structure in its own memory through an indirect
+call and never finishing.
+
+That points at the restored state being INTERNALLY INCONSISTENT rather than
+mis-restored: `STATE VERIFY: idempotent OK` proves save->load->save is
+byte-stable, which is a claim about the serialiser and says nothing about
+whether the machine that was saved made sense. A task list or dispatch chain
+that is walked forever fits the evidence.
+
+Identifying the structure needs either game knowledge or a RAM diff against a
+state that loads cleanly - not another log line.
+
+### Turning the SH4 debugger on: it was never the option
+
+`[CORRECTED 2026-09-11]` an earlier note here said `config::GDB` was not picking
+up `-config config:Debug.GDBEnabled=yes`. That was wrong, and gdb settled it in
+one run by printing the option object itself:
+
+    (gdb) print config::GDB
+    $1 = {... section = "config", name = "Debug.GDBEnabled",
+          value = true, defaultValue = false, overridden = true ...}
+
+The plumbing was fine all along. **The feature was not compiled in:**
+
+    ENABLE_GDB_SERVER:BOOL=OFF          # in build-dojo7/CMakeCache.txt
+
+    cmake -S . -B build-dojo7 -DENABLE_GDB_SERVER=ON
+
+That is now ON. It adds `core/debug/gdb_server.cpp` and a `GDB_SERVER` define,
+and costs nothing at runtime while `Debug.GDBEnabled` is off - which for a tree
+whose whole subject is re-recording is worth having permanently.
+
+**And the instrument that produced the wrong answer is worth naming**, because
+it is a shape this project keeps hitting: `info functions debugger::init |
+grep -c "init"` returned 1 and was read as "present". The 1 was gdb's own header
+line, `All functions matching regular expression "debugger::init":`, which
+contains "init". The right test is the one that failed loudly later -
+`break debugger::init` answering **`Function "debugger::init" not defined.`**
+
+### Talking to the guest
+
+    (Xvfb :209 &) ; sleep 2
+    DISPLAY=:209 … flycast … -config config:Debug.GDBEnabled=yes \
+                             -config config:Debug.GDBWaitForConnection=no &
+
+    gdb-multiarch -batch -nx \
+      -ex "set architecture sh4" \
+      -ex "target remote localhost:3263" \
+      -ex "printf \"pc = %08x\\n\", \$pc" -ex "stepi" … \
+      -ex "detach"
+
+`gdb-multiarch` is required - the stock `gdb` here answers *Undefined item:
+"sh4"*. `WaitForConnection=no` matters: otherwise the emulator blocks at boot
+waiting for a debugger, which is the opposite of what a headless reproduction
+wants. Port **3263** (`gdb_server.h: DEFAULT_PORT`).
+
+### What was already known before the stub worked
 
 `p_sh4rcb->cntx.pc` is the guest PC (`Sh4cntx` is a macro for `sh4rcb.cntx`,
 `core/hw/sh4/sh4_if.h`), but reading it from host gdb requires a stop, and the

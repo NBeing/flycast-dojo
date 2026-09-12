@@ -130,13 +130,25 @@ and needs no timing. It does not fire once in ~117 s. **The guest performs no
 further maple DMA after the state load** - it is not that the movie counter is
 stuck while frames go by; the poll that would advance it never happens.
 
-The remaining question is which loop the guest is in. flycast ships its own SH4
-debugger (`core/debug/gdb_server.cpp`, port 3263) and it IS compiled into this
-binary, and `gdb-multiarch` here speaks `sh4` - but `-config
-config:Debug.GDBEnabled=yes` leaves the port refusing connections while the same
-syntax works for other options. **The next step is how that option is plumbed**,
-which is a much smaller question than the one this started as. docs/GDB.md
-carries the detail, including three gdb fixtures that measured nothing.
+`[NARROWED AGAIN 2026-09-11, SH4 stub]` **the guest is in a normal game loop,
+not waiting on hardware.** Sampled eight times while stalled, its PC stays inside
+a ~2.5 KB range around `0x8c191c90`, and the disassembly reads only MAIN RAM
+(`0x8c32…`) through an indirect call — no hardware register anywhere. It is
+walking a structure in its own memory and never finishing.
+
+So the restored state is INTERNALLY INCONSISTENT rather than mis-restored.
+`STATE VERIFY: idempotent OK` proves save→load→save is byte-stable, which is a
+claim about the serialiser and says nothing about whether the machine that was
+saved made sense.
+
+Identifying the structure needs game knowledge or a RAM diff against a state
+that loads cleanly. `docs/GDB.md` carries the recipe, the disassembly, and three
+gdb fixtures that measured nothing.
+
+`[CORRECTED]` an earlier version of this said the next step was "how the
+`Debug.GDBEnabled` option is plumbed". The plumbing was fine — gdb printed the
+option object showing `value = true, overridden = true`. The SH4 debugger simply
+**was not compiled in**: `ENABLE_GDB_SERVER:BOOL=OFF`. It is now ON.
 
     scripts/recordtest.sh          # records 60 frames from 9948, then hangs in replay
 
