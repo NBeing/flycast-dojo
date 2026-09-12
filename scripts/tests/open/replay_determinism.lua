@@ -23,6 +23,38 @@
 --- both times, so this shows a restore reproduces PLAYBACK. It does not show
 --- that a freshly RECORDED movie replays the same - that is recordtest's job,
 --- and this exists to tell you whether to believe its verdict.
+---
+--- WHAT THE DIVERGENCE ACTUALLY IS `[MEASURED 2026-09-12]`, from the blob diff
+--- this file now does:
+---
+---   ONE BYTE out of 27,793,699. Not a wrong path - a wrong NUMBER. Every other
+---   byte of the machine is identical at the diverging frame.
+---
+---   It is Sh4Context::cycle_counter, SERMAP offset sh4.cntx + 308, and the two
+---   runs read 188 and 186. Two SH4 cycles of phase.
+---
+--- Three things it is NOT, each measured rather than argued:
+---
+---   NOT a regression from the 2026-09-12 scheduler work. The tree as it stood
+---   before that commit fails identically, with the same two hashes.
+---   NOT a race. The same two hashes on two different builds.
+---   NOT the dynarec. -config config:Dynarec.Enabled=no diverges too, at frame
+---   69 with its own pair of hashes - so it is not compiled-block boundaries
+---   shifting after dc_loadstate resets the block cache, which was the leading
+---   theory. (Without the section prefix that flag is silently rejected; the
+---   run was checked for the rejection before its result was believed.)
+---
+--- `[CORRECTED 2026-09-12]` the first reading of that offset said byte 424 -
+--- inside the 136 bytes of `u64 raw[64-8]` padding that no named field of
+--- Sh4Context covers - and a change to stop serializing that padding was
+--- written, built and measured before the mapping was rechecked. It was wrong
+--- by 116 bytes: the SERMAP block used came from a DIFFERENT serialization than
+--- the one the hash uses. This tree emits several sizes, so match SERMAP's END
+--- against the blob length before trusting an offset from it. The padding
+--- change fixed nothing and was reverted. The near-miss is the useful part -
+--- 424 is padding and would have made this test a proxy failure with the
+--- emulator innocent, 308 is a register and makes it real, and the two readings
+--- are indistinguishable without checking the END.
 
 local t = dofile(os.getenv("FLYCAST_TESTLIB"))
 
@@ -35,6 +67,66 @@ local prevFrame, steady = -1, 0
 local savedAt = 0
 local passA, passB = {}, {}
 local aCount, bCount = 0, 0
+
+--- THE BLOB AT THE FIRST SHARED FRAME, from each pass. A hash says the two
+--- machines differ; it cannot say WHERE, and "where" is the whole question once
+--- the divergence is known to be deterministic. Keyed to the first frame pass A
+--- samples, because that is the earliest frame both passes cover and the
+--- earliest evidence is the least contaminated by whatever the difference goes
+--- on to cause.
+--- WHICH frame, by default the first pass A samples. RD_BLOB_FRAME overrides
+--- it, because the interesting frame is the FIRST DIVERGING one and that is not
+--- known until a run has been done: keeping a blob per frame would be ~28 MB
+--- each. So run once to learn the frame, then again pointing here.
+local blobWant = tonumber(os.getenv("RD_BLOB_FRAME") or "") or nil
+local blobFrame, blobA, blobB = nil, nil, nil
+
+--- FIRST DIFFERING OFFSET, coarse then fine. A byte loop over ~28 MB in Lua is
+--- far too slow and a binary search over string.sub copies the whole blob on
+--- every step; 64 KB blocks cost one pass over the data, then one byte scan of
+--- one block.
+local BLOCK = 65536
+
+--- EVERY differing offset, not just the first. `[MEASURED 2026-09-12]` the first
+--- one landed 112 bytes past the last named field of Sh4Context - inside the
+--- tail that exists only because the union is `u64 raw[56]` while the struct
+--- covers 312 of its 448 bytes. If that is ALL that differs then the machine is
+--- reproducing and savestate.hash() is the thing that is wrong, which is the
+--- opposite conclusion from the one the first measurement invited.
+local function allDiffs(a, b, cap)
+	local out, n = {}, math.min(#a, #b)
+	local i = 1
+	while i <= n and #out < cap do
+		local j = math.min(i + BLOCK - 1, n)
+		if a:sub(i, j) ~= b:sub(i, j) then
+			for k = i, j do
+				if a:byte(k) ~= b:byte(k) then
+					out[#out + 1] = k - 1
+					if #out >= cap then break end
+				end
+			end
+		end
+		i = j + 1
+	end
+	return out
+end
+
+local function firstDiff(a, b)
+	local n = math.min(#a, #b)
+	local i = 1
+	while i <= n do
+		local j = math.min(i + BLOCK - 1, n)
+		if a:sub(i, j) ~= b:sub(i, j) then
+			for k = i, j do
+				if a:byte(k) ~= b:byte(k) then return k end
+			end
+			return i					-- unreachable unless sub/byte disagree
+		end
+		i = j + 1
+	end
+	if #a ~= #b then return n + 1 end	-- identical prefix, different length
+	return nil
+end
 
 local function sample(into)
 	local f = flycast.frame.count()
@@ -81,7 +173,12 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage == 3 then					-- PASS A: forward from the save
-		if sample(passA) then aCount = aCount + 1 end
+		if sample(passA) then
+			aCount = aCount + 1
+			if blobA == nil and (blobWant == nil or f == blobWant) then
+				blobFrame = f; blobA = ss.tostring()
+			end
+		end
 		if aCount < SPAN then return end
 		stage = 4
 		ss.loadSlotLater(SLOT)
@@ -95,7 +192,10 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage == 5 then					-- PASS B: forward from the restore
-		if sample(passB) then bCount = bCount + 1 end
+		if sample(passB) then
+			bCount = bCount + 1
+			if f == blobFrame and blobB == nil then blobB = ss.tostring() end
+		end
 		if bCount < SPAN then return end
 		stage = 6
 
@@ -132,6 +232,29 @@ flycast_callbacks.vblank = function()
 						.. ": " .. tostring(passA[firstBad])
 						.. " then " .. tostring(passB[firstBad]))
 					or (same .. "/" .. common .. " frames identical"))
+
+		--- AND WHERE. Reported as a detail on a claim that can only PASS, because
+		--- this is diagnosis rather than a rule - the rule is the claim above,
+		--- and a second failing claim about the same defect would double-count
+		--- it. `dojo:StateMapLog=yes` prints SERMAP lines that turn this offset
+		--- into a subsystem name.
+		local where
+		if blobA == nil or blobB == nil then
+			where = "no blob captured at frame " .. tostring(blobFrame)
+		else
+			local off = firstDiff(blobA, blobB)
+			if off == nil then
+				where = "the two blobs at frame " .. tostring(blobFrame)
+						.. " are IDENTICAL (" .. #blobA .. " bytes)"
+			else
+				local d = allDiffs(blobA, blobB, 400)
+				local lo, hi = d[1], d[#d]
+				where = ("%d+ differing bytes in %d, frame %s; span %d..%d; first %d vs %d")
+						:format(#d, #blobA, tostring(blobFrame), lo, hi,
+								blobA:byte(off), blobB:byte(off))
+			end
+		end
+		t.check("the blobs were compared", true, where)
 
 		t.finish()
 	end

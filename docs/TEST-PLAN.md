@@ -204,37 +204,52 @@ which that note did not have. Until it is understood, recordtest cannot be
 registered, and everything in section 2 waits behind it — which is why this is
 the top item rather than the re-record claims themselves.
 
-### 1a. `[OPEN 2026-09-12]` a restored machine does not walk the same path
+### 1a. `[OPEN 2026-09-12]` `cycle_counter` is two cycles out after a restore
 
-The new blocker, and it is a far sharper one than the wedge it replaced: **run a
-machine forward from a deferred savestate and it does not reproduce the sequence
-it produced the first time.**
+The new blocker, and far sharper than the wedge it replaced.
 
     scripts/testrun.sh scripts/tests/open/replay_determinism.lua
 
 Two passes in ONE process over the SAME movie frames, inputs from the same clip,
-nothing different but the restore. They diverge at the first frame the two
-passes share - and `[MEASURED]` the same two hashes appear on two different
-builds, so it is deterministic, a specific piece of state rather than a race.
-Also measured against the tree as it stood BEFORE the scheduler work of
-2026-09-12, where it fails identically: **not a regression from that fix.**
+nothing different but the restore. They diverge - and the blob diff says the
+divergence is **one byte out of 27,793,699**.
 
-Why this test exists rather than just reading recordtest's verdict: recordtest
-compares two PROCESSES, where everything differs, so it cannot separate an
-emulator defect from its own misalignment. This compares two passes in one
-process. It is the control recordtest needed, and it is registered - through
-`scripts/openarm.sh`, which requires the named claim to be the failing one, so
-the day somebody fixes it the arm goes red and says so in words.
+| | |
+|---|---|
+| where | `Sh4Context::cycle_counter`, SERMAP `sh4.cntx` + 308 |
+| what | 188 vs 186 - two SH4 cycles of phase |
+| everything else | identical, all 27.79 MB of it |
 
-What it does NOT show, said out loud: the inputs come from the clip on both
-passes, so this is about reproducing PLAYBACK. Whether a freshly RECORDED movie
-replays the same is recordtest's question, and it cannot be answered while this
-one is open.
+So this is not "the machine walks a different path". The machine is byte-for-byte
+the same and its cycle budget is not. Still fatal for a re-record tool, because a
+state hash is how every one of its claims is judged - but a very small target.
 
-Next step is a byte diff: the divergence is deterministic, so the two blobs at
-the diverging frame can be compared directly and the first differing offset will
-name the subsystem - the same technique `verifyLoadedStateIdempotent` already
-uses on a different pair.
+**Three things it is NOT**, each measured rather than argued:
+
+| ruled out | evidence |
+|---|---|
+| a regression from the 2026-09-12 scheduler fix | the tree before that commit fails identically, the same two hashes |
+| a race | the same two hashes on two different builds |
+| the dynarec's block boundaries shifting after `dc_loadstate` resets the block cache | `-config config:Dynarec.Enabled=no` diverges too, at frame 69, with its own hashes - and the flag was verified to apply, since `-config Dynarec.Enabled=no` without the section prefix is silently rejected |
+
+**`[CORRECTED 2026-09-12]`** the first reading of that offset said **424**, inside
+the 136 bytes of `u64 raw[64-8]` padding that no named field of `Sh4Context`
+covers - which would have made this test a *proxy* failure and the emulator
+innocent. A change to stop serializing that padding was written, built and
+measured before the mapping was rechecked. It was wrong by 116 bytes: the SERMAP
+block used came from a **different serialization** than the one
+`savestate.hash()` uses. This tree emits several sizes - 27793147, 27793571,
+27793687, 27934131, 36181651 and 44570871 all appeared in one run - so **match
+SERMAP's `END` against the blob length before trusting any offset from it.** The
+padding change was reverted; it fixed nothing.
+
+Next step: find where those two cycles come from. `cycle_counter` is serialized
+(offset 308 is well inside the 448 bytes written) and the frames before the
+divergence are identical including it, so something between the restore and the
+fifth frame after it spends a different number of cycles. It is not the CPU core.
+The remaining suspects are the paths `dc_loadstate` runs that a normal frame does
+not - `sh4_cpu.ResetCache()`, `bm_Reset()`, `mmu_set_state()` - and
+`Emulator::start()`'s resume.
 
 ### 2. The re-record claims, on top of it
 
