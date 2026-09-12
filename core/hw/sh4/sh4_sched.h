@@ -42,6 +42,16 @@ void sh4_sched_request(int id, int cycles);
 bool sh4_sched_is_scheduled(int id);
 
 /*
+	Is this event currently INSIDE its own callback?
+
+	handle_cb clears an event's deadline before invoking it and re-arms it after,
+	so for the duration of a callback the event reads as disabled. The two states
+	look identical and are not: one re-arms itself on return, the other is dead.
+	Only a load needs to tell them apart - see spg_RepairSchedule.
+ */
+bool sh4_sched_in_callback(int id);
+
+/*
 	Tick for *cycles*
 */
 void sh4_sched_tick(int cycles);

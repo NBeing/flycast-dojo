@@ -346,4 +346,70 @@ void spg_Deserialize(Deserializer& deser)
 				" numscanlines=%u Line_Cycles=%u Frame_Cycles=%u maple_int_pending=%d",
 				clc_pvr_scanline, prv_cur_scanline, pvr_numscanlines,
 				Line_Cycles, Frame_Cycles, (int)maple_int_pending);
+
+}
+
+/*
+	A LOADED MACHINE WITH ITS RASTER SWITCHED OFF IS NOT A MACHINE.
+
+	`[MEASURED 2026-09-11]` a state in this tree's own test data restores with
+	sch_list[vblank_schid].end == -1. The emulator then runs the SH4 flat out -
+	3,468,966,592 cycles in three seconds - and completes ZERO frames, because
+	spg_line_sched is what advances the scanline and only spg_line_sched can
+	re-arm spg_line_sched. Every fidelity check passes: the bytes round-trip
+	perfectly, and what they faithfully describe is a machine that cannot run.
+
+	CALLED FROM dc_loadstate, NOT FROM spg_Deserialize. `[MEASURED 2026-09-11]`
+	it WAS in spg_Deserialize first, and did nothing at all - no log line, which
+	is what said so. `[SOURCE]` dc_deserialize runs pvr::deserialize before
+	sh4::deserialize, and the scheduler table arrives with the latter, so the
+	repair ran against a value that had not been loaded yet and was then
+	overwritten by the -1 it existed to remove. A fix-up for the whole machine
+	belongs where the whole machine has finished loading.
+
+	SAFE TO REPAIR UNCONDITIONALLY, and that is worth stating rather than
+	assuming. `[SOURCE]` spg_line_sched has exactly one exit, `return
+	getNextSpgInterrupt()`, which is always positive, and no site in the tree
+	calls sh4_sched_request(vblank_schid, -1). There is no legitimate resting
+	state in which a Dreamcast's raster is descheduled, so this cannot mask a
+	correct one.
+
+	LOUD, because a silent repair would hide the fixture that produced it - and
+	those fixtures are on people's disks, inside clips already recorded.
+	core/hw/sh4/sh4_sched.cpp stops NEW ones being written; this rescues the old.
+*/
+// Whether the LAST load needed the repair. Read by verifyLoadedStateIdempotent,
+// which would otherwise report the repair as a serializer defect - see there.
+static bool scheduleRepaired = false;
+
+bool spg_ScheduleWasRepaired()
+{
+	return scheduleRepaired;
+}
+
+void spg_RepairSchedule()
+{
+	scheduleRepaired = false;
+	if (sh4_sched_is_scheduled(vblank_schid))
+		return;
+	/*
+		DESCHEDULED AND ABOUT TO RE-ARM ITSELF IS NOT DESCHEDULED.
+
+		`[MEASURED 2026-09-11]` scripts/tests/slots.lua saves AND loads from
+		inside a Lua vblank hook, which runs inside spg_line_sched, which runs
+		inside handle_cb - so its state file carries the -1 and its machine
+		never wedges, because handle_cb re-arms the event the moment the
+		callback returns. Repairing there changes a machine that was fine and
+		broke that test's round-trip identity.
+
+		The wedge needs the OTHER case: a load from the UI or the deferred
+		point, outside any callback, where nothing will ever re-arm it.
+	*/
+	if (sh4_sched_in_callback(vblank_schid))
+		return;
+	scheduleRepaired = true;
+	WARN_LOG(SAVESTATE, "SPG REPAIR: this state was saved from inside a scheduler "
+			"callback - the raster restored DESCHEDULED and the machine would have "
+			"completed no frames. Re-arming it (core/hw/sh4/sh4_sched.cpp)");
+	sh4_sched_request(vblank_schid, getNextSpgInterrupt());
 }

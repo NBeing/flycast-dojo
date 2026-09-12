@@ -18,6 +18,7 @@
  */
 #include "emulator.h"
 #include "frame_clock.h"
+#include "hw/pvr/spg.h"
 #include "dojo/session.h"
 #include "pause.h"
 #include "determinism.h"
@@ -834,6 +835,11 @@ void dc_loadstate(Deserializer& deser)
 
 	dc_deserialize(deser);
 
+	// THE MACHINE IS WHOLE ONLY HERE. Everything below repairs state that lives
+	// outside the blob or that the blob can describe wrongly; spg_RepairSchedule
+	// is the second kind, and it must run after sh4::deserialize has landed the
+	// scheduler table rather than inside pvr::deserialize, which runs first.
+	spg_RepairSchedule();
 	mmu_set_state();
 	sh4_cpu.ResetCache();
 	KillTex = true;

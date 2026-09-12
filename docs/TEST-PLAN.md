@@ -105,6 +105,19 @@ two shape claims `docs/STEP-GRANULARITY.md` reasons from.
 
 ## The order of work, and why this order
 
+> **`[2026-09-12]` THE BLOCKER IS GONE.** Everything below was written while a
+> state load could wedge the emulator, which is why `recordtest` could not be
+> registered: every re-record claim rests on loading a state and playing on, and
+> that did not work. Root cause found and fixed - `handle_cb` clears a scheduled
+> event's deadline for the duration of its callback, so a savestate written from
+> a vblank hook records a machine whose raster is switched off, and only the
+> raster can re-arm the raster. `spg_RepairSchedule` rescues those states on
+> load; `docs/GDB.md` has the four readings that closed it. The seek-then-play
+> path now runs a clip to `replay end at frame 10007 (movie exhausted)`.
+>
+> `recordtest` is unblocked. It has not been registered yet - that is the next
+> item, and it is now a harness question rather than an emulator one.
+
 ### 1. Land `recordtest` in ctest  — **the biggest single gain**
 
 It is the only harness that records, and it is the vehicle for everything in

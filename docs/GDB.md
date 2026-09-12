@@ -305,9 +305,38 @@ caller instead.
 
 ## What it has found here
 
-Three things, all invisible to the tests that were passing:
+Four things, all invisible to the tests that were passing:
 
-1. **A watchdog asleep on the thread it was watching.** `core/liveness.cpp` was
+1. **The savestate wedge, root-caused.** The `[OPEN]` that had blocked every
+   re-record test across several sessions. Four gdb readings closed it, each
+   cheap and each impossible to get from source:
+
+   - `thread apply all bt` after an interrupt: **Thread 1 is the SH4**
+     (`Emulator::render -> recSh4_Run`), which is why the first watchdog was
+     asleep - see item 1 below.
+   - `p sch_list` stopped just after a load: `sch_list[vblank_schid]` has
+     **`end = -1`** - disabled - while `start` holds a real value. `[SOURCE]`
+     `sh4_sched_remaining` returns `end - now` as a u32, so a disabled event is
+     never selected, `spg_line_sched` never runs, and only `spg_line_sched` can
+     re-arm `spg_line_sched`.
+   - `break rend_vblank` then `p sch_list[vblank_schid].end`: **-1 while inside
+     the callback**, with AICA's entry live at the same instant. The stack -
+     `rend_vblank <- spg_line_sched <- handle_cb <- sh4_sched_tick` - is the
+     whole explanation: `handle_cb` clears the deadline BEFORE invoking the
+     callback and re-arms only after, so anything that saves a state from a
+     vblank hook records a machine with its raster switched off.
+   - `dojo:SchedTrace` (added because of this) then settled the *fix*: the
+     candidate save-side repair round-tripped the field **identically**, which
+     ruled it out and pointed at `sh4_sched_next` instead. Three wrong guesses
+     preceded that one number.
+
+   Why nothing else could see it: the bytes are perfect. `STATE VERIFY:
+   idempotent OK (27793147 bytes round-trip)` on a state that cannot run. Every
+   fidelity check in the tree is a claim about the serializer, and the
+   serializer was right.
+
+
+2. **A watchdog asleep on the thread it was watching.** `core/liveness.cpp` was
    written to report a savestate that restores bytes but leaves a machine that
    does not run. Its eight unit claims were green, it compiled, it linked, and
    against the exact defect it was built for it emitted **no verdict at all** -
@@ -327,12 +356,12 @@ Three things, all invisible to the tests that were passing:
    separate and the check fires correctly, so the bug was invisible in half the
    configurations.
 
-2. **A template that was never a template.** `dojocfg::writeThrough`'s `const T& v`
+3. **A template that was never a template.** `dojocfg::writeThrough`'s `const T& v`
    was never read, so every instantiation was byte-identical, the linker folded
    them, and gdb reported a `std::string` call arriving in `writeThrough<bool>`.
    No compiler warning (unused *template* parameters draw none) and no test
    failure (behaviour identical either way). Fixed in `d3c372bf0`.
-3. **A `.flyr` is not a header followed by frames at all.** gdb read 11520 movie
+4. **A `.flyr` is not a header followed by frames at all.** gdb read 11520 movie
    keys from a 324,175-byte clip, which did not divide the way
    `scripts/testrun.sh` assumed. Chasing that discrepancy is what turned up the
    real layout: a stream of messages, each 12 bytes of header plus a body, with

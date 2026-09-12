@@ -1,6 +1,7 @@
 #include "types.h"
 #include "sh4_if.h"
 #include "sh4_sched.h"
+#include "cfg/cfg.h"
 #include "serialize.h"
 
 #include <algorithm>
@@ -29,6 +30,21 @@ struct sched_list
 	int start;
 	int end;
 };
+
+/*
+	WHICH EVENT IS CURRENTLY INSIDE ITS OWN CALLBACK, or -1.
+
+	`[MEASURED 2026-09-11]` This exists for one reason: handle_cb clears an
+	event's `end` BEFORE invoking it and re-arms only after, so for the whole
+	duration of a callback that event serializes as DISABLED. A savestate
+	written from inside a callback therefore records a machine with that timer
+	switched off - and for the SPG that is fatal and self-sealing, because the
+	only thing that re-arms the vblank event is the vblank event firing.
+
+	Read only by spg_RepairSchedule, to tell the two cases apart. Nothing about a
+	RUNNING machine changes.
+*/
+static int sh4_sched_in_cb = -1;
 
 static u64 sh4_sched_ffb;
 static std::vector<sched_list> sch_list;
@@ -138,6 +154,11 @@ void sh4_sched_request(int id, int cycles)
 	sh4_sched_ffts();
 }
 
+bool sh4_sched_in_callback(int id)
+{
+	return id != -1 && id == sh4_sched_in_cb;
+}
+
 bool sh4_sched_is_scheduled(int id)
 {
 	return sch_list[id].end != -1;
@@ -163,6 +184,15 @@ static void handle_cb(sched_list& sched)
 	int jitter = elapsd - remain;
 
 	sched.end = -1;
+	// SAVED AND RESTORED rather than assigned, because a callback that reaches
+	// code which ticks the scheduler would otherwise clear the marker for the
+	// event still on the stack beneath it. The guard also survives an exception
+	// thrown THROUGH the callback, which dc_savestate can do.
+	struct InCb {
+		int prev;
+		explicit InCb(int id) : prev(sh4_sched_in_cb) { sh4_sched_in_cb = id; }
+		~InCb() { sh4_sched_in_cb = prev; }
+	} inCb((int)(&sched - &sch_list[0]));
 	int re_sch = sched.cb(sched.tag, remain, jitter, sched.arg);
 
 	if (re_sch > 0)
@@ -203,6 +233,23 @@ void sh4_sched_serialize(Serializer& ser, int id)
 {
 	ser << sch_list[id].tag;
 	ser << sch_list[id].start;
+	/*
+		WRITTEN AS-IS, INCLUDING THE -1 AN IN-FLIGHT CALLBACK LEAVES BEHIND.
+
+		`[MEASURED 2026-09-11]` the obvious repair - substitute "due now" for an
+		event inside its own callback, so it fires on restore - was built, and
+		it is worse than it looks. An event whose deadline is NOW is selected by
+		sh4_sched_ffts on the next pass, which rewrites Sh4cntx.sh4_sched_next
+		and sh4_sched_ffb; both are serialized, so a restored machine no longer
+		hashes equal to the one that was saved. scripts/tests/slots.lua caught
+		it immediately - "the machine is unchanged across the round trip",
+		523635580 -> 1031346583 - and that invariant is the floor under state
+		hashes, anchors and every determinism comparison in this tree. Not worth
+		trading for a fix the load side can make on its own.
+
+		The repair is in spg_RepairSchedule (core/hw/pvr/spg.cpp), which also
+		rescues the states already written this way.
+	*/
 	ser << sch_list[id].end;
 }
 
@@ -211,6 +258,8 @@ void sh4_sched_deserialize(Deserializer& deser, int id)
 	deser >> sch_list[id].tag;
 	deser >> sch_list[id].start;
 	deser >> sch_list[id].end;
+	if (cfgLoadBool("dojo", "SchedTrace", false))
+		NOTICE_LOG(SAVESTATE, "SCHEDTRACE dser id=%d end=%d", id, sch_list[id].end);
 }
 
 // FIXME modules should save their scheduling data so that it doesn't depend on their scheduler id

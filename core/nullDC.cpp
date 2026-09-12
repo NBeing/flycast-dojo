@@ -2,6 +2,7 @@
 #include "types.h"
 #include "emulator.h"
 #include "frame_clock.h"
+#include "hw/pvr/spg.h"
 #include "hw/sh4/sh4_sched.h"
 #include "hw/mem/addrspace.h"
 #include "cfg/cfg.h"
@@ -322,6 +323,20 @@ static void verifyLoadedStateIdempotent(const void *blobA, size_t sizeA)
 	}
 	else
 	{
+		/*
+			A REPAIRED STATE IS *SUPPOSED* TO DIFFER, and saying so here is not
+			politeness - without it this probe becomes a false-positive
+			generator. `[MEASURED 2026-09-11]` the SPG repair turns the raster's
+			deadline from ffffffff (the disabled sentinel) into a real value, so
+			re-serializing a repaired machine differs from the blob it came from
+			in exactly those four bytes, and the report read as a serializer
+			defect that does not exist. A check that cries wolf gets ignored,
+			and this one is load-bearing.
+		*/
+		if (spg_ScheduleWasRepaired())
+			WARN_LOG(SAVESTATE, "STATE VERIFY: ...and this state WAS repaired on load "
+					"(see SPG REPAIR above). A difference in the scheduler's vblank "
+					"deadline is expected here and is not a serializer fault.");
 		WARN_LOG(SAVESTATE, "STATE VERIFY: NOT idempotent - first diff at offset %llu "
 				"(re-serialized %llu vs loaded %llu bytes)",
 				(unsigned long long)off, (unsigned long long)sizeB, (unsigned long long)sizeA);
