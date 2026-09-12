@@ -61,15 +61,32 @@ cp "$SEED" "$OUT/data/flycast-dojo/NoBGM_VMU.state"
 [ -f "$SEED.frame" ] && cp "$SEED.frame" "$OUT/data/flycast-dojo/NoBGM_VMU.state.frame"
 echo "  seed state: $SEED"
 
-cleanup() { pkill -f "Xvfb $DISP" 2>/dev/null; return 0; }
+# TEARDOWN IS PID-SCOPED, NEVER BY NAME. `[SOURCE]` dc053dfeb - killing Xvfb or
+# i3 by pattern on a developer's own machine logs them out, and this harness
+# runs on one. The same run also used to leave its mktemp dir behind on every
+# invocation; an interrupted debugging session left 156 of them.
+XPID=""
+cleanup() {
+	[ -n "$XPID" ] && kill "$XPID" 2>/dev/null
+	[ "${RECORDTEST_KEEP:-0}" = 1 ] || rm -rf "$OUT"
+	return 0
+}
 trap cleanup EXIT
 Xvfb "$DISP" -screen 0 640x480x24 >/dev/null 2>&1 &
+XPID=$!
 sleep 2
 
 write_script() {
 	cat > "$OUT/config/flycast-dojo/flycast.lua" <<LUAEOF
 local PHASE  = "$1"
 local WINDOW = $WINDOW
+-- THE RECORD PHASE COLLECTS WIDER THAN THE REPLAY, deliberately. saveSlotLater
+-- lands at the next deferred drain, so the exact movie frame the anchor
+-- captures is not knowable from here - and a comparison that never samples the
+-- anchor frame cannot tell "the restore is wrong" from "the first stepped frame
+-- is wrong". Collect from the moment recording starts and let the join find the
+-- overlap.
+local COLLECT = (PHASE == "record") and (WINDOW + 40) or WINDOW
 local out = "$OUT/" .. PHASE .. ".txt"
 local function w(s) local f = io.open(out, "a"); if f then f:write(s .. "\n"); f:close() end end
 
@@ -97,12 +114,26 @@ flycast_callbacks.vblank = function()
 			if not started then
 				w("err=startRecording refused"); w("ok"); flycast.emulator.exit(); return
 			end
-			-- THE ANCHOR. A movie started mid-session has no frame 0, so it is
-			-- replayable only paired with a state at its first frame. Saving it
-			-- here is not bookkeeping - without it phase 2 has nothing to seek to.
-			if not pcall(flycast.savestate.save, 0) then
-				w("err=could not save the anchor state"); w("ok"); flycast.emulator.exit(); return
-			end
+			-- THE ANCHOR, AND IT MUST NOT BE SAVED FROM HERE.
+			--
+			-- A movie started mid-session has no frame 0, so it is replayable
+			-- only paired with a state at its first frame; without this, phase 2
+			-- has nothing to seek to. But `savestate.save` writes from THIS
+			-- callback, and [MEASURED 2026-09-12] a state written from a vblank
+			-- hook records sch_list[vblank_schid].end == -1 - the raster
+			-- descheduled - because sh4_sched's handle_cb clears an event's
+			-- deadline for the duration of its callback and Emulator::vblank()
+			-- runs inside spg_line_sched. spg_RepairSchedule rescues such a
+			-- state on load, but it re-arms with getNextSpgInterrupt() and
+			-- cannot recover the `- jitter` that handle_cb would have applied,
+			-- so the restored timeline is up to 448 cycles out and EVERY HASH
+			-- AFTER THE FIRST DIVERGES. Measured here: first divergence at
+			-- frame 9949, one frame in.
+			--
+			-- saveSlotLater posts to deferred::drain() instead - between
+			-- frames, no callback on the stack, nothing pending. That is the
+			-- only place a state can be both runnable and bit-exact.
+			flycast.savestate.saveSlotLater(0)
 			first = flycast.frame.count()
 			w("first=" .. tostring(first))
 			w("clip=" .. tostring(flycast.replay.currentPath()))
@@ -119,10 +150,10 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage ~= "collect" then return end
-	if taken >= WINDOW then return end
+	if taken >= COLLECT then return end
 	taken = taken + 1
 	w("H " .. tostring(f) .. " " .. tostring(flycast.savestate.hash()))
-	if taken < WINDOW then return end
+	if taken < COLLECT then return end
 
 	if PHASE == "record" then flycast.replay.stopRecording() end
 	w("ok")
@@ -164,7 +195,7 @@ fail()  { echo "FAIL recordtest - $1"; exit 1; }
 launch record || fail "the recording session never finished (see $OUT/record.log)"
 ERR=$(field record err); [ -z "$ERR" ] || fail "$ERR"
 CLIP=$(field record clip); FIRST=$(field record first)
-echo "  recorded: $WINDOW frames from movie frame $FIRST"
+echo "  recorded: $(grep -c '^H ' "$OUT/record.txt") frames from movie frame $FIRST"
 echo "  clip:     $CLIP"
 [ -n "$CLIP" ] && [ -f "$CLIP" ] || fail "no .flyr was written"
 echo "  size:     $(stat -c%s "$CLIP") bytes"
@@ -176,7 +207,7 @@ echo "  size:     $(stat -c%s "$CLIP") bytes"
 DISTINCT=$(grep -c '^H ' "$OUT/record.txt")
 UNIQUE=$(awk '/^H /{print $3}' "$OUT/record.txt" | sort -u | wc -l)
 echo "  window:   $DISTINCT frames, $UNIQUE distinct state hashes"
-[ "$DISTINCT" -eq "$WINDOW" ] || fail "collected $DISTINCT of $WINDOW frames"
+[ "$DISTINCT" -ge "$WINDOW" ] || fail "collected $DISTINCT frames, fewer than the $WINDOW-frame window"
 if [ "$UNIQUE" -le 1 ]; then
 	echo "VACUOUS recordtest - the machine did not change across $WINDOW frames,"
 	echo "  so replaying it identically proves nothing. Seed from a state where"
@@ -194,15 +225,26 @@ echo "  replayed: $(grep -c '^H ' "$OUT/replay.txt") frames from movie frame $(f
 # ---- element for element ---------------------------------------------------
 # Joined on the FRAME NUMBER, not on position, so a run that skipped or repeated
 # a frame is a mismatch rather than a silent shift.
-awk '/^H /{a[$2]=$3} END{for (k in a) print k, a[k]}' "$OUT/record.txt" | sort -n > "$OUT/a.txt"
-awk '/^H /{b[$2]=$3} END{for (k in b) print k, b[k]}' "$OUT/replay.txt" | sort -n > "$OUT/b.txt"
-COMMON=$(join "$OUT/a.txt" "$OUT/b.txt" | wc -l)
+# JOINED IN AWK, NOT WITH join(1). `[MEASURED 2026-09-12]` the previous version
+# piped both sides through `sort -n` and then `join`, which requires the DEFAULT
+# collation: the movie crosses 9999 -> 10000, four digits to five, and join
+# reported "input is not in sorted order" and silently stopped pairing there.
+# A comparison that quietly covers less than it claims is the failure mode this
+# whole file exists to avoid, so the sort is gone rather than corrected.
+read -r COMMON FIRSTBAD REC REP <<< "$(awk '
+	/^H / && FNR == NR { a[$2] = $3; next }
+	/^H / && ($2 in a) {
+		common++
+		if (a[$2] != $3 && bad == "") { bad = $2; rec = a[$2]; rep = $3 }
+	}
+	END { printf "%d %s %s %s\n", common + 0, (bad == "" ? "-" : bad), rec, rep }
+' "$OUT/record.txt" "$OUT/replay.txt")"
+
 [ "$COMMON" -ge $((WINDOW / 2)) ] || fail "the two runs share only $COMMON frames; they did not cover the same range"
-DIFF=$(join "$OUT/a.txt" "$OUT/b.txt" | awk '$2 != $3 {print; exit}')
-if [ -n "$DIFF" ]; then
+if [ "$FIRSTBAD" != "-" ]; then
 	echo "FAIL recordtest - replaying the recording took a DIFFERENT path"
-	echo "       first divergence at frame $(echo "$DIFF" | awk '{print $1}'):"
-	echo "       recorded $(echo "$DIFF" | awk '{print $2}'), replayed $(echo "$DIFF" | awk '{print $3}')"
+	echo "       first divergence at frame $FIRSTBAD:"
+	echo "       recorded $REC, replayed $REP"
 	exit 1
 fi
 echo "PASS recordtest - $COMMON frames recorded and replayed to the same state, hash for hash"

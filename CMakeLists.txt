@@ -2107,6 +2107,34 @@ set_tests_properties(flycast.selftest_can_fail PROPERTIES
 	SKIP_RETURN_CODE 77
 	TIMEOUT 120)
 
+# A KNOWN-OPEN DEFECT, KEPT EXECUTABLE. `[MEASURED 2026-09-12]` a machine
+# restored from a deferred savestate does not walk the path it walked the first
+# time: two passes over the same frames in ONE process, inputs from the same
+# clip, diverge at the first frame they share. Deterministic - the same two
+# hashes on two different builds - and `[MEASURED]` present before the scheduler
+# work of 2026-09-12, so it is not a regression from it.
+#
+# This is what blocks scripts/recordtest.sh, and isolating it is the point: that
+# harness compares two PROCESSES, where everything differs, and could not tell an
+# emulator defect from its own misalignment. This compares two passes in one
+# process, so nothing differs but the restore.
+#
+# JUDGED BY scripts/openarm.sh, NOT BY ctest's WILL_FAIL. `[MEASURED
+# 2026-09-12]` WILL_FAIL was the first version and inverts ANY non-zero exit, so
+# a crash, a Lua error or a missing ROM would all have reported the defect as
+# present and correctly shaped by a run that never reached the claim. openarm
+# requires the NAMED claim to be the failing one and nothing else to be red, and
+# it says something different for "still open", "apparently fixed" and "broke
+# differently". See scripts/tests/open/README.md.
+add_test(NAME flycast.replay_determinism_known_open
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/openarm.sh
+			${CMAKE_CURRENT_SOURCE_DIR}/scripts/tests/open/replay_determinism.lua
+			"a restored machine walks the same path")
+set_tests_properties(flycast.replay_determinism_known_open PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 300
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
 # THE FRAME-CLOCK TYPE BARRIER, which no in-process suite can reach: the whole
 # point of core/frame_clock.h is that mixing two clocks DOES NOT BUILD, and code
 # that does not build cannot be run. Four snippets the compiler must refuse and

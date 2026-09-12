@@ -115,8 +115,14 @@ two shape claims `docs/STEP-GRANULARITY.md` reasons from.
 > load; `docs/GDB.md` has the four readings that closed it. The seek-then-play
 > path now runs a clip to `replay end at frame 10007 (movie exhausted)`.
 >
-> `recordtest` is unblocked. It has not been registered yet - that is the next
-> item, and it is now a harness question rather than an emulator one.
+> `recordtest` is unblocked - its replay phase now completes, where before it
+> wedged. `[CORRECTED 2026-09-12]` the sentence that stood here said the rest was
+> "a harness question rather than an emulator one". Wrong, and the correction is
+> the useful part of this entry: three real harness bugs WERE found and fixed
+> (the anchor saved from inside a vblank hook; `join(1)` silently giving up at
+> the 9999 -> 10000 collation boundary; collection starting before the auto-seek
+> landed), and it still diverged. The remaining cause is in the emulator, and it
+> now has a name and a test of its own - see the item below.
 
 ### 1. Land `recordtest` in ctest  — **the biggest single gain**
 
@@ -134,7 +140,20 @@ and the caller meant only the last. `movie::firstFrame()` and `beforeStart()`
 now separate them, and the playhead seeks instead. Verified: with the auto-seek
 out of the way the clip replays to `movie exhausted` at 10007.
 
-**STILL BLOCKING — the auto-seek's state load leaves the guest SPINNING.**
+**`[FIXED 2026-09-12]` the auto-seek's state load left the guest spinning.** Root
+cause: `sh4_sched`'s `handle_cb` clears an event's deadline for the duration of
+its callback, and `Emulator::vblank()` runs inside `spg_line_sched`, so a state
+saved from a vblank hook records a raster that is switched off - and only the
+raster can re-arm the raster. `spg_RepairSchedule` repairs such states on load;
+`docs/GDB.md` has the four readings that closed it. The elimination table below
+is kept because every row in it was right, and because the last row of reasoning
+drawn from it was **wrong**: "the restored state is INTERNALLY INCONSISTENT
+rather than mis-restored" - it was neither. The state was faithful and the
+scheduler was off, and the guest's loop around `0x8c191c90` was it waiting for a
+vblank interrupt that could never arrive. A correct measurement, a wrong
+inference from it.
+
+**ORIGINAL DIAGNOSIS, kept for the eliminations:**
 `[OPEN]` With `AutoSeekState=0`, the movie index stops advancing after the load
 and never moves again. What it is NOT, each measured rather than assumed:
 
@@ -184,6 +203,38 @@ file) without finding the fourth. What is new is a **reliable reproduction**,
 which that note did not have. Until it is understood, recordtest cannot be
 registered, and everything in section 2 waits behind it — which is why this is
 the top item rather than the re-record claims themselves.
+
+### 1a. `[OPEN 2026-09-12]` a restored machine does not walk the same path
+
+The new blocker, and it is a far sharper one than the wedge it replaced: **run a
+machine forward from a deferred savestate and it does not reproduce the sequence
+it produced the first time.**
+
+    scripts/testrun.sh scripts/tests/open/replay_determinism.lua
+
+Two passes in ONE process over the SAME movie frames, inputs from the same clip,
+nothing different but the restore. They diverge at the first frame the two
+passes share - and `[MEASURED]` the same two hashes appear on two different
+builds, so it is deterministic, a specific piece of state rather than a race.
+Also measured against the tree as it stood BEFORE the scheduler work of
+2026-09-12, where it fails identically: **not a regression from that fix.**
+
+Why this test exists rather than just reading recordtest's verdict: recordtest
+compares two PROCESSES, where everything differs, so it cannot separate an
+emulator defect from its own misalignment. This compares two passes in one
+process. It is the control recordtest needed, and it is registered - through
+`scripts/openarm.sh`, which requires the named claim to be the failing one, so
+the day somebody fixes it the arm goes red and says so in words.
+
+What it does NOT show, said out loud: the inputs come from the clip on both
+passes, so this is about reproducing PLAYBACK. Whether a freshly RECORDED movie
+replays the same is recordtest's question, and it cannot be answered while this
+one is open.
+
+Next step is a byte diff: the divergence is deterministic, so the two blobs at
+the diverging frame can be compared directly and the first differing offset will
+name the subsystem - the same technique `verifyLoadedStateIdempotent` already
+uses on a different pair.
 
 ### 2. The re-record claims, on top of it
 
