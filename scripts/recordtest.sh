@@ -31,9 +31,21 @@
 # cannot be defeated by a bad offset calculation, which is exactly how the
 # backwards version fooled itself.
 #
+# AND IT SHIPS WITH A WAY TO MAKE IT FAIL. `--self-test` records normally and
+# then REPLACES THE ANCHOR with the seed state before replaying, so phase 2
+# resumes from a different machine than the one that was recorded. The hashes
+# must then diverge; the arm exits 0 only if this script correctly reports that.
+#
+# Sabotage through the ARTIFACT rather than the judge: a corrupted anchor is
+# exactly the failure this test exists to catch, and routing it through the same
+# file the real run uses means a judge that has stopped reading the file cannot
+# pass both arms.
+#
 # Exit: 0 pass, 1 fail, 77 skip.
 set -uo pipefail
 SKIP=77
+SELFTEST=0
+[ "${1:-}" = "--self-test" ] && SELFTEST=1
 ROM="${ROM:-/home/nbee/dev/davids_fly/NoBGM_VMU.cdi}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 EXE="$HERE/../build-dojo7/flycast"
@@ -91,6 +103,8 @@ local out = "$OUT/" .. PHASE .. ".txt"
 local function w(s) local f = io.open(out, "a"); if f then f:write(s .. "\n"); f:close() end end
 
 local n, stage, first, taken = 0, "boot", nil, 0
+local savedN, loadedN, beforeLoad = 0, 0, 0
+local lastF = nil
 local prev = flycast_callbacks and flycast_callbacks.vblank
 flycast_callbacks = flycast_callbacks or {}
 flycast_callbacks.vblank = function()
@@ -118,22 +132,62 @@ flycast_callbacks.vblank = function()
 			--
 			-- A movie started mid-session has no frame 0, so it is replayable
 			-- only paired with a state at its first frame; without this, phase 2
-			-- has nothing to seek to. But `savestate.save` writes from THIS
+			-- has nothing to seek to. But savestate.save writes from THIS
 			-- callback, and [MEASURED 2026-09-12] a state written from a vblank
-			-- hook records sch_list[vblank_schid].end == -1 - the raster
-			-- descheduled - because sh4_sched's handle_cb clears an event's
-			-- deadline for the duration of its callback and Emulator::vblank()
-			-- runs inside spg_line_sched. spg_RepairSchedule rescues such a
-			-- state on load, but it re-arms with getNextSpgInterrupt() and
-			-- cannot recover the `- jitter` that handle_cb would have applied,
-			-- so the restored timeline is up to 448 cycles out and EVERY HASH
-			-- AFTER THE FIRST DIVERGES. Measured here: first divergence at
-			-- frame 9949, one frame in.
+			-- hook records the raster descheduled, because sh4_sched clears an
+			-- event's deadline for the duration of its callback and
+			-- Emulator::vblank() runs inside spg_line_sched.
 			--
 			-- saveSlotLater posts to deferred::drain() instead - between
-			-- frames, no callback on the stack, nothing pending. That is the
-			-- only place a state can be both runnable and bit-exact.
+			-- frames, no callback on the stack, nothing pending.
 			flycast.savestate.saveSlotLater(0)
+			savedN = n
+			stage = "saved"; return
+		end
+		if stage == "saved" then
+			-- LET THE DEFERRED SAVE LAND. It runs at the next drain, not here.
+			if n < savedN + 15 then return end
+			--- AND THEN RESTORE IT, WHICH IS THE POINT OF THIS PHASE.
+			---
+			--- [2026-09-13] This test used to record from a CONTINUING machine
+			--- and replay from a RESTORED one, so passing required those two to
+			--- agree cycle-for-cycle. They do not: docs/TEST-PLAN.md 1a, where a
+			--- restored machine ends up two SH4 cycles out because host state
+			--- that bills the guest's cycle budget is not in the blob.
+			---
+			--- That was the wrong thing to demand. What a re-record tool needs
+			--- is that loading an anchor and applying inputs gives the same
+			--- result EVERY TIME - restore-to-restore - and that was already
+			--- true before any of the 2026-09-12 work (58/58 frames, measured).
+			--- Recording from a restored machine asks for exactly that property
+			--- and nothing more, so this test no longer waits on an emulator
+			--- change to be meaningful.
+			beforeLoad = flycast.frame.count()
+			flycast.savestate.loadSlotLater(0)
+			loadedN = n
+			stage = "restoring"; return
+		end
+		if stage == "restoring" then
+			--- WAIT FOR THE RESTORE TO ACTUALLY LAND. loadSlotLater is deferred;
+			--- falling through would start collecting on the pre-restore
+			--- timeline, which is the race that made a sibling test report a
+			--- confident wrong answer for a whole session.
+			--- The restore seeks the movie BACK, so a frame number below where
+			--- we issued it is the signal.
+			if flycast.frame.count() >= beforeLoad then
+				if n > loadedN + 600 then
+					w("err=the anchor never restored (frame stayed at " .. flycast.frame.count() .. ")")
+					w("ok"); flycast.emulator.exit()
+				end
+				return
+			end
+			--- AND THE RECORDING MUST HAVE SURVIVED IT. A load inside a
+			--- recording session is exactly the operation a re-record does, but
+			--- if it silently stopped the recording this test would compare an
+			--- empty clip and pass for the wrong reason.
+			if not flycast.replay.isRecording() then
+				w("err=the load stopped the recording"); w("ok"); flycast.emulator.exit(); return
+			end
 			first = flycast.frame.count()
 			w("first=" .. tostring(first))
 			w("clip=" .. tostring(flycast.replay.currentPath()))
@@ -150,6 +204,22 @@ flycast_callbacks.vblank = function()
 	end
 
 	if stage ~= "collect" then return end
+	--- A SEEK DURING COLLECTION RESTARTS IT.
+	---
+	--- The replay phase runs with dojo:AutoSeekState=0, which fires on WALL
+	--- CLOCK about two seconds in - not on a frame - so it can land after
+	--- collection has begun and jump the machine to another point in the movie.
+	--- Samples either side of that come from two different timelines. A seek
+	--- runs the movie index BACKWARDS, which nothing else here does.
+	---
+	--- The marker is written to the stream and the shell reads only what
+	--- follows the LAST one, so a restart discards the contaminated samples
+	--- without the script having to rewrite anything.
+	if lastF ~= nil and f < lastF then
+		w("restart")
+		taken = 0
+	end
+	lastF = f
 	if taken >= COLLECT then return end
 	taken = taken + 1
 	w("H " .. tostring(f) .. " " .. tostring(flycast.savestate.hash()))
@@ -189,7 +259,17 @@ launch() {
 }
 
 field() { sed -n "s/^$2=//p" "$OUT/$1.txt" 2>/dev/null | head -1; }
-fail()  { echo "FAIL recordtest - $1"; exit 1; }
+fail()  {
+	# UNDER --self-test A DIVERGENCE IS THE PASS. Only the divergence, though:
+	# a fixture that never recorded, or a replay that never ran, is a broken
+	# harness in both arms and must stay a failure in both.
+	if [ "$SELFTEST" -eq 1 ] && [ "${2:-}" = "divergence" ]; then
+		echo "PASS recordtest --self-test - the sabotaged anchor was detected:"
+		echo "  $1"
+		exit 0
+	fi
+	echo "FAIL recordtest - $1"; exit 1
+}
 
 # ---- phase 1: record -------------------------------------------------------
 launch record || fail "the recording session never finished (see $OUT/record.log)"
@@ -204,8 +284,8 @@ echo "  size:     $(stat -c%s "$CLIP") bytes"
 # A frozen machine reproduces itself perfectly. If the recorded window holds one
 # distinct hash, the comparison below cannot fail and must not be reported as a
 # pass. This is the check v1 lacked.
-DISTINCT=$(grep -c '^H ' "$OUT/record.txt")
-UNIQUE=$(awk '/^H /{print $3}' "$OUT/record.txt" | sort -u | wc -l)
+DISTINCT=$(awk '/^restart$/{n=0;next} /^H /{n++} END{print n+0}' "$OUT/record.txt")
+UNIQUE=$(awk '/^restart$/{delete seen;next} /^H /{seen[$3]=1} END{print length(seen)}' "$OUT/record.txt")
 echo "  window:   $DISTINCT frames, $UNIQUE distinct state hashes"
 [ "$DISTINCT" -ge "$WINDOW" ] || fail "collected $DISTINCT frames, fewer than the $WINDOW-frame window"
 if [ "$UNIQUE" -le 1 ]; then
@@ -213,6 +293,16 @@ if [ "$UNIQUE" -le 1 ]; then
 	echo "  so replaying it identically proves nothing. Seed from a state where"
 	echo "  the game is actually running."
 	exit 1
+fi
+
+# ---- the sabotage arm, applied to the fixture and nowhere else -------------
+if [ "$SELFTEST" -eq 1 ]; then
+	ANCHOR="$(dirname "$CLIP")/NoBGM_VMU.state"
+	[ -f "$ANCHOR" ] || { echo "FAIL recordtest --self-test - no anchor at $ANCHOR"; exit 1; }
+	cp "$SEED" "$ANCHOR"
+	rm -f "$ANCHOR.frame"
+	echo "  SABOTAGE: anchor replaced with the seed state - the replay now resumes"
+	echo "            from a different machine than the one that was recorded"
 fi
 
 # ---- phase 2: replay it ----------------------------------------------------
@@ -231,20 +321,46 @@ echo "  replayed: $(grep -c '^H ' "$OUT/replay.txt") frames from movie frame $(f
 # reported "input is not in sorted order" and silently stopped pairing there.
 # A comparison that quietly covers less than it claims is the failure mode this
 # whole file exists to avoid, so the sort is gone rather than corrected.
+# ONLY WHAT FOLLOWS THE LAST `restart`. Everything before it was collected on a
+# timeline the auto-seek then threw away; keeping it would compare two different
+# runs and report the difference as a re-record defect.
 read -r COMMON FIRSTBAD REC REP <<< "$(awk '
-	/^H / && FNR == NR { a[$2] = $3; next }
-	/^H / && ($2 in a) {
-		common++
-		if (a[$2] != $3 && bad == "") { bad = $2; rec = a[$2]; rep = $3 }
+	# BUILD BOTH MAPS FIRST, COMPARE AT THE END.
+	#
+	# `[MEASURED 2026-09-13]` comparing line-by-line as the second file is read
+	# looks equivalent and is not: a sample is judged BEFORE the `restart`
+	# marker after it has been seen, so the first divergence was recorded from
+	# samples the restart then discarded. The run was reported as a failure
+	# while the surviving samples agreed exactly - the values in the message
+	# were literally present in the other half of the file, matching.
+	#
+	# `restart` clears the map for the pass it appears in: everything before it
+	# was collected on a timeline the auto-seek threw away. split("", x) rather
+	# than `delete x`, which is a gawk extension.
+	FNR == 1 { pass++ }
+	/^restart$/ { if (pass == 1) split("", a); else split("", b); next }
+	/^H / { if (pass == 1) a[$2] = $3; else b[$2] = $3; next }
+	END {
+		bad = ""
+		for (k in a)
+			if (k in b) {
+				common++
+				if (a[k] != b[k] && (bad == "" || k + 0 < bad + 0)) {
+					bad = k; rec = a[k]; rep = b[k]
+				}
+			}
+		printf "%d %s %s %s\n", common + 0, (bad == "" ? "-" : bad), rec, rep
 	}
-	END { printf "%d %s %s %s\n", common + 0, (bad == "" ? "-" : bad), rec, rep }
 ' "$OUT/record.txt" "$OUT/replay.txt")"
 
 [ "$COMMON" -ge $((WINDOW / 2)) ] || fail "the two runs share only $COMMON frames; they did not cover the same range"
 if [ "$FIRSTBAD" != "-" ]; then
-	echo "FAIL recordtest - replaying the recording took a DIFFERENT path"
-	echo "       first divergence at frame $FIRSTBAD:"
-	echo "       recorded $REC, replayed $REP"
+	fail "replaying the recording took a DIFFERENT path - first divergence at frame $FIRSTBAD: recorded $REC, replayed $REP" divergence
+fi
+if [ "$SELFTEST" -eq 1 ]; then
+	echo "FAIL recordtest --self-test - the sabotaged anchor was NOT detected."
+	echo "  $COMMON frames compared equal against a replay resumed from the WRONG state,"
+	echo "  so this harness cannot tell a correct re-record from a broken one."
 	exit 1
 fi
 echo "PASS recordtest - $COMMON frames recorded and replayed to the same state, hash for hash"

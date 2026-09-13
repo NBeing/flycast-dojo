@@ -2107,6 +2107,38 @@ set_tests_properties(flycast.selftest_can_fail PROPERTIES
 	SKIP_RETURN_CODE 77
 	TIMEOUT 120)
 
+# THE RE-RECORD ROUND TRIP, and docs/TEST-PLAN.md called landing it "the biggest
+# single gain". It records a movie and replays it, requiring the machine to walk
+# the same path hash for hash, with a vacuity gate first: a frozen machine
+# reproduces itself perfectly, so the recorded window must hold more than one
+# distinct state hash before the comparison is allowed to mean anything.
+#
+# `[2026-09-13]` It records from a RESTORED machine rather than a continuing one.
+# The earlier shape demanded that a restored machine agree with one that kept
+# running, which is docs/TEST-PLAN.md 1a and still open; what a re-record tool
+# actually needs is that loading an anchor and applying inputs gives the same
+# result every time, and that is what this now asks.
+add_test(NAME flycast.recordtest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/recordtest.sh)
+set_tests_properties(flycast.recordtest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 900
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;RECORDTEST_DISPLAY=76")
+
+# ITS PAIRED ARM, sabotaged through the ARTIFACT rather than the judge: record
+# normally, then replace the anchor with the seed state so phase 2 resumes from a
+# different machine than the one recorded. The hashes must diverge. Routing the
+# sabotage through the same file the real run reads means a judge that has
+# stopped reading that file cannot pass both arms.
+add_test(NAME flycast.recordtest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/recordtest.sh --self-test)
+set_tests_properties(flycast.recordtest_can_fail PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 900
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;RECORDTEST_DISPLAY=79")
+
 # A KNOWN-OPEN DEFECT, KEPT EXECUTABLE. `[MEASURED 2026-09-12]` a machine
 # restored from a deferred savestate does not walk the path it walked the first
 # time: two passes over the same frames in ONE process, inputs from the same

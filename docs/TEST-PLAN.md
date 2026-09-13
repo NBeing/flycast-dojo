@@ -124,7 +124,31 @@ two shape claims `docs/STEP-GRANULARITY.md` reasons from.
 > landed), and it still diverged. The remaining cause is in the emulator, and it
 > now has a name and a test of its own - see the item below.
 
-### 1. Land `recordtest` in ctest  — **the biggest single gain**
+### 1. `[LANDED 2026-09-13]` `recordtest` is in ctest
+
+    flycast.recordtest            PASS - 59 frames recorded and replayed to the
+                                  same state, hash for hash, 100 distinct states
+                                  in the window
+    flycast.recordtest_can_fail   PASS - the sabotaged anchor was detected
+
+**It records from a RESTORED machine, not a continuing one**, and that change is
+what unblocked it rather than any further emulator work. The earlier shape
+demanded that a restored machine agree with one that kept running - which is 1a,
+still open. What a re-record tool actually needs is weaker: load an anchor, apply
+inputs, get the same result every time. That was already true before any of the
+2026-09-12 work (58/58 frames, measured), so the test had been waiting on a
+property it did not need.
+
+The sabotage arm goes through the ARTIFACT: record normally, replace the anchor
+with the seed state, require the hashes to diverge. A judge that has stopped
+reading the file cannot pass both arms.
+
+Three harness defects had to be fixed first, all found only by being able to run
+it at all - see the git log for 2026-09-12/13: the anchor was saved from inside a
+vblank hook; `join(1)` silently stopped pairing at the 9999 -> 10000 collation
+boundary; and both phases began sampling before their state load had landed.
+
+### 1. Original plan — land `recordtest` in ctest
 
 It is the only harness that records, and it is the vehicle for everything in
 section 2. `[MEASURED 2026-09-11]` reviving it found two things, one fixed and
