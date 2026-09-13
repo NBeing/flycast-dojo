@@ -19,6 +19,7 @@
 #include "emulator.h"
 #include "frame_clock.h"
 #include "hw/pvr/spg.h"
+#include "hw/sh4/sh4_cycles.h"
 #include "dojo/session.h"
 #include "pause.h"
 #include "determinism.h"
@@ -868,6 +869,17 @@ void dc_invalidateDerived(u32 mask)
 		sh4_cpu.ResetCache();
 	if (mask & 128)
 		KillTex = true;
+	/*
+		NOT PART OF dc_loadstate's LIST - which is the point of testing it.
+		`[SOURCE]` Sh4Cycles is a global (`extern Sh4Cycles sh4cycles`) carrying
+		`lastUnit` and `memOps` ACROSS instructions, it feeds countCycles() and
+		therefore cycle_counter, and grepping sh4_mmr.cpp and serialize.cpp for
+		it finds nothing: it is neither serialized nor cleared on a load. So a
+		continuing machine carries its own history in it and a restored one
+		carries whatever the process happened to have.
+	*/
+	if (mask & 256)
+		sh4cycles.reset();
 	NOTICE_LOG(SAVESTATE, "POSTSAVE INVALIDATE: applied mask 0x%x to the live machine", mask);
 }
 
@@ -891,6 +903,20 @@ void dc_loadstate(Deserializer& deser)
 	// is the second kind, and it must run after sh4::deserialize has landed the
 	// scheduler table rather than inside pvr::deserialize, which runs first.
 	spg_RepairSchedule();
+	/*
+		dojo:LoadResetCycles - off unless set, and the other half of
+		PostSaveInvalidate bit 256.
+
+		`[MEASURED 2026-09-12]` resetting the sh4cycles global on the CONTINUING
+		machine alone changed its trajectory but did not align it with a restored
+		one - because a load does not reset it either, so the restored machine
+		carries its own arbitrary lastUnit/memOps. Resetting only one side makes
+		them differ differently, which is a result about the mechanism and not
+		about the hypothesis. With both sides reset at the same point in the
+		timeline, the two should agree if this global is the residue.
+	*/
+	if (cfgLoadBool("dojo", "LoadResetCycles", false))
+		sh4cycles.reset();
 	mmu_set_state();
 	sh4_cpu.ResetCache();
 	KillTex = true;

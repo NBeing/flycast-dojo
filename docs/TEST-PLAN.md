@@ -284,20 +284,67 @@ invalidation list on the continuing machine does **not** close the gap, and this
 reading is clean rather than seek-contaminated. `sh4_int_resetcache()` is an
 empty function, so the dynarec's culprit cannot be the culprit here.
 
-What the interpreter's cause is NOT, each measured with the seek guard in place
-so the readings are clean:
+**THE INTERPRETER'S CAUSE, FOUND `[MEASURED 2026-09-12]`.** It is a host global,
+and the same defect class as the dynarec's.
+
+`[SOURCE]` `core/hw/sh4/sh4_cycles.h` declares `extern Sh4Cycles sh4cycles`, and
+that object carries `lastUnit` and `memOps` **across instructions**. They feed
+`countCycles()`, which feeds `Sh4cntx.cycle_counter`. Grepping `sh4_mmr.cpp` and
+`serialize.cpp` for `sh4cycles` finds **nothing**: it is neither serialized nor
+reset by `dc_loadstate`. So a continuing machine carries its own execution
+history in it, and a restored machine carries whatever the process happened to
+have at *its* load point.
+
+Two measurements, and the first is the one that makes the second mean something:
+
+| what | result |
+|---|---|
+| reset `sh4cycles` on the CONTINUING machine only (`PostSaveInvalidate=256`) | still diverges, **but pass A's hash changed** (`1811270343` -> `2422850379`) |
+| reset it on BOTH sides (`+ dojo:LoadResetCycles=yes`) | **53/53 frames identical** |
+
+The first is not a null result. Resetting only one side proves the global feeds
+execution - the trajectory moved - while making the two differ *differently*,
+because a load does not reset it either. Only with both sides reset at the same
+point in the timeline do they agree.
+
+**And the two causes are genuinely separate.** The dynarec arm with the *same*
+flags still diverges at frame 71 with the same two hashes, so `sh4cycles` is the
+interpreter's residue and `bm_ResetCache` is the dynarec's. Same class - host
+state that bills the guest's cycle budget and is not in the blob - two instances.
+
+`fastmmu.cpp` is a third instance waiting to happen: five mutable file-scope
+scalars, no serialization, and `[SOURCE]` `cycle_counter -= 164` on a lookup
+miss. Not measured; listed so it is not rediscovered from scratch.
+
+What it is NOT, each measured with the seek guard in place:
 
 | ruled out | evidence |
 |---|---|
 | `dc_loadstate`'s invalidation list | mask 255 diverges, frame 69, `restarted 0x`, instants 53/53 |
-| `verifyLoadedStateIdempotent` perturbing the restored machine (it runs on load only, and each `dc_serialize` calls `sh4_sched_ffts`, which *writes*) | `-config dojo:VerifyState=no` diverges identically, frame 69, same hashes |
+| `verifyLoadedStateIdempotent` perturbing the restored machine | `-config dojo:VerifyState=no` diverges identically |
 | the seek artifact that produced the withdrawn 1b | `restarted 0x` on every run above |
 | the two passes sampling different instants | 53/53 frames seen equally often |
 
-**One defect, two causes; one found.** Said out loud rather than generalised from
-one arm, because the dynarec bisect alone reads like a complete answer. Note this
-is NOT the withdrawn 1b: that was restore-vs-restore and is now measured clean at
-70/70. This is continuing-vs-restored, which fails on both CPU cores.
+**One defect, two causes, BOTH FOUND.** Note this is not the withdrawn 1b: that
+was restore-vs-restore and measures clean at 70/70. This is
+continuing-vs-restored, and it failed on both CPU cores for two different
+reasons.
+
+**Neither fix is landed, because both are judgement calls rather than repairs:**
+
+  *Interpreter.* Serialize `lastUnit` and `memOps` so a restore reproduces the
+  continuing timeline exactly. Correct, small, and it **changes the savestate
+  format** - a version bump, and every existing clip's anchor state predates it.
+  The alternative, resetting both on save and load, makes restores deterministic
+  without a format change but does not make a restored machine match one that
+  kept running, which is the property re-record actually needs.
+
+  *Dynarec.* Stop billing block lookup and compilation to `cycle_counter`
+  (`blockmanager.cpp`, `-= 100`). That `-= 100` exists so a guest does not spin
+  while blocks compile, so removing it **changes SH4 timing for everyone**.
+
+  Or accept both and have re-record compare something narrower than a
+  whole-machine hash.
 
 Deciding what to do about the dynarec one is a judgement call rather than a bug
 fix: the `-= 100` exists so a guest does not spin while blocks compile, and
