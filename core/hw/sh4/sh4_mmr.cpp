@@ -13,6 +13,7 @@
 #include "cfg/cfg.h"
 #include "sh4_interrupts.h"
 #include "sh4_sched.h"
+#include "sh4_cycles.h"
 #include "sh4_interpreter.h"
 
 #include <array>
@@ -710,6 +711,11 @@ void serialize(Serializer& ser)
 	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.cntx", (u32)ser.size());
 	ser << (*p_sh4rcb).cntx;
 
+	// THE SH4 PIPELINE STATE. See the comment on Sh4Cycles::pipelineUnit.
+	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.cycles", (u32)ser.size());
+	ser << sh4cycles.pipelineUnit();
+	ser << sh4cycles.pipelineMemOps();
+
 	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.sched", (u32)ser.size());
 	sh4_sched_serialize(ser);
 	if (mapLog) NOTICE_LOG(SAVESTATE, "SERMAP   %10u sh4.END", (u32)ser.size());
@@ -786,6 +792,25 @@ void deserialize(Deserializer& deser)
 		deser.skip<u32>(); // sh4InterpCycles
 	if (deser.version() < Deserializer::V21)
 		p_sh4rcb->cntx.cycle_counter = SH4_TIMESLICE;
+
+	/*
+		OLDER STATES CARRY NO PIPELINE, so give them a KNOWN one rather than
+		leaving the process's. It will not reproduce the machine that was saved -
+		nothing can, the information was never written - but it makes every load
+		of such a state start from the same place, which is the difference
+		between "wrong" and "wrong and irreproducible".
+	*/
+	if (deser.version() >= Deserializer::V49)
+	{
+		u32 unit = 0; int ops = 0;
+		deser >> unit;
+		deser >> ops;
+		sh4cycles.setPipeline(unit, ops);
+	}
+	else
+	{
+		sh4cycles.reset();
+	}
 
 	sh4_sched_deserialize(deser);
 }

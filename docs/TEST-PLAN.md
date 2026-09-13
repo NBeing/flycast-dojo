@@ -330,21 +330,33 @@ was restore-vs-restore and measures clean at 70/70. This is
 continuing-vs-restored, and it failed on both CPU cores for two different
 reasons.
 
-**Neither fix is landed, because both are judgement calls rather than repairs:**
+**The interpreter half is FIXED `[2026-09-12]`.** `lastUnit` and `memOps` are
+serialized as `sh4.cycles`, savestate version **V49 (844)**, authorised as
+pre-alpha work where a format bump is acceptable. Measured with no probe knobs
+set: **53/53 frames identical**.
 
-  *Interpreter.* Serialize `lastUnit` and `memOps` so a restore reproduces the
-  continuing timeline exactly. Correct, small, and it **changes the savestate
-  format** - a version bump, and every existing clip's anchor state predates it.
-  The alternative, resetting both on save and load, makes restores deterministic
-  without a format change but does not make a restored machine match one that
-  kept running, which is the property re-record actually needs.
+Compatibility, measured rather than assumed:
 
-  *Dynarec.* Stop billing block lookup and compilation to `cycle_counter`
-  (`blockmanager.cpp`, `-= 100`). That `-= 100` exists so a guest does not spin
-  while blocks compile, so removing it **changes SH4 timing for everyone**.
+| direction | result |
+|---|---|
+| an old V48 state in a V49 build | **loads** - one run shows `ver 843` and `ver 844` side by side. The gate is additive; older states take a `reset()` branch |
+| a V49 state in a V48 build (David's fork, upstream) | **refused** - `[SOURCE]` `if (_version > Current) throw Exception("Version too recent")`. This is the direction that breaks, until they take the change |
+| David's states specifically | his `core/serialize.h` reads `V8 = 803, Current = V48` - the **same lineage**, so his states are ordinary V48 and load here unchanged |
 
-  Or accept both and have re-record compare something narrower than a
-  whole-machine hash.
+**What a "port" of old states cannot do.** The pipeline state was never written to
+those files, so no conversion can recover it: re-saving an old state at V49 only
+records the `reset()` value. The practical consequence is narrower than it
+sounds - an old anchor is perfectly usable *going forward*, because every load of
+it now starts from the same known pipeline, so a clip re-recorded from it after
+this change replays exactly. What will not hold is a clip recorded BEFORE this
+change replaying hash-identically against its old anchor.
+
+**The dynarec half is still open, and is a judgement call rather than a repair.**
+Stop billing block lookup and compilation to `cycle_counter` (`blockmanager.cpp`,
+`-= 100`). That exists so a guest does not spin while blocks compile, so removing
+it **changes SH4 timing for everyone**. Measured after the V49 fix: the dynarec
+arm still diverges at frame 71, with new hashes (the blob changed), so the two
+causes remain independent.
 
 Deciding what to do about the dynarec one is a judgement call rather than a bug
 fix: the `-= 100` exists so a guest does not spin while blocks compile, and

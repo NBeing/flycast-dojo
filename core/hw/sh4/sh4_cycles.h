@@ -121,6 +121,24 @@ public:
 		memOps = 0;
 	}
 
+	/*
+		PIPELINE STATE, AND IT BELONGS IN A SAVESTATE.
+
+		`[MEASURED 2026-09-12]` these two carry across instructions and feed
+		countCycles(), so they feed Sh4cntx.cycle_counter - and they were in no
+		savestate. A machine restored from a state therefore resumed with
+		whatever pipeline history the PROCESS happened to have, not the one the
+		saved machine had, and drifted from a machine that had simply kept
+		running: identical guest memory, different cycle budget, then divergence
+		into guest RAM a few frames later.
+
+		Exposed as a pair rather than serialized in here, because this header is
+		included in the hot path and does not otherwise know about Serializer.
+	*/
+	u32 pipelineUnit() const { return (u32)lastUnit; }
+	int pipelineMemOps() const { return memOps; }
+	void setPipeline(u32 unit, int ops) { lastUnit = (sh4_eu)unit; memOps = ops; }
+
 	static u64 now() {
 		return sh4_sched_now64() + SH4_TIMESLICE - Sh4cntx.cycle_counter;
 	}

@@ -74,7 +74,12 @@ public:
 		V46,
 		V47,
 		V48,
-		Current = V48,
+		// `[2026-09-12]` the SH4 pipeline state carried by the sh4cycles global
+		// - lastUnit and memOps. Not state anyone thought of as state, and its
+		// absence made a restored machine drift from a continuing one; see
+		// docs/TEST-PLAN.md and core/hw/sh4/sh4_cycles.h.
+		V49,
+		Current = V49,
 
 		Next = Current + 1,
 	};
