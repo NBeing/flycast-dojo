@@ -10,6 +10,22 @@
 #   SELF:  scripts/statesuitest.sh --self-test - drives the SAME clicks with the
 #          modifier never pressed, and requires the Ctrl claim to fail.
 #
+# THE HOTKEY IS READ, NOT ASSUMED. The panel's binding is configurable, so this
+# asks the emulator what it is (scripts/lib/hotkeys.sh) rather than carrying a
+# second copy of that fact - CLAUDE.md rule 4. It opens the panel with
+# `dojo:Panel.states=yes` all the same, and that is a LIMITATION worth stating:
+#
+#   `[MEASURED 2026-09-13]` driving the panel open with its real binding was
+#   built and does not work in this harness. Clicks land and keys do not - not
+#   even a HOTKEY trace - because a synthetic click is delivered by POSITION
+#   while a key needs input FOCUS, and `xdotool search --name Flycast` returns
+#   nothing here so windowactivate is a no-op. The clicks kept working anyway
+#   because i3 places the window at 0,0 and the coordinates happen to land, so
+#   the harness was half-connected and looked fine.
+#
+#   scripts/hotkeytest.sh DOES drive keys successfully and is where key-driven
+#   paths are covered. Splitting them is not ideal and is not pretended to be.
+#
 # WHY THIS EXISTS. `[MEASURED 2026-09-13]` scripts/statestest.sh drives NO input
 # at all - it reads traces - and says so deliberately. So the States panel, which
 # is the surface a TAS artist actually clicks to name and annotate a state, had
@@ -32,6 +48,7 @@ SELFTEST=0
 [ "${1:-}" = "--self-test" ] && SELFTEST=1
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+. "$ROOT/scripts/lib/hotkeys.sh"
 EXE="${FLYCAST_BIN:-$ROOT/build-dojo7/flycast}"
 ROM="${FLYCAST_TEST_ROM:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
 DISP="${STATESUI_DISPLAY:-:151}"
@@ -93,6 +110,7 @@ gesture() {
 		-config dojo:Replay=yes -config "dojo:ReplayFilename=$w/clip/clip.flyr" \
 		-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no \
 		-config dojo:Panel.states=yes -config dojo:StatesTrace=yes \
+		-config dojo:HotkeyTrace=yes \
 		-config dojo:StatesGenProbe=yes \
 		"$ROM" > "$w/out.log" 2>&1 &
 	FC=$!
@@ -109,6 +127,16 @@ gesture() {
 	# it set beyond its stdout was discarded and the caller read unbound
 	# variables. Files cross that boundary; a command substitution does not.
 	echo "$cell" > "$w.cell"
+	# WHAT THE EMULATOR SAYS IS BOUND, read from its own output rather than
+	# assumed here - see scripts/lib/hotkeys.sh for why a harness must not carry
+	# its own copy of a configurable fact.
+	hk_binding "$w/out.log" "States Window" > "$w.hkey"
+	hk_keyboard_mappings "$w/out.log" | wc -l > "$w.nkbd"
+	# DISTINCT DEVICES, not lines: the emulator re-logs the whole table whenever
+	# mappings reload, so counting matches reported "2 devices, 4 unbound".
+	{ tr -d '\0' < "$w/out.log" \
+		| sed -n 's/.*HOTKEY BOUND: \[\([^]]*\)\] *States Window  *unbound.*/\1/p' \
+		| sort -u | wc -l; } > "$w.unbound"
 	echo "${GENSN:-0}" > "$w.gens"
 	: > "$w.edit"
 	if [ -z "$cx" ]; then return; fi
@@ -154,6 +182,14 @@ gesture "$CTRLMODE"
 CTRL=$(cat "$OUT/$CTRLMODE.edit" 2>/dev/null || true)
 CELLLINE=$(cat "$OUT/$CTRLMODE.cell" 2>/dev/null || true)
 GENS=$(cat "$OUT/$CTRLMODE.gens" 2>/dev/null || echo 0)
+
+# ---- what is this panel's hotkey, according to the emulator? --------------
+HKEY=$(cat "$OUT/$CTRLMODE.hkey" 2>/dev/null || true)
+NKBD=$(cat "$OUT/$CTRLMODE.nkbd" 2>/dev/null || echo 0)
+NUNB=$(cat "$OUT/$CTRLMODE.unbound" 2>/dev/null || echo 0)
+claim "the States window has a nameable hotkey" \
+	"$([ -n "$HKEY" ] && echo 1 || echo 0)" \
+	"${HKEY:-<unbound or not logged>} on 1 of ${NKBD} keyboard(s); ${NUNB} device(s) have it unbound"
 
 claim "the generations pane has a row to click" "$([ "${GENS:-0}" -ge 1 ] && echo 1 || echo 0)" "count=${GENS:-0}"
 claim "the panel published a clickable cell rect" "$([ -n "$CELLLINE" ] && echo 1 || echo 0)" "${CELLLINE:-<no STATES CELL line>}"

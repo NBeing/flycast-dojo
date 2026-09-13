@@ -374,3 +374,39 @@ The static one is fast and checks the shape; the runtime one proves the shape
 translates into behaviour. Six of 53 actions are covered behaviourally and all
 53 structurally, which is the position a registry migration can be attempted
 from.
+
+## A harness must ASK which key is bound `[2026-09-13]`
+
+`scripts/lib/hotkeys.sh` reads the binding out of the emulator's own startup
+output rather than carrying a second copy of it:
+
+    HOTKEY BOUND: [Keyboard] States Window            Shift+F4 (code 65597)
+
+`hk_binding` returns `shift+F4` for xdotool, `hk_code` the numeric code,
+`hk_keyboard_mappings` the mapping filenames, `hk_pin` writes one, and
+`hk_press` presses a chord *decomposed* — never `xdotool key shift+F4`, which
+sends the whole chord faster than one emulated frame so the modifier and the key
+are never simultaneously true when the host samples input.
+
+Bindings are configurable, so a harness that hardcodes a key is the CLAUDE.md
+rule 4 problem: the day a default moves, the test presses a key that does
+nothing and reports the **feature** broken.
+
+### Two facts that cost a session to find
+
+**The defaults reach only ONE keyboard device.** This machine presents
+`Keyboard` and `Kinesis Freestyle2 PC - KB800`; every TAS action is bound on the
+first and `unbound` on the second. A user whose events come from the second
+keyboard has no TAS hotkeys at all, and a harness that presses the default chord
+gets nothing — not even a `HOTKEY:` trace — if the synthetic event is routed
+there. `scripts/hotkeytest.sh` avoids this by writing a mapping for *every*
+keyboard device; `hk_pin` is that logic, extracted.
+
+**Keyboard needs focus; the mouse does not.** `[MEASURED]` in
+`scripts/statesuitest.sh`, clicks landed and every key press vanished, because a
+synthetic click is delivered by POSITION while a key goes to whatever holds
+input focus — and `xdotool search --name "Flycast"` returned nothing there, so
+`windowactivate` was a no-op. The clicks kept working because i3 places the
+window at 0,0 and the coordinates happened to land. **A UI harness can be
+half-connected and look entirely healthy.** `hotkeytest` guards this by treating
+an empty window handle as a SKIP rather than continuing.
