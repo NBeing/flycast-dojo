@@ -61,6 +61,26 @@ static char editBuf[80] = {};
 // The generations pane's own click-to-edit cell. Separate from the wall's
 // because they are different tables with different rows, and one shared row
 // index between two lists is how a rename lands on the wrong thing.
+/*
+	IS THE GENERATIONS TABLE EVEN BEGUN?
+
+	`[MEASURED 2026-09-13]` a clipped table returns false from BeginTable and its
+	entire body is skipped, which from outside is indistinguishable from "the
+	rows are not there" - and that is exactly how a whole pane stayed unreachable
+	without any test noticing. Kept rather than deleted: "did this draw at all"
+	is the question a panel trace should answer FIRST, before any question about
+	what it drew.
+*/
+static bool traceGensBegin(bool ok)
+{
+	if (cfgLoadBool("dojo", "StatesTrace", false))
+	{
+		static int last = -1;
+		if (last != (int)ok) { last = (int)ok; NOTICE_LOG(RENDERER, "STATES GENS: BeginTable=%s", ok ? "yes" : "NO"); }
+	}
+	return ok;
+}
+
 static int  genEditRow = -1;
 static int  genEditCol = 0;			// 0 = tags, 1 = notes
 static char genEditBuf[512] = {};
@@ -130,9 +150,47 @@ static void draw()
 
 	ImGui::Separator();
 
+	/*
+		THE WALL MUST LEAVE ROOM FOR WHAT IS UNDER IT.
+
+		`[MEASURED 2026-09-13]` this passed no size, and a ScrollY table with no
+		size FILLS THE REMAINING HEIGHT. So the wall took the whole window and
+		everything after it - the separator, the Generations header, its table -
+		was clipped away. `BeginTable("##gens", ...)` returned false on every
+		frame, its body never ran, and the generations pane was UNREACHABLE for
+		any user with a non-trivial number of slots. It is 100 here.
+
+		Nothing reported it because nothing clicked it: scripts/statestest.sh
+		reads traces and drives no input, so it saw the counts it asked for and
+		never noticed the pane they describe was off screen. It took
+		scripts/statesuitest.sh - which has to aim a real mouse at a real cell -
+		to fail, and it failed by being unable to find the cell at all.
+
+		Reserved only when the window is tall enough to be worth splitting;
+		below that the wall keeps the space it has, because half of two panes is
+		worse than one.
+	*/
+	const float availY = ImGui::GetContentRegionAvail().y;
+	// PROPORTIONAL, NOT A FIXED RESERVE. `[MEASURED 2026-09-13]` a fixed 240 px
+	// reserve applied only above a threshold, and the docked panel is shorter
+	// than that threshold - so the fix did nothing and the pane stayed
+	// unreachable. A fraction always splits, and the cap keeps a tall window
+	// from giving the generations pane more room than it can use.
+	const float reserve = std::min(240.f, availY * 0.45f);
+	const ImVec2 wallSize(0.f, availY > 120.f ? -reserve : 0.f);
+	if (cfgLoadBool("dojo", "StatesTrace", false))
+	{
+		static int lastH = -1;
+		if (lastH != (int)availY)
+		{
+			lastH = (int)availY;
+			NOTICE_LOG(RENDERER, "STATES LAYOUT: avail=%d wall=%d reserve=%d",
+					(int)availY, (int)wallSize.y, (int)reserve);
+		}
+	}
 	if (!ImGui::BeginTable("##states", 7,
 			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY
-			| ImGuiTableFlags_SizingFixedFit))
+			| ImGuiTableFlags_SizingFixedFit, wallSize))
 		return;
 	ImGui::TableSetupScrollFreeze(1, 1);
 	ImGui::TableSetupColumn("slot");
@@ -367,11 +425,16 @@ static void draw()
 	if (ImGui::CollapsingHeader("Generations", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		const int gn = h->snapshotCount();
+		if (cfgLoadBool("dojo", "StatesTrace", false))
+		{
+			static int lastGn = -2;
+			if (lastGn != gn) { lastGn = gn; NOTICE_LOG(RENDERER, "STATES GENS: count=%d", gn); }
+		}
 		if (gn == 0)
 			ImGui::TextDisabled("No snapshots of this slot set yet.");
-		else if (ImGui::BeginTable("##gens", 7, ImGuiTableFlags_Borders
+		else if (traceGensBegin(ImGui::BeginTable("##gens", 7, ImGuiTableFlags_Borders
 				| ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit
-				| ImGuiTableFlags_ScrollY, ImVec2(0, 160.f)))
+				| ImGuiTableFlags_ScrollY, ImVec2(0, 160.f))))
 		{
 			ImGui::TableSetupScrollFreeze(1, 1);
 			ImGui::TableSetupColumn("#");
@@ -387,7 +450,14 @@ static void draw()
 			{
 				SnapshotView g;
 				if (!h->snapshotView(i, g))
+				{
+					if (cfgLoadBool("dojo", "StatesTrace", false))
+					{
+						static int lastSkip = -2;
+						if (lastSkip != i) { lastSkip = i; NOTICE_LOG(RENDERER, "STATES GENS: row %d has no view - skipped", i); }
+					}
 					continue;
+				}
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
 				ImGui::Text("%d", i + 1);
@@ -442,7 +512,50 @@ static void draw()
 					if (g.tags.empty() && g.notes.empty()) ImGui::TextDisabled("%s", shown.c_str());
 					else                                   ImGui::TextUnformatted(shown.c_str());
 					if (ImGui::IsItemHovered())
+					{
 						ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+						// DID THE MOUSE EVER ARRIVE? Separates "the harness
+						// aimed at the wrong pixel" from "the click was not
+						// delivered", which produce the same silence.
+						if (cfgLoadBool("dojo", "StatesTrace", false))
+						{
+							static bool said = false;
+							if (!said) { said = true;
+								const ImVec2 m = ImGui::GetIO().MousePos;
+								NOTICE_LOG(RENDERER, "STATES CELL: hovered at %d,%d", (int)m.x, (int)m.y); }
+						}
+					}
+					/*
+						WHERE THIS CELL IS, for a harness that has to click it.
+
+						`dojo:StatesTrace`, first row only, logged on change. A
+						test cannot guess: the pane is DOCKED, so its origin
+						moves with the layout, and a click computed from a
+						constant lands on the wrong cell - or on nothing - and
+						reports the feature broken. Published relative to the
+						main viewport, because that is the origin an OS window
+						position is added to.
+
+						The CENTRE rather than a corner, so a pixel of rounding
+						or a window-manager title bar does not decide the
+						result.
+					*/
+					if (i == 0 && cfgLoadBool("dojo", "StatesTrace", false))
+					{
+						const ImVec2 a = ImGui::GetItemRectMin();
+						const ImVec2 b = ImGui::GetItemRectMax();
+						const ImVec2 o = ImGui::GetMainViewport()->Pos;
+						char sig[96];
+						snprintf(sig, sizeof(sig), "gen row=0 x=%d y=%d",
+								(int)((a.x + b.x) * 0.5f - o.x),
+								(int)((a.y + b.y) * 0.5f - o.y));
+						static std::string lastCell;
+						if (lastCell != sig)
+						{
+							lastCell = sig;
+							NOTICE_LOG(RENDERER, "STATES CELL: %s", sig);
+						}
+					}
 					if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 					{
 						genEditRow = i;
@@ -450,6 +563,14 @@ static void draw()
 						// same cell with Ctrl, rather than stealing a column
 						// from a pane that is already seven wide.
 						genEditCol = ImGui::GetIO().KeyCtrl ? 1 : 0;
+						// WHICH GESTURE WAS IT. One cell, two destinations,
+						// chosen by a modifier - so the only way to tell a
+						// working Ctrl+click from a plain one that happens to
+						// land in the same place is to say which was decided.
+						if (cfgLoadBool("dojo", "StatesTrace", false))
+							NOTICE_LOG(RENDERER, "STATES EDIT: gen row=%d col=%d (%s)",
+									genEditRow, genEditCol,
+									genEditCol == 1 ? "notes" : "tags");
 						snprintf(genEditBuf, sizeof(genEditBuf), "%s",
 								genEditCol == 0 ? g.tags.c_str() : g.notes.c_str());
 					}
@@ -531,7 +652,11 @@ void registerStatesPanel()
 	if (done)
 		return;
 	done = true;
-	panels::add({ "states", "States", &statesOpen, draw, panels::Both, /*persist*/ true });
+	// 760x520 so the wall AND the generations pane under it both fit. Docked
+	// beside the game with no default this opened at 68 pixels of content
+	// height and the generations pane was unreachable - see draw().
+	panels::add({ "states", "States", &statesOpen, draw, panels::Both, /*persist*/ true,
+			/*defW*/ 760.f, /*defH*/ 520.f });
 	NOTICE_LOG(RENDERER, "STATES PANEL: registered=%s open=%s",
 			panels::find("states") != nullptr ? "yes" : "NO", statesOpen ? "yes" : "no");
 }

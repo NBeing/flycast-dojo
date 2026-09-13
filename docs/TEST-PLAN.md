@@ -86,6 +86,7 @@ What the better question — *does a claim or a probe assert this?* — answers:
 
 | subsystem | verdict |
 |---|---|
+| **the States panel's clicks** | **covered `[2026-09-13]`** — `flycast.statesuitest` aims a real mouse at a real generations cell and asserts the MODIFIER: plain click opens tags, Ctrl+click opens notes. Its paired arm drives the identical gesture with no modifier and requires notes NOT to open. It found two defects on its first run, below |
 | **state liveness** | **covered `[2026-09-11]`** — `LIVENESS SELFTEST` (8 claims) for the rule, `flycast.livetest` for the wiring, and it was verified against the real wedge: Dead at +4.7 s on the auto-seek load, silent on a run with no load, Alive on a healthy one. Three arms, because "Dead after every load" satisfies the first two |
 | **rewind + re-record** | **genuinely uncovered.** `LoadStateFrame` runs on every state load, so it is exercised; none of its RULES is asserted — no truncate on a WRITE load, a rewind is not itself a re-record, a state saved before a rewind below it is stale |
 | the staged buffer | **covered** — `ROLLSTAGED SELFTEST`, 18 claims |
@@ -478,6 +479,34 @@ list and rots in place. Decide per file — either it earns a ctest entry or it
 goes.
 
 ---
+
+## What a UI test found that a trace-reading test could not
+
+`[MEASURED 2026-09-13]` `scripts/statestest.sh` drives **no input** — deliberately,
+for a good reason it documents. The consequence is that the States panel had
+every behaviour checked except the one a user performs, and two defects lived
+there undisturbed:
+
+**The generations pane was unreachable.** `BeginTable("##states", …, ScrollY)`
+passed no size, and a ScrollY table with no size *fills the remaining height*, so
+the separator, the Generations header and its table were all clipped away.
+`BeginTable("##gens", …)` then returned **false** on every frame and skipped its
+whole body. From outside, a pane whose table never begins is indistinguishable
+from a feature that was never wired — which is precisely the confusion
+`CLAUDE.md` opens with.
+
+**Panels had no default size at all.** Nothing called `SetNextWindowSize`, so a
+panel docked beside the game got whatever was left: the States window opened with
+**68 pixels** of content height. Fixed with a `FirstUseEver` default — never
+`Always`, the rule this tree already learned for `SetNextWindowDockID`.
+
+Neither is subtle once seen, and neither was visible to a test that reads counts
+out of a trace. The trace was *correct*: it reported the generations it had. It
+simply could not report that the pane describing them was off screen.
+
+**The general lesson, and it is cheap to apply:** a panel trace should answer
+"did this draw at all" BEFORE it answers anything about what it drew.
+`STATES GENS: BeginTable=NO` is now a permanent line for that reason.
 
 ## Two disciplines that are not optional
 

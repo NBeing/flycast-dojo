@@ -88,6 +88,23 @@ struct Panel
 	//! quietly reverse a decision somebody made deliberately - a transient
 	//! tool that reopens itself every launch is a bug report.
 	bool persist;
+
+	/*
+		OPTIONAL default size, applied FirstUseEver. Zero means "leave it to
+		ImGui", which is what every panel did until 2026-09-13.
+
+		PER PANEL AND NOT A BLANKET DEFAULT, and that is measured rather than
+		taste. `[MEASURED 2026-09-13]` a blanket 760x520 fixed the States window
+		- which had been opening with 68 pixels of content height, hiding a
+		whole pane - and simultaneously moved the Piano Roll's rows, so
+		scripts/rolltest.sh could no longer find three distinct rows by sweeping
+		and SKIPPED. One panel's fix silently disarmed another panel's test.
+
+		A window size is a fact about ONE panel. Giving them all the same number
+		is how a fix for one becomes a regression in another.
+	*/
+	float defW = 0.f;
+	float defH = 0.f;
 };
 
 /*

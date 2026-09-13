@@ -127,6 +127,24 @@ void drawStream(Stream s, const char *skipId)
 	visitStream(s, [](const Panel& p) {
 		if (skipThisFrame != nullptr && sameId(p.id, skipThisFrame))
 			return;
+		/*
+			A PANEL OPENS AT A USABLE SIZE.
+
+			`[MEASURED 2026-09-13]` nothing set one, so a panel docked beside the
+			game got whatever was left - the States wall opened with 68 pixels
+			of content height. Everything below its first table was clipped, and
+			a clipped ImGui table returns false from BeginTable and skips its
+			whole body, so the generations pane was UNREACHABLE rather than
+			merely cramped. Indistinguishable, from outside, from "that feature
+			is not wired".
+
+			FirstUseEver, never Always - the same rule this tree already learned
+			for SetNextWindowDockID. An Always size drags the window back every
+			frame and takes the layout away from the user, which is the exact
+			bug that once defeated docking.
+		*/
+		if (p.defW > 0.f && p.defH > 0.f)
+			ImGui::SetNextWindowSize(ImVec2(p.defW, p.defH), ImGuiCond_FirstUseEver);
 		// Begin/End are the REGISTRY's, always paired, whatever the body does.
 		// `open` is handed to ImGui so the window's own close button writes
 		// straight into the one owner of that fact.

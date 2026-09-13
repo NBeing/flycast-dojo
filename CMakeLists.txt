@@ -2107,6 +2107,40 @@ set_tests_properties(flycast.selftest_can_fail PROPERTIES
 	SKIP_RETURN_CODE 77
 	TIMEOUT 120)
 
+# THE STATES PANEL, CLICKED FOR REAL - and it found a defect on its first run.
+#
+# `[MEASURED 2026-09-13]` scripts/statestest.sh drives NO input and says so
+# deliberately, so the panel a TAS artist actually clicks had everything checked
+# except the clicking. This aims a real mouse at a real cell and asserts the
+# MODIFIER: one cell, two destinations, "click to tag, Ctrl+click to annotate".
+#
+# What it found before it could even click: the generations pane was
+# UNREACHABLE. The wall's table passed no size, a ScrollY table with no size
+# fills the remaining height, so everything below it was clipped - and a clipped
+# ImGui table returns false from BeginTable and skips its entire body. From
+# outside that is indistinguishable from "the feature is not wired". Panels also
+# had no default size at all, so the States window opened with 68 pixels of
+# content. Both fixed; this test is why they were visible.
+add_test(NAME flycast.statesuitest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/statesuitest.sh)
+set_tests_properties(flycast.statesuitest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 600
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;STATESUI_DISPLAY=:151")
+
+# ITS PAIRED ARM drives the IDENTICAL gesture with the modifier never pressed and
+# requires the notes editor NOT to open. Without it, a build that ignored KeyCtrl
+# - or a harness that forgot to hold it - would satisfy the positive claim with
+# the wrong half of the behaviour.
+add_test(NAME flycast.statesuitest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/statesuitest.sh --self-test)
+set_tests_properties(flycast.statesuitest_can_fail PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 600
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;STATESUI_DISPLAY=:152")
+
 # THE RE-RECORD ROUND TRIP, and docs/TEST-PLAN.md called landing it "the biggest
 # single gain". It records a movie and replays it, requiring the machine to walk
 # the same path hash for hash, with a vacuity gate first: a frozen machine
