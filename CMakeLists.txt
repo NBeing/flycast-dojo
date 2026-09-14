@@ -2067,6 +2067,30 @@ add_test(NAME flycast.checks_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/checks.sh --self-test)
 set_tests_properties(flycast.checks_can_fail PROPERTIES TIMEOUT 60)
 
+# THE OTHER JUDGE, GUARDED. scripts/openarm.sh is the WILL_FAIL replacement and
+# the sole arbiter of both known-open entries, distinguishing three verdicts -
+# "still open", "apparently fixed", "broke differently" - and it had no coverage
+# of that discrimination whatsoever.
+#
+# `[MEASURED 2026-09-14]` its judge was inline, so it could only ever be fed
+# logs this machine produced, which is the same shape as the WILL_FAIL trap it
+# was written to replace: unfalsifiable by construction. It is now a function
+# taking a log, with eight canned arms.
+#
+# Proven able to fail, and the two sabotages are deliberately chosen to break
+# DIFFERENT halves - the second one leaves every exit code correct:
+#
+#   judge never returns 0        -> the CONTROL arm fails. Nothing else does.
+#   three verdicts collapsed to  -> all five rc arms still PASS; only the
+#   one identical message           non-vacuity half catches it.
+#
+# The second is the one worth having. "Every verdict is non-zero" is satisfied
+# by a judge that has stopped saying anything useful, and that is precisely how
+# a judge rots - it keeps returning the right number and stops distinguishing.
+add_test(NAME flycast.openarm_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/openarm.sh --self-test)
+set_tests_properties(flycast.openarm_can_fail PROPERTIES TIMEOUT 60)
+
 # DO THE FIVE FILES THAT MUST AGREE ABOUT A HOTKEY ACTUALLY AGREE?
 #
 # A hotkey is not one declaration, it is five: the id in gamepad.h, a row in
