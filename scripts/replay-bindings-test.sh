@@ -21,13 +21,26 @@
 set -uo pipefail
 BIN="${1:-$(dirname "$0")/../build-dojo7/flycast}"
 ROM="${2:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
-FLYR="${3:-}"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}/flycast-dojo/replays"
+# A DEFAULT CLIP, so this can be registered. `[MEASURED 2026-09-14]` it took
+# three positional arguments and NONE of them had a default, which is the whole
+# reason it sat unregistered in docs/TEST-PLAN.md's "exists but does not run"
+# list while every other harness here discovers its own fixture. Newest clip
+# wins; the checks below still refuse if there is not one.
+# PREFER A CLIP FOR THIS ROM. A mismatched clip fails in the SAFE direction -
+# if it does not load, replay_loaded is false and startRecording would be
+# ALLOWED, so the test fails rather than passing hollowly - but a harness whose
+# fixture depends on which clip happens to be newest is one whose verdict moves
+# for reasons unrelated to the code.
+ROMBASE="$(basename "${2:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}")"; ROMBASE="${ROMBASE%.*}"
+FLYR="${3:-}"
+[ -n "$FLYR" ] || FLYR=$(ls -1t "$DATA/$ROMBASE"/*/*.flyr 2>/dev/null | head -1)
+[ -n "$FLYR" ] || FLYR=$(ls -1t "$DATA"/*/*/*.flyr 2>/dev/null | head -1)
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}/flycast-dojo"
 # 77 is ctest's SKIP_RETURN_CODE: "this machine cannot answer the question",
 # which is neither a pass nor a failure. Same convention as scripts/testrun.sh.
 SKIP=77
-[ -n "$FLYR" ] || { echo "SKIP: usage: $0 <bin> <rom> <existing .flyr>"; exit $SKIP; }
+[ -n "$FLYR" ] || { echo "SKIP: no .flyr in $DATA and none given"; exit $SKIP; }
 [ -x "$BIN" ]  || { echo "SKIP: no binary at $BIN"; exit $SKIP; }
 [ -f "$ROM" ]  || { echo "SKIP: no ROM at $ROM"; exit $SKIP; }
 [ -f "$FLYR" ] || { echo "SKIP: no clip at $FLYR"; exit $SKIP; }

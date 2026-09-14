@@ -2173,6 +2173,48 @@ set_tests_properties(flycast.recordtest_can_fail PROPERTIES
 	RUN_SERIAL TRUE
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;RECORDTEST_DISPLAY=79")
 
+# THE ISOLATION CONTRACT of scripts/isotest.sh, which is a TOOL and not a test -
+# it boots, screenshots and exits, and has no verdict for ctest to judge. What it
+# DOES have is one safety property, the rule CLAUDE.md states and this tree
+# learned the expensive way: automated testing must never touch the real desktop.
+# That property was documented rather than checked.
+#
+# `[MEASURED 2026-09-14]` assert_isolated() asserted HALF of what its name
+# claims. It refused the real display, and its WM-socket branch was a no-op
+# whose comment said the protection lived in iso() - true, and unchecked. The
+# unasserted half is exactly the hazard that once moved the user's Firefox.
+# It now asks iso() itself whether a socket survived.
+#
+# Three arms, accept AND refuse, because a guard that refuses everything passes
+# the first alone and one that refuses nothing passes the second. No ROM, no
+# emulator, under a second.
+add_test(NAME flycast.isotest_isolation
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/isotest.sh selftest)
+set_tests_properties(flycast.isotest_isolation PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 120)
+
+# flycast.replay.* AGAINST THE REAL ENGINE, positive and negative.
+#
+# docs/TEST-PLAN.md section 4 listed this under "exists but does not run", and
+# `[MEASURED 2026-09-14]` the reason was mundane: it took three positional
+# arguments and none of them had a default, so it could not be invoked without
+# being told where everything was. Every other harness here discovers its own
+# fixture. It does now, preferring a clip for the ROM under test.
+#
+# NO PAIRED ARM, because it already carries both halves: its PASS requires the
+# marker to say startRecording=false AND the clip-folder count to be unchanged,
+# and its header records that "no clip folder was created" is ALSO what "the Lua
+# never ran" looks like - a false pass that took four attempts to make honest.
+# The marker is written BEFORE the call under test so the two cannot look alike.
+add_test(NAME flycast.replay_bindings
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/replay-bindings-test.sh)
+set_tests_properties(flycast.replay_bindings PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 300
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
 # LOADING AN EMPTY SLOT - one of docs/TEST-PLAN.md section 2's re-record claims,
 # and the first of them to be written. The plan's claim holds: the emulator keeps
 # running, on BOTH the direct path and the deferred one through gui_loadState's

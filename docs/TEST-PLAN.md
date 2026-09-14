@@ -586,41 +586,46 @@ generation works and is probed, restoring one does not exist. Build it the way
 the rest of this tree is built - a pure core claimed at tier 1, then a probe
 carrying it through the real funnel - and the test comes with it.
 
-### 4. Register `isotest` and `replay-bindings-test`, or delete them
+### 4. `[PART DONE 2026-09-14]` register `isotest` and `replay-bindings-test`
 
-A harness that nobody runs is worse than no harness: it looks like coverage on a
-list and rots in place. Decide per file — either it earns a ctest entry or it
-goes.
+**Neither was dead code, and "delete them" was never really an option.**
+`isotest` is cited by `CLAUDE.md` itself as the house rule for automated testing
+that must not touch the real desktop; `replay-bindings-test` is referenced by
+four docs and the fixtures README. Deleting a harness the doctrine points at
+would leave the doctrine pointing at nothing.
 
----
+**`replay-bindings-test` is registered `[DONE]`** as `flycast.replay_bindings`,
+and the reason it had sat unregistered was mundane: it took three positional
+arguments and **none of them had a default**, so it could not be invoked without
+being told where everything was, while every other harness here discovers its own
+fixture. It does now, preferring a clip for the ROM under test - a mismatched
+clip fails in the safe direction (an unloaded clip leaves `replay_loaded` false,
+so `startRecording` would be ALLOWED and the test fails) but a harness whose
+verdict moves with whichever clip is newest is one nobody can read.
 
-## What a UI test found that a trace-reading test could not
+No paired arm: it already carries both halves. Its PASS requires the marker to
+say `startRecording=false` **and** the clip-folder count to be unchanged, and its
+own header records that "no clip folder was created" is also what "the Lua never
+ran" looks like - a false pass that took four attempts to make honest.
 
-`[MEASURED 2026-09-13]` `scripts/statestest.sh` drives **no input** — deliberately,
-for a good reason it documents. The consequence is that the States panel had
-every behaviour checked except the one a user performs, and two defects lived
-there undisturbed:
+**`isotest` is a TOOL, not a test, and that is the third option this item did not
+offer.** `isotest.sh run <rom> [seconds]` boots, screenshots and exits; it has no
+pass condition for ctest to judge. What IS testable is the guarantee it exists to
+provide, and that is worth a self-test rather than trust:
 
-**The generations pane was unreachable.** `BeginTable("##states", …, ScrollY)`
-passed no size, and a ScrollY table with no size *fills the remaining height*, so
-the separator, the Generations header and its table were all clipped away.
-`BeginTable("##gens", …)` then returned **false** on every frame and skipped its
-whole body. From outside, a pane whose table never begins is indistinguishable
-from a feature that was never wired — which is precisely the confusion
-`CLAUDE.md` opens with.
+`[SOURCE]` `assert_isolated()` refuses when the target display is the real
+session - a real guard, and the one to assert. Its **other** branch is a no-op:
 
-**Panels had no default size at all.** Nothing called `SetNextWindowSize`, so a
-panel docked beside the game got whatever was left: the States window opened with
-**68 pixels** of content height. Fixed with a `FirstUseEver` default — never
-`Always`, the rule this tree already learned for `SetNextWindowDockID`.
+    if [ -n "${I3SOCK:-}${SWAYSOCK:-}" ] && [ "${ISOTEST_ALLOW_WM_SOCKETS:-}" != "1" ]; then
+        : # iso() strips them per command; this just records that they are present
+    fi
 
-Neither is subtle once seen, and neither was visible to a test that reads counts
-out of a trace. The trace was *correct*: it reported the generations it had. It
-simply could not report that the pane describing them was off screen.
-
-**The general lesson, and it is cheap to apply:** a panel trace should answer
-"did this draw at all" BEFORE it answers anything about what it drew.
-`STATES GENS: BeginTable=NO` is now a permanent line for that reason.
+The protection there is real but lives elsewhere - `iso()` runs every command
+under `env -u I3SOCK -u SWAYSOCK -u WAYLAND_DISPLAY`. So a function named
+`assert_isolated` asserts half of what its name claims, and the half it does not
+assert is exactly the hazard `CLAUDE.md` records as having moved the user's
+Firefox once. **`[OPEN]`** - the self-test to write is the pair: the real display
+must be refused, a private one must not be.
 
 ## Two disciplines that are not optional
 

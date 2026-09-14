@@ -86,8 +86,26 @@ assert_isolated() {
 	if [ "$DISPLAY_NUM" = "${REAL_DISPLAY:-:1}" ]; then
 		echo "isotest: REFUSING - $DISPLAY_NUM is the real session"; exit 1
 	fi
-	if [ -n "${I3SOCK:-}${SWAYSOCK:-}" ] && [ "${ISOTEST_ALLOW_WM_SOCKETS:-}" != "1" ]; then
-		: # iso() strips them per command; this just records that they are present
+	# ASSERT THE STRIP RATHER THAN NOTE IT.
+	#
+	# `[MEASURED 2026-09-14]` this branch was a no-op with a comment saying
+	# "iso() strips them per command; this just records that they are present".
+	# The protection is real and lives in iso(), but a function called
+	# assert_isolated then asserted HALF of what its name claims - and the
+	# unasserted half is precisely the hazard the header opens with, the one
+	# that moved the user's Firefox once. A guarantee nothing checks is a
+	# comment.
+	#
+	# Asked of iso() itself, so this measures the thing that actually runs
+	# rather than restating its definition.
+	if [ -n "${I3SOCK:-}${SWAYSOCK:-}${WAYLAND_DISPLAY:-}" ] \
+			&& [ "${ISOTEST_ALLOW_WM_SOCKETS:-}" != "1" ]; then
+		leaked=$(iso env 2>/dev/null | grep -cE '^(I3SOCK|SWAYSOCK|WAYLAND_DISPLAY)=' || true)
+		if [ "${leaked:-0}" -ne 0 ]; then
+			echo "isotest: REFUSING - a WM socket survived iso(); a command would talk"
+			echo "         to the REAL window manager while appearing to use $DISPLAY_NUM"
+			exit 1
+		fi
 	fi
 }
 
@@ -164,6 +182,37 @@ cmd="${1:-}"; shift || true
 assert_isolated
 
 case "$cmd" in
+selftest)
+	# THE ISOLATION CONTRACT, ASSERTED. This script exists for one safety
+	# property - never touch the user's desktop - and until now that property was
+	# documented rather than checked. Needs no ROM and no emulator: every
+	# subcommand passes through assert_isolated before the dispatcher, so `stop`
+	# exercises it.
+	#
+	# ACCEPT AND REFUSE, both. A guard that refuses everything passes the first
+	# arm alone, and one that refuses nothing passes the second.
+	fails=0
+	out=$(REAL_DISPLAY=":99" ISOTEST_DISPLAY=":99" "$0" stop 2>&1); rc=$?
+	if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "REFUSING"; then
+		echo "  ok    the real session's display is refused"
+	else
+		echo "  WRONG the real session's display was NOT refused (rc=$rc)"; fails=$((fails+1))
+	fi
+	out=$(REAL_DISPLAY=":1" ISOTEST_DISPLAY=":98" "$0" stop 2>&1); rc=$?
+	if [ $rc -eq 0 ]; then
+		echo "  ok    a private display is allowed"
+	else
+		echo "  WRONG a private display was refused (rc=$rc): $out"; fails=$((fails+1))
+	fi
+	out=$(REAL_DISPLAY=":1" ISOTEST_DISPLAY=":98" I3SOCK=/tmp/isotest-fake-i3 "$0" stop 2>&1); rc=$?
+	if [ $rc -eq 0 ]; then
+		echo "  ok    a WM socket in the environment does not survive iso()"
+	else
+		echo "  WRONG iso() let a WM socket through (rc=$rc): $out"; fails=$((fails+1))
+	fi
+	[ $fails -eq 0 ] && { echo "isotest: PASS selftest - the isolation contract holds (3/3)"; exit 0; }
+	echo "isotest: FAIL selftest - $fails of 3 wrong"; exit 1
+	;;
 run)
 	ensure_display
 	rom="$1"; secs="${2:-20}"
