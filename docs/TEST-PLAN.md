@@ -288,12 +288,25 @@ the continuing machine ends up in the same condition as a restored one. Six runs
 | 192 | `ResetCache`, `KillTex` | **identical** |
 | **64** | **`sh4_cpu.ResetCache()` alone** | **identical** |
 
-So on the dynarec the residue is the **block cache**. `sh4_cpu.ResetCache()` is
-`bm_ResetCache()`, and `[SOURCE]` `core/hw/sh4/dyna/blockmanager.cpp` charges
-`Sh4cntx.cycle_counter -= 100` when a block has to be found or compiled. **JIT
-cache warmth is billed to the guest's cycle budget**, so the same machine state
-runs at different speeds depending on host-side compilation history - which a
-savestate neither captures nor could.
+So on the dynarec the residue is the **block cache**: `sh4_cpu.ResetCache()` is
+`bm_ResetCache()`, and clearing it on the continuing machine makes the two agree.
+That is measured and stands.
+
+**`[CORRECTED 2026-09-13]` THE MECHANISM WAS INVENTED AND IS WRONG.** This
+paragraph claimed `blockmanager.cpp` charges `cycle_counter -= 100` when a block
+must be found or compiled, and concluded that "JIT cache warmth is billed to the
+guest's cycle budget". **There is no such charge.** `[SOURCE]` both `-= 100`
+sites in that file sit inside `#ifdef USE_WINCE_HACK`, emulating Windows CE's
+`GetTickCount` and `QueryPerformanceCounter` syscalls, and are reachable only
+when `mmu_enabled()` - the function early-returns to `bm_GetCode()` otherwise.
+Dreamcast titles do not use the MMU, so those lines never executed in any run
+here. There is no other cycle charge anywhere in the dynarec path.
+
+The bisect was right and the story told about it was not. What clearing the block
+cache actually changes is **`[OPEN]`**. The leading candidate is block
+BOUNDARIES: the dynarec accounts guest cycles per compiled block, so a cache
+rebuilt from a different entry point can split code differently and reach the
+same instruction with a different budget spent. Not measured.
 
 **AND IT IS NOT THE WHOLE STORY** - re-measured `[2026-09-12]` after the seek
 artifact in 1b was found, because the first version of this paragraph rested on a
@@ -376,12 +389,17 @@ it now starts from the same known pipeline, so a clip re-recorded from it after
 this change replays exactly. What will not hold is a clip recorded BEFORE this
 change replaying hash-identically against its old anchor.
 
-**The dynarec half is still open, and is a judgement call rather than a repair.**
-Stop billing block lookup and compilation to `cycle_counter` (`blockmanager.cpp`,
-`-= 100`). That exists so a guest does not spin while blocks compile, so removing
-it **changes SH4 timing for everyone**. Measured after the V49 fix: the dynarec
-arm still diverges at frame 71, with new hashes (the blob changed), so the two
-causes remain independent.
+**The dynarec half is still open, and `[CORRECTED 2026-09-13]` it is NOT the
+judgement call this section used to describe.** It said the fix was to stop
+billing block lookup to `cycle_counter`, at the cost of changing SH4 timing for
+every user. Both halves of that were built on a charge that does not exist - see
+the correction above. There is nothing to remove, and therefore no timing
+trade-off to weigh.
+
+What is true: clearing the block cache on the continuing machine makes the two
+agree (bisected to that one bit), and WHY is unknown. Measured after the V49 fix,
+the dynarec arm still diverges at frame 71 with new hashes, so the two causes
+remain independent.
 
 Deciding what to do about the dynarec one is a judgement call rather than a bug
 fix: the `-= 100` exists so a guest does not spin while blocks compile, and
