@@ -19,11 +19,54 @@
 > - **"the video capture stack" is OURS.** His `avi_dump.cpp` sits in this tree at
 >   944 lines and is **not in `CMakeLists.txt`**; `core/rend/video_recorder.{cpp,h}`
 >   is what builds. A reader will assume his capture stack is live. It is not.
-> - **The engine is not all in his engine files.** ~5,952 lines of non-UI logic live
->   inside his 26,591-line `dojo_gui.cpp`, and **~42% of it has no equivalent here** -
->   concentrated in four things: the Notepad notation layer (~1,400), branches
->   (~420 on top of the missing module), the Frame Skip Test runner (~320) and the
->   hotkey rebind engine (~150).
+> - **The engine is not all in his engine files.** `[MEASURED 2026-09-14]` **5,571
+>   lines** across 257 functions carrying no UI token at all live inside his
+>   26,591-line `dojo_gui.cpp` - 23.7% of everything inside a function body there.
+>   Four islands have no equivalent here, and three of the four were undercounted
+>   when this list was first written:
+>
+>   | island | said | measured |
+>   |---|---|---|
+>   | Notepad notation layer | ~1,400 | **1,411** (32 fns; 2,513 with its file I/O and profiles) |
+>   | branches, in-GUI | ~420 | **~374**, on top of the absent module |
+>   | Frame Skip Test runner | ~320 | **380** (13 fns; ~440 with its state struct) |
+>   | hotkey rebind engine | ~150 | **~261** engine core, 388 with its query helpers |
+>
+> - **`[CORRECTED 2026-09-14]` his GUI is 32 windows, not 27** (plus 19
+>   `BeginPopupModal` sites). The 27 is `docs/PANEL-INVENTORY.md`'s count against
+>   the 21,877-line snapshot. Likewise **419 file-scope functions (407 static) and
+>   218 file-scope statics**, against the 351/235 the docs still carry.
+>
+> - **The port drags in four third-party dependencies we do not have**, ~19,700
+>   lines: `imgui-node-editor` (11,886 - Branches), `ImGuiColorTextEdit` (5,106 -
+>   Notepad and UI Text), `imgui_md` (1,521) and `imgui_markdown` (1,176). Any plan
+>   that costs a window without costing its dependency is wrong by an order of
+>   magnitude.
+>
+> ### The file is four clumps and a long tail, not one clump
+>
+> `[MEASURED 2026-09-14]` Sorted by transitive closure (helpers only, excluding
+> his UI-text shim), the break is sharp and sits at about **1,000 lines**:
+>
+> - **Below it, liftable one at a time**: state backups (79), Markdown Playground
+>   (103), branch export (130), UI Text (211), hotkey overlay (351), hotkey editor
+>   (521), Captures (600), **Input Viz (728)**, Frame Skip Test (741), Branches
+>   (923).
+> - **Above it, arriving as ONE ~9,000-line clump** whichever you start from,
+>   because they share the `seq*` / `movieMacros*` / `tasMacro*` / `selSet`
+>   substrate: Snippets (2,349), macro browser (2,673), Macros (2,832), Notepad
+>   (5,197), main menu bar (5,475), Piano Roll (8,278). Note Macros is **163 lines
+>   of window on 2,832 lines of helpers** - the ratio, not the size, is what makes
+>   it expensive.
+>
+> **`[LANDED 2026-09-14]` Input Viz is ported** (`core/dojo/input_viz.{h,cpp}`),
+> chosen off that table: smallest closure of any real window whose every data
+> symbol already exists here, and no new dependency.
+>
+> **The one genuinely file-wide coupling is his UI-text override shim** -
+> `tasText`/`tasButton`/`tasTip`/`uiResolve`, 36 functions and 387 lines wrapping
+> almost every widget call, backed by a generated manifest. Decide once whether to
+> adopt or strip it; deciding per window guarantees a mixed file.
 >
 > So "only the UI is missing" is **no longer true**. It was true of the 2026-09-07
 > snapshot `docs/DIVERGENCE-FROM-DAVID.md` measured, when his GUI file was 21,877
