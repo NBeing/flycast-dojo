@@ -59,9 +59,20 @@
 >   of window on 2,832 lines of helpers** - the ratio, not the size, is what makes
 >   it expensive.
 >
-> **`[LANDED 2026-09-14]` Input Viz is ported** (`core/dojo/input_viz.{h,cpp}`),
-> chosen off that table: smallest closure of any real window whose every data
-> symbol already exists here, and no new dependency.
+> **`[LANDED 2026-09-14]` Two are ported**, both chosen off that table:
+>
+> - **Input Viz** (`core/dojo/input_viz.{h,cpp}`) - smallest closure of any real
+>   window whose every data symbol already exists here, and no new dependency.
+> - **Frame Skip Test** (`core/dojo/fst.{h,cpp}`) - its runner was already a
+>   standalone state machine behind a public step/running boundary, so the model
+>   separated cleanly: 32 claims over pure sweep arithmetic, no emulator.
+>
+> Both follow the same shape and it is worth repeating for the next one: **put
+> the part that can be wrong somewhere a test can reach it.** In both cases that
+> turned out to be a conversion or a piece of arithmetic, not the drawing - and
+> in both cases the sabotage that mattered was the NEGATIVE claim (an inverted
+> ring lights every button that is UP; a merge that does not merge still
+> produces a plausible-looking table).
 >
 > **The one genuinely file-wide coupling is his UI-text override shim** -
 > `tasText`/`tasButton`/`tasTip`/`uiResolve`, 36 functions and 387 lines wrapping
@@ -546,6 +557,33 @@ and raw bindings, colour packing is rarely what you assume. Every entry there
 is something that actually went wrong, not a precaution.
 
 Add to it rather than re-learning.
+
+## Driving ImGui with xdotool: a plain `click` is too fast to be seen
+
+`[MEASURED 2026-09-14]` `xdotool click 1` presses and releases within one X
+event batch. ImGui reads the mouse once per frame, so a click that goes down and
+up between two frames **never happened** as far as the widget is concerned.
+
+The failure has no error and no log line. Three separate clicks on a live,
+correctly-registered button did nothing at all and looked exactly like a dead
+button or a broken handler - while a DRAG on the same window worked first time,
+because `mousedown` / `mousemove` / `mouseup` naturally spans frames.
+
+    xdotool click 1                              -> often invisible
+    xdotool mousedown 1; sleep 0.25; mouseup 1   -> seen
+
+So: move, settle, press, hold, release. And note the diagnostic shape - if a
+gesture that involves holding works and a tap does not, suspect this before
+suspecting the code under test.
+
+Two neighbours from the same family, both already paid for elsewhere in this
+file: a bare Xvfb swallows KEYS entirely (so a config-less `i3` goes on the
+display first), and a click into an unfocused ImGui window can be consumed
+raising it - which stacks with this one, because two panels registered at the
+same default position sit exactly on top of each other and a title-bar click
+raises the wrong one.
+
+---
 
 ## Killing a process you launched: get the handle right, and never kill by name
 
