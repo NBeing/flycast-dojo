@@ -31,6 +31,7 @@
 #include "lua/luawatch.h"
 #include "dojo/roll_host.h"
 #include "dojo/input_viz.h"
+#include "dojo/fst.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
 #include "archive/rzip.h"
@@ -98,6 +99,7 @@ int flycast_init(int argc, char* argv[])
 	roll::marksSelfTest();
 	roll::notationSelfTest();
 	roll::inputviz::selfTest();
+	roll::fst::selfTest();
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();
@@ -122,6 +124,7 @@ int flycast_init(int argc, char* argv[])
 	roll::registerStatesPanel();
 	roll::registerHotkeyPanel();
 	roll::registerInputVizPanel();
+	roll::registerFrameSkipTestPanel();
 	os_CreateWindow();
 	os_SetupInput();
 

@@ -5152,14 +5152,24 @@ void quick_player_select()
 
 void gui_open_step()
 {
+	// ONE OWNER OF THE RULE. This used to be the body below with a literal 1 in
+	// it; the Frame Skip Test needed the same thing for N frames, and a second
+	// copy is how the two drift.
+	gui_step_frames(1);
+}
+
+void gui_step_frames(int n)
+{
 	const LockGuard lock(guiMutex);
+	if (n < 1)
+		n = 1;
 	if (gui_state == GuiState::Paused && dojo.buffering && dojo.frame_number == dojo.session_inputs.size())
 		return;
 
 	if (!dojo.stepping)
 		dojo.stepping = true;
 
-	dojo.target_step_frame = dojo.frame_number + 1;
+	dojo.target_step_frame = dojo.frame_number + n;
 
 	if (pausing::active(pausing::USER))
 		pausing::clear(pausing::USER);

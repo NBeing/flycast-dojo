@@ -70,6 +70,22 @@ void gui_saveState();
 void gui_open_pause();
 void gui_open_step();
 
+/*
+	STEP N FRAMES, not one.
+
+	`gui_open_step()` is now this with n = 1, rather than a second copy of the
+	same rule - which is the shape core/dojo/roll_host.h and docs/HOTKEYS.md
+	are both built on, and which this tree has already paid for twice (the
+	letterbox arithmetic written out in gldraw and lua, and the three private
+	copies of the backup-folder predicate that disagreed).
+
+	Added for the Frame Skip Test, whose runner has to advance a variant to a
+	known stop frame in one go. A loop of single steps is not the same thing:
+	each one re-enters the pause arbiter and restarts the emulation thread, so
+	stepping 400 frames that way is 400 stop/start pairs.
+*/
+void gui_step_frames(int n);
+
 enum class GuiState {
 	Closed,
 	Commands,
