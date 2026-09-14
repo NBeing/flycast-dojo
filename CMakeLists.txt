@@ -2193,6 +2193,14 @@ add_test(NAME flycast.emptyslot_known_open
 			"the baseline is quiet, and nothing was restored")
 set_tests_properties(flycast.emptyslot_known_open PROPERTIES
 	SKIP_RETURN_CODE 77
+	# RUN_SERIAL BECAUSE IT DRIVES scripts/testrun.sh, which owns
+	# build-dojo7/testresults exclusively and REFUSES to start when another run
+	# holds it. `[MEASURED 2026-09-14]` four entries here drive testrun and only
+	# ONE was serial; a parallel pairing made testrun skip, its caller saw no log
+	# and reported a failure that reproduced nowhere when run alone. Serialising
+	# is the blunt fix; the sharp one is a per-test FLYCAST_TEST_OUT, which
+	# scripts/livetest.sh cannot use yet because it reads the default path.
+	RUN_SERIAL TRUE
 	TIMEOUT 400
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
 
@@ -2223,6 +2231,14 @@ add_test(NAME flycast.restore_determinism
 			${CMAKE_CURRENT_SOURCE_DIR}/scripts/tests/open/replay_determinism.lua)
 set_tests_properties(flycast.restore_determinism PROPERTIES
 	SKIP_RETURN_CODE 77
+	# RUN_SERIAL BECAUSE IT DRIVES scripts/testrun.sh, which owns
+	# build-dojo7/testresults exclusively and REFUSES to start when another run
+	# holds it. `[MEASURED 2026-09-14]` four entries here drive testrun and only
+	# ONE was serial; a parallel pairing made testrun skip, its caller saw no log
+	# and reported a failure that reproduced nowhere when run alone. Serialising
+	# is the blunt fix; the sharp one is a per-test FLYCAST_TEST_OUT, which
+	# scripts/livetest.sh cannot use yet because it reads the default path.
+	RUN_SERIAL TRUE
 	TIMEOUT 400
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;RD_BOTH_RESTORED=1")
 
@@ -2239,6 +2255,14 @@ add_test(NAME flycast.replay_determinism_known_open
 			"a restored machine walks the same path")
 set_tests_properties(flycast.replay_determinism_known_open PROPERTIES
 	SKIP_RETURN_CODE 77
+	# RUN_SERIAL BECAUSE IT DRIVES scripts/testrun.sh, which owns
+	# build-dojo7/testresults exclusively and REFUSES to start when another run
+	# holds it. `[MEASURED 2026-09-14]` four entries here drive testrun and only
+	# ONE was serial; a parallel pairing made testrun skip, its caller saw no log
+	# and reported a failure that reproduced nowhere when run alone. Serialising
+	# is the blunt fix; the sharp one is a per-test FLYCAST_TEST_OUT, which
+	# scripts/livetest.sh cannot use yet because it reads the default path.
+	RUN_SERIAL TRUE
 	TIMEOUT 300
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
 
@@ -2392,6 +2416,14 @@ add_test(NAME flycast.lua
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/testrun.sh --timeout 120)
 set_tests_properties(flycast.lua PROPERTIES
 	SKIP_RETURN_CODE 77
+	# RUN_SERIAL BECAUSE IT DRIVES scripts/testrun.sh, which owns
+	# build-dojo7/testresults exclusively and REFUSES to start when another run
+	# holds it. `[MEASURED 2026-09-14]` four entries here drive testrun and only
+	# ONE was serial; a parallel pairing made testrun skip, its caller saw no log
+	# and reported a failure that reproduced nowhere when run alone. Serialising
+	# is the blunt fix; the sharp one is a per-test FLYCAST_TEST_OUT, which
+	# scripts/livetest.sh cannot use yet because it reads the default path.
+	RUN_SERIAL TRUE
 	TIMEOUT 1800
 	FIXTURES_REQUIRED FLYCAST_HARNESS_TRUSTED
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")

@@ -41,6 +41,13 @@
 # file the real run uses means a judge that has stopped reading the file cannot
 # pass both arms.
 #
+# NO BACKTICKS IN THE LUA BELOW. write_script's heredoc is UNQUOTED (it
+# interpolates $OUT and $WINDOW), so a backtick in a comment is COMMAND
+# SUBSTITUTION - the shell runs it, prints "command not found", and silently
+# substitutes the result into the script it writes. `[MEASURED]` this bit four
+# times in one session, always in a provenance mark like the one in this
+# sentence, because that is where backticks naturally go.
+#
 # Exit: 0 pass, 1 fail, 77 skip.
 set -uo pipefail
 SKIP=77
@@ -104,6 +111,7 @@ local function w(s) local f = io.open(out, "a"); if f then f:write(s .. "\n"); f
 
 local n, stage, first, taken = 0, "boot", nil, 0
 local savedN, loadedN, beforeLoad = 0, 0, 0
+local diverged, divergedOff = false, false
 local lastF = nil
 local prev = flycast_callbacks and flycast_callbacks.vblank
 flycast_callbacks = flycast_callbacks or {}
@@ -209,6 +217,41 @@ flycast_callbacks.vblank = function()
 		end
 	end
 
+	--- THE DISCRIMINATING HALF OF THE REWIND CLAIM.
+	---
+	--- Re-recording the SAME inputs after a rewind must confirm NOTHING, which
+	--- the shell asserts. On its own that claim is also satisfied by a detector
+	--- that never fires at all - so part-way through the window this presses a
+	--- button the original take did not have, and the shell then requires
+	--- exactly ONE confirmation, naming a frame inside THIS range rather than
+	--- the rewind's.
+	---
+	--- [SOURCE] dojo.cpp collapses a run of consecutive differing frames into
+	--- one event via divergence_open, so holding the button for several frames
+	--- is one re-record and not several - which the count asserts.
+	---
+	--- EARLY IN THE WINDOW, AND THAT IS NOT A TUNING CHOICE. A divergence is
+	--- only possible where a frame is being OVERWRITTEN: [SOURCE] the detector
+	--- needs session_inputs.find(frame) != end() and differing bytes, so past
+	--- the old take's last frame the recorder is APPENDING and there is nothing
+	--- to differ from. [MEASURED 2026-09-14] driving it at +40 frames put it
+	--- past the tail and confirmed nothing - the test reported the emulator
+	--- broken when it had asked for a divergence in a region where one cannot
+	--- exist. The rewind lands ~14 frames below the frontier, so this sits at +3.
+	if PHASE == "record" and stage == "collect" then
+		if taken == 3 and not diverged then
+			diverged = true
+			pcall(flycast.input.setButton, 1, "a", true)
+			w("divfrom=" .. tostring(f))
+		elseif taken == 8 and diverged and not divergedOff then
+			divergedOff = true
+			pcall(flycast.input.setButton, 1, "a", false)
+			w("divto=" .. tostring(f))
+		elseif diverged and not divergedOff then
+			pcall(flycast.input.setButton, 1, "a", true)
+		end
+	end
+
 	if stage ~= "collect" then return end
 	--- A SEEK DURING COLLECTION RESTARTS IT.
 	---
@@ -303,6 +346,37 @@ if [ -z "$LENPRE" ] || [ -z "$LENPOST" ]; then
 fi
 if [ "$LENPOST" -lt "$LENPRE" ]; then
 	fail "a WRITE load TRUNCATED the movie: $LENPRE -> $LENPOST frames (the un-reached tail should stay as the old take)" divergence
+fi
+
+# ---- section 2: a rewind is not itself a re-record -------------------------
+# `[SOURCE]` dojo.cpp arms a detector on the state load and fires the timeline
+# event LATER, at the first write whose bytes actually differ:
+#
+#   TAS: rewind to frame N armed - becomes a re-record only if input diverges
+#   TAS: re-record CONFIRMED - input diverged at frame N (timeline event [a, b])
+#
+# This phase rewinds and then re-records the SAME inputs it just recorded, so the
+# writes do not differ and no event may fire. Both halves are asserted: the arm
+# must be present (or the claim is about a rewind that never happened) and the
+# confirmation must be absent (which is the claim itself).
+ARMED=$(tr -d '\0' < "$OUT/record.log" 2>/dev/null | grep -ac "TAS: rewind to frame .* armed")
+CONF=$(tr -d '\0' < "$OUT/record.log" 2>/dev/null | grep -ac "TAS: re-record CONFIRMED")
+if [ "${ARMED:-0}" -eq 0 ]; then
+	fail "the rewind never armed the divergence detector, so the no-re-record claim is untested"
+fi
+echo "  rewind armed: $ARMED; re-record events: $CONF"
+DIVFROM=$(field record divfrom); DIVTO=$(field record divto)
+if [ -z "$DIVFROM" ] || [ -z "$DIVTO" ]; then
+	fail "the divergence window was never driven, so a detector that never fires would pass"
+fi
+CONFFRAME=$(tr -d '\0' < "$OUT/record.log" 2>/dev/null \
+	| sed -n 's/.*re-record CONFIRMED - input diverged at frame \([0-9]*\).*/\1/p' | head -1)
+echo "  divergence driven at frames $DIVFROM..$DIVTO; confirmed at ${CONFFRAME:-<none>}"
+if [ "${CONF:-0}" -ne 1 ]; then
+	fail "a rewind plus one run of differing writes produced $CONF re-record event(s), expected exactly 1" divergence
+fi
+if [ -z "$CONFFRAME" ] || [ "$CONFFRAME" -lt "$DIVFROM" ] || [ "$CONFFRAME" -gt "$DIVTO" ]; then
+	fail "the re-record event names frame ${CONFFRAME:-<none>}, outside the driven window $DIVFROM..$DIVTO - a rewind counted as the event" divergence
 fi
 
 # ---- THE VACUITY GATE, before any comparison -------------------------------

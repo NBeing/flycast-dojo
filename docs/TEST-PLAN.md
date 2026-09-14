@@ -491,10 +491,26 @@ Each of these is a sentence from the TAS fork's own help text or comments, and
 each is a test:
 
 - *"READ seeks the movie to that frame — WRITE rewinds there to re-record."*
-- **A WRITE load does not truncate.** The tail stays as the un-reached old take
-  and is overwritten in place; the roll greys it.
-- **A rewind is not itself a re-record.** The timeline event fires at the first
-  write whose bytes actually DIFFER, with that divergence frame as the event.
+- **A WRITE load does not truncate.** `[DONE 2026-09-14]` `scripts/recordtest.sh`:
+  movie length **9963 -> 9963** across the load. Its precondition is asserted,
+  not assumed - a READ load keeps the movie too, so "the length did not shrink"
+  is satisfied by the wrong gesture. The record phase logs 1 `TAS: WRITE load`
+  and the replay phase 0, which is the same grep with the gesture absent.
+- **A rewind is not itself a re-record.** `[DONE 2026-09-14]` Both halves, in one
+  run: a rewind plus IDENTICAL re-writes confirms **none**, and one run of six
+  differing frames confirms **exactly one**, named at **9953** - the first
+  differing frame, inside the driven window and not the rewind's frame (9949).
+  Either half alone is satisfiable by the wrong build: count a rewind and the
+  counter inflates on every seek; miss a divergence and the timeline has no event
+  where the take changed, so stale anchors survive.
+
+  `[MEASURED 2026-09-14]` the first attempt drove the divergence 40 frames after
+  the rewind and confirmed nothing - **a divergence is only possible where a
+  frame is being OVERWRITTEN.** `[SOURCE]` the detector needs
+  `session_inputs.find(frame) != end()` AND differing bytes, so past the old
+  take's last frame the recorder is appending and there is nothing to differ
+  from. The test asked for a divergence in a region where one cannot exist and
+  reported the emulator broken.
 - **A state saved before a rewind below it is STALE** — it will load and verify
   byte-perfect and the movie will still desync. Warn, but allow.
 - **Loading an empty slot must not stop the emulator.** `[DONE 2026-09-13]`

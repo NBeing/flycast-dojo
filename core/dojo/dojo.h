@@ -357,7 +357,14 @@ public:
 	// line was the only witness before, and the native console is usually closed).
 	double load_fail_at = -100.0;
 	int load_fail_slot = -1;
-	u32 rerecord_count = 0;			// state loads during recording THIS session (PCSX2-rr "re-records")
+	// `[CORRECTED 2026-09-14]` this said "state loads during recording THIS
+	// session", which the code has not done since the UX refinement: a rewind
+	// only ARMS the detector (divergence_open = false) and the counter is bumped
+	// at the first write whose bytes actually DIFFER - so reviewing your work by
+	// seeking back stales nothing. scripts/recordtest.sh asserts both halves:
+	// a rewind plus identical re-writes confirms none, and one run of differing
+	// frames confirms exactly one, named at the first differing frame.
+	u32 rerecord_count = 0;			// timeline events THIS session (PCSX2-rr "re-records")
 	u32 rerecord_base = 0;
 	double edit_base = 0;			// seconds previously spent on this clip
 	double clip_start_time = 0;		// os_GetSeconds() when this clip became active
