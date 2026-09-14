@@ -2091,6 +2091,53 @@ add_test(NAME flycast.openarm_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/openarm.sh --self-test)
 set_tests_properties(flycast.openarm_can_fail PROPERTIES TIMEOUT 60)
 
+# THE FIVE THINGS UNIT CHECKS CANNOT ASK. docs/CROSS-PROJECT-LESSONS.md calls
+# shell/linux/integration-tests "the best test artefact in the tree - full
+# RUN/PASS/FAIL/SKIP contract, exit 2 on skip, pixel-level non-vacuity" and
+# recorded `[MEASURED 2026-09-07]` that no CI workflow referenced it and there
+# was no add_test anywhere. Both still true on 2026-09-14. This closes it.
+#
+# It decodes actual pixels (the 2026-08-09 defect was a well-formed 8.7-second
+# AVI, correct dimensions and duration, entirely black - every structural check
+# passed), runs the package from a deliberately wrongly-named directory, and
+# boots the emulator from a working directory unrelated to the config.
+#
+# `[MEASURED 2026-09-14]` REGISTERING IT REQUIRED FIXING IT, AND WHAT IT HID IS
+# the reason this rule exists. Three of its five cases had been failing, and
+# because nothing ran it, nobody knew:
+#
+#   1. It set FLYCAST_ROOT to redirect config and data. NOTHING READS THAT -
+#      core/linux-dist/main.cpp reads XDG_CONFIG_HOME / XDG_DATA_HOME. So the
+#      three emulator cases wrote their script somewhere the emulator never
+#      looked, AND every run wrote into the developer's real
+#      ~/.config/flycast-dojo. The isolation was decorative.
+#   2. `( cd / && ... & echo $! )` captured THE SUBSHELL'S PID, so every
+#      kill -TERM hit a process that had already exited and the emulator was
+#      never signalled at all. 23 orphaned emulators and a load average of 141
+#      came from this. `pkill -x flycast-dojo` hid it for as long as the binary
+#      carried that name - a name-based cleanup is not a backstop for a broken
+#      handle, it is what stops you discovering the handle is broken.
+#   3. The capture case waited a fixed 36 s for work that takes ~52 s here, and
+#      the video is finalised by an EXTERNAL ffmpeg that outlives the emulator.
+#
+# All five pass now (pass=5 fail=0 skip=0, no orphans, 2026-09-14).
+#
+# SKIP_RETURN_CODE 2, which is the script's own contract rather than ctest's 77:
+# it exits 2 when a case is skipped, deliberately, because "a suite that goes
+# green when its prerequisites are missing is reporting on the machine rather
+# than on the code". scripts/checks.sh then exits 2 on the skip, so it cannot
+# read as green either way.
+add_test(NAME flycast.integration
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/shell/linux/integration-tests)
+set_tests_properties(flycast.integration PROPERTIES
+	SKIP_RETURN_CODE 2
+	TIMEOUT 1200
+	# RUN_SERIAL: it owns Xvfb :71, boots three emulators in sequence and
+	# transcodes video. Sharing a machine with another emulator test makes the
+	# frame-count-dependent capture case miss its window.
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
 # DO THE FIVE FILES THAT MUST AGREE ABOUT A HOTKEY ACTUALLY AGREE?
 #
 # A hotkey is not one declaration, it is five: the id in gamepad.h, a row in

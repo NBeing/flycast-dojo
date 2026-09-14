@@ -60,8 +60,11 @@ ok()   { pass=$((pass+1));    printf '  ok    %s\n' "$1"; }
 bad()  { fail=$((fail+1));    failures+=("$1: $2"); printf '  FAIL  %s\n        %s\n' "$1" "$2"; }
 skip() { skipped=$((skipped+1)); printf '  skip  %s\n        %s\n' "$1" "$2"; }
 
+# Kill only what this run started. `pkill -x flycast-dojo` reached the
+# developer's own emulator; the Xvfb pattern is anchored to THIS display number
+# so it cannot match the session's own server.
 cleanup() {
-    pkill -x flycast-dojo 2>/dev/null
+    [ -s "$WORK/pid" ] && kill -KILL "$(cat "$WORK/pid")" 2>/dev/null
     pkill -f "^/usr/bin/Xvfb :$DISPLAY_NUM\b" 2>/dev/null
     [ -n "${KEEP_WORK:-}" ] || rm -rf "$WORK"
 }
@@ -87,26 +90,144 @@ start_x() {
 
 # Boot the emulator from a working directory that is NOT the config directory,
 # which is how a desktop launcher starts it and how the path bug hid.
+#
+# `[MEASURED 2026-09-14]` THIS FUNCTION SET FLYCAST_ROOT, WHICH THE EMULATOR HAS
+# NEVER READ. Nothing in the tree reads it: `core/linux-dist/main.cpp`'s
+# find_user_config_dir/find_user_data_dir consult XDG_CONFIG_HOME and
+# XDG_DATA_HOME, and `core/oslib/storage.cpp` additionally knows FLYCAST_HOME.
+# A grep for FLYCAST_ROOT finds only the two shell scripts that SET it.
+#
+# Two consequences, and the second is much worse than the first:
+#
+#   1. Cases 3, 4 and 5 wrote their flycast.lua into a scratch root the
+#      emulator never looked at, so it loaded no script, wrote no log there,
+#      and all three failed with "no ... was written". They could not pass.
+#   2. THE ISOLATION WAS DECORATIVE. Every run wrote into the developer's real
+#      ~/.config/flycast-dojo and ~/.local/share/flycast-dojo. CLAUDE.md's
+#      "automated testing must not touch the real desktop" was being violated
+#      by the harness that is supposed to model good practice, and the
+#      violation was invisible precisely BECAUSE the cases failed for an
+#      unrelated-looking reason.
+#
+# The root passed in is now the flycast config directory itself, so its
+# basename must be flycast-dojo - that is the subdirectory name both XDG
+# lookups append. Asserted rather than assumed, because getting it wrong
+# silently restores behaviour 2.
 run_emulator() {
-    local root="$1" seconds="$2" log="$3"
-    ( cd / && FLYCAST_ROOT="$root" DISPLAY=":$DISPLAY_NUM" \
-        stdbuf -oL "$BIN" "$ROM" >"$log" 2>&1 & echo $! >"$WORK/pid" )
-    local pid; pid="$(cat "$WORK/pid")"
-    sleep "$seconds"
+    local root="$1" seconds="$2" log="$3" marker="${4:-}"
+    [ "$(basename "$root")" = "flycast-dojo" ] || {
+        printf 'run_emulator: root must end in /flycast-dojo, got %s\n' "$root" >&2
+        return 1
+    }
+    local xdg; xdg="$(dirname "$root")"
+    mkdir -p "$xdg/data" "$xdg/home"
+
+    # `env -C`, NOT `( cd / && ... & echo $! )`. `[MEASURED 2026-09-14]` the
+    # subshell form captures THE SUBSHELL'S PID, not the emulator's - bash forks
+    # for the `cd / && ...` list and does not exec-optimise it away:
+    #
+    #   ( cd / && sleep 40 & echo $! )  -> captured=3973611 actual=3973612
+    #   env -C / sleep 41 &  echo $!    -> captured=3973614 actual=3973614
+    #
+    # Every kill -TERM therefore hit a subshell that had already exited, the
+    # wait loop saw it gone within half a second and reported a clean exit, and
+    # THE EMULATOR WAS NEVER SIGNALLED. It ran forever. 23 orphaned emulators
+    # and a load average of 141 were traced to this, along with two failures
+    # that looked like defects elsewhere:
+    #
+    #   - case 3 printed no verdict. The suite reports from emu.registerexit,
+    #     which only runs on a clean shutdown the emulator never got.
+    #   - the same run's log stopped at 7 s of internal time, because by then
+    #     the machine was carrying 20+ orphans and the emulator was running at
+    #     about a seventh of real speed.
+    #
+    # `pkill -x flycast-dojo` hid this for as long as FLYCAST_BIN was the
+    # packaged binary: the name match killed it anyway, so the wrong PID never
+    # showed. Point FLYCAST_BIN at build-dojo7/flycast - the normal thing to do -
+    # and the mask comes off. A cleanup that works by name is not a backstop for
+    # a broken handle; it is what stops you finding out the handle is broken.
+    env -C / XDG_CONFIG_HOME="$xdg" XDG_DATA_HOME="$xdg/data" \
+        HOME="$xdg/home" DISPLAY=":$DISPLAY_NUM" \
+        stdbuf -oL "$BIN" "$ROM" >"$log" 2>&1 &
+    local pid=$!
+    printf '%s\n' "$pid" >"$WORK/pid"
+
+    # WAIT FOR THE WORK, NOT FOR A DURATION, when the script can say it is done.
+    #
+    # `[MEASURED 2026-09-14]` case 5 records frames 900-1200 and was given
+    # BOOT_SECONDS+14 = 36 s. This machine reaches frame 1200 at about 52 s, so
+    # the emulator was killed around frame 800 - before recording even STARTED -
+    # and the case reported "no capture file was written", which is true and
+    # says nothing about capture.
+    #
+    # Raising 36 to 70 is the wrong fix: it is a number about this machine, and
+    # CLAUDE.md records three separate wrong readings from measuring whatever
+    # the sandbox happened to do and stating it as the behaviour. A script that
+    # writes a marker when it is finished turns the wait into a fact about the
+    # WORK. The duration becomes a ceiling rather than the mechanism, and
+    # "never ran" stops being indistinguishable from "ran and produced nothing".
+    if [ -n "$marker" ]; then
+        local waited=0
+        while [ ! -e "$marker" ] && [ "$waited" -lt "$seconds" ]; do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+            waited=$((waited + 1))
+        done
+        [ -e "$marker" ] && sleep 2   # let the stop path finish its work
+    else
+        sleep "$seconds"
+    fi
     kill -TERM "$pid" 2>/dev/null
-    pkill -x flycast-dojo 2>/dev/null
     # WAIT FOR IT TO ACTUALLY GO. The exit report is written from the
     # Terminate handler, so reading the log immediately after sending the
     # signal races the thing being tested: the first run of this harness
     # reported "the suite never reported" against a log that said CONFORMS.
+    #
+    # BY PID, NEVER `pkill -x flycast-dojo`. A name-matching kill here reaches
+    # the developer's own running emulator, which is the same defect as killing
+    # i3 or Xvfb by name (docs/rolltest, dc053dfeb) one binary along. It was
+    # also simply wrong: FLYCAST_BIN is usually build-dojo7/flycast, so the
+    # name it matched was not even the process this function started.
     local i
     for i in $(seq 1 40); do
-        pgrep -x flycast-dojo >/dev/null 2>&1 || return 0
+        kill -0 "$pid" 2>/dev/null || return 0
         sleep 0.5
     done
-    pkill -KILL -x flycast-dojo 2>/dev/null
+    kill -KILL "$pid" 2>/dev/null
     sleep 1
     return 0
+}
+
+# WAIT FOR A FILE THAT ANOTHER PROCESS IS STILL WRITING.
+#
+# `[MEASURED 2026-09-14]` case 5 reported "no capture file was written" against
+# a run that produced a perfectly good 11.7 MB AVI. The emulator does not write
+# that file: `core/rend/video_recorder.cpp` pipes frames to an EXTERNAL ffmpeg
+# through popen (REC_POPEN), so ffmpeg outlives the emulator and finalises the
+# container after the process the harness waited for is already gone.
+#
+# This is the same race run_emulator's own comment describes for the log - "the
+# exit report is written from the Terminate handler, so reading the log
+# immediately after sending the signal races the thing being tested" - one
+# process further out. Waiting for the emulator is not waiting for the work.
+#
+# Size-stability rather than pgrep ffmpeg: a name match would catch the
+# developer's own unrelated encode, which is the mistake this file just removed
+# in two other places.
+wait_for_stable_file() {
+    local f="$1" tries="${2:-60}" last=-1 now i stable=0
+    for i in $(seq 1 "$tries"); do
+        now="$(stat -c %s "$f" 2>/dev/null || echo 0)"
+        if [ "$now" -gt 0 ] && [ "$now" -eq "$last" ]; then
+            stable=$((stable + 1))
+            [ "$stable" -ge 3 ] && return 0
+        else
+            stable=0
+        fi
+        last="$now"
+        sleep 0.5
+    done
+    [ "$(stat -c %s "$f" 2>/dev/null || echo 0)" -gt 0 ]
 }
 
 # --- case 1: the package runs with no emulator -----------------------------
@@ -144,13 +265,28 @@ case_emulator_conformance() {
     [ -x "$BIN" ] || { skip "$name" "no emulator at $BIN"; return; }
     [ -n "$ROM" ] || { skip "$name" "no ROM; set FLYCAST_ROM"; return; }
     start_x || { skip "$name" "could not start Xvfb"; return; }
-    local root="$WORK/conf"; mkdir -p "$root"
+    local root="$WORK/conf/flycast-dojo"; mkdir -p "$root"
     cp -r "$PKG" "$root/emuapi"
     printf 'require("emuapi.conformance")\n' >"$root/flycast.lua"
-    run_emulator "$root" "$((BOOT_SECONDS + 4))" "$WORK/conf.log"
-    local line; line="$(grep -E '^pass=' "$WORK/conf.log" | tail -1)"
-    if grep -q '^RESULT: CONFORMS' "$WORK/conf.log"; then ok "$name ($line)"
-    elif [ -z "$line" ]; then bad "$name" "no verdict; the suite never reported"
+    # GIVE IT A WHOLE SESSION. The suite reports from emu.registerexit - its
+    # own comment says "Reported at exit so the rollback sampling has a whole
+    # session to observe" - so the verdict appears only after a clean shutdown
+    # of a run that got far enough to have something to say.
+    #
+    # `[MEASURED 2026-09-14]` BOOT_SECONDS+4 = 26 s produced no verdict at all,
+    # and the case had been reporting "the suite never reported" as though the
+    # suite were broken. At 40 s the same binary and the same script print
+    # "RESULT: CONFORMS" with pass=359 fail=0 skip=59. Nothing was wrong with
+    # the suite; the harness was killing it too early and blaming it.
+    #
+    # This IS a number about this machine, which CLAUDE.md warns about, so it is
+    # a generous ceiling rather than a tuned value and the failure message below
+    # now names the possibility instead of asserting a defect in the suite.
+    run_emulator "$root" "$((BOOT_SECONDS + 30))" "$WORK/conf.log"
+    local line; line="$(grep -aE '^pass=' "$WORK/conf.log" | tail -1)"
+    if grep -aq '^RESULT: CONFORMS' "$WORK/conf.log"; then ok "$name ($line)"
+    elif [ -z "$line" ]; then
+        bad "$name" "no verdict - the suite reports at exit, so either it did not run long enough (raise FLYCAST_BOOT_SECONDS) or shutdown did not complete"
     else bad "$name" "$line"; fi
 }
 
@@ -160,7 +296,7 @@ case_script_loads() {
     [ -x "$BIN" ] || { skip "$name" "no emulator at $BIN"; return; }
     [ -n "$ROM" ] || { skip "$name" "no ROM; set FLYCAST_ROM"; return; }
     start_x || { skip "$name" "could not start Xvfb"; return; }
-    local root="$WORK/tour"; mkdir -p "$root"
+    local root="$WORK/tour/flycast-dojo"; mkdir -p "$root"
     cp -r "$PKG" "$root/emuapi"
     printf 'require("emuapi.examples.tour")\n' >"$root/flycast.lua"
     run_emulator "$root" "$BOOT_SECONDS" "$WORK/tour.log"
@@ -186,7 +322,7 @@ case_capture() {
         || { skip "$name" "ffmpeg/ffprobe not installed"; return; }
     start_x || { skip "$name" "could not start Xvfb"; return; }
 
-    local root="$WORK/rec"; mkdir -p "$root"
+    local root="$WORK/rec/flycast-dojo"; mkdir -p "$root"
     local out="$root/capture.avi"
     cat >"$root/flycast.lua" <<LUA
 -- Record a fixed span, then stop, so the file is finalised before we look.
@@ -205,12 +341,26 @@ flycast_callbacks.vblank = function()
     elseif n == 1200 and not stopped then
         stopped = true
         flycast.video.stopRecording()
+        -- SAY SO. The harness waits for this file rather than for a number of
+        -- seconds; without it, "the emulator was killed before frame 900" and
+        -- "the capture came out empty" produce identical evidence.
+        local fh = io.open("$root/recording-stopped", "w")
+        if fh then fh:write("stopped at frame " .. n .. "\n"); fh:close() end
     end
 end
 LUA
-    run_emulator "$root" "$((BOOT_SECONDS + 14))" "$WORK/rec.log"
+    run_emulator "$root" 180 "$WORK/rec.log" "$root/recording-stopped"
 
-    if [ ! -s "$out" ]; then bad "$name" "no capture file was written"; return; fi
+    # NON-VACUITY FIRST: did the thing under test actually happen? A missing
+    # capture file is equally consistent with "recording never started", which
+    # is a fact about the harness rather than about capture.
+    if [ ! -e "$root/recording-stopped" ]; then
+        bad "$name" "recording never reached its stop; the emulator did not get far enough to test capture"
+        return
+    fi
+    # The emulator is gone, but ffmpeg may not be. See wait_for_stable_file.
+    wait_for_stable_file "$out" 60
+    if [ ! -s "$out" ]; then bad "$name" "recording stopped but no capture file was written"; return; fi
 
     local frames; frames="$(ffprobe -v error -select_streams v:0 \
         -count_packets -show_entries stream=nb_read_packets \
@@ -260,7 +410,7 @@ LUA
 
 usage() {
     cat <<EOF
-cases:
+cases (name any of them as arguments to run just those):
   mock        conformance with no emulator
   dirname     package runs from a wrongly-named directory
   conformance conformance inside the emulator
@@ -269,15 +419,30 @@ cases:
 EOF
 }
 
+# NAMING CASES. `--list` has always printed the five names and there was no way
+# to RUN one, so diagnosing a single failing case meant re-running all five -
+# about four minutes for one 30-second question. The names it prints are now
+# accepted as arguments.
 FAST=0
+declare -a want=()
 for a in "$@"; do
     case "$a" in
         --fast) FAST=1 ;;
         --list) usage; exit 0 ;;
         -h|--help) sed -n '2,30p' "$SELF"; exit 0 ;;
-        *) printf 'unknown option: %s\n' "$a" >&2; exit 1 ;;
+        -*) printf 'unknown option: %s\n' "$a" >&2; exit 1 ;;
+        mock|dirname|conformance|script|capture) want+=("$a") ;;
+        *) printf 'unknown case: %s (see --list)\n' "$a" >&2; exit 1 ;;
     esac
 done
+
+# A named case runs whether or not it is one of the slow ones; --fast is only
+# meaningful when selecting the default set.
+selected() {
+    [ ${#want[@]} -eq 0 ] && return 0
+    local w; for w in "${want[@]}"; do [ "$w" = "$1" ] && return 0; done
+    return 1
+}
 
 ROM="$(find_rom)"
 printf 'flycast-dojo integration tests\n'
@@ -285,14 +450,20 @@ printf '  binary: %s\n' "$BIN"
 printf '  rom:    %s\n' "${ROM:-<none>}"
 printf '  work:   %s\n\n' "$WORK"
 
-case_mock
-case_dirname
-if [ "$FAST" -eq 0 ]; then
-    case_emulator_conformance
-    case_script_loads
-    case_capture
+selected mock    && case_mock
+selected dirname && case_dirname
+if [ "$FAST" -eq 0 ] || [ ${#want[@]} -gt 0 ]; then
+    selected conformance && case_emulator_conformance
+    selected script      && case_script_loads
+    selected capture     && case_capture
 else
     skip "emulator cases" "--fast was given"
+fi
+
+# A run that selected nothing is vacuous and must not report success.
+if [ $((pass + fail + skipped)) -eq 0 ]; then
+    printf 'no cases ran\n' >&2
+    exit 2
 fi
 
 printf '\npass=%d fail=%d skip=%d\n' "$pass" "$fail" "$skipped"

@@ -110,18 +110,44 @@ list had simply not kept up, and found two more that mattered:
   `scripts/tests/repro/oracle_probe.lua` as the only `.lua` in the tree nothing
   ran. Registered as `flycast.oracle`.
 
+- **`scripts/openarm.sh --self-test`** — the `WILL_FAIL` replacement and sole
+  judge of both known-open entries, distinguishing three verdicts with no
+  coverage of that discrimination. Now `flycast.openarm_can_fail`.
+- **`shell/linux/integration-tests`** — now `flycast.integration`. Registering
+  it required fixing it, and what it hid is the argument for this whole
+  section. Three of its five cases had been failing and nothing ran them:
+
+  - It set **`FLYCAST_ROOT`**, which nothing reads — `core/linux-dist/main.cpp`
+    reads `XDG_CONFIG_HOME` / `XDG_DATA_HOME`. The emulator cases wrote their
+    script where the emulator never looked, **and every run wrote into the
+    developer's real `~/.config/flycast-dojo`**. The isolation was decorative,
+    which is the rule in CLAUDE.md about not touching the real desktop being
+    broken by the harness that models good practice.
+  - **`( cd / && ... & echo $! )` captured the subshell's PID**, so every
+    `kill -TERM` hit a process that had already exited and the emulator was
+    never signalled. 23 orphans and a load average of 141 came from this.
+    `pkill -x flycast-dojo` masked it while the binary carried that name.
+  - The capture case waited a fixed 36 s for work that takes ~52 s here, and
+    the video is finalised by an **external ffmpeg that outlives the emulator**.
+
+  It also gained the ability to run one named case, which `--list` had always
+  advertised and nothing accepted.
+
 Still out, and ranked by what they guard:
 
-- **`shell/linux/integration-tests`** — `docs/CROSS-PROJECT-LESSONS.md` calls it
-  the best test artefact in the tree, and it is in no ctest and no CI workflow.
-  Its `--fast` arm needs neither ROM nor display.
-- **`scripts/openarm.sh`** — the `WILL_FAIL` replacement, sole judge of both
-  known-open entries, distinguishing three verdicts with no coverage of that
-  discrimination. A judge with no arm of its own is the specific thing
-  `selftest.sh`, `livetest.sh` and `checks.sh` each had to learn.
 - **`scripts/lib/hotkeys.sh`** — parses hotkeys out of emulator log text for
   two harnesses and has no self-test. If its parsing silently returns empty,
   those harnesses press nothing and blame the feature.
+- **`scripts/stepprobe.sh`** — deliberately out for its timings, which are a
+  fact about the machine. But the rationale does not cover its two `exit 1`
+  shape assertions, which `docs/STEP-GRANULARITY.md` reasons from and nothing
+  checks.
+- **The stale-binary hole, which is not a registration gap but the same class.**
+  `scripts/testrun.sh` takes `FLYCAST_BIN` from the environment and checks only
+  that it is executable, never that it is newer than `core/`. **Every entry in
+  the suite can pass against a binary that predates the change under test.**
+  `shell/linux/integration-tests` defaults to `artifact/bin/flycast-dojo`,
+  which on this machine was a week stale.
 
 `stepprobe.sh` is deliberately out — its milliseconds are a fact about the
 machine. Note the rationale covers the timings and not its two `exit 1` shape
