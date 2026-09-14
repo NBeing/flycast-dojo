@@ -511,8 +511,22 @@ each is a test:
   take's last frame the recorder is appending and there is nothing to differ
   from. The test asked for a divergence in a region where one cannot exist and
   reported the emulator broken.
-- **A state saved before a rewind below it is STALE** — it will load and verify
-  byte-perfect and the movie will still desync. Warn, but allow.
+- **A state saved before a rewind below it is STALE** `[DONE 2026-09-14]` — the
+  nastiest of the five, because the symptom is silent: such a state loads and
+  verifies byte-perfect and the movie desyncs anyway. `scripts/recordtest.sh`
+  saves a second anchor HIGH and before the rewind, then drives the divergence
+  BELOW it:
+
+      high anchor @9958: clean -> stale (divergence at 9953, below it)
+      stale anchor loaded: 10049 -> back to 9958 -> ran on to 10048
+
+  **Clean first, or the claim is untestable** - an anchor that was stale all
+  along satisfies "it went stale" by itself. And "warn but ALLOW" is asserted
+  too, because refusing to load a stale state would take the artist's own work
+  away, which is worse than the desync it warns about. The still-loads check
+  needs BOTH conditions: below where the load was asked from (the load moved the
+  machine) and above the anchor (it ran on afterwards). One alone passes against
+  a dead machine, the other against a no-op.
 - **Loading an empty slot must not stop the emulator.** `[DONE 2026-09-13]`
   `scripts/tests/open/emptyslot.lua`. The claim HOLDS, on the direct path and on
   the deferred one through `gui_loadState`'s stop/start. A stricter property does
@@ -528,6 +542,19 @@ each is a test:
 The round trip that proves the lot: record a segment, rewind into it,
 re-record different input, and require the movie to replay to the *new* hashes
 while the frames outside the retry keep the *old* ones.
+
+`[MOSTLY DONE 2026-09-14]` `scripts/recordtest.sh` is now exactly that shape end
+to end - record, rewind, drive a real divergence, replay - and requires the
+replay to match the recording **hash for hash**, 59 frames, with 100 distinct
+states in the window so the comparison has something to catch. The tail half is
+covered by the no-truncate claim.
+
+**What is still missing, stated rather than glossed:** it does not explicitly
+compare the frames OUTSIDE the retry against their PRE-retry values. The replay
+matching the recording proves the movie replays to the new take; it does not
+independently prove the untouched frames were left alone. That needs the old
+hashes captured before the rewind and compared after, and is the last piece of
+section 2.
 
 ### 3. Generations RESTORE — a feature, not a test
 

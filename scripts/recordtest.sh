@@ -112,6 +112,7 @@ local function w(s) local f = io.open(out, "a"); if f then f:write(s .. "\n"); f
 local n, stage, first, taken = 0, "boot", nil, 0
 local savedN, loadedN, beforeLoad = 0, 0, 0
 local diverged, divergedOff = false, false
+local anchoredHigh, stalePre, staleLoadAt = false, nil, 0
 local lastF = nil
 local prev = flycast_callbacks and flycast_callbacks.vblank
 flycast_callbacks = flycast_callbacks or {}
@@ -153,6 +154,20 @@ flycast_callbacks.vblank = function()
 			stage = "saved"; return
 		end
 		if stage == "saved" then
+			-- A SECOND ANCHOR, SAVED HIGH AND BEFORE THE REWIND.
+			--
+			-- docs/TEST-PLAN.md section 2: "a state saved before a rewind BELOW
+			-- it is STALE - it will load and verify byte-perfect and the movie
+			-- will still desync. Warn, but allow." Slot 0 is the rewind target
+			-- and sits at the bottom; this one sits ~10 frames above it, so the
+			-- divergence the collect stage drives lands UNDER it and must
+			-- invalidate it. An anchor the event is above would stay clean and
+			-- prove nothing.
+			if n == savedN + 10 and not anchoredHigh then
+				anchoredHigh = true
+				flycast.savestate.saveSlotLater(2)
+				w("anchor2at=" .. tostring(f))
+			end
 			-- LET THE DEFERRED SAVE LAND. It runs at the next drain, not here.
 			if n < savedN + 15 then return end
 			--- AND THEN RESTORE IT, WHICH IS THE POINT OF THIS PHASE.
@@ -239,6 +254,13 @@ flycast_callbacks.vblank = function()
 	--- broken when it had asked for a divergence in a region where one cannot
 	--- exist. The rewind lands ~14 frames below the frontier, so this sits at +3.
 	if PHASE == "record" and stage == "collect" then
+		if taken == 1 and stalePre == nil then
+			-- BEFORE the divergence: the high anchor must still be CLEAN, or
+			-- "it went stale" says nothing about what made it stale.
+			local af, verdict = flycast.savestate.anchor(2)
+			stalePre = tostring(verdict)
+			w("stalepre=" .. stalePre .. " at=" .. tostring(af))
+		end
 		if taken == 3 and not diverged then
 			diverged = true
 			pcall(flycast.input.setButton, 1, "a", true)
@@ -250,6 +272,18 @@ flycast_callbacks.vblank = function()
 		elseif diverged and not divergedOff then
 			pcall(flycast.input.setButton, 1, "a", true)
 		end
+	end
+
+	if stage == "staleprobe" then
+		-- THE OTHER HALF OF THE CLAIM: "warn, but ALLOW". A stale anchor that
+		-- refused to load would take the artist's own work away, so the test
+		-- requires the machine to be running after loading one.
+		if n < staleLoadAt + 90 then return end
+		w("stalealive=" .. tostring(flycast.frame.count()))
+		flycast.replay.stopRecording()
+		w("ok")
+		flycast.emulator.exit()
+		return
 	end
 
 	if stage ~= "collect" then return end
@@ -274,7 +308,19 @@ flycast_callbacks.vblank = function()
 	w("H " .. tostring(f) .. " " .. tostring(flycast.savestate.hash()))
 	if taken < COLLECT then return end
 
-	if PHASE == "record" then flycast.replay.stopRecording() end
+	if PHASE == "record" then
+		-- AFTER the divergence, which landed BELOW the high anchor.
+		local af2, verdict2 = flycast.savestate.anchor(2)
+		w("stalepost=" .. tostring(verdict2) .. " at=" .. tostring(af2))
+		-- AND IT MUST STILL LOAD. "Warn, but allow" is half the claim: a stale
+		-- anchor that refuses to load would take the artist's own work away.
+		local aliveFrom = flycast.frame.count()
+		flycast.savestate.loadSlotLater(2)
+		w("staleloadfrom=" .. tostring(aliveFrom))
+		staleLoadAt = n
+		stage = "staleprobe"
+		return
+	end
 	w("ok")
 	flycast.emulator.exit()
 end
@@ -378,6 +424,42 @@ fi
 if [ -z "$CONFFRAME" ] || [ "$CONFFRAME" -lt "$DIVFROM" ] || [ "$CONFFRAME" -gt "$DIVTO" ]; then
 	fail "the re-record event names frame ${CONFFRAME:-<none>}, outside the driven window $DIVFROM..$DIVTO - a rewind counted as the event" divergence
 fi
+
+# ---- section 2: a state saved before a rewind BELOW it is STALE ------------
+# The nastiest of the five, because the symptom is silent: such a state LOADS and
+# VERIFIES byte-perfect, and the movie desyncs anyway. The plan's wording is
+# "warn, but allow", so both halves are asserted - the verdict flips, and the
+# state still loads and leaves the machine running.
+A2=$(field record anchor2at)
+# FIRST WORD ONLY - the Lua writes "clean at=9958" so the frame travels with the
+# verdict for the human reading the log, and the judge must not compare against
+# the whole line. `[MEASURED 2026-09-14]` it did, and reported the anchor as not
+# starting clean when it had.
+SPRE=$(field record stalepre | cut -d' ' -f1); SPOST=$(field record stalepost | cut -d' ' -f1)
+SFROM=$(field record staleloadfrom); SALIVE=$(field record stalealive)
+[ -n "$A2" ] && [ -n "$SPRE" ] && [ -n "$SPOST" ] || fail "the high anchor was never saved or never judged"
+echo "  high anchor @$A2: $SPRE -> $SPOST (divergence at $CONFFRAME, below it)"
+# CLEAN FIRST, or "it went stale" is not about the divergence. An anchor that was
+# stale all along would satisfy the second half on its own.
+case "$SPRE" in
+clean) ;;
+*) fail "the high anchor read '$SPRE' BEFORE the divergence - it must start clean or the claim is untestable" ;;
+esac
+case "$SPOST" in
+stale) ;;
+*) fail "a divergence at $CONFFRAME, below an anchor at $A2, left it '$SPOST' - a state the movie has diverged under must not read clean" divergence ;;
+esac
+# AND IT STILL LOADS. Two conditions, because each alone is weak: the frame must
+# be BELOW where the load was asked from (so the load actually moved the machine
+# back) and ABOVE the anchor (so the machine ran on afterwards).
+[ -n "$SFROM" ] && [ -n "$SALIVE" ] || fail "the stale anchor was never loaded, so 'warn but ALLOW' is untested"
+if [ "$SALIVE" -ge "$SFROM" ]; then
+	fail "loading the stale anchor did not move the machine back ($SFROM -> $SALIVE)" divergence
+fi
+if [ "$SALIVE" -le "$A2" ]; then
+	fail "the machine did not run on after loading the stale anchor (anchor $A2, reached $SALIVE)" divergence
+fi
+echo "  stale anchor loaded: $SFROM -> back to $A2 -> ran on to $SALIVE"
 
 # ---- THE VACUITY GATE, before any comparison -------------------------------
 # A frozen machine reproduces itself perfectly. If the recorded window holds one
