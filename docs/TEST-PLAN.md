@@ -302,11 +302,31 @@ when `mmu_enabled()` - the function early-returns to `bm_GetCode()` otherwise.
 Dreamcast titles do not use the MMU, so those lines never executed in any run
 here. There is no other cycle charge anywhere in the dynarec path.
 
-The bisect was right and the story told about it was not. What clearing the block
-cache actually changes is **`[OPEN]`**. The leading candidate is block
-BOUNDARIES: the dynarec accounts guest cycles per compiled block, so a cache
-rebuilt from a different entry point can split code differently and reach the
-same instruction with a different budget spent. Not measured.
+The bisect was right and the story told about it was not. **`[MEASURED
+2026-09-13]` the cause is now confirmed from both directions**, which is as far
+as measurement can take it without a mechanism:
+
+| experiment | result |
+|---|---|
+| clear the cache on the CONTINUING machine (`PostSaveInvalidate=64`) | 56/56 identical |
+| do NOT clear it on the RESTORED machine (`LoadKeepBlockCache=yes`) | 56/56 identical |
+
+So the block cache is the whole of the dynarec-side difference, and nothing else
+in `dc_loadstate` contributes. That rules out a correlation.
+
+**It does not give a fix.** `LoadKeepBlockCache` is a DIAGNOSTIC and unsafe as a
+setting: the cache maps guest PC to compiled code, and a state load replaces RAM
+wholesale without going through the write path that normally invalidates it, so
+keeping it leaves translations that may no longer match their source. That is
+why `dc_loadstate` clears it. (Rollback is the interesting exception - `[SOURCE]`
+ggpo.cpp calls `dc_deserialize` directly and never clears, which is presumably
+judged safe because a rollback rewinds only a few frames.)
+
+WHY a rebuilt cache changes cycle accounting is still **`[OPEN]`**. The leading
+candidate is block BOUNDARIES: the dynarec accounts guest cycles per compiled
+block, so a cache rebuilt from a different entry point can split code differently
+and reach the same instruction having spent a different budget. Not measured, and
+marked as the hypothesis it is.
 
 **AND IT IS NOT THE WHOLE STORY** - re-measured `[2026-09-12]` after the seek
 artifact in 1b was found, because the first version of this paragraph rested on a
@@ -477,7 +497,17 @@ each is a test:
   write whose bytes actually DIFFER, with that divergence frame as the event.
 - **A state saved before a rewind below it is STALE** — it will load and verify
   byte-perfect and the movie will still desync. Warn, but allow.
-- **Loading an empty slot must not stop the emulator.**
+- **Loading an empty slot must not stop the emulator.** `[DONE 2026-09-13]`
+  `scripts/tests/open/emptyslot.lua`. The claim HOLDS, on the direct path and on
+  the deferred one through `gui_loadState`'s stop/start. A stricter property does
+  not, and the test is an open arm for it: **a failed load mutates the machine**,
+  at byte 284 of `Sh4Context` - `old_sr`, the saved status register - measured
+  twice at the same context offset in blobs of different sizes. The instrument is
+  controlled: four serializes with no load between them are byte-identical, so it
+  is the load and not the hashing. `[SOURCE]` `dc_loadstate` returns before
+  touching the machine when the file will not open, and `luaSavestateSlot` calls
+  it with no stop/start around it - so the mechanism is not visible in the code
+  and is recorded as open rather than explained.
 
 The round trip that proves the lot: record a segment, rewind into it,
 re-record different input, and require the movie to replay to the *new* hashes

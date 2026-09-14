@@ -163,6 +163,11 @@ flycast_callbacks.vblank = function()
 			--- and nothing more, so this test no longer waits on an emulator
 			--- change to be meaningful.
 			beforeLoad = flycast.frame.count()
+			-- HOW LONG IS THE MOVIE BEFORE THE LOAD. docs/TEST-PLAN.md section 2:
+			-- "a WRITE load does not truncate - the tail stays as the un-reached
+			-- old take and is overwritten in place". Truncation would drop every
+			-- frame from the loaded one onward, so the length is the observable.
+			w("lenpre=" .. tostring(flycast.movie.length()))
 			flycast.savestate.loadSlotLater(0)
 			loadedN = n
 			stage = "restoring"; return
@@ -188,6 +193,7 @@ flycast_callbacks.vblank = function()
 			if not flycast.replay.isRecording() then
 				w("err=the load stopped the recording"); w("ok"); flycast.emulator.exit(); return
 			end
+			w("lenpost=" .. tostring(flycast.movie.length()))
 			first = flycast.frame.count()
 			w("first=" .. tostring(first))
 			w("clip=" .. tostring(flycast.replay.currentPath()))
@@ -279,6 +285,25 @@ echo "  recorded: $(grep -c '^H ' "$OUT/record.txt") frames from movie frame $FI
 echo "  clip:     $CLIP"
 [ -n "$CLIP" ] && [ -f "$CLIP" ] || fail "no .flyr was written"
 echo "  size:     $(stat -c%s "$CLIP") bytes"
+
+# ---- section 2: a WRITE load does not truncate -----------------------------
+# THE PRECONDITION IS ASSERTED FIRST, and it is not decoration: a READ load seeks
+# and keeps the movie too, so "the length did not shrink" is satisfied by the
+# wrong gesture. `[SOURCE]` dojo.cpp logs the WRITE case specifically, and its
+# guard is narrow - not a netplay match, not macro-armed, an append target open,
+# and existing frames at or past the loaded one.
+WLOAD=$(tr -d '\0' < "$OUT/record.log" 2>/dev/null | grep -ac "TAS: WRITE load @")
+LENPRE=$(field record lenpre); LENPOST=$(field record lenpost)
+if [ "${WLOAD:-0}" -eq 0 ]; then
+	fail "the record phase never took a WRITE load, so the no-truncate claim is untested"
+fi
+echo "  WRITE load: yes; movie length $LENPRE -> $LENPOST"
+if [ -z "$LENPRE" ] || [ -z "$LENPOST" ]; then
+	fail "the movie length was not reported on both sides of the WRITE load"
+fi
+if [ "$LENPOST" -lt "$LENPRE" ]; then
+	fail "a WRITE load TRUNCATED the movie: $LENPRE -> $LENPOST frames (the un-reached tail should stay as the old take)" divergence
+fi
 
 # ---- THE VACUITY GATE, before any comparison -------------------------------
 # A frozen machine reproduces itself perfectly. If the recorded window holds one

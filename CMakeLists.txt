@@ -2173,6 +2173,29 @@ set_tests_properties(flycast.recordtest_can_fail PROPERTIES
 	RUN_SERIAL TRUE
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;RECORDTEST_DISPLAY=79")
 
+# LOADING AN EMPTY SLOT - one of docs/TEST-PLAN.md section 2's re-record claims,
+# and the first of them to be written. The plan's claim holds: the emulator keeps
+# running, on BOTH the direct path and the deferred one through gui_loadState's
+# stop/start. A stricter property does not, which is why this is an open arm:
+#
+# `[MEASURED 2026-09-13]` a FAILED load mutates the machine. The blob differs at
+# byte 284 of Sh4Context - `gdb ptype /o` names it `old_sr`, the saved status
+# register - measured twice, at the same context offset in blobs of different
+# sizes. The instrument is controlled: four serializes with NO load between them
+# are byte-identical, so it is the load and not the hashing.
+#
+# It matters because a stray load onto an empty slot is something a user does by
+# accident, and a perturbed register can desync an otherwise good movie. The
+# notification says "Save state not found"; the machine disagrees.
+add_test(NAME flycast.emptyslot_known_open
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/openarm.sh
+			${CMAKE_CURRENT_SOURCE_DIR}/scripts/tests/open/emptyslot.lua
+			"the baseline is quiet, and nothing was restored")
+set_tests_properties(flycast.emptyslot_known_open PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 400
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
 # A KNOWN-OPEN DEFECT, KEPT EXECUTABLE. `[MEASURED 2026-09-12]` a machine
 # restored from a deferred savestate does not walk the path it walked the first
 # time: two passes over the same frames in ONE process, inputs from the same

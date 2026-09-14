@@ -80,6 +80,24 @@ for f in $(ls -1t "${XDG_DATA_HOME:-$HOME/.local/share}"/flycast-dojo/replays/*/
 done
 [ -n "$CLIP" ] || { echo "statesuitest: SKIP - no clip with a savestate"; exit $SKIP; }
 
+# EVERY EXIT PATH TEARS DOWN ITS TRIO.
+#
+# `[MEASURED 2026-09-13, by a peer session]` the early return below - taken when
+# no STATES CELL line appears - skipped the kill at the bottom of gesture(), and
+# the next gesture() then overwrote FC/IPID/XPID, so the EXIT trap only ever saw
+# the SECOND trio. Ten flycast processes and one Xvfb ran at 100% CPU for twelve
+# hours on a twelve-core machine; load average reached 73 and swap filled.
+#
+# THE RULE IS GENERAL: a return that does not pass through teardown() is a leak.
+# Hoisted out of gesture() rather than nested in it, so it exists before the
+# first call and cannot be half-defined on an early exit.
+teardown() {
+	for p in $FC $IPID $XPID; do [ "$p" -ne 0 ] && kill "$p" 2>/dev/null; done
+	sleep 2
+	for p in $FC $IPID $XPID; do [ "$p" -ne 0 ] && kill -0 "$p" 2>/dev/null && kill -9 "$p" 2>/dev/null; done
+	FC=0; IPID=0; XPID=0
+}
+
 # ONE LAUNCH PER GESTURE, which is statestest.sh's shape and for a sharper
 # reason here. `[MEASURED 2026-09-13]` doing both gestures in one process
 # coupled them: the first click leaves the cell as an InputText, so the second
@@ -103,6 +121,18 @@ gesture() {
 
 	nohup Xvfb "$DISP" -screen 0 1600x1300x24 >"$w/xvfb.log" 2>&1 & XPID=$!
 	sleep 2
+	# DID OUR OWN Xvfb SURVIVE? If the display is already owned - by a leaked
+	# server from an earlier run, which is exactly what this script used to
+	# leave behind - Xvfb exits immediately and the emulator then attaches to a
+	# display THIS RUN DID NOT CREATE and does not control. Everything after
+	# would be measuring somebody else's screen. Same shape as hotkeytest
+	# treating an empty window handle as a SKIP rather than continuing.
+	if ! kill -0 "$XPID" 2>/dev/null; then
+		echo "statesuitest: SKIP - Xvfb $DISP did not start (display already in use?)"
+		sed -n '1,3p' "$w/xvfb.log" 2>/dev/null | sed 's/^/    /'
+		teardown
+		exit $SKIP
+	fi
 	DISPLAY="$DISP" nohup i3 -c "$OUT/i3.conf" >"$w/i3.log" 2>&1 & IPID=$!
 	sleep 2
 	XDG_CONFIG_HOME="$w/config" XDG_DATA_HOME="$w/data" DISPLAY="$DISP" "$EXE" \
@@ -139,7 +169,7 @@ gesture() {
 		| sort -u | wc -l; } > "$w.unbound"
 	echo "${GENSN:-0}" > "$w.gens"
 	: > "$w.edit"
-	if [ -z "$cx" ]; then return; fi
+	if [ -z "$cx" ]; then teardown; return; fi
 
 	wid=$(xdotool search --name "Flycast" 2>/dev/null | head -1)
 	geom=$(xdotool getwindowgeometry "$wid" 2>/dev/null | grep Position | head -1)
@@ -160,10 +190,7 @@ gesture() {
 
 	tr -d '\0' < "$w/out.log" | grep -a "STATES EDIT:" | tail -1 > "$w.edit"
 
-	for p in $FC $IPID $XPID; do [ "$p" -ne 0 ] && kill "$p" 2>/dev/null; done
-	sleep 2
-	for p in $FC $IPID $XPID; do [ "$p" -ne 0 ] && kill -0 "$p" 2>/dev/null && kill -9 "$p" 2>/dev/null; done
-	FC=0; IPID=0; XPID=0
+	teardown
 }
 
 printf 'font pango:monospace 8\n' > "$OUT/i3.conf"
