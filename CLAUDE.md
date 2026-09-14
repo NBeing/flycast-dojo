@@ -74,10 +74,33 @@
 > ring lights every button that is UP; a merge that does not merge still
 > produces a plausible-looking table).
 >
-> **The one genuinely file-wide coupling is his UI-text override shim** -
-> `tasText`/`tasButton`/`tasTip`/`uiResolve`, 36 functions and 387 lines wrapping
-> almost every widget call, backed by a generated manifest. Decide once whether to
-> adopt or strip it; deciding per window guarantees a mixed file.
+> ### `[LANDED 2026-09-14]` the UI-text shim is ADOPTED, and that changes the plan
+>
+> `core/dojo/ui_text.{h,cpp}` carries his `tasText`/`tasButton`/`tasTip` wrappers
+> under **his names**, with 150 call sites converted across the five panels that
+> draw. **His remaining windows now paste in with their widget calls unchanged** -
+> which is the entire reason to take a layer like this, and why renaming the
+> wrappers to something this tree would prefer would have been the worst of both.
+>
+> Two departures, both recorded in the header with their reasons:
+>
+> - **The string list is DERIVED, not scanned.** His editor reads a manifest
+>   produced by `tools/extract_ui_text.py`; that is a second owner of "what
+>   strings this UI draws" and §4 below is about exactly that failure. A registry
+>   the wrappers populate cannot drift from the wrappers. The cost is real and the
+>   panel states it: *"N strings drawn so far this session"*, never *"N strings"*.
+> - **No `ImGuiColorTextEdit`.** His editor pulls in 5,106 lines of third-party
+>   widget for multi-cursor editing; `InputTextMultiline` renames a button fine.
+>   One of the four blocking dependencies stays off the books.
+>
+> **`fmtSignature` had an out-of-bounds read in his shipped version** - `continue`
+> inside a `for` runs the increment, so a label ending in a lone `%` steps past
+> the NUL. Reachable from the editor this layer exists to provide. Found by a
+> boring edge-case claim while every interesting claim passed.
+>
+> **A label carries its ImGui id.** Identity comes from the whole label including
+> everything after `##`, so an override must replace only the visible part and
+> re-attach the suffix, or widgets silently lose state or collide.
 >
 > So "only the UI is missing" is **no longer true**. It was true of the 2026-09-07
 > snapshot `docs/DIVERGENCE-FROM-DAVID.md` measured, when his GUI file was 21,877
