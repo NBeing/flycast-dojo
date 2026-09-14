@@ -97,10 +97,36 @@ So there is ONE real hole, and it is the one that matters most: the re-record
 rules. That is a smaller and sharper answer than the first version gave, and it
 is the reason this section now says what instrument produced it.
 
-**Exists but does not run:** `isotest.sh`, `replay-bindings-test.sh`, and until
-now `recordtest.sh`. `stepprobe.sh` is deliberately out — it is a measurement
-harness whose milliseconds are a fact about the machine, and it asserts only the
-two shape claims `docs/STEP-GRANULARITY.md` reasons from.
+**Exists but does not run.** `[CORRECTED 2026-09-14]` this list named
+`isotest.sh`, `replay-bindings-test.sh` and `recordtest.sh`; all three are
+registered now. A census of all 20 harnesses against every `add_test` found the
+list had simply not kept up, and found two more that mattered:
+
+- **`scripts/checks.sh --self-test`** — the gate that enforces "a skipped check
+  is not a passing one" was itself run by nothing. The detector had the defect
+  it detects. Registered as `flycast.checks_can_fail`.
+- **`scripts/reprotest.sh --oracle`** — the only differential check against a
+  second implementation, unregistered since it was written, which also left
+  `scripts/tests/repro/oracle_probe.lua` as the only `.lua` in the tree nothing
+  ran. Registered as `flycast.oracle`.
+
+Still out, and ranked by what they guard:
+
+- **`shell/linux/integration-tests`** — `docs/CROSS-PROJECT-LESSONS.md` calls it
+  the best test artefact in the tree, and it is in no ctest and no CI workflow.
+  Its `--fast` arm needs neither ROM nor display.
+- **`scripts/openarm.sh`** — the `WILL_FAIL` replacement, sole judge of both
+  known-open entries, distinguishing three verdicts with no coverage of that
+  discrimination. A judge with no arm of its own is the specific thing
+  `selftest.sh`, `livetest.sh` and `checks.sh` each had to learn.
+- **`scripts/lib/hotkeys.sh`** — parses hotkeys out of emulator log text for
+  two harnesses and has no self-test. If its parsing silently returns empty,
+  those harnesses press nothing and blame the feature.
+
+`stepprobe.sh` is deliberately out — its milliseconds are a fact about the
+machine. Note the rationale covers the timings and not its two `exit 1` shape
+assertions, which are what `docs/STEP-GRANULARITY.md` reasons from and which
+nothing checks.
 
 ---
 

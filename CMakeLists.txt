@@ -2040,6 +2040,33 @@ add_test(NAME flycast.configaudit_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/configaudit.py --self-test)
 set_tests_properties(flycast.configaudit_can_fail PROPERTIES TIMEOUT 120)
 
+# THE GATE THAT GUARDS THE SUITE, GUARDED. scripts/checks.sh is what enforces
+# doctrine rule 5 - "a skipped check is not a passing one, and must not report
+# as one" - by running ctest and refusing to be green over a Skipped line. Its
+# judge is a function precisely so it can be fed summaries this machine did not
+# produce, and it has four arms including a control.
+#
+# `[MEASURED 2026-09-14]` and it was registered NOWHERE. The detector for
+# "exists, works, is never run" had the defect it detects. That is not an
+# ironic footnote: this judge is the single point every other entry's verdict
+# passes through, and CMakeLists.txt:199 already records that the JUDGE is the
+# part which silently stops discriminating.
+#
+# Proven able to fail, in both directions, because one sabotage is not enough -
+# a judge that returns non-zero unconditionally satisfies the failure, skip and
+# no-summary arms all three:
+#
+#   judge always non-zero    -> the CONTROL arm fails ("a genuinely clean run
+#                               is still accepted": wanted rc=0, got rc=1)
+#   skip detection blinded   -> the SKIP arm fails ("a skip is NOT a pass":
+#                               wanted rc=2, got rc=0)
+#
+# Different sabotages, different arms. Needs no ROM, no display and no build -
+# it feeds the judge four temp files and exits.
+add_test(NAME flycast.checks_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/checks.sh --self-test)
+set_tests_properties(flycast.checks_can_fail PROPERTIES TIMEOUT 60)
+
 # DO THE FIVE FILES THAT MUST AGREE ABOUT A HOTKEY ACTUALLY AGREE?
 #
 # A hotkey is not one declaration, it is five: the id in gamepad.h, a row in
@@ -2476,6 +2503,50 @@ set_tests_properties(flycast.crossprocess_cold PROPERTIES
 	TIMEOUT 900
 	RUN_SERIAL TRUE
 	DEPENDS flycast.crossprocess
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
+
+# THE ONLY DIFFERENTIAL CHECK AGAINST A SECOND IMPLEMENTATION, and until now
+# the only one ctest could not reach. Every other entry compares this binary
+# against itself, which cannot see anything both halves share. This compares it
+# against David's fork on the same clip and the same savestate.
+#
+# `[MEASURED 2026-09-14]` it had been unregistered since it was written on
+# 2026-09-09, which also stranded scripts/tests/repro/oracle_probe.lua as the
+# only .lua in the tree nothing runs. Re-running it after five days of changes
+# reproduced the baseline digit for digit: 169/169 identical at offset 91, with
+# A and B distinct-sample counts of 154 and 153 of 260. The distinct counts
+# matching is the load-bearing part - a matching VERDICT is consistent with two
+# sequences that merely happen to agree, a matching number of distinct values
+# is not.
+#
+# ORACLE_SEQ=260 IS DELIBERATE AND MUST NOT BE DROPPED TO THE DEFAULT. The
+# probe defaults to 150, which yields a 59/59 window. Both arms were measured
+# and both are in a2f9a9e40's message, so running the default and comparing it
+# against the remembered "169" manufactures a regression out of a window size.
+#
+# SKIPS RATHER THAN FAILS when the second fork is not on this machine, and that
+# is the honest verdict: the check genuinely cannot run. It skips on a missing
+# binary, missing xdotool, missing i3 (a bare Xvfb swallows keys), missing ROM,
+# or no clip with a savestate beside it. scripts/checks.sh exits 2 on any of
+# those, so the skip cannot read as green.
+#
+# WHAT IT DOES NOT COVER, said out loud. The fixture is a V48 state written
+# 2026-09-07; we are on V49 since 221b0c519 and his tree pins Current = V48 and
+# throws on anything newer. So this measures the forks agreeing over the V48
+# path, and V49's added bytes are restored by NEITHER build here. See the
+# SAVESTATE INTERCHANGE block in scripts/reprotest.sh.
+set(FLYCAST_ORACLE_BIN "$ENV{HOME}/dev/flycast-rr-oracle/build/flycast"
+	CACHE FILEPATH "Second-fork flycast binary for reprotest.sh --oracle; the test SKIPs if absent")
+add_test(NAME flycast.oracle
+	COMMAND ${CMAKE_COMMAND} -E env ORACLE_SEQ=260
+		${CMAKE_CURRENT_SOURCE_DIR}/scripts/reprotest.sh
+		--oracle ${FLYCAST_ORACLE_BIN} --timeout 300)
+set_tests_properties(flycast.oracle PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 900
+	# RUN_SERIAL because it drives a private Xvfb + i3 and launches two emulators.
+	RUN_SERIAL TRUE
+	DEPENDS flycast.crossprocess_cold
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>")
 
 add_test(NAME flycast.lua

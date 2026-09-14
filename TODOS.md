@@ -652,8 +652,12 @@ skip as green: `100% tests passed, 0 tests failed out of 15`, exit 0, with
 run those); the **summary** was what lied. The gate caught a second one the same
 day: `flycast.crossprocess` skipping on its own, one run in seven.
 
-**17 entries**, up from 10 at the start of that session. Seven are `_can_fail`
-twins or carry their own control arm. The cheap ones first:
+**32 entries** `[MEASURED 2026-09-14]`, up from 10 when this gate was written.
+`[CORRECTED 2026-09-14]` this line said **17** and had been stale by fifteen;
+a count of the suite that drifts is the same defect the suite exists to catch,
+one level up. Verify with `ctest --test-dir build-dojo7 -N | tail -1` rather
+than trusting this number. Roughly a third are `_can_fail` twins or carry
+their own control arm. The cheap ones first:
 
 | entry | s | what it is |
 |---|---|---|

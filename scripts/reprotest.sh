@@ -11,15 +11,26 @@
 # "the bulletproof/cross-machine mode"; cross-PROCESS agreement is the weakest
 # form of that claim, and it had never been measured.
 #
-# MODES
+# MODES - all six the parser accepts. `[CORRECTED 2026-09-14]` this block
+# listed three and described --cold as skipping, which the script's OWN
+# correction #2 below contradicts. A header that disagrees with what it runs
+# reports one failure shape as another.
 #   (default)  --from-state   both runs seek to the clip's savestate first.
 #                             This is what the rest of the suite does, and it
 #                             WORKS here.
 #   --cold                    no seek: boot from power-on, the way nbneo's
-#                             cold-boot-twice probe does. See COLD BOOT below -
-#                             it SKIPs on this machine, for a measured reason.
+#                             cold-boot-twice probe does. It RUNS - see COLD
+#                             BOOT below, and correction #2 for why this line
+#                             used to say it skipped.
 #   --self-test               the sabotage arm: a third run pokes one word of
 #                             guest RAM and MUST disagree with the first two.
+#   --oracle <other-flycast>  compare against a SECOND FORK, not against
+#                             ourselves. The only differential check in the
+#                             tree against another implementation. Full
+#                             rationale at ORACLE MODE below.
+#   --runs N                  N runs instead of 2 (N>=3).
+#   --timeout N               per-run seconds; default 180. The oracle needs
+#                             more (300 measured at ORACLE_SEQ=260).
 #
 # COLD BOOT. docs/STATE-COVERAGE.md asks for a cold-boot-twice probe because
 # that is what caught nbneo's init-residue bugs (a CPU zeroed once per PROCESS
@@ -32,7 +43,7 @@
 # cross-process comparison, including --cold. So --cold measures cross-process
 # boot reproducibility, which is worth having and was untested, but it is NOT
 # the residue probe. That one has to boot twice in one process:
-# scripts/tests/coldboot_pair.lua, via lua emulator.restartLater().
+# scripts/tests/repro/coldboot_pair.lua, via lua emulator.restartLater().
 #
 # TWO CORRECTIONS ARE RECORDED HERE RATHER THAN QUIETLY EDITED OUT, because both
 # wrong versions looked measured:
@@ -318,8 +329,23 @@ oracle_correlate() {
 #
 # Every other mode here compares our binary against itself. This compares it
 # against a different tree - David's flycast-rr - on the same clip and the same
-# savestate, which are interchangeable between the forks
-# (`[MEASURED 2026-09-09]` his build loads ours and passes its own STATE VERIFY).
+# savestate.
+#
+# SAVESTATE INTERCHANGE IS NOW ONE-WAY, and this mode depends on it.
+# `[MEASURED 2026-09-09]` his build loaded ours and passed its own STATE VERIFY.
+# `[CORRECTED 2026-09-14]` that is no longer true in the our->his direction. We
+# bumped the format to V49 (844) on 2026-09-12 in 221b0c519 to carry the SH4
+# pipeline state; his serialize.h pins `Current = V48` and throws
+# "Version too recent" on anything newer. His states still load in ours.
+#
+# The consequence is a COVERAGE CLIFF rather than a failure, which is worse:
+# the clip loop below requires a *.state sibling, and every state regenerated
+# from current HEAD is V49. As fixtures are refreshed this mode quietly narrows
+# to whatever pre-V49 states survive, and then skips - it does not go red.
+# `[MEASURED 2026-09-14]` the fixture in use, NoBGM_VMU/2026-09-08T02_38_29Z,
+# carries version word 843 = V48 and predates the bump, so the 169/169 result
+# is a statement about the V48 path. Whether V49's added bytes are harmless
+# across forks is `[OPEN]` and needs a V48-writing build or a downgrade path.
 #
 # THE TWO FORKS SHARE NO CLOCK. His Lua has no frame/savestate/movie namespace
 # at all (822 lines to our 2572), so there is no frame number both sides can
