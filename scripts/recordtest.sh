@@ -112,7 +112,25 @@ local function w(s) local f = io.open(out, "a"); if f then f:write(s .. "\n"); f
 local n, stage, first, taken = 0, "boot", nil, 0
 local savedN, loadedN, beforeLoad = 0, 0, 0
 local diverged, divergedOff = false, false
+local BELOWPRE, INSIDEPRE = nil, nil
 local anchoredHigh, stalePre, staleLoadAt = false, nil, 0
+local recFrom, insideFrame = nil, nil
+
+--- THE MOVIE'S OWN BYTES FOR ONE FRAME, as a stable string.
+---
+--- Sorted by key so two samples are comparable, and "none" when the frame is not
+--- in the movie at all - which is a different thing from a frame of no buttons
+--- and must not read the same.
+local function btnsig(fr)
+	local t = flycast.movie.getButtons(fr, 1)
+	if t == nil then return "none" end
+	local ks = {}
+	for k in pairs(t) do ks[#ks + 1] = k end
+	table.sort(ks)
+	local out = {}
+	for _, k in ipairs(ks) do out[#out + 1] = (t[k] and "1" or "0") end
+	return table.concat(out)
+end
 local lastF = nil
 local prev = flycast_callbacks and flycast_callbacks.vblank
 flycast_callbacks = flycast_callbacks or {}
@@ -133,6 +151,7 @@ flycast_callbacks.vblank = function()
 		if stage == "settle" then
 			-- A few frames for the load to land before the movie opens.
 			if n < 220 then return end
+			recFrom = flycast.frame.count()	-- below the rewind target: never re-recorded
 			local started = flycast.replay.startRecording("")
 			if not started then
 				w("err=startRecording refused"); w("ok"); flycast.emulator.exit(); return
@@ -163,6 +182,10 @@ flycast_callbacks.vblank = function()
 			-- divergence the collect stage drives lands UNDER it and must
 			-- invalidate it. An anchor the event is above would stay clean and
 			-- prove nothing.
+			if n == savedN + 11 and recFrom ~= nil and BELOWPRE == nil then
+				BELOWPRE = btnsig(recFrom)
+				w("belowpre=" .. BELOWPRE .. " at=" .. tostring(recFrom))
+			end
 			if n == savedN + 10 and not anchoredHigh then
 				anchoredHigh = true
 				flycast.savestate.saveSlotLater(2)
@@ -262,6 +285,17 @@ flycast_callbacks.vblank = function()
 			w("stalepre=" .. stalePre .. " at=" .. tostring(af))
 		end
 		if taken == 3 and not diverged then
+			--- THE OLD TAKE FOR THE EXACT FRAME ABOUT TO BE REWRITTEN, read in
+			--- this callback - before the guest polls maple and the recorder
+			--- writes it. MEASURED 2026-09-14: guessing the frame as first+2
+			--- was wrong. taken counts SAMPLES and the movie index repeats when
+			--- the guest does not poll, so the third sample landed on 9953 and
+			--- not 9951 - and comparing an untouched frame to itself made the
+			--- whole claim read as "the retry changed nothing", which is
+			--- precisely the vacuity it exists to rule out.
+			insideFrame = f
+			INSIDEPRE = btnsig(f)
+			w("insidepre=" .. INSIDEPRE .. " at=" .. tostring(f))
 			diverged = true
 			pcall(flycast.input.setButton, 1, "a", true)
 			w("divfrom=" .. tostring(f))
@@ -310,6 +344,8 @@ flycast_callbacks.vblank = function()
 
 	if PHASE == "record" then
 		-- AFTER the divergence, which landed BELOW the high anchor.
+		w("belowpost=" .. btnsig(recFrom))
+		w("insidepost=" .. btnsig(insideFrame))
 		local af2, verdict2 = flycast.savestate.anchor(2)
 		w("stalepost=" .. tostring(verdict2) .. " at=" .. tostring(af2))
 		-- AND IT MUST STILL LOAD. "Warn, but allow" is half the claim: a stale
@@ -460,6 +496,26 @@ if [ "$SALIVE" -le "$A2" ]; then
 	fail "the machine did not run on after loading the stale anchor (anchor $A2, reached $SALIVE)" divergence
 fi
 echo "  stale anchor loaded: $SFROM -> back to $A2 -> ran on to $SALIVE"
+
+# ---- section 2: the frames OUTSIDE the retry keep the OLD take -------------
+# The half the hash round trip below cannot see. That comparison requires the
+# REPLAY to match the RECORDING - so a bug that corrupted frames outside the
+# retry would still pass it, because both sides would carry the same corruption.
+# Only values captured BEFORE the edit can catch that, which is what these are.
+BPRE=$(field record belowpre | cut -d' ' -f1);  BPOST=$(field record belowpost | cut -d' ' -f1)
+IPRE=$(field record insidepre | cut -d' ' -f1); IPOST=$(field record insidepost | cut -d' ' -f1)
+[ -n "$BPRE" ] && [ -n "$BPOST" ] && [ -n "$IPRE" ] && [ -n "$IPOST" ] \
+	|| fail "the movie was not sampled on both sides of the retry"
+echo "  below the rewind: $BPRE -> $BPOST"
+echo "  inside the retry: $IPRE -> $IPOST"
+# THE INSIDE PAIR IS THE NON-VACUITY, and it comes first: if the retry rewrote
+# nothing anywhere, "the frames outside were left alone" is true and empty.
+if [ "$IPRE" = "$IPOST" ]; then
+	fail "the retry did not change the frame it diverged on ($IPRE), so 'outside was left alone' proves nothing"
+fi
+if [ "$BPRE" != "$BPOST" ]; then
+	fail "a retry rewrote a frame BELOW the rewind point: $BPRE -> $BPOST" divergence
+fi
 
 # ---- THE VACUITY GATE, before any comparison -------------------------------
 # A frozen machine reproduces itself perfectly. If the recorded window holds one

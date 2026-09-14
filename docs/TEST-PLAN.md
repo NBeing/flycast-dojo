@@ -543,18 +543,39 @@ The round trip that proves the lot: record a segment, rewind into it,
 re-record different input, and require the movie to replay to the *new* hashes
 while the frames outside the retry keep the *old* ones.
 
-`[MOSTLY DONE 2026-09-14]` `scripts/recordtest.sh` is now exactly that shape end
-to end - record, rewind, drive a real divergence, replay - and requires the
-replay to match the recording **hash for hash**, 59 frames, with 100 distinct
-states in the window so the comparison has something to catch. The tail half is
-covered by the no-truncate claim.
+`[DONE 2026-09-14]` `scripts/recordtest.sh` is exactly that shape end to end -
+record, rewind, drive a real divergence, replay - and asserts all of it in ONE
+run:
 
-**What is still missing, stated rather than glossed:** it does not explicitly
-compare the frames OUTSIDE the retry against their PRE-retry values. The replay
-matching the recording proves the movie replays to the new take; it does not
-independently prove the untouched frames were left alone. That needs the old
-hashes captured before the rewind and compared after, and is the last piece of
-section 2.
+    WRITE load: yes; movie length 9963 -> 9963
+    rewind armed: 2; re-record events: 1
+    divergence driven at frames 9953..9958; confirmed at 9953
+    high anchor @9958: clean -> stale (divergence at 9953, below it)
+    stale anchor loaded: 10049 -> back to 9958 -> ran on to 10048
+    below the rewind: 00000000000000000 -> 00000000000000000
+    inside the retry: 00000000000000000 -> 10000000000000000
+    PASS - 59 frames recorded and replayed to the same state, hash for hash
+
+**The last two lines are the half the hash comparison cannot see.** That
+comparison requires the REPLAY to match the RECORDING, so a bug that corrupted
+frames outside the retry would still pass it - both sides would carry the same
+corruption. Only values captured BEFORE the edit catch that, and the inside pair
+is their non-vacuity: if the retry rewrote nothing anywhere, "the frames outside
+were left alone" is true and empty.
+
+`[MEASURED 2026-09-14]` the sampled frame was first guessed as `first + 2` and
+that was wrong: `taken` counts SAMPLES and the movie index REPEATS when the guest
+does not poll maple, so the third sample landed on 9953 rather than 9951. The
+test compared an untouched frame with itself and the whole claim read as "the
+retry changed nothing" - exactly the vacuity it exists to rule out. It now reads
+the old take in the same callback that drives the divergence, on the frame
+actually being rewritten.
+
+## Section 2 is complete `[2026-09-14]`
+
+All five claims are asserted, every one of them a sentence out of the TAS fork's
+own help text or comments. Four hold; the fifth - an empty-slot load - holds as
+written and fails a stricter property, tracked as an open arm.
 
 ### 3. Generations RESTORE — a feature, not a test
 
