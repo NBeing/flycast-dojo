@@ -401,11 +401,13 @@ agree (bisected to that one bit), and WHY is unknown. Measured after the V49 fix
 the dynarec arm still diverges at frame 71 with new hashes, so the two causes
 remain independent.
 
-Deciding what to do about the dynarec one is a judgement call rather than a bug
-fix: the `-= 100` exists so a guest does not spin while blocks compile, and
-removing it changes SH4 timing for everyone. Options are to stop charging host
-work to the guest, to charge it a constant, or to accept it and have re-record
-compare something other than a whole-machine hash.
+`[CORRECTED 2026-09-13]` this paragraph said deciding what to do about the
+dynarec one was a judgement call, weighed the `-= 100` against SH4 timing for
+every user, and listed three options. All of it rested on a charge that does not
+exist. There is no decision here and there never was - only an unexplained
+measurement. Next step is to find what `bm_ResetCache()` actually changes about
+cycle accounting, starting with whether recompiled blocks split at the same
+boundaries.
 
 ### 1b. `[WITHDRAWN 2026-09-12]` "the interpreter is not reproducible at all"
 
