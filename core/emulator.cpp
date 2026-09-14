@@ -918,7 +918,22 @@ void dc_loadstate(Deserializer& deser)
 	if (cfgLoadBool("dojo", "LoadResetCycles", false))
 		sh4cycles.reset();
 	mmu_set_state();
-	sh4_cpu.ResetCache();
+	/*
+		dojo:LoadKeepBlockCache - DIAGNOSTIC, off by default, and UNSAFE as a
+		setting. The block cache maps guest PC to compiled code; a state load
+		replaces RAM wholesale without going through the write path that
+		normally invalidates it, so skipping this leaves translations that may
+		no longer match the code they came from.
+
+		It exists to answer one question. `[MEASURED 2026-09-12]` clearing the
+		cache on the CONTINUING machine makes it agree with a restored one -
+		bisected to this single call. This is the converse: if NOT clearing it on
+		the restored machine also makes them agree, the cache is confirmed as the
+		whole of the difference. If they still diverge, something else in this
+		function is involved and the bisect was reading a correlation.
+	*/
+	if (!cfgLoadBool("dojo", "LoadKeepBlockCache", false))
+		sh4_cpu.ResetCache();
 	KillTex = true;
 }
 
