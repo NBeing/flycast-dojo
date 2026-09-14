@@ -35,3 +35,22 @@
 	# unpublished project at length. Make it public with:
 	#   gh repo edit NBeing/emuapi --visibility public --accept-visibility-change-consequences
 	url = git@github.com:NBeing/emuapi.git
+[submodule "reference/flycast-rr"]
+	# THE PORT ORACLE, PINNED - David's fork (magnetro1/flycast-rr). Reference
+	# only: nothing here compiles it, nothing includes from it, and no audit or
+	# harness scans it. It is checked out so that a claim about "what the fork
+	# does" can be verified against a KNOWN COMMIT rather than against whatever
+	# HEAD happened to be the day somebody looked.
+	#
+	# `[MEASURED 2026-09-14]` why the pin matters: docs/DIVERGENCE-FROM-DAVID.md
+	# concluded on 2026-09-07 that "the divergence is almost purely the UI
+	# layer", measured against his then-21,877-line dojo_gui.cpp. That file is
+	# now 26,591 lines and he has since added a whole module (tas_branch), so
+	# the conclusion went stale without anything in this tree changing. A
+	# submodule makes the version part of the record: bump it deliberately and
+	# re-measure, rather than drift.
+	#
+	# Its own deps/ submodules are NOT initialised and do not need to be - we
+	# read source, we never build it.
+	path = reference/flycast-rr
+	url = https://github.com/magnetro1/flycast-rr.git

@@ -6,6 +6,32 @@
 > TAS fork's re-record engine and `tas_*` modules, the determinism layer and the
 > video capture stack. **Read `UNIFIED.md` first.**
 >
+> ### `[CORRECTED 2026-09-14]` what "carrying his engine" does and does not mean
+>
+> The line above is accurate and has been read as saying more than it does. What
+> is measured, against `reference/flycast-rr` pinned at `edca8915`:
+>
+> - **93% of his non-GUI code is here**, nine of eleven `tas_*` files byte-identical
+>   or near it. `dojo.cpp` is a faithful port carrying two `[CORRECTED]` bug fixes
+>   of our own.
+> - **Two of his modules are absent**: `tas_branch.{cpp,h}` (741 lines, branching
+>   timelines - he wrote it after our snapshot) and `thumbnail.{cpp,h}` (133).
+> - **"the video capture stack" is OURS.** His `avi_dump.cpp` sits in this tree at
+>   944 lines and is **not in `CMakeLists.txt`**; `core/rend/video_recorder.{cpp,h}`
+>   is what builds. A reader will assume his capture stack is live. It is not.
+> - **The engine is not all in his engine files.** ~5,952 lines of non-UI logic live
+>   inside his 26,591-line `dojo_gui.cpp`, and **~42% of it has no equivalent here** -
+>   concentrated in four things: the Notepad notation layer (~1,400), branches
+>   (~420 on top of the missing module), the Frame Skip Test runner (~320) and the
+>   hotkey rebind engine (~150).
+>
+> So "only the UI is missing" is **no longer true**. It was true of the 2026-09-07
+> snapshot `docs/DIVERGENCE-FROM-DAVID.md` measured, when his GUI file was 21,877
+> lines. It has since grown to 26,591 and gained a module. **The oracle is pinned as
+> a submodule for exactly this reason** - a claim about "what the fork does" is
+> checkable against a known commit rather than against whatever HEAD was the day
+> somebody looked. Bump the pin deliberately and re-measure.
+>
 > `video-recording` is history now, not a branch to migrate away from.
 > `UNIFICATION.md` is superseded and marked as such; it is kept because several
 > of its conclusions were wrong in instructive ways.
