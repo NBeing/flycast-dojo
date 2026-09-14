@@ -504,6 +504,62 @@ is something that actually went wrong, not a precaution.
 
 Add to it rather than re-learning.
 
+## Killing a process you launched: get the handle right, and never kill by name
+
+`[MEASURED 2026-09-14]` Two rules, one incident. `shell/linux/integration-tests`
+had both halves wrong and it cost 23 orphaned emulators and a load average of
+141 before anything noticed.
+
+**`( cd / && CMD & echo $! )` captures the SUBSHELL's pid, not `CMD`'s.** Bash
+forks for the `cd / && …` list and does not exec-optimise it away:
+
+    ( cd / && sleep 40 & echo $! )   -> captured=3973611  actual=3973612
+    env -C / sleep 41 &  echo $!     -> captured=3973614  actual=3973614
+
+So every `kill -TERM "$pid"` hit a process that had already exited, the wait
+loop saw it gone in half a second and reported a clean exit, and **the emulator
+was never signalled**. Use `env -C <dir>` (it execs) or set the directory
+without a compound list.
+
+**A name-based cleanup is not a backstop for a broken handle — it is what stops
+you discovering the handle is broken.** `pkill -x flycast-dojo` sat underneath
+that bug and hid it completely for as long as `FLYCAST_BIN` happened to be the
+packaged binary. Point it at `build-dojo7/flycast`, the ordinary thing to do,
+and the mask comes off. It is also dangerous in its own right: it reaches the
+developer's own running emulator, which is the i3/Xvfb rule (`dc053dfeb`) one
+binary along. **Kill by PID, and verify `/proc/PID/cmdline` before you do.**
+
+The cost of getting this wrong is not just leaked processes. It produced two
+failures that looked like defects somewhere else entirely: a conformance suite
+that "never reported" (it reports from `emu.registerexit`, which only runs on a
+clean shutdown it never received), and a log that stopped at 7 seconds of
+internal time (the machine was carrying 20+ orphans, so the emulator ran at a
+seventh of real speed). **An orphan leak does not present as a leak. It presents
+as everything else being slow and wrong.**
+
+---
+
+## Waiting for a fixed number of seconds is a claim about your machine
+
+`[MEASURED 2026-09-14]` The same harness gave a capture case `BOOT_SECONDS + 14`
+= 36 s to record frames 900–1200. This machine reaches frame 1200 at about 52 s,
+so the emulator was killed around frame 800 — before recording started — and the
+case reported "no capture file was written", which is true and says nothing
+about capture.
+
+The tempting repair is 36 → 70. That is the move §1's sandbox section already
+records three wrong readings from. **Have the script say when it is done and
+wait for that**, with the duration as a ceiling rather than the mechanism. It
+also splits two outcomes that were producing identical evidence: "the run never
+got far enough to test the thing" and "the thing ran and produced nothing".
+
+And **waiting for the process is not always waiting for the work.**
+`core/rend/video_recorder.cpp` pipes frames to an *external* ffmpeg through
+`popen`, so the container is finalised after the emulator the harness waited for
+is already gone.
+
+---
+
 ## The emulator's stdout is NOT a text file — use `grep -a`
 
 `flycast` writes NUL bytes into its output, so a redirected log is `data` to
