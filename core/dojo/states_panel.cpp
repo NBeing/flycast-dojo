@@ -1,4 +1,5 @@
 #include "roll_host.h"
+#include "ui_text.h"
 #include "roll_marks.h"
 #include "movie.h"
 #include "dojo.h"
@@ -112,7 +113,7 @@ static void draw()
 	{
 		// Said rather than drawn as an empty wall: "no host" and "no states"
 		// look identical, and this tree shipped a null host for a day.
-		ImGui::TextDisabled("No host installed - there is nothing to ask about slots.");
+		tasTextDisabled("No host installed - there is nothing to ask about slots.");
 		return;
 	}
 
@@ -128,11 +129,11 @@ static void draw()
 		if (!v.judged) unjudged++;
 	}
 
-	ImGui::Text("%d of %d slots hold a state", occupied, n);
+	tasText("%d of %d slots hold a state", occupied, n);
 	if (stale != 0)
 	{
 		ImGui::SameLine();
-		ImGui::TextColored(TAS_P2_COL, "  %d stale", stale);
+		tasTextColored(TAS_P2_COL, "  %d stale", stale);
 	}
 	if (unjudged != 0)
 	{
@@ -140,13 +141,13 @@ static void draw()
 		// NOT FOLDED INTO "clean", deliberately, and the phrasing follows the
 		// tree's own vocabulary: a state that MIGHT be dead is not a state that
 		// is fine. These predate re-record sequencing and cannot be judged.
-		ImGui::TextDisabled("  %d unjudged", unjudged);
+		tasTextDisabled("  %d unjudged", unjudged);
 	}
 	ImGui::SameLine();
-	ImGui::Checkbox("show empty", &showEmpty);
+	tasCheckbox("show empty", &showEmpty);
 
 	if (!movie::authored())
-		ImGui::TextDisabled("No movie open - a slot's frame has nothing to be a frame OF.");
+		tasTextDisabled("No movie open - a slot's frame has nothing to be a frame OF.");
 
 	ImGui::Separator();
 
@@ -193,13 +194,13 @@ static void draw()
 			| ImGuiTableFlags_SizingFixedFit, wallSize))
 		return;
 	ImGui::TableSetupScrollFreeze(1, 1);
-	ImGui::TableSetupColumn("slot");
-	ImGui::TableSetupColumn("frame");
-	ImGui::TableSetupColumn("state");
-	ImGui::TableSetupColumn("size");
-	ImGui::TableSetupColumn("saved");
-	ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch);
-	ImGui::TableSetupColumn("");
+	tasTableSetupColumn("slot");
+	tasTableSetupColumn("frame");
+	tasTableSetupColumn("state");
+	tasTableSetupColumn("size");
+	tasTableSetupColumn("saved");
+	tasTableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch);
+	tasTableSetupColumn("");
 	ImGui::TableHeadersRow();
 
 	const u32 playhead = dojo.frame_number.load();
@@ -217,40 +218,40 @@ static void draw()
 		// is labelled rather than left as a bare zero, because flycast's own
 		// pause menu numbers slots from ONE and would show this same file as
 		// "1" (docs/STATES-LIFT.md G11). Naming it sidesteps the collision.
-		if (i == 0) ImGui::Text("BASE");
-		else        ImGui::Text("%d", i);
+		if (i == 0) tasText("BASE");
+		else        tasText("%d", i);
 
 		ImGui::TableNextColumn();
 		if (!v.exists)
-			ImGui::TextDisabled("-");
+			tasTextDisabled("-");
 		else if (!v.haveFrame)
 			// A state with no sidecar has no position in the movie. Drawing 0
 			// would put it on the first row, which is a lie about where it is.
-			ImGui::TextDisabled("(none)");
+			tasTextDisabled("(none)");
 		else
 		{
 			const bool here = movie::authored() && v.frame == playhead;
-			ImGui::TextColored(here ? TAS_FOCUS_RING : ImGui::GetStyle().Colors[ImGuiCol_Text],
+			tasTextColored(here ? TAS_FOCUS_RING : ImGui::GetStyle().Colors[ImGuiCol_Text],
 					"%u", v.frame);
 			if (marks().has(v.frame))
 			{
 				ImGui::SameLine();
-				ImGui::TextDisabled("*");	// a bookmark sits on the same frame
+				tasTextDisabled("*");	// a bookmark sits on the same frame
 			}
 		}
 
 		ImGui::TableNextColumn();
-		if (!v.exists)          ImGui::TextDisabled("empty");
-		else if (v.stale)       ImGui::TextColored(TAS_P2_COL, "stale");
-		else if (!v.judged)     ImGui::TextDisabled("unjudged");
-		else                    ImGui::Text("clean");
+		if (!v.exists)          tasTextDisabled("empty");
+		else if (v.stale)       tasTextColored(TAS_P2_COL, "stale");
+		else if (!v.judged)     tasTextDisabled("unjudged");
+		else                    tasText("clean");
 
 		ImGui::TableNextColumn();
-		if (v.exists) ImGui::Text("%.1f MB", (double)v.bytes / 1048576.0);
-		else          ImGui::TextDisabled("-");
+		if (v.exists) tasText("%.1f MB", (double)v.bytes / 1048576.0);
+		else          tasTextDisabled("-");
 
 		ImGui::TableNextColumn();
-		ImGui::TextUnformatted(v.exists ? whenText(v.mtime).c_str() : "-");
+		tasTextUnformatted(v.exists ? whenText(v.mtime).c_str() : "-");
 
 		ImGui::TableNextColumn();
 		if (!v.exists)
@@ -272,7 +273,7 @@ static void draw()
 					// SAID, not swallowed. The host refuses when there is no
 					// clip folder, and a rename that silently did nothing would
 					// look exactly like one that worked until the next refresh.
-					ImGui::TextDisabled("refused");
+					tasTextDisabled("refused");
 				editRow = -1;
 			}
 			else if (ImGui::IsItemDeactivated())
@@ -282,8 +283,8 @@ static void draw()
 		else
 		{
 			ImGui::PushID(i);
-			if (v.label.empty()) ImGui::TextDisabled("(unnamed)");
-			else                 ImGui::TextUnformatted(v.label.c_str());
+			if (v.label.empty()) tasTextDisabled("(unnamed)");
+			else                 tasTextUnformatted(v.label.c_str());
 			if (ImGui::IsItemHovered())
 				ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
 			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
@@ -303,18 +304,18 @@ static void draw()
 					&& os_GetSeconds() - armedAt < ARM_SECONDS;
 			if (!armed)
 			{
-				if (ImGui::SmallButton("x"))
+				if (tasSmallButton("x"))
 				{
 					armedDelete = i;
 					armedAt = os_GetSeconds();
 				}
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Delete this state and its sidecars");
+					tasTip("Delete this state and its sidecars");
 			}
 			else
 			{
 				ImGui::PushStyleColor(ImGuiCol_Button, TAS_WRITE);
-				if (ImGui::SmallButton("really?"))
+				if (tasSmallButton("really?"))
 				{
 					// SAID, not swallowed - the host refuses with no clip
 					// folder, and a delete that quietly did nothing would look
@@ -431,19 +432,19 @@ static void draw()
 			if (lastGn != gn) { lastGn = gn; NOTICE_LOG(RENDERER, "STATES GENS: count=%d", gn); }
 		}
 		if (gn == 0)
-			ImGui::TextDisabled("No snapshots of this slot set yet.");
+			tasTextDisabled("No snapshots of this slot set yet.");
 		else if (traceGensBegin(ImGui::BeginTable("##gens", 7, ImGuiTableFlags_Borders
 				| ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit
 				| ImGuiTableFlags_ScrollY, ImVec2(0, 160.f))))
 		{
 			ImGui::TableSetupScrollFreeze(1, 1);
-			ImGui::TableSetupColumn("#");
-			ImGui::TableSetupColumn("kind");
-			ImGui::TableSetupColumn("created");
-			ImGui::TableSetupColumn("files");
-			ImGui::TableSetupColumn("MB");
-			ImGui::TableSetupColumn("at frame");
-			ImGui::TableSetupColumn("tags / notes", ImGuiTableColumnFlags_WidthStretch);
+			tasTableSetupColumn("#");
+			tasTableSetupColumn("kind");
+			tasTableSetupColumn("created");
+			tasTableSetupColumn("files");
+			tasTableSetupColumn("MB");
+			tasTableSetupColumn("at frame");
+			tasTableSetupColumn("tags / notes", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableHeadersRow();
 
 			for (int i = 0; i < gn; i++)
@@ -460,30 +461,30 @@ static void draw()
 				}
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
-				ImGui::Text("%d", i + 1);
+				tasText("%d", i + 1);
 				if (!g.onDisk)
 				{
 					ImGui::SameLine();
 					// RECORDED BUT ABSENT is a real state and says so: the
 					// alternative is a row that looks fine and restores nothing.
-					ImGui::TextColored(TAS_P2_COL, "!");
+					tasTextColored(TAS_P2_COL, "!");
 					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("recorded, but its files are not on disk");
+						tasTip("recorded, but its files are not on disk");
 				}
 				else if (g.synthesized && ImGui::IsItemHovered())
-					ImGui::SetTooltip("record rebuilt from the folder");
+					tasTip("record rebuilt from the folder");
 
 				ImGui::TableNextColumn();
-				ImGui::Text("%s %02d", g.kindLabel.c_str(), g.ordinal);
+				tasText("%s %02d", g.kindLabel.c_str(), g.ordinal);
 				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(g.createdLocal.empty() ? "-" : g.createdLocal.c_str());
+				tasTextUnformatted(g.createdLocal.empty() ? "-" : g.createdLocal.c_str());
 				ImGui::TableNextColumn();
-				ImGui::Text("%d", g.files);
+				tasText("%d", g.files);
 				ImGui::TableNextColumn();
-				ImGui::Text("%.1f", (double)g.bytes / 1048576.0);
+				tasText("%.1f", (double)g.bytes / 1048576.0);
 				ImGui::TableNextColumn();
-				if (g.haveFrame) ImGui::Text("%u", g.atFrame);
-				else             ImGui::TextDisabled("-");
+				if (g.haveFrame) tasText("%u", g.atFrame);
+				else             tasTextDisabled("-");
 
 				ImGui::TableNextColumn();
 				ImGui::PushID(i);
@@ -509,8 +510,8 @@ static void draw()
 					const std::string shown = g.tags.empty() && g.notes.empty()
 							? std::string("(untagged)")
 							: g.tags + (g.notes.empty() ? "" : "  -  " + g.notes);
-					if (g.tags.empty() && g.notes.empty()) ImGui::TextDisabled("%s", shown.c_str());
-					else                                   ImGui::TextUnformatted(shown.c_str());
+					if (g.tags.empty() && g.notes.empty()) tasTextDisabled("%s", shown.c_str());
+					else                                   tasTextUnformatted(shown.c_str());
 					if (ImGui::IsItemHovered())
 					{
 						ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
@@ -578,7 +579,7 @@ static void draw()
 				ImGui::PopID();
 			}
 			ImGui::EndTable();
-			ImGui::TextDisabled("click to tag, Ctrl+click to annotate");
+			tasTextDisabled("click to tag, Ctrl+click to annotate");
 		}
 
 		/*

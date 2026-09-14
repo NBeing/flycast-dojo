@@ -1,4 +1,5 @@
 #include "fst.h"
+#include "ui_text.h"
 #include "dojo.h"
 #include "mvc2.h"
 #include "tas_ruler.h"
@@ -683,18 +684,18 @@ static void drawPanel()
 	{
 		// SAID, not shown as an empty form. A window full of disabled spinners
 		// does not tell you the one thing you need to do next.
-		ImGui::TextDisabled("No selection captured.");
-		ImGui::TextWrapped("Select rows in the Piano Roll, then press Capture.");
-		if (ImGui::Button("Capture selection"))
+		tasTextDisabled("No selection captured.");
+		tasTextWrapped("Select rows in the Piano Roll, then press Capture.");
+		if (tasButton("Capture selection"))
 			captureSelection();
 		if (!st.why.empty())
-			ImGui::TextColored(TAS_WRITE, "%s", st.why.c_str());
+			tasTextColored(TAS_WRITE, "%s", st.why.c_str());
 		return;
 	}
 
-	ImGui::TextColored(TAS_ACCENT, "rows %u..%u", s.selLo, s.selHi);
+	tasTextColored(TAS_ACCENT, "rows %u..%u", s.selLo, s.selHi);
 	ImGui::SameLine();
-	if (ImGui::SmallButton("Re-capture"))
+	if (tasSmallButton("Re-capture"))
 		captureSelection();
 
 	ImGui::BeginDisabled(st.running);
@@ -705,7 +706,7 @@ static void drawPanel()
 		normalize(s);
 	}
 	ImGui::DragIntRange2("blanks", &s.k0, &s.k1, 1.f, 0, 30);
-	ImGui::Checkbox("sweep frame skip too", &s.fkOn);
+	tasCheckbox("sweep frame skip too", &s.fkOn);
 	if (s.fkOn)
 	{
 		int fr = (int)s.fkRow;
@@ -717,7 +718,7 @@ static void drawPanel()
 		ImGui::DragIntRange2("pin blanks", &s.fk0, &s.fk1, 1.f, 0, 30);
 	}
 	ImGui::DragInt("settle", &st.settle, 1.f, 0, 600);
-	ImGui::Checkbox("fast-forward the run", &st.fastForward);
+	tasCheckbox("fast-forward the run", &st.fastForward);
 	ImGui::EndDisabled();
 
 	/*
@@ -727,38 +728,38 @@ static void drawPanel()
 		it refuses at 99.
 	*/
 	ImGui::Separator();
-	ImGui::TextColored(TAS_ACTIVE_COL, "%d variant%s", s.Ntot(), s.Ntot() == 1 ? "" : "s");
+	tasTextColored(TAS_ACTIVE_COL, "%d variant%s", s.Ntot(), s.Ntot() == 1 ? "" : "s");
 	ImGui::SameLine();
-	ImGui::TextDisabled("base slot %d @ %u", st.baseSlot, st.baseFrame);
+	tasTextDisabled("base slot %d @ %u", st.baseSlot, st.baseFrame);
 
 	ImGui::BeginDisabled(st.running || gui_state != GuiState::Paused);
-	if (ImGui::Button(st.generated ? "Re-generate" : "Generate"))
+	if (tasButton(st.generated ? "Re-generate" : "Generate"))
 		generate();
 	ImGui::EndDisabled();
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!st.generated || st.running);
-	if (ImGui::Button("Run all"))
+	if (tasButton("Run all"))
 		runStart();
 	ImGui::EndDisabled();
 	ImGui::SameLine();
 	ImGui::BeginDisabled(st.cur < 0 || st.running);
-	if (ImGui::Button("Restore"))
+	if (tasButton("Restore"))
 		restore();
 	ImGui::EndDisabled();
 
 	if (st.running)
 	{
 		ImGui::SameLine();
-		if (ImGui::Button("Stop"))
+		if (tasButton("Stop"))
 			runAbort("stopped by hand");
-		ImGui::TextColored(TAS_STAGED, "running variant %d / %d  (phase %d)",
+		tasTextColored(TAS_STAGED, "running variant %d / %d  (phase %d)",
 				st.runN + 1, s.Ntot(), st.runPhase);
 	}
 	else if (gui_state != GuiState::Paused)
-		ImGui::TextDisabled("Pause to generate or run.");
+		tasTextDisabled("Pause to generate or run.");
 
 	if (!st.why.empty())
-		ImGui::TextColored(TAS_WRITE, "%s", st.why.c_str());
+		tasTextColored(TAS_WRITE, "%s", st.why.c_str());
 
 	// ---- results -------------------------------------------------------------------
 	if (st.result.empty())
@@ -767,11 +768,11 @@ static void drawPanel()
 	if (!ImGui::BeginTable("##fstres", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV
 			| ImGuiTableFlags_SizingStretchProp))
 		return;
-	ImGui::TableSetupColumn("variant");
-	ImGui::TableSetupColumn("P1");
-	ImGui::TableSetupColumn("P2");
-	ImGui::TableSetupColumn("row");
-	ImGui::TableSetupColumn("skip");
+	tasTableSetupColumn("variant");
+	tasTableSetupColumn("P1");
+	tasTableSetupColumn("P2");
+	tasTableSetupColumn("row");
+	tasTableSetupColumn("skip");
 	ImGui::TableHeadersRow();
 	// THE BEST ONE IS MARKED, because a column of numbers is not an answer -
 	// the question this tool is asked is "which timing worked".
@@ -785,22 +786,22 @@ static void drawPanel()
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 		const bool win = r.ran && best > 0 && r.peak1 == best;
-		ImGui::TextColored(win ? TAS_ACTIVE_COL : (kv.first == st.cur ? TAS_ACCENT : TAS_TEXT),
+		tasTextColored(win ? TAS_ACTIVE_COL : (kv.first == st.cur ? TAS_ACCENT : TAS_TEXT),
 				"%s", varDesc(kv.first).c_str());
 		ImGui::TableSetColumnIndex(1);
-		if (r.ran) ImGui::TextColored(win ? TAS_ACTIVE_COL : TAS_TEXT, "%u", (unsigned)r.peak1);
-		else ImGui::TextDisabled("-");
+		if (r.ran) tasTextColored(win ? TAS_ACTIVE_COL : TAS_TEXT, "%u", (unsigned)r.peak1);
+		else tasTextDisabled("-");
 		ImGui::TableSetColumnIndex(2);
-		if (r.ran) ImGui::Text("%u", (unsigned)r.peak2); else ImGui::TextDisabled("-");
+		if (r.ran) tasText("%u", (unsigned)r.peak2); else tasTextDisabled("-");
 		ImGui::TableSetColumnIndex(3);
-		ImGui::TextDisabled("%u", r.seqRow);
+		tasTextDisabled("%u", r.seqRow);
 		ImGui::TableSetColumnIndex(4);
 		if (r.haveSkip)
-			ImGui::TextDisabled("%u/%u", (unsigned)r.skipCount, (unsigned)r.skipRate);
+			tasTextDisabled("%u/%u", (unsigned)r.skipCount, (unsigned)r.skipRate);
 		else
 			// NOT BLANK. "the ruler never saw this frame" and "it saw it and the
 			// rate was 0" are different, and an empty cell gives neither.
-			ImGui::TextDisabled("?");
+			tasTextDisabled("?");
 	}
 	ImGui::EndTable();
 }

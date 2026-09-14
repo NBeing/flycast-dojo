@@ -1,4 +1,5 @@
 #include "input_viz.h"
+#include "ui_text.h"
 #include "dojo.h"
 #include "mvc2.h"
 #include "tas_colors.h"
@@ -193,7 +194,7 @@ static void draw()
 		// SAID, not drawn as two empty pads. "No game" and "a game with nobody
 		// pressing anything" are different answers and blank circles give
 		// neither - the distinction core/dojo/hotkey_panel.cpp also makes.
-		ImGui::TextDisabled("No game loaded - nothing to visualise.");
+		tasTextDisabled("No game loaded - nothing to visualise.");
 		return;
 	}
 
@@ -231,16 +232,16 @@ static void draw()
 	// ---- header: the frame, and who is driving ------------------------------------
 	const u32 mlen = (u32)dojo.session_inputs.size();
 	if (mlen > 0)
-		ImGui::TextColored(TAS_ACTIVE_COL, "Frame %u / %u", frame, mlen);
+		tasTextColored(TAS_ACTIVE_COL, "Frame %u / %u", frame, mlen);
 	else
-		ImGui::TextColored(TAS_ACTIVE_COL, "Frame - / -");
+		tasTextColored(TAS_ACTIVE_COL, "Frame - / -");
 	ImGui::SameLine();
 	if (dojo.play_match)
-		ImGui::TextColored(TAS_READ, "[READ]");
+		tasTextColored(TAS_READ, "[READ]");
 	else if (dojo.macro_armed)
-		ImGui::TextColored(TAS_READWRITE, "[READ-WRITE]");
+		tasTextColored(TAS_READWRITE, "[READ-WRITE]");
 	else
-		ImGui::TextColored(TAS_WRITE, "[WRITE]");
+		tasTextColored(TAS_WRITE, "[WRITE]");
 
 	/*
 		WHY A ROW CAN BE MISSING, said out loud rather than shown as a neutral
@@ -251,11 +252,11 @@ static void draw()
 		this tree keeps paying for.
 	*/
 	if (fromMovie && !haveMovieRow)
-		ImGui::TextColored(TAS_DIM, "no authored input at frame %u", vizFrame);
+		tasTextColored(TAS_DIM, "no authored input at frame %u", vizFrame);
 	else if (!tas_mvc2::mapValidated())
-		ImGui::TextDisabled("game read - during a match only");
+		tasTextDisabled("game read - during a match only");
 	else
-		ImGui::TextColored(TAS_DIM, "scene %u  skip %u/%u",
+		tasTextColored(TAS_DIM, "scene %u  skip %u/%u",
 				gs.sceneFrame, gs.skipCount, gs.skipRate);
 	ImGui::Separator();
 
@@ -292,7 +293,7 @@ static void draw()
 
 	auto drawPlayer = [&](int p, u8 fa, u8 fb) {
 		ImGui::BeginGroup();
-		ImGui::TextColored(p == 1 ? TAS_P2_COL : TAS_P1_COL, "P%d", p + 1);
+		tasTextColored(p == 1 ? TAS_P2_COL : TAS_P1_COL, "P%d", p + 1);
 		const ImVec2 o = ImGui::GetCursorScreenPos();
 		const float dx = o.x + cell * 1.5f, dy = o.y + cell * 1.5f;
 		drawCtl(ImVec2(dx, dy - cell), kDpad[0], p, fa, fb);

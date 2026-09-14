@@ -209,4 +209,7 @@ void registerStatesPanel();
 //! The hotkey cheat sheet: every TAS action and its LIVE binding. Idempotent.
 void registerHotkeyPanel();
 
+//! The UI Text editor: rename any label the UI has drawn. Idempotent.
+void registerUiTextPanel();
+
 }	// namespace roll

@@ -32,6 +32,7 @@
 #include "dojo/roll_host.h"
 #include "dojo/input_viz.h"
 #include "dojo/fst.h"
+#include "dojo/ui_text.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
 #include "archive/rzip.h"
@@ -100,6 +101,7 @@ int flycast_init(int argc, char* argv[])
 	roll::notationSelfTest();
 	roll::inputviz::selfTest();
 	roll::fst::selfTest();
+	uitext::selfTest();
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();
@@ -125,6 +127,7 @@ int flycast_init(int argc, char* argv[])
 	roll::registerHotkeyPanel();
 	roll::registerInputVizPanel();
 	roll::registerFrameSkipTestPanel();
+	roll::registerUiTextPanel();
 	os_CreateWindow();
 	os_SetupInput();
 

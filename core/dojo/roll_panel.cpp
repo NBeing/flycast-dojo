@@ -1,4 +1,5 @@
 #include "roll_profile.h"
+#include "ui_text.h"
 #include "roll_host.h"
 #include "roll_select.h"
 #include "roll_edit.h"
@@ -101,7 +102,7 @@ static void draw()
 
 	if (!movie::authored())
 	{
-		ImGui::TextDisabled("No movie is open.");
+		tasTextDisabled("No movie is open.");
 		return;
 	}
 
@@ -130,7 +131,7 @@ static void draw()
 	}
 
 	const u32 playhead = dojo.frame_number.load();
-	ImGui::Text("%s   frame %u of %u", prof.name, playhead, movie::end());
+	tasText("%s   frame %u of %u", prof.name, playhead, movie::end());
 	// `dojo:RollSelTrace=yes` - the selection as a line a harness can assert on.
 	// Logged only when it CHANGES, so a driven test can watch it move rather
 	// than polling, and a quiet log means nothing was selected.
@@ -155,14 +156,14 @@ static void draw()
 	// snapshots pane - "It always occupies its height, drawn or not, so picking
 	// a snapshot never moves the bar below."
 	if (selection().empty())
-		ImGui::TextDisabled("no selection");
+		tasTextDisabled("no selection");
 	else
-		ImGui::Text("selected: %d rows, %u..%u", (int)selection().count(),
+		tasText("selected: %d rows, %u..%u", (int)selection().count(),
 				selection().lo(), selection().hi());
 	if (h == nullptr)
 		// Said rather than papered over: with no host there are no savestate
 		// markers, and a blank gutter would look like "no states exist".
-		ImGui::TextDisabled("No host installed - savestate markers unavailable.");
+		tasTextDisabled("No host installed - savestate markers unavailable.");
 	ImGui::Separator();
 
 	// ---- INTEGRATION PROBE, dojo:RollEditProbe=yes -----------------------
@@ -445,8 +446,8 @@ static void draw()
 		Selection& sel = selection();
 		const bool haveSel  = !sel.empty();
 
-		if (!paused)        ImGui::TextDisabled("edits need the movie PAUSED");
-		else if (!writable) ImGui::TextDisabled("edits are refused while a peer is connected - the tape is shared");
+		if (!paused)        tasTextDisabled("edits need the movie PAUSED");
+		else if (!writable) tasTextDisabled("edits are refused while a peer is connected - the tape is shared");
 		else
 		{
 			// GOVERNS THE DRAG, NOT THE BUTTONS, and says so. A control sitting
@@ -471,14 +472,14 @@ static void draw()
 			ImGui::BeginDisabled(!haveSel);
 			{
 
-			if (ImGui::Button("Blank"))
+			if (tasButton("Blank"))
 			{
 				// MERGED: the funnel refuses a map that does not span the movie.
 				Edit e = mergeIntoMovie(wholeMovie(), blankRows(sel.rows()));
 				dojo.ApplyEdit(e, "roll: blank");
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Delete rows"))
+			if (tasButton("Delete rows"))
 			{
 				Resize r = deleteRows(wholeMovie(), sel.rows());
 				dojo.ApplyEditResize(r.edit, "roll: delete rows");
@@ -499,14 +500,14 @@ static void draw()
 				remapAll(r.remap);
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Insert blanks"))
+			if (tasButton("Insert blanks"))
 			{
 				Resize r = insertBlanks(wholeMovie(), sel.lo(), (u32)sel.count());
 				dojo.ApplyEditResize(r.edit, "roll: insert blanks");
 				remapAll(r.remap);
 			}
 			ImGui::SameLine();
-			ImGui::TextDisabled("(%d rows)", (int)sel.count());
+			tasTextDisabled("(%d rows)", (int)sel.count());
 
 			// ---- THE RANGE TOOLS ------------------------------------------
 			//
@@ -517,20 +518,20 @@ static void draw()
 			//
 			// Reverse is the exception and does take the set, because exchanging
 			// exactly the named rows IS well defined however scattered they are.
-			if (ImGui::Button("Reverse"))
+			if (tasButton("Reverse"))
 			{
 				Edit e = reverseRows(wholeMovie(), sel.rows());
 				dojo.ApplyEdit(e, "roll: reverse");
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Stretch"))
+			if (tasButton("Stretch"))
 			{
 				Resize r = stretchRows(wholeMovie(), sel.lo(), sel.hi(), (u32)rangeFactor);
 				dojo.ApplyEditResize(r.edit, "roll: stretch");
 				remapAll(r.remap);
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Compress"))
+			if (tasButton("Compress"))
 			{
 				Resize r = compressRows(wholeMovie(), sel.lo(), sel.hi(), (u32)rangeFactor);
 				dojo.ApplyEditResize(r.edit, "roll: compress");
@@ -568,7 +569,7 @@ static void draw()
 				ImGui::InputText("##mash", mashText, sizeof(mashText));
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!haveSel);
-				if (ImGui::Button("Mash"))
+				if (tasButton("Mash"))
 				{
 					std::vector<Cell> cells;
 					mashErr.clear();
@@ -597,7 +598,7 @@ static void draw()
 				// only the payload changes, which is the claim
 				// docs/ROLL-EDIT-MODEL.md §2 makes about these being one tool.
 				// Not gated on a selection: a brush is armed to be dragged.
-				if (ImGui::Button(paint().armed() ? "Unbrush" : "Brush"))
+				if (tasButton(paint().armed() ? "Unbrush" : "Brush"))
 				{
 					if (paint().armed())
 						paint().arm({}, false);
@@ -612,11 +613,11 @@ static void draw()
 				if (paint().armed())
 				{
 					ImGui::SameLine();
-					ImGui::TextColored(TAS_FOCUS_RING, "brush armed");
+					tasTextColored(TAS_FOCUS_RING, "brush armed");
 				}
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!haveSel);
-				if (ImGui::Button("Fill"))
+				if (tasButton("Fill"))
 				{
 					// The SAME pattern over the selected ROWS rather than over
 					// the range - a different thing only when the selection is
@@ -635,11 +636,11 @@ static void draw()
 				}
 				ImGui::EndDisabled();
 				ImGui::SameLine();
-				ImGui::Checkbox("merge", &mashMerge);
+				tasCheckbox("merge", &mashMerge);
 				if (!mashErr.empty())
 				{
 					ImGui::SameLine();
-					ImGui::TextColored(TAS_P2_COL, "%s", mashErr.c_str());
+					tasTextColored(TAS_P2_COL, "%s", mashErr.c_str());
 				}
 			}
 
@@ -656,47 +657,47 @@ static void draw()
 			{
 				Staged& st = staged();
 				ImGui::BeginDisabled(!haveSel);
-				if (ImGui::Button("Stage"))
+				if (tasButton("Stage"))
 					st.load(wholeMovie(), sel.rows());
 				ImGui::EndDisabled();
 				ImGui::SameLine();
 				if (st.empty())
-					ImGui::TextDisabled("(nothing staged)");
+					tasTextDisabled("(nothing staged)");
 				else
 				{
 					// BASELINE AND RESULT BOTH, because the difference is the
 					// point: 6 -> 2 after a compress says the four are still
 					// there to come back.
-					ImGui::Text("%d frames (from %d), %d op%s",
+					tasText("%d frames (from %d), %d op%s",
 							(int)st.size(), (int)st.baseSize(), (int)st.ops().size(),
 							st.ops().size() == 1 ? "" : "s");
 					ImGui::SameLine();
-					if (ImGui::Button("Swap"))     st.push(Step{ Op::SwapLanes });
+					if (tasButton("Swap"))     st.push(Step{ Op::SwapLanes });
 					ImGui::SameLine();
-					if (ImGui::Button("Flip"))     st.push(Step{ Op::Flip });
+					if (tasButton("Flip"))     st.push(Step{ Op::Flip });
 					ImGui::SameLine();
-					if (ImGui::Button("Rev"))      st.push(Step{ Op::Reverse });
+					if (tasButton("Rev"))      st.push(Step{ Op::Reverse });
 					ImGui::SameLine();
-					if (ImGui::Button("x N"))      st.push(Step{ Op::Stretch, rangeFactor });
+					if (tasButton("x N"))      st.push(Step{ Op::Stretch, rangeFactor });
 					ImGui::SameLine();
-					if (ImGui::Button("/ N"))      st.push(Step{ Op::Compress, rangeFactor });
+					if (tasButton("/ N"))      st.push(Step{ Op::Compress, rangeFactor });
 					ImGui::SameLine();
 					ImGui::BeginDisabled(st.ops().empty());
 					// UNDO OP, not undo: it pops the recipe and replays from the
 					// baseline, so a compress gives its frames back.
-					if (ImGui::Button("Undo op"))  st.pop();
+					if (tasButton("Undo op"))  st.pop();
 					ImGui::SameLine();
-					if (ImGui::Button("Clear ops")) st.clearOps();
+					if (tasButton("Clear ops")) st.clearOps();
 					ImGui::EndDisabled();
 					ImGui::SameLine();
-					if (ImGui::Button("Place"))
+					if (tasButton("Place"))
 					{
 						const u32 at = haveSel ? sel.lo() : playhead;
 						Edit e = st.place(wholeMovie(), at, mashMerge);
 						dojo.ApplyEdit(e, "roll: place staged");
 					}
 					ImGui::SameLine();
-					if (ImGui::Button("Unload"))   st.unload();
+					if (tasButton("Unload"))   st.unload();
 				}
 			}
 
@@ -712,21 +713,21 @@ static void draw()
 				const u32 target = haveSel ? sel.lo() : playhead;
 				char mb[48];
 				snprintf(mb, sizeof(mb), marks().has(target) ? "Unmark %u" : "Mark %u", target);
-				if (ImGui::Button(mb))
+				if (tasButton(mb))
 					marks().toggle(target);
 				ImGui::SameLine();
 				u32 to = 0;
 				ImGui::BeginDisabled(!marks().prev(target, to));
-				if (ImGui::Button("<Mark") && marks().prev(target, to))
+				if (tasButton("<Mark") && marks().prev(target, to))
 					sel.press(to, Mods{});		// select it; seeking is the playhead's job
 				ImGui::EndDisabled();
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!marks().next(target, to));
-				if (ImGui::Button("Mark>") && marks().next(target, to))
+				if (tasButton("Mark>") && marks().next(target, to))
 					sel.press(to, Mods{});
 				ImGui::EndDisabled();
 				ImGui::SameLine();
-				ImGui::TextDisabled("(%d marks)", (int)marks().count());
+				tasTextDisabled("(%d marks)", (int)marks().count());
 			}
 
 			// ---- THE SEQUENCE LIBRARY -------------------------------------
@@ -761,7 +762,7 @@ static void draw()
 				ImGui::InputText("##seqname", libName, sizeof(libName));
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!haveSel || libName[0] == 0);
-				if (ImGui::Button("Save selection"))
+				if (tasButton("Save selection"))
 				{
 					libErr.clear();
 					std::error_code lec;
@@ -795,7 +796,7 @@ static void draw()
 				}
 				ImGui::EndDisabled();
 				ImGui::SameLine();
-				ImGui::TextDisabled("(%d in library)", (int)lib.size());
+				tasTextDisabled("(%d in library)", (int)lib.size());
 
 				if (ImGui::BeginListBox("##seqlib", ImVec2(-FLT_MIN, 4 * ImGui::GetTextLineHeightWithSpacing())))
 				{
@@ -807,7 +808,7 @@ static void draw()
 							tags += (t != 0 ? "," : "") + lib[i].tags[t];
 						snprintf(row, sizeof(row), "%s  (%d f)%s%s", lib[i].name.c_str(),
 								(int)lib[i].length(), tags.empty() ? "" : "  ", tags.c_str());
-						if (ImGui::Selectable(row, libSel == i))
+						if (tasSelectable(row, libSel == i))
 							libSel = i;
 					}
 					ImGui::EndListBox();
@@ -819,7 +820,7 @@ static void draw()
 				ImGui::BeginDisabled(!haveSeq);
 				char pb[64];
 				snprintf(pb, sizeof(pb), "Place at %u", at);
-				if (ImGui::Button(pb))
+				if (tasButton(pb))
 				{
 					const Sequence& sq = lib[libSel];
 					const Pattern pat = libReplace ? patternReplacing(sq)
@@ -833,12 +834,12 @@ static void draw()
 				ImGui::SameLine();
 				// The two placements, as a choice made HERE, at the gesture.
 				// A sequence does not record which it is (roll_library.h).
-				if (ImGui::RadioButton("replace", libReplace))  libReplace = true;
+				if (tasRadioButton("replace", libReplace))  libReplace = true;
 				ImGui::SameLine();
-				if (ImGui::RadioButton("overdub", !libReplace)) libReplace = false;
+				if (tasRadioButton("overdub", !libReplace)) libReplace = false;
 				ImGui::SameLine();
 				ImGui::BeginDisabled(!haveSeq);
-				if (ImGui::Button("Delete##seq"))
+				if (tasButton("Delete##seq"))
 				{
 					libErr.clear();
 					libraryDelete(libraryDir() + "/" + lib[libSel].file, libErr);
@@ -849,7 +850,7 @@ static void draw()
 				if (!libErr.empty())
 				{
 					ImGui::SameLine();
-					ImGui::TextColored(TAS_P2_COL, "%s", libErr.c_str());
+					tasTextColored(TAS_P2_COL, "%s", libErr.c_str());
 				}
 			}
 
@@ -867,10 +868,10 @@ static void draw()
 		return;
 
 	ImGui::TableSetupScrollFreeze(2, 1);
-	ImGui::TableSetupColumn("frame", ImGuiTableColumnFlags_WidthFixed, 64.f);
-	ImGui::TableSetupColumn("st", ImGuiTableColumnFlags_WidthFixed, 40.f);
+	tasTableSetupColumn("frame", ImGuiTableColumnFlags_WidthFixed, 64.f);
+	tasTableSetupColumn("st", ImGuiTableColumnFlags_WidthFixed, 40.f);
 	for (int c = 0; c < prof.count; c++)
-		ImGui::TableSetupColumn(prof.cols[c].label, ImGuiTableColumnFlags_WidthFixed, 28.f);
+		tasTableSetupColumn(prof.cols[c].label, ImGuiTableColumnFlags_WidthFixed, 28.f);
 	ImGui::TableHeadersRow();
 
 	// WHICH COLUMN IS UNDER THE MOUSE, asked ONCE. The row is a single hit
@@ -976,7 +977,7 @@ static void draw()
 		// that distinction, and the roll must show it rather than draw zeroes.
 		if (!movie::has(f)) ImGui::PushStyleColor(ImGuiCol_Text,
 				ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-		ImGui::Selectable(lbl, wasSel,
+		tasSelectable(lbl, wasSel,
 				ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap);
 		if (!movie::has(f)) ImGui::PopStyleColor();
 
@@ -1008,8 +1009,8 @@ static void draw()
 			const bool stale = h != nullptr && h->slotStale(slot);
 			// Stale means the state no longer belongs to this timeline: still a
 			// valid machine, no longer a point on THIS movie.
-			if (stale) ImGui::TextColored(TAS_P2_COL, "%d!", slot);
-			else       ImGui::Text("%d", slot);
+			if (stale) tasTextColored(TAS_P2_COL, "%d!", slot);
+			else       tasText("%d", slot);
 		}
 
 		FrameInputs fi{};
@@ -1031,7 +1032,7 @@ static void draw()
 			if (prev)
 				on = pt.writes();
 			if (on)
-				ImGui::TextColored(prev ? TAS_FOCUS_RING : TAS_P1_COL, "%s", "\xe2\x96\xa0");	// filled square
+				tasTextColored(prev ? TAS_FOCUS_RING : TAS_P1_COL, "%s", "\xe2\x96\xa0");	// filled square
 		}
 	}
 	ImGui::EndTable();

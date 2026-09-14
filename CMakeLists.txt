@@ -1295,6 +1295,9 @@ if(NOT LIBRETRO)
 	core/dojo/input_viz.h
 	core/dojo/fst.cpp
 	core/dojo/fst.h
+	core/dojo/ui_text.cpp
+	core/dojo/ui_text.h
+	core/dojo/ui_text_panel.cpp
 	core/dojo/roll_profile.cpp
 	core/dojo/roll_panel.cpp
 	core/dojo/roll_select.cpp

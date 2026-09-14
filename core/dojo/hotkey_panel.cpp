@@ -1,4 +1,5 @@
 #include "input/hotkeys.h"
+#include "ui_text.h"
 #include "input/gamepad_device.h"
 #include "input/mapping.h"
 #include "rend/panel.h"
@@ -82,7 +83,7 @@ static void draw()
 	{
 		// SAID, not drawn as an empty list. "No keyboard" and "nothing bound"
 		// are different answers and an empty table gives neither.
-		ImGui::TextDisabled("No keyboard that can name its keys - nothing to show.");
+		tasTextDisabled("No keyboard that can name its keys - nothing to show.");
 		return;
 	}
 	const std::shared_ptr<InputMapping> map = kb->get_input_mapping();
@@ -95,7 +96,7 @@ static void draw()
 		const hotkeys::Action& a = hotkeys::all()[i];
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		ImGui::TextUnformatted(a.label);
+		tasTextUnformatted(a.label);
 		ImGui::TableSetColumnIndex(1);
 
 		const u32 code = map->get_button_code(0, a.id);
@@ -104,20 +105,20 @@ static void draw()
 			// UNBOUND IS A REAL ANSWER and it is the common one here: these
 			// ship with no default key, because every key the fork defaults
 			// them to is already a training binding in this tree.
-			ImGui::TextDisabled("unbound");
+			tasTextDisabled("unbound");
 			continue;
 		}
 		const char *name = kb->get_button_name(code);
 		if (name != nullptr)
-			ImGui::TextColored(TAS_FOCUS_RING, "%s", name);
+			tasTextColored(TAS_FOCUS_RING, "%s", name);
 		else
 			// The raw code, rather than nothing: a key this device cannot name
 			// is still bound, and hiding that would make it look unbound.
-			ImGui::TextDisabled("[%u]", code);
+			tasTextDisabled("[%u]", code);
 	}
 	ImGui::EndTable();
 	ImGui::Separator();
-	ImGui::TextDisabled("Rebind under Settings > Controls, then Map on a device.");
+	tasTextDisabled("Rebind under Settings > Controls, then Map on a device.");
 }
 
 void registerHotkeyPanel()
