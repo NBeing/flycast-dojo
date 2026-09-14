@@ -926,3 +926,69 @@ Premature abstraction is a real cost, and each of these is left concrete on purp
 studio's ten thousand lines of UI are furniture over roughly a dozen neutral facts, and the fact
 that a savestate knows which movie frame it belongs to — and whether that movie still exists — is
 the one everything else stands on.
+
+## 8. THE BINDING SURFACE, MEASURED `[2026-09-14]`
+
+The plan's Phase 3 proposed settling "component or C++" by porting the Input
+Visualizer both ways and recording how many `ui.*` names emuapi lacks. **That
+number can be taken WITHOUT doing the port**, by diffing the surface the window
+actually uses against the surface we bind — and it is decisive enough that the
+port is not needed to answer this half.
+
+`show_input_visualizer` in David's `core/dojo/dojo_gui.cpp` (lines 21003–21376,
+**374 lines**, matching the plan's ~372 estimate):
+
+| | |
+|---|---|
+| distinct `ImGui::` calls it needs | **31** |
+| names flycast's `ui.*` currently binds | 35 |
+| **of those 31, not bound** | **25** |
+| draw-list primitives it needs | 3 (`AddText`, `AddCircle`, `AddCircleFilled`) |
+| draw-list primitives `ui.*` binds | **0** |
+
+The missing names:
+
+    BeginChild BeginGroup BeginTable Dummy EndChild EndGroup EndTable
+    GetColorU32 GetContentRegionAvail GetCursorScreenPos GetIO GetScrollMaxY
+    GetStyle GetTextLineHeight GetTextLineHeightWithSpacing GetWindowDrawList
+    PopStyleVar PushStyleVar SetNextWindowBgAlpha SetNextWindowSizeConstraints
+    SetScrollY SetWindowFontScale TableHeadersRow TableNextRow
+    TableSetColumnIndex
+
+### What that settles
+
+**Porting ONE of twenty-seven windows nearly doubles the binding surface** — 28+
+new names against 35 that exist — and several are not single functions but
+sub-APIs. `GetWindowDrawList` returns an object with its own dozens of
+primitives; tables are a five-call protocol with their own lifecycle rules, in a
+build where ImGui's asserts are compiled out so an unbalanced `EndTable` corrupts
+the frame silently rather than failing.
+
+So **hand-writing `ui.*` does not scale to the studio port.** That is the same
+wall nbneo-rr hit: `docs/panel-scaffolding.md` records a predecessor that
+"hand-wrote 27 KB of C++ for ~21 functions and re-broke it every upgrade", after
+which it generated from `dear_bindings` with an ergonomics layer that names no
+ImGui function.
+
+Three routes, and the measurement prices them:
+
+1. **Generate the bindings** from `dear_bindings`, as nbneo does. Large up-front
+   cost, then the surface stops being a per-window decision.
+2. **Port this class of window as flycast C++.** No binding cost at all, and
+   `docs/DIVERGENCE-FROM-DAVID.md` already argues host furniture belongs here.
+   Costs the portability a component would have bought.
+3. **Hand-write the 28.** Prices one window at 28 bindings and leaves 26 windows
+   behind it. This is the route the numbers rule out.
+
+### What this does NOT settle, and what it would cost
+
+Whether a component runs on **agnes** unmodified — the actual falsifiable test of
+"does this belong in emuapi" — is unanswered, and cannot be answered without
+building one. That question is about portability, not surface area, and the
+cheapest way to ask it is a component that needs almost no `ui.*`: a readout with
+text and a button, not a window that draws circles into a draw list.
+
+**The Input Visualizer was the wrong first component** for that question. It was
+chosen as "the cheapest and cleanest" by line count, and by line count it is —
+but 374 lines that draw custom graphics are the most `ui.*`-hungry shape in the
+studio, not the least.
