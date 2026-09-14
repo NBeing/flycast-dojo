@@ -2121,6 +2121,45 @@ static void luaRegister(lua_State *L)
 				.addFunction("currentPath", std::function<std::string()>([]() {
 					return dojo.replay.filename;
 				}))
+				/*
+					RESTORE A GENERATION - the way IN to an engine that had none.
+
+					`[MEASURED 2026-09-14]` Dojo::RestoreClipDir and
+					tas_clip::restore were both declared and defined, complete
+					with guardrails, and NOTHING CALLED EITHER - no UI, no
+					hotkey, no script. docs/TEST-PLAN.md recorded the feature as
+					not existing, which is half right and the wrong half: it
+					existed and was unreachable. That is the shape CLAUDE.md
+					opens with, where SaveStateFrame compiled, linked and sat
+					unreachable while savestates silently carried no sidecar.
+
+					TAKES THE DIRECTORY EXPLICITLY, because restore is a PRE-BOOT
+					operation by design. `[SOURCE]` RestoreClipDir refuses when
+					the target is the clip this session has open: a live restore
+					would leave the loaded movie, the replay writer, the rewind
+					log, undo, bookmarks and the wave stores stale in memory, and
+					their next write would undo it. A no-argument "restore mine"
+					would therefore always be refused and be useless.
+
+					Returns the number of files restored, or -1 when refused -
+					reporting inability rather than faking success, and never
+					throwing for a refusal a caller can act on.
+				*/
+				.addFunction("restoreGeneration", std::function<int(std::string, std::string)>(
+						[](std::string clipDir, std::string genName) {
+					// GATED AT THE CALL SITE. The tier table classifies by
+					// prefix but enforcement is per binding, and `[MEASURED
+					// 2026-09-13]` four savestate bindings were reachable at
+					// observer tier because only two of six checked. This one
+					// writes to the filesystem; it checks.
+					if (!luatier::allow("replay.restoreGeneration"))
+						throw std::runtime_error("replay.restoreGeneration needs the full tier; "
+								"this session grants "
+								+ std::string(luatier::name(luatier::granted())));
+					if (clipDir.empty())
+						throw std::runtime_error("replay.restoreGeneration needs a clip directory");
+					return dojo.RestoreClipDir(clipDir, genName);
+				}))
 			.endNamespace()
 #endif
 

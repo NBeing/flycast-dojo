@@ -82,6 +82,19 @@ flycast_callbacks.vblank = function()
 	--- These four are the pooling/deferred route, which is the one that will
 	--- GROW, so the claim is written per binding rather than as "the namespace
 	--- is gated" - a future fifth binding must fail this, not inherit it.
+	--- AND THE ONE THAT WRITES TO THE FILESYSTEM. replay.restoreGeneration
+	--- copies a backup over a clip's live states and moves the rest to .trash;
+	--- an observer must not reach it. Written beside the savestate four because
+	--- it is the same rule and the same way of getting it wrong - a prefix in
+	--- the tier table is not enforcement, each call site is.
+	do
+		local n0 = st.refusals()
+		local ok = pcall(flycast.replay.restoreGeneration, "/tmp/nonexistent-gentest", "gen_01")
+		report("an observer is REFUSED replay.restoreGeneration", not ok)
+		report("...and that refusal is counted", st.refusals() == n0 + 1,
+			tostring(st.refusals()) .. " vs " .. tostring(n0))
+	end
+
 	for _, name in ipairs({ "snapshotLater", "restoreLater", "loadSlotLater", "saveSlotLater" }) do
 		local n0 = st.refusals()
 		local arg = (name == "restoreLater") and "" or 0

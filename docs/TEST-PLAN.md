@@ -577,14 +577,50 @@ All five claims are asserted, every one of them a sentence out of the TAS fork's
 own help text or comments. Four hold; the fifth - an empty-slot load - holds as
 written and fails a stricter property, tracked as an open arm.
 
-### 3. Generations RESTORE — a feature, not a test
+### 3. `[DONE 2026-09-14]` Generations restore — it existed, and had no way in
 
-`[CORRECTED 2026-09-11]` this item used to read "undo, staged, generations
-restore — tier 1 first". Undo and the staged buffer are already covered, and
-generations restore has nothing to test because it has not been built: taking a
-generation works and is probed, restoring one does not exist. Build it the way
-the rest of this tree is built - a pure core claimed at tier 1, then a probe
-carrying it through the real funnel - and the test comes with it.
+This item said the feature "does not exist. There is no restore function; it is a
+feature to build, not a test to write." **`[CORRECTED 2026-09-14]` that is half
+right and the wrong half.**
+
+`[SOURCE]` `Dojo::RestoreClipDir` and `tas_clip::restore` are both declared AND
+defined, complete with guardrails - and **nothing called either**. No UI, no
+hotkey, no script. Compiled, linked, unreachable, which is the shape CLAUDE.md
+opens with: `SaveStateFrame` compiled, linked and sat unreachable for several
+commits while savestates silently carried no `.frame` sidecar. From outside,
+"never built" and "no way in" are indistinguishable, and this plan recorded the
+wrong one.
+
+The engine is also better than a fresh one would likely have been: it moves
+live-only files to `.trash/<utc>/` rather than deleting them, copies everything
+except `clip.json`, then MERGES that so tags, notes and the sequence clock do not
+regress to backup time.
+
+**Reached via `flycast.replay.restoreGeneration(clipDir, genName)`**, gated at the
+call site and asserted refused at observer tier in `scripts/tests/tiers.lua` - a
+prefix in the tier table is not enforcement, each call site is.
+
+It takes the directory EXPLICITLY because restore is pre-boot by design: a live
+restore would leave the loaded movie, the replay writer, the rewind log, undo and
+bookmarks stale in memory, and their next write would undo it. A no-argument
+"restore mine" would always be refused and be useless.
+
+`scripts/gentest.sh`, written first and red for the right reason (five failures,
+`attempt to call a nil value`):
+
+    PASS  the restore binding exists and returned          n=1
+    PASS  the backup's state overwrote the live one        OLD
+    PASS  the live-only orphan was TRASHED, not deleted
+    PASS  ...and is gone from the clip directory
+    PASS  restoring the OPEN clip is refused               n=-1
+
+The guardrail arm needs a real clip OPEN. Without one
+`hostfs::savestateFolderOverride` is empty, the refusal can never fire, and the
+claim would pass for a reason unrelated to the guard.
+
+**Still no UI.** The panel that lists generations is the States window, which
+shows the OPEN clip - exactly the case restore refuses. A usable UI path is
+pre-boot, in the clip browser, and is not built.
 
 ### 4. `[PART DONE 2026-09-14]` register `isotest` and `replay-bindings-test`
 

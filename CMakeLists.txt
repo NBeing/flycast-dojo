@@ -2173,6 +2173,30 @@ set_tests_properties(flycast.recordtest_can_fail PROPERTIES
 	RUN_SERIAL TRUE
 	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;RECORDTEST_DISPLAY=79")
 
+# GENERATIONS RESTORE. docs/TEST-PLAN.md section 3 recorded this as a feature
+# that "does not exist - there is no restore function". `[MEASURED 2026-09-14]`
+# that is half right and the wrong half: Dojo::RestoreClipDir and
+# tas_clip::restore were both declared and defined, complete with guardrails, and
+# NOTHING CALLED EITHER - no UI, no hotkey, no script. Compiled, linked,
+# unreachable, which is the shape CLAUDE.md opens with.
+#
+# Five claims, and the last two are the ones a careless restore would break: the
+# live-only orphan is moved to .trash rather than DELETED, and a restore of the
+# clip the session has OPEN is refused - a live restore would leave the movie,
+# the replay writer, the rewind log, undo and bookmarks stale in memory and their
+# next write would undo it.
+#
+# No paired arm: it was written first and ran RED for the right reason - five
+# failures, "attempt to call a nil value (field 'restoreGeneration')" - against
+# the genuine pre-implementation tree.
+add_test(NAME flycast.gentest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gentest.sh)
+set_tests_properties(flycast.gentest PROPERTIES
+	SKIP_RETURN_CODE 77
+	TIMEOUT 300
+	RUN_SERIAL TRUE
+	ENVIRONMENT "FLYCAST_BIN=$<TARGET_FILE:flycast>;GENTEST_DISPLAY=153")
+
 # THE ISOLATION CONTRACT of scripts/isotest.sh, which is a TOOL and not a test -
 # it boots, screenshots and exits, and has no verdict for ctest to judge. What it
 # DOES have is one safety property, the rule CLAUDE.md states and this tree
