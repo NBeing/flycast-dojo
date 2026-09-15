@@ -2135,6 +2135,28 @@ add_test(NAME flycast.enginediff_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/enginediff.sh --self-test)
 set_tests_properties(flycast.enginediff_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
 
+# THE BRANCH JOURNEY, DRIVEN THROUGH THE REAL MERGE ENGINE. The tas_branch model
+# has unit self-tests; this is the WIRING - the first USER-JOURNEY test of the
+# ported studio. It forks a branch whose movie DIFFERS from main's, then drives
+# the real merge() session-verb (FlushLiveClip + tas_branch::merge + gui_loadState)
+# via dojo:BranchMergeProbe - a config-gated one-shot, the branch analogue of
+# RollEditProbe, because merge sits behind a nested confirm menu and a node with
+# no published rect (both unreliable to click under llvmpipe). The CLAIM is a
+# DIFFERENCE: main's movie changes IFF a valid merge ran. Needs a ROM, Xvfb, g++,
+# and a base clip with a prefixHash-stamped savestate; SKIP 77 otherwise.
+add_test(NAME flycast.branchtest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/branchtest.sh)
+set_tests_properties(flycast.branchtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+
+# ITS ARM. Perturbs the branch's forkAnchor prefixHash so the fork no longer
+# byte-matches main (main re-recorded below the fork). The merge gate MUST refuse
+# (PrefixDiverged) and main MUST stay byte-identical - the exact defect CLAUDE.md
+# flags: without the states[] prefixHash mirror, mainHash reads 0 and
+# PrefixDiverged can never fire, silently accepting a diverged merge.
+add_test(NAME flycast.branchtest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/branchtest.sh --self-test)
+set_tests_properties(flycast.branchtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+
 # THE FIVE THINGS UNIT CHECKS CANNOT ASK. docs/CROSS-PROJECT-LESSONS.md calls
 # shell/linux/integration-tests "the best test artefact in the tree - full
 # RUN/PASS/FAIL/SKIP contract, exit 2 on skip, pixel-level non-vacuity" and

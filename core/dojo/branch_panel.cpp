@@ -846,6 +846,116 @@ static void drawCreateRow(const Graph& d)
 	}
 }
 
+// ---------------------------------------------------------------------------------------
+// INTEGRATION PROBE, dojo:BranchMergeProbe=<branchId|first>
+//
+// Runs ONCE: force-pause, then drive the REAL merge session-verb - the same
+// merge() the context-menu's op==2 calls (FlushLiveClip + tas_branch::merge +
+// re-attach + gui_loadState) - against a chosen branch, and report the gate
+// verdict and whether main's movie actually became the branch's. This is the
+// branch analogue of roll_panel's RollEditProbe: the unit self-tests prove the
+// path arithmetic; only this proves the WIRING - that a merge MOVES THE MACHINE.
+//
+// The probe emits FACTS, never a pass/fail; scripts/branchtest.sh owns the CLAIM
+// (main's movie changes IFF a valid merge ran) and its PrefixDiverged sabotage.
+// Safe because branchtest.sh copies the clip into a throwaway temp dir per run.
+// Off by default; frame_number gate lets the clip finish attaching first.
+static u64 fnv1aFile(const std::string& path, u64 *sizeOut)
+{
+	u64 h = 1469598103934665603ull, sz = 0;
+	std::ifstream in(path, std::ios::binary);
+	char buf[8192];
+	while (in.good())
+	{
+		in.read(buf, sizeof(buf));
+		const std::streamsize got = in.gcount();
+		for (std::streamsize i = 0; i < got; i++) { h ^= (unsigned char)buf[i]; h *= 1099511628211ull; }
+		sz += (u64)got;
+	}
+	if (sizeOut != nullptr)
+		*sizeOut = sz;
+	return h;
+}
+
+static std::string movieIn(const std::string& dir)
+{
+	std::error_code ec;
+	for (const auto& f : ghc::filesystem::directory_iterator(ghc::filesystem::path(dir), ec))
+	{
+		if (f.is_directory(ec))
+			continue;
+		const std::string ext = f.path().extension().string();
+		if (ext == ".flyr" || ext == ".flyreplay")
+			return f.path().string();
+	}
+	return "";
+}
+
+static void mergeProbe(const Graph& d)
+{
+	static bool probed = false;
+	if (probed)
+		return;
+	const std::string want = cfgLoadStr("dojo", "BranchMergeProbe", "");
+	if (want.empty() || !d.valid || d.nodes.empty() || dojo.frame_number.load() < 120)
+		return;
+	probed = true;
+
+	std::string id;
+	if (want == "yes" || want == "first")
+		id = d.nodes.front().id;
+	else
+		for (const Node& n : d.nodes)
+			if (n.id == want) { id = n.id; break; }
+	if (id.empty())
+	{
+		NOTICE_LOG(NETWORK, "BRANCH PROBE RESULT: verdict=NOTARGET want=%s branches=%d", want.c_str(), (int)d.nodes.size());
+		return;
+	}
+
+	// The gate verdict (the region report: why merge is / isn't allowed) - a
+	// pure frame-timing check: frame + prefixHash of main's states[slot].
+	const tas_branch::MergeCheck mc = tas_branch::mergeStatus(d.rootDir, id);
+	// A STABLE token for the harness to grep (mergeVerdictText is human prose).
+	const char *verdictTok = "Unknown";
+	switch (mc.verdict)
+	{
+	case tas_branch::MergeVerdict::Ok:             verdictTok = "Ok"; break;
+	case tas_branch::MergeVerdict::NoAnchor:       verdictTok = "NoAnchor"; break;
+	case tas_branch::MergeVerdict::MainMissing:    verdictTok = "MainMissing"; break;
+	case tas_branch::MergeVerdict::FrameMismatch:  verdictTok = "FrameMismatch"; break;
+	case tas_branch::MergeVerdict::PrefixDiverged: verdictTok = "PrefixDiverged"; break;
+	}
+	NOTICE_LOG(NETWORK, "BRANCH PROBE: start head=%s branches=%d target=%s verdict=%s (%s)",
+			d.headId.c_str(), (int)d.nodes.size(), id.c_str(), verdictTok, tas_branch::mergeVerdictText(mc.verdict));
+
+	// Pause FIRST (no emu-thread flush racing our reads), then observe provenance:
+	// main's movie now, and the branch's movie we expect it to adopt.
+	gui_pause_for_checkout();
+	const std::string mainMovie = movieIn(d.rootDir);
+	const std::string branchMovie = movieIn((ghc::filesystem::path(d.rootDir) / "branches" / id).string());
+	u64 mBefSz = 0, brSz = 0;
+	const u64 mBef = fnv1aFile(mainMovie, &mBefSz);
+	const u64 brH = fnv1aFile(branchMovie, &brSz);
+	const bool differ = (mBef != brH) || (mBefSz != brSz);
+	NOTICE_LOG(NETWORK, "BRANCH PROBE: before mainSize=%llu mainHash=%016llx branchSize=%llu branchHash=%016llx differ=%s",
+			(unsigned long long)mBefSz, (unsigned long long)mBef, (unsigned long long)brSz, (unsigned long long)brH,
+			differ ? "yes" : "NO");
+
+	// Drive the REAL session verb.
+	const bool rc = merge(d.rootDir, id);
+
+	u64 mAftSz = 0;
+	const u64 mAft = fnv1aFile(movieIn(d.rootDir), &mAftSz);
+	const bool changed = (mAft != mBef) || (mAftSz != mBefSz);
+	const bool equalsBranch = (mAft == brH) && (mAftSz == brSz);
+	// ONE parseable line the harness greps. Facts only - the harness asserts the
+	// difference-claim and inverts it for the sabotage.
+	NOTICE_LOG(NETWORK, "BRANCH PROBE RESULT: verdict=%s differ=%s rc=%s changed=%s nowEqualsBranch=%s",
+			verdictTok, differ ? "yes" : "NO", rc ? "ok" : "refused",
+			changed ? "yes" : "NO", equalsBranch ? "yes" : "NO");
+}
+
 static void draw()
 {
 	const Graph& d = graph();
@@ -856,6 +966,8 @@ static void draw()
 	}
 	if (layoutRoot != d.rootDir)
 		loadLayout(d.rootDir);
+
+	mergeProbe(d);		// dojo:BranchMergeProbe=<id|first> - one-shot, drives the real merge
 
 	// ---- top: create, and the view controls ----------------------------------------
 	drawCreateRow(d);
