@@ -159,20 +159,34 @@ if cmp -s "$OUT/main_before.flyr" "$OUT/branch.flyr"; then
 fi
 
 # ---- boot: replay the clip, panel open, probe armed. No display INPUT, so no i3. -----
-# Pick a FREE display so the test and its _can_fail twin (and peer sessions) never
-# collide on a fixed number. -displayfd lets Xvfb choose and report it; only the
-# emulator needs DISPLAY (no xdotool here). FLYCAST_TEST_DISPLAY forces one.
+# Pick a FREE display in a HIGH range so the test, its twin, and peer sessions
+# never collide - and NEVER :0/:1, which are real displays (do NOT use Xvfb
+# -displayfd: it searches from 0 up and will grab :0 whenever it is free, exactly
+# the desktop-touching hazard CLAUDE.md forbids). Only the emulator needs DISPLAY
+# (no xdotool here). FLYCAST_TEST_DISPLAY forces one (still never 0/1).
+pick_display() {			# echo a free display number >= 160, offset by PID
+	local base=$((160 + ($$ % 80))) n
+	for n in $(seq "$base" 250) $(seq 160 "$base"); do
+		[ "$n" -le 1 ] && continue
+		[ -e "/tmp/.X11-unix/X$n" ] && continue
+		[ -e "/tmp/.X$n-lock" ] && continue
+		printf '%s' "$n"; return 0
+	done
+	return 1
+}
 if [ -n "${FLYCAST_TEST_DISPLAY:-}" ]; then
-	DISP="$FLYCAST_TEST_DISPLAY"
-	rm -f "/tmp/.X${DISP#:}-lock" 2>/dev/null || true
-	nohup Xvfb "$DISP" -screen 0 1000x800x24 >"$OUT/xvfb.log" 2>&1 & XPID=$!
+	DN="${FLYCAST_TEST_DISPLAY#:}"
+	[ "$DN" -gt 1 ] 2>/dev/null || { echo "branchtest: SKIP - refusing display :$DN (0/1 are real)"; exit $SKIP; }
 else
-	nohup Xvfb -displayfd 3 -screen 0 1000x800x24 3>"$OUT/xdisp" >"$OUT/xvfb.log" 2>&1 & XPID=$!
-	DISP=""
-	for _ in $(seq 1 20); do d="$(cat "$OUT/xdisp" 2>/dev/null)"; [ -n "$d" ] && { DISP=":$d"; break; }; sleep 0.3; done
-	[ -n "$DISP" ] || { echo "branchtest: SKIP - Xvfb did not report a display"; kill "$XPID" 2>/dev/null; exit $SKIP; }
+	DN="$(pick_display)" || { echo "branchtest: SKIP - no free display >=160"; exit $SKIP; }
 fi
+DISP=":$DN"
+nohup Xvfb "$DISP" -screen 0 1000x800x24 >"$OUT/xvfb.log" 2>&1 & XPID=$!
 sleep 2
+# CONFIRM Xvfb actually owns this display before driving the emulator at it.
+if [ ! -e "/tmp/.X11-unix/X$DN" ]; then
+	echo "branchtest: SKIP - Xvfb did not come up on $DISP"; kill "$XPID" 2>/dev/null; exit $SKIP
+fi
 echo "branchtest: display $DISP"
 export LP_NUM_THREADS="${LP_NUM_THREADS:-4}"		# be a good citizen (checks.sh)
 
