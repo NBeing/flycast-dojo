@@ -231,6 +231,17 @@ namespace sender { void selfTest(); }
 void registerLabPanel();
 namespace lab { void selfTest(); }
 
+//! tas_branch's pure half, under dojo:PanelSelfTest. The engine file is his, verbatim.
+namespace branch { void selfTest(); }
+
+/*
+	Captures: record the presented frame into captures/<clip>/ and list what is
+	there. A panel for OUR recorder (core/rend/video_recorder), not the fork's
+	avi_dump. Its one tas_branch dependency is rootOf. Idempotent.
+*/
+void registerCapturesPanel();
+namespace captures { void selfTest(); }
+
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();
 

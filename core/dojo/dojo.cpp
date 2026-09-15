@@ -900,6 +900,29 @@ void Dojo::BeginClipStats()
 	catch (...) {}
 }
 
+/*
+	EVERYTHING THE LIVE CLIP HAS NOT YET WRITTEN, written. Called before any copy
+	of the clip folder - tas_branch::create's first act - because a copy taken
+	mid-batch carries a .flyr short by up to 119 frames and a macro file one
+	edit behind.
+
+	Ported from the fork minus one call: his also flushes FlushRecordUndoGroup(),
+	"land any open recorded burst as one undo entry". This tree has no
+	record-undo-group, so there is nothing to land and the call is simply absent
+	rather than stubbed.
+*/
+void Dojo::FlushLiveClip()
+{
+	if (recording_started)
+		replay.FlushReplay();		// the <=119-frame .flyr tail
+	MacroFlush();					// <folder>_macro.txt
+	tas_wave::saveClip(hostfs::savestateFolderOverride);	// audio.env
+	tas_ruler::saveClip(hostfs::savestateFolderOverride);	// skip.map
+	WriteClipStats();				// stamp clip.json
+	NOTICE_LOG(NETWORK, "TAS BRANCH: FlushLiveClip -> %s (recording=%d)",
+			hostfs::savestateFolderOverride.c_str(), (int)recording_started);
+}
+
 void Dojo::WriteClipStats()
 {
 	if (hostfs::savestateFolderOverride.empty())
@@ -984,6 +1007,17 @@ void Dojo::WriteClipStats()
 		// dead-timeline staleness verdict from clip.json alone. Absent for old 4-byte sidecars.
 		if (slots[i].haveSeq)
 			e["rerecordSeq"] = slots[i].rerecordSeq;
+		/*
+			THE PREFIX HASH, MIRRORED. `[MEASURED 2026-09-14]` our sidecar v3
+			already carries it and hostfs::scanSavestateInfo already reads it -
+			this line was the only thing missing. Without it tas_branch::
+			mergeStatus reads mainHash == 0 from clip.json, its PrefixDiverged
+			clause can never fire, and a merge silently accepts a same-frame,
+			different-inputs divergence. Two lines that decide whether the merge
+			gate is a gate.
+		*/
+		if (slots[i].prefixHash != 0)
+			e["prefixHash"] = slots[i].prefixHash;
 		e["bytes"] = slots[i].size;
 		if (slots[i].mtime != 0)
 		{

@@ -198,6 +198,45 @@ int stateFileSlot(const ghc::filesystem::path& p)
 	return atoi(stem.c_str() + us + 1);
 }
 
+/*
+	THE ONE DEFINITION OF "what files make up a clip". See the header for why
+	this is an extract rather than a second copy.
+*/
+int copyLiveSet(const std::string& srcDir, const std::string& dstDir, u64 *bytesCopied)
+{
+	std::error_code ec;
+	int copied = 0;
+	u64 bytes = 0;
+	for (const auto& f : ghc::filesystem::directory_iterator(srcDir, ec))
+	{
+		// DIRECTORIES ARE SKIPPED. Prior gen_NN folders are directories and are
+		// never nested - and the same rule caps branch depth at 1.
+		if (f.is_directory(ec))
+			continue;
+		const std::string ext = f.path().extension().string();
+		if (ext == ".flyr" || ext == ".flyreplay" || ext == ".state" || ext == ".frame"
+				|| ext == ".json" || ext == ".png" || ext == ".label" || ext == ".txt"
+				|| ext == ".env" || ext == ".wave" || ext == ".map")	// .txt carries a macro clip's macro.txt
+		{
+			std::error_code sizeEc;
+			const u64 sz = (u64)ghc::filesystem::file_size(f.path(), sizeEc);
+			std::error_code cpEc;
+			ghc::filesystem::copy_file(f.path(),
+					ghc::filesystem::path(dstDir) / f.path().filename(),
+					ghc::filesystem::copy_options::overwrite_existing, cpEc);
+			if (!cpEc)
+			{
+				copied++;
+				if (!sizeEc)
+					bytes += sz;
+			}
+		}
+	}
+	if (bytesCopied != nullptr)
+		*bytesCopied = bytes;
+	return copied;
+}
+
 int archive(const std::string& clipDir, int *filesCopied, u64 *bytesCopied, const char *tag)
 {
 	ghc::filesystem::path clip(clipDir);
@@ -242,31 +281,11 @@ int archive(const std::string& clipDir, int *filesCopied, u64 *bytesCopied, cons
 	if (ghc::filesystem::exists(genDir, ec))
 		return -1;	// cannot happen after the max rule - belt and braces
 	ghc::filesystem::create_directories(genDir, ec);
-	int copied = 0;
 	u64 bytes = 0;
 	// Everything in the clip folder is copied by extension - there is no slot ceiling here, so a
 	// backup carries however many of the 100 slots actually exist, their .frame/.png sidecars, the
 	// movie itself and clip.json. At ~10-28 MB per state that adds up fast, hence the size report.
-	for (const auto& f : ghc::filesystem::directory_iterator(clip, ec))
-	{
-		if (f.is_directory(ec))
-			continue;		// prior gen_NN folders are directories - never nested
-		std::string ext = f.path().extension().string();
-		if (ext == ".flyr" || ext == ".flyreplay" || ext == ".state" || ext == ".frame"
-				|| ext == ".json" || ext == ".png" || ext == ".label" || ext == ".txt" || ext == ".env" || ext == ".wave" || ext == ".map")	// .txt carries a macro clip's macro.txt
-		{
-			std::error_code sizeEc;
-			u64 sz = (u64)ghc::filesystem::file_size(f.path(), sizeEc);
-			ghc::filesystem::copy_file(f.path(), genDir / f.path().filename(),
-					ghc::filesystem::copy_options::overwrite_existing, ec);
-			if (!ec)
-			{
-				copied++;
-				if (!sizeEc)
-					bytes += sz;
-			}
-		}
-	}
+	const int copied = copyLiveSet(clip.string(), genDir.string(), &bytes);
 	NOTICE_LOG(NETWORK, "TAS GEN: state backup %d file(s), %.1f MB -> %s",
 			copied, bytes / 1048576.0, genDir.string().c_str());
 	if (filesCopied != nullptr)

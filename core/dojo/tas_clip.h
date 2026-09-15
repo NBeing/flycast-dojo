@@ -40,6 +40,24 @@ namespace tas_clip
 	// (recovered: true), entries whose folder is gone stay flagged present: false, files / bytes are recounted.
 	void reconcile(const std::string& clipDir);
 
+	/*
+		COPY A CLIP'S LIVE SET into `dst` - every top-level file whose extension
+		belongs to a clip, and no directories.
+
+		EXTRACTED FROM `archive()` RATHER THAN WRITTEN AGAIN. `[MEASURED 2026-09-14]`
+		the fork calls this from two places (its F8 archive and `tas_branch::create`)
+		and our `archive()` already contained the identical loop, with a
+		character-for-character identical extension list. A second copy would be
+		the "one owner per fact" failure this tree keeps paying for - and the fact
+		here is "what files make up a clip", which is exactly the sort that drifts
+		silently when a new sidecar is added to one copy.
+
+		DIRECTORIES ARE SKIPPED, and that is load-bearing beyond tidiness: it is
+		what structurally caps branch depth at 1, because a branch folder can never
+		inherit a `branches/` subtree.
+	*/
+	int copyLiveSet(const std::string& srcDir, const std::string& dstDir, u64 *bytesCopied);
+
 	// ---- clip.json ----
 	nlohmann::json read(const std::string& clipDir);					// {} when absent / unparsable, always an object
 	bool write(const std::string& clipDir, const nlohmann::json& j);	// dump(2), trailing newline

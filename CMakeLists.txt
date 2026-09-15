@@ -1302,6 +1302,10 @@ if(NOT LIBRETRO)
 	core/dojo/hotkey_bind.h
 	core/dojo/sender_panel.cpp
 	core/dojo/lab_panel.cpp
+	core/dojo/tas_branch.cpp
+	core/dojo/tas_branch.h
+	core/dojo/branch_selftest.cpp
+	core/dojo/captures_panel.cpp
 	core/dojo/roll_profile.cpp
 	core/dojo/roll_panel.cpp
 	core/dojo/roll_select.cpp

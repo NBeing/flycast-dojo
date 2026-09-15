@@ -195,6 +195,7 @@ public:
 	void ArchiveGeneration();							// TAS: F8 - snapshot the ACTIVE clip into gen_NN
 	void BeginClipStats();								// TAS: start tracking stats for the active clip
 	void WriteClipStats();								// TAS: merge session stats into the clip's clip.json
+	void FlushLiveClip();								// TAS: flush .flyr tail, macro, wave, ruler and clip.json - before any copy of the folder
 	int ArchiveClipDir(const std::string& clipDir, int *filesCopied = nullptr,
 			u64 *bytesCopied = nullptr, const char *tag = "gen");	// returns gen/backup number or -1; tag: gen | setup
 	// Copy a generation's files back over the live clip. Gens themselves are never touched -
