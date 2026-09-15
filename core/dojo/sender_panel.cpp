@@ -110,6 +110,19 @@ void selfTest()
 	claim("...and 15 is NOT the same pattern as 30",
 			tas_auto::tickOn(30, 2) != tas_auto::tickOn(15, 2));
 
+	// ---- the rate has ONE owner ----------------------------------------------------------
+	{
+		const int was = tas_auto::autoHz();
+		tas_auto::setAutoHz(20);
+		claim("the engine remembers the rate a new arm uses", tas_auto::autoHz() == 20);
+		tas_auto::setAutoHz(999);
+		claim("...clamped to hold at the top", tas_auto::autoHz() <= 60);
+		tas_auto::setAutoHz(0);
+		claim("...and never to zero, which would mean 'off' rather than a rate",
+				tas_auto::autoHz() >= 1);
+		tas_auto::setAutoHz(was);
+	}
+
 	// ---- the pattern conversion --------------------------------------------------------
 	{
 		std::vector<u16> out;
@@ -156,7 +169,6 @@ void selfTest()
 // ---------------------------------------------------------------------------------------
 
 static bool senderOpen = false;
-static int armHz = 60;					//!< what a NEW arm uses. 60 = hold.
 static char patternBuf[256] = "";
 static std::string patternErr;
 
@@ -171,6 +183,15 @@ static void drawHoldGrid()
 	ImGui::SameLine();
 	tasTextDisabled("armed inputs are ORed into the guest every frame");
 
+	/*
+		THE RATE LIVES IN THE ENGINE, not here. `[CORRECTED 2026-09-14]` the first
+		version of this panel kept its own `armHz`, which is a SECOND OWNER of
+		"what rate does a new arm use" - the exact shape CLAUDE.md §4 is about,
+		and doubly silly when tas_auto.h already declares setAutoHz/autoHz for
+		precisely this. Found by auditing the engine for uncalled functions,
+		which is what turned up the unreachable overlay in the first place.
+	*/
+	const int armHz = tas_auto::autoHz();
 	ImGui::SetNextItemWidth(150.f);
 	if (ImGui::BeginCombo("##hz", armHz >= 60 ? "hold" : [&]{
 			static char b[24];
@@ -185,7 +206,7 @@ static void drawHoldGrid()
 			else
 				snprintf(label, sizeof(label), "%d Hz", hz);
 			if (ImGui::Selectable(label, armHz == hz))
-				armHz = hz;
+				tas_auto::setAutoHz(hz);
 		}
 		ImGui::EndCombo();
 	}
@@ -252,6 +273,21 @@ static void drawHoldGrid()
 	}
 	ImGui::EndTable();
 
+	for (int pl = 0; pl < 2; pl++)
+	{
+		ImGui::PushID(pl);
+		ImGui::BeginDisabled(!tas_auto::anyArmed(pl));
+		char lbl[16];
+		snprintf(lbl, sizeof(lbl), "clear P%d", pl + 1);
+		if (ImGui::Button(lbl))
+		{
+			tas_auto::clearPlayer(pl);
+			NOTICE_LOG(RENDERER, "INPUT SENDER: P%d arms cleared", pl + 1);
+		}
+		ImGui::EndDisabled();
+		ImGui::PopID();
+		ImGui::SameLine();
+	}
 	ImGui::BeginDisabled(!tas_auto::anyArmed());
 	if (tasButton("clear all"))
 	{

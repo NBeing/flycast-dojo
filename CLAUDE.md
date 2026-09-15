@@ -595,6 +595,53 @@ is something that actually went wrong, not a precaution.
 
 Add to it rather than re-learning.
 
+## Before porting a window, ask whether its ENGINE is already here and dead
+
+`[MEASURED 2026-09-14]` `core/dojo/tas_auto.cpp` — the hold / auto-fire engine —
+is **byte-identical** to the fork's, and `core/dojo/dojo.cpp:2169` consults it
+every single frame: `anyArmed()`, then `overlayCanon()` per player, ORed into the
+guest's input and baked into the movie cell.
+
+**`tas_auto::arm()` — the only function that puts bits into that overlay — had
+zero callers anywhere in the tree.**
+
+    overlayCanon / anyArmed / liveCanon / liveTick    dojo.cpp, every frame
+    arm                                               0
+    hzOf                                              0
+
+So `overlayCanon()` always returned 0, `anyArmed()` was permanently false, and
+the branch could only ever fire through one `playLive()` buried in the
+frameskip-alignment path. A documented, wired, byte-identical engine that ran
+sixty times a second and **could not be armed**. Nothing ever failed; nothing
+ever could.
+
+This is §1's first rule — "a clean build is not evidence a feature is wired" —
+and it is worth its own entry because of what it changes about PORT ORDER. The
+Input Sender looked like a 767-line window. It was a ~200-line panel, because
+the expensive half was already paid for and merely unreachable.
+
+**So the first question about any window is not "how big is it" but "what of it
+is already here, and is any of it dead?"** The closure table answers the first;
+only a caller census answers the second.
+
+### The census, and the one it found next
+
+Compare each engine header's declared functions against callers outside its own
+`.cpp`. Read the result carefully — a module whose UI lives in the same file
+reports false positives, so verify a hit before believing it.
+
+`[MEASURED 2026-09-14]` it found a second one immediately: **`tas_clip`'s Test
+Lab backend** — `labDir`, `labIsActive`, `labNewTestDir`, `labTests` — has no
+caller outside `tas_clip.cpp`, inside a 1,025-line module that is otherwise
+live. Same shape, next port.
+
+It also caught a duplicate owner **this session had just introduced**: the
+sender panel kept its own `armHz` while `tas_auto` already declared
+`setAutoHz`/`autoHz` for exactly that. Two owners of one fact, in a file whose
+own header argues against them. §4 is easy to violate while quoting it.
+
+---
+
 ## Driving ImGui with xdotool: a plain `click` is too fast to be seen
 
 `[MEASURED 2026-09-14]` `xdotool click 1` presses and releases within one X
