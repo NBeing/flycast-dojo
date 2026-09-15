@@ -220,6 +220,17 @@ void registerHotkeyPanel();
 void registerSenderPanel();
 namespace sender { void selfTest(); }
 
+/*
+	The Test Lab: a permanent library of fixture states, each with its own
+	scratch slots.
+
+	`[MEASURED 2026-09-14]` found by the caller census, not by size -
+	`tas_clip`'s whole lab backend (labDir / labIsActive / labTests /
+	labNewTestDir) shipped with no caller outside tas_clip.cpp. Idempotent.
+*/
+void registerLabPanel();
+namespace lab { void selfTest(); }
+
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();
 

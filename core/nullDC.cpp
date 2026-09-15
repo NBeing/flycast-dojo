@@ -105,6 +105,7 @@ int flycast_init(int argc, char* argv[])
 	uitext::selfTest();
 	roll::rebind::selfTest();
 	roll::sender::selfTest();
+	roll::lab::selfTest();
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();
@@ -132,6 +133,7 @@ int flycast_init(int argc, char* argv[])
 	roll::registerFrameSkipTestPanel();
 	roll::registerUiTextPanel();
 	roll::registerSenderPanel();
+	roll::registerLabPanel();
 	os_CreateWindow();
 	os_SetupInput();
 
