@@ -121,8 +121,13 @@ static bool sameId(const char *a, const char *b)
 
 static const char *skipThisFrame = nullptr;
 
+//! Defined below, beside saveOpenState - it needs keyFor(), which is too.
+static void persistIfChanged();
+
 void drawStream(Stream s, const char *skipId)
 {
+	// Before drawing: catch a change made since the last frame, whoever made it.
+	persistIfChanged();
 	skipThisFrame = skipId;
 	visitStream(s, [](const Panel& p) {
 		if (skipThisFrame != nullptr && sameId(p.id, skipThisFrame))
@@ -186,6 +191,54 @@ void saveOpenState()
 	for (const Panel& p : registry)
 		if (p.persist)
 			cfgSaveBool("dojo", keyFor(p), *p.open);
+}
+
+/*
+	PERSIST THE MOMENT IT CHANGES, from wherever it changed.
+
+	`[MEASURED 2026-09-14]` `persist: true` was HALF-WIRED. add() restores from
+	cfg at registration and that half works; the writing half never ran, because
+	`saveOpenState()`'s only caller was this file's own self-test. So a panel
+	opened by hand was shut again on the next launch, and every panel registered
+	with persist=true was persisting nothing.
+
+	It looked fine under test for a reason worth remembering: a harness that
+	launches with `-config dojo:Panel.<id>=yes` exercises the READ half only,
+	and the read half was correct. The write half has no observable at all
+	inside one session.
+
+	A SWEEP RATHER THAN A HOOK IN toggle(), because `open` has THREE writers and
+	only one of them is toggle(): `panels::open()` sets it, and the window's own
+	close button writes straight through the pointer handed to ImGui::Begin -
+	deliberately, so that flag has one owner. A save hung off toggle() would
+	persist a hotkey and silently lose a close button, which is a worse bug than
+	the one it fixes because it works often enough to be trusted.
+
+	Costs one bool compare per persisted panel per frame, and writes only on a
+	change - a few times a session.
+*/
+static void persistIfChanged()
+{
+	// Parallel to `registry` by index; grows with it. Seeded on first sight so
+	// registration-time restore is not immediately written back out.
+	static std::vector<char> lastSaved;
+	if (lastSaved.size() != registry.size())
+		lastSaved.resize(registry.size(), (char)2);		// 2 = "not yet seen"
+	for (size_t i = 0; i < registry.size(); i++)
+	{
+		const Panel& p = registry[i];
+		if (!p.persist)
+			continue;
+		const char now = *p.open ? 1 : 0;
+		if (lastSaved[i] == now)
+			continue;
+		const bool firstSight = lastSaved[i] == (char)2;
+		lastSaved[i] = now;
+		if (firstSight)
+			continue;		// that was the restored value, not a user change
+		cfgSaveBool("dojo", keyFor(p), *p.open);
+		NOTICE_LOG(RENDERER, "PANEL PERSIST: %s -> %s", p.id, now ? "open" : "closed");
+	}
 }
 
 /*
