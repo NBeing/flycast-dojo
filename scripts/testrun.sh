@@ -85,6 +85,43 @@ fi
 # prevent. Three outcomes, because there are three.
 SKIP=77
 [ -x "$BIN" ] || { echo "testrun: SKIP - no binary at $BIN" >&2; exit $SKIP; }
+
+# IS THE BINARY NEWER THAN THE SOURCE IT IS SUPPOSED TO BE TESTING?
+#
+# `[MEASURED 2026-09-14]` every entry in this suite could pass against a build
+# that predates the change under test. This script took FLYCAST_BIN from the
+# environment and checked only that it was EXECUTABLE - never that it was newer
+# than core/ - and shell/linux/integration-tests defaulted to a packaged binary
+# that was a week stale on this machine.
+#
+# docs/CROSS-PROJECT-LESSONS.md flagged this as the shape of nbneo's
+# three-times-green incident: a fix is written, the suite is run, it passes, and
+# nothing built. The result is worse than a failure because it is EVIDENCE FOR
+# the change that was never compiled.
+#
+# A WARNING, NOT A FAILURE, and deliberately. A tester may be running an older
+# binary on purpose - bisecting, or checking a packaged artefact - and refusing
+# would break that. What must not happen is doing it BY ACCIDENT and silently.
+# Every run now says which it is, so a green result carries its provenance.
+#
+# `-newer` is a whole-file mtime compare and needs no build system; find prints
+# one line per source newer than the binary, and only the first is needed.
+if [ -d "$ROOT/core" ]; then
+	# PARENTHESISED. `-o` binds looser than the implicit `-a`, so
+	#     -name '*.cpp' -o -name '*.h' -newer BIN
+	# reads as "(any .cpp) OR (a .h newer than BIN)" and matches every .cpp in
+	# the tree - the guard would fire on every run and mean nothing.
+	newer="$(find "$ROOT/core" \( -name '*.cpp' -o -name '*.h' \) -newer "$BIN" -print -quit 2>/dev/null)"
+	if [ -n "$newer" ]; then
+		echo "testrun: WARNING - $BIN is older than $newer" >&2
+		echo "testrun:           this run tests the BUILD, not the source. Build first, or set" >&2
+		echo "testrun:           TESTRUN_ALLOW_STALE=1 to say you meant it." >&2
+		[ -n "${TESTRUN_ALLOW_STALE:-}" ] || {
+			echo "testrun: SKIP - refusing to report on a stale binary" >&2
+			exit $SKIP
+		}
+	fi
+fi
 [ -f "$ROM" ] || { echo "testrun: SKIP - no ROM at $ROM" >&2; exit $SKIP; }
 if [ "$WATCH" -eq 1 ]; then
 	# --watch runs on YOUR display so you can see it, instead of provisioning an
