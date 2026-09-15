@@ -106,6 +106,19 @@
 >   silently accepted. Two things the engine does NOT enforce and the panel
 >   must: depth-1 (create() on a branch dir nests happily), and the fork anchor
 >   is read from the BOUND folder, not the `clipDir` argument.
+>
+>   **`[CORRECTED 2026-09-15]` `tas_clip` was BEHIND his `edca8915`** - ported from
+>   a snapshot earlier than the pin, so three features he added since were silently
+>   absent (a full-tree grep found zero occurrences of each): `readLocked` /
+>   `setLocked` + the `locked` field (a FINALIZED macro is protected from the
+>   perpetual auto-save's clobber), `labTrashTest` (delete a Test Lab test SAFELY -
+>   move to `_lab/.trash/`, never a hard delete), and the `meta["node"]` "every
+>   clip is a node from birth / main" groundwork. The Test Lab we shipped
+>   therefore had no locked-macro guard and no safe delete. A catch-up port is
+>   landing this session, and a new `flycast.tasclip_parity` check guards this
+>   class of drift (the `enginediff` differential only covers `copyLiveSet`'s
+>   extension set, so it could not have caught this). NOT yet verified done here -
+>   the catch-up is a sibling change under review.
 > - **Per-branch export** (`core/dojo/branch_export.{h,cpp}`) - fan main + every
 >   branch to its own video through OUR recorder; the state machine reuses the
 >   replay-end hook to stop each capture. Closes the branch lifecycle.
@@ -122,6 +135,18 @@
 > is by choice, not blockers: the Markdown Playground (a dev toy needing
 > `imgui_md`), and text->roll apply from the Notepad (the roll's `applyPattern`
 > owns that). Every ported panel carries executable coverage his fork never had.
+>
+> **`[CORRECTED 2026-09-15]` that list of "what is left" was short by three.** A
+> port-gap re-measure against `edca8915` found three more studio windows still
+> UNPORTED: **Macros** (~2,832-line closure), **Snippets** (~2,349), and the
+> **Timeline HUD overlay** (the compact movie/driver banner, distinct from the
+> Piano Roll - `his dojo_gui.cpp:23209`). Macros + Snippets are the ~9,000-line
+> shared `seq*` / `movieMacros*` / `selSet` clump this file already says arrives
+> as one unit, so they are "left by choice" in the same sense as above; the
+> Timeline HUD is small and unblocked (stock ImGui overlay). Its absence is why
+> the "unlock in Timeline" notifications in `dojo.cpp` were reworded to a generic
+> "unlock the range first" - the lock UI they pointed at is not in this tree
+> (`gui_locked_ranges()` is a stub, `dojo.cpp` ~1547).
 >
 > They all follow the same shape, and it is the thing to repeat on the next one:
 > **put the part that can be wrong somewhere a test can reach it.** Each time
