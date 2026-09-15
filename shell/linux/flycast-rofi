@@ -404,6 +404,7 @@ Run the Lua conformance suite
 TAS: open the studio
 TAS: panel self-tests
 TAS: open the studio on a replay
+TAS: open my saved session (all panels)
 Compare: davidrr studio'
 
 if [ -z "$ACTION" ]; then
@@ -413,6 +414,20 @@ fi
 
 mkdir -p "$OUT_DIR"
 base=("$BIN")
+
+# THE STUDIO'S WINDOWS, in one place so every studio action opens the same set
+# and a new panel is added here once, not in three actions. Ten ported this
+# session (input viz, frame skip test, UI text, hotkey rebind, input sender,
+# test lab, captures, branches, notepad - export lives inside captures) plus the
+# piano roll and states wall the studio is built around. `game` is on by default.
+studio_panels=(
+    -config dojo:Panel.pianoroll=yes    -config dojo:Panel.states=yes
+    -config dojo:Panel.hotkeys=yes      -config dojo:Panel.inputviz=yes
+    -config dojo:Panel.frameskiptest=yes -config dojo:Panel.uitext=yes
+    -config dojo:Panel.sender=yes       -config dojo:Panel.testlab=yes
+    -config dojo:Panel.captures=yes     -config dojo:Panel.branches=yes
+    -config dojo:Panel.notepad=yes
+)
 
 case "$ACTION" in
 Play)
@@ -521,8 +536,7 @@ Play)
     # something happens and then say exactly what. They land in $LOG, which
     # die() quotes back on a failed launch.
     launch "$dev" -config dojo:RecordMatches=yes \
-                  -config dojo:Panel.pianoroll=yes -config dojo:Panel.states=yes \
-                  -config dojo:Panel.hotkeys=yes \
+                  "${studio_panels[@]}" \
                   -config dojo:RollSelTrace=yes -config dojo:RollPaintTrace=yes \
                   -config dojo:StatesTrace=yes \
                   "$GAME"
@@ -565,8 +579,7 @@ Play)
     fi
     launch "$dev" -config dojo:Replay=yes -config "dojo:ReplayFilename=$replay" \
                   "${seek[@]}" \
-                  -config dojo:Panel.pianoroll=yes -config dojo:Panel.states=yes \
-                  -config dojo:Panel.hotkeys=yes \
+                  "${studio_panels[@]}" \
                   -config dojo:RollSelTrace=yes -config dojo:RollPaintTrace=yes \
                   -config dojo:StatesTrace=yes \
                   "$GAME"
@@ -575,6 +588,38 @@ Play)
 # SIDE BY SIDE, on the same game. That fork's studio is its own UI, opened from
 # inside it; this only launches it. It is a separate build this repository does
 # not produce, hence the path, the override, and the refusal that names both.
+# THE SESSION THESE WINDOWS WERE BUILT AND VERIFIED IN: the NoBGM_VMU clip and
+# its savestate, with every studio panel open. Self-contained - it brings its own
+# ROM and clip, so it ignores the game picked above (the launcher asks for one
+# before any action; this one does not need it). Both paths are overridable and
+# checked, so a missing file names itself instead of a blank window. Loads via
+# the replay path with AutoSeekState=0, which lands ON the state with the movie
+# already in the roll - the same setup every window was driven from.
+'TAS: open my saved session (all panels)')
+    dev="$(need_bin "$DEV_BIN" "the build-tree flycast" FLYCAST_DEV_BIN)" || exit 1
+    demo_rom="${FLYCAST_TAS_DEMO_ROM:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
+    demo_clip="${FLYCAST_TAS_DEMO_CLIP:-$HOME/.local/share/flycast-dojo/replays/NoBGM_VMU/2026-09-08T02_38_29Z/NoBGM_VMU__2026-09-08T02_38_29Z__Player____.flyr}"
+    [ -r "$demo_rom" ]  || die "no ROM at $demo_rom
+set FLYCAST_TAS_DEMO_ROM to your NoBGM_VMU.cdi"
+    [ -r "$demo_clip" ] || die "no clip at $demo_clip
+set FLYCAST_TAS_DEMO_CLIP to a .flyr with a .state beside it"
+    seek=()
+    if has_state "$demo_clip"; then
+        seek=(-config dojo:AutoSeekState=0)
+    else
+        log "no .state beside $demo_clip - starting at frame 0"
+    fi
+    # AutoLoadNetState=no / Transmitting=no / Receiving=no: this is a local
+    # session, not netplay - without them the boot stalls on a savestate-download
+    # modal (the memory-card prompt), which is what ate the first automated runs.
+    launch "$dev" -config dojo:Replay=yes -config "dojo:ReplayFilename=$demo_clip" \
+                  "${seek[@]}" \
+                  -config dojo:AutoLoadNetState=no -config dojo:Transmitting=no \
+                  -config dojo:Receiving=no \
+                  "${studio_panels[@]}" \
+                  "$demo_rom"
+    ;;
+
 'Compare: davidrr studio')
     rr="$(need_bin "$RR_BIN" "the davidrr fork" FLYCAST_RR_BIN)" || exit 1
     # Its pause key is P, not comma.
