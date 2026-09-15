@@ -47,8 +47,15 @@
 >   zoom transform; and he re-implemented the same star with `ImDrawList` for
 >   the minimap in the same file. `core/dojo/branch_panel.cpp` draws it with
 >   stock ImGui. `ImGuiColorTextEdit` was likewise sidestepped for UI Text.
->   What remains genuinely absent: `imgui_md` / `imgui_markdown` (help tooltips)
->   and `ImGuiColorTextEdit` for the Notepad specifically.
+>
+>   `[RESOLVED 2026-09-15]` of the four, only ONE was ever load-bearing:
+>   `ImGuiColorTextEdit`, for the NOTEPAD - its gutter, diagnostics, palette and
+>   view-at-line have no `InputTextMultiline` equivalent, and the same closure
+>   survey that dismissed the node editor CONFIRMED this one. It is now vendored
+>   (`core/deps/ImGuiColorTextEdit`, 5,106 lines, ImGui 1.90.4, zero
+>   `imgui_internal`) and the Notepad is built on it. `imgui-node-editor` was
+>   never needed. `imgui_md` / `imgui_markdown` back only the Markdown Playground,
+>   a dev toy the port map marks SKIP. So: one dependency taken, three refused.
 >
 > - **`[CORRECTED 2026-09-14]` "Captures needs 8 `tas_branch::*` symbols" - it
 >   needs ONE**, `rootOf`, a pure path function that is the identity when no
@@ -99,6 +106,22 @@
 >   silently accepted. Two things the engine does NOT enforce and the panel
 >   must: depth-1 (create() on a branch dir nests happily), and the fork anchor
 >   is read from the BOUND folder, not the `clipDir` argument.
+> - **Per-branch export** (`core/dojo/branch_export.{h,cpp}`) - fan main + every
+>   branch to its own video through OUR recorder; the state machine reuses the
+>   replay-end hook to stop each capture. Closes the branch lifecycle.
+> - **Notepad** (`core/dojo/notepad_panel.cpp` + vendored `ImGuiColorTextEdit`) -
+>   the one window whose dependency was real; a scratchpad on our notation.
+> - **The engine-differential test** (`scripts/enginediff.sh`,
+>   `scripts/tests/engine_diff.cpp`) - runs our `copyLiveSet` and his over one
+>   fixture and diffs, plus a source-parity check on the extension sets. The only
+>   differential aimed at a feature rather than the emulator core, and it works
+>   there because the engines are meant to MATCH him. Differential where parity is
+>   intended; property self-tests everywhere we mean to differ.
+>
+> **`[2026-09-15]` The studio's windows of value here are ported.** What is left
+> is by choice, not blockers: the Markdown Playground (a dev toy needing
+> `imgui_md`), and text->roll apply from the Notepad (the roll's `applyPattern`
+> owns that). Every ported panel carries executable coverage his fork never had.
 >
 > They all follow the same shape, and it is the thing to repeat on the next one:
 > **put the part that can be wrong somewhere a test can reach it.** Each time
