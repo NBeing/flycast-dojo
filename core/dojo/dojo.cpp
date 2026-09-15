@@ -529,7 +529,7 @@ void Dojo::MapleRecordAction(MapleInputState inputState[4])
 			const double nowLw = os_GetSeconds();
 			if (nowLw - lastLockWarn > 1.5)
 			{
-				gui_display_notification("Locked range - controller input not recorded (unlock in Timeline)", 1500);
+				gui_display_notification("Locked range - controller input not recorded (unlock the range first)", 1500);
 				lastLockWarn = nowLw;
 			}
 		}
@@ -869,6 +869,8 @@ void Dojo::BeginClipStats()
 	live_from_local.clear();
 	live_from_edited = false;
 	live_state_writes = 0;
+	macro_locked = tas_clip::readLocked(hostfs::savestateFolderOverride);	// a finalized test protects its macro from the auto-save (dev)
+	macro_force_write = false;
 	movie_len_at_begin = (u32)session_inputs.size();
 	clip_start_time = os_GetSeconds();
 	if (hostfs::savestateFolderOverride.empty())
@@ -929,10 +931,10 @@ void Dojo::FlushLiveClip()
 	savestate folder, start fresh stats, clear the roll, attach the new clip's
 	movie. Lands EDITABLE - a branch is "resume editing this fork".
 
-	`[PORTED 2026-09-14]` from the fork minus ONE line: his also sets
-	`macro_locked = false`, a member this tree does not have (the lock lives in
-	our Test Lab as a panel-local, not on Dojo). The session lands unlocked
-	here because there is no lock to clear.
+	`[PORTED 2026-09-14]` from the fork; `[CORRECTED 2026-09-15]` it now also
+	clears `macro_locked` like his - the member WAS absent when this was first
+	ported and is present since the tas_clip catch-up, so a branch lands unlocked
+	(always editable) even when it forks from a finalized test.
 
 	Does NOT load a state or touch the roll selection - the caller owns those
 	(roll::branch::checkout), and must have paused first.
@@ -950,6 +952,7 @@ void Dojo::SwitchClipFolder(const std::string& dir)
 	loaded_macro_rr = rerecord_count;
 	macro_armed = true;			// the roll drives the guest
 	play_match = false;			// editable: WRITE
+	macro_locked = false;		// a branch is always editable, even off a finalized test
 	divergence_open = false;
 	// copyLiveSet keeps original names, so scan for the movie rather than
 	// assuming one. AttachFile clears the roll and loads it.
@@ -1562,7 +1565,7 @@ s64 Dojo::ApplyEdit(const std::map<u32, std::vector<u8>>& edited, const char *so
 		if (changed.size() != before)
 		{
 			char lm[96];
-			snprintf(lm, sizeof(lm), "%u frame(s) blocked - locked range (unlock in Timeline)",
+			snprintf(lm, sizeof(lm), "%u frame(s) blocked - locked range (unlock the range first)",
 					(u32)(before - changed.size()));
 			gui_display_notification(lm, 2500);
 			if (changed.empty())
@@ -1663,7 +1666,7 @@ s64 Dojo::ApplyEditResize(const std::map<u32, std::vector<u8>>& edited, const ch
 			if (r.second > maxHi) maxHi = r.second;
 		if (first >= 0 && (u32)first < maxHi)
 		{
-			gui_display_notification("Structural edit blocked - it would shift a locked range (unlock in Timeline)", 2800);
+			gui_display_notification("Structural edit blocked - it would shift a locked range (unlock the range first)", 2800);
 			return -1;
 		}
 	}
@@ -2934,6 +2937,8 @@ u32 Dojo::MacroAnchorFrame(bool& hasState0)
 u32 Dojo::WriteMacroFile()
 {
 	if (session_inputs.empty() || hostfs::savestateFolderOverride.empty())
+		return 0;
+	if (macro_locked && !macro_force_write)	// a FINALIZED test (dev): the auto-save / State-0 dual-link must not overwrite it; only an explicit Finalize / Overwrite does
 		return 0;
 	macro_save_pending.store(false, std::memory_order_relaxed);	// cleared BEFORE the snapshot: a write landing during it re-marks; a failed save re-marks below
 	bool hasState0 = false;

@@ -66,6 +66,7 @@ int labTests(const std::string& gameName, std::vector<LabTest>& out)
 		readTagsNotes(t.dir, tagsCsv, notes, &created, nullptr);
 		parseTags(tagsCsv.c_str(), t.tags);
 		t.notes = notes;
+		t.locked = readLocked(t.dir);	// finalized macro (protected from the auto-save)
 		// states count + newest-file mtime (Modified) + BASE mtime (Created fallback), one pass
 		ghc::filesystem::file_time_type modFt{}, baseFt{};
 		bool modValid = false, baseValid = false;
@@ -900,6 +901,54 @@ bool writeTagsNotes(const std::string& clipDir, const char *tagsCsv, const char 
 	return write(clipDir, j);
 }
 
+bool readLocked(const std::string& clipDir)
+{
+	std::error_code ec;
+	if (clipDir.empty() || !ghc::filesystem::exists(ghc::filesystem::path(clipDir) / "clip.json", ec))
+		return false;
+	const nlohmann::json j = read(clipDir);
+	return j.contains("locked") && j["locked"].is_boolean() && j["locked"].get<bool>();
+}
+
+bool setLocked(const std::string& clipDir, bool locked)
+{
+	nlohmann::json j = read(clipDir);
+	j["locked"] = locked;
+	return write(clipDir, j);
+}
+
+bool labTrashTest(const std::string& testDir)
+{
+	if (testDir.empty())
+		return false;
+	std::lock_guard<std::recursive_mutex> lk(clipMutex);	// the folder move, one critical section (parity with deleteGenerations)
+	const ghc::filesystem::path dir(testDir);
+	if (dir.parent_path().filename().string() != "_lab")	// the only tests we touch live directly under <game>/_lab
+	{
+		NOTICE_LOG(NETWORK, "TAS LAB: refused to trash %s - not under a _lab folder", testDir.c_str());
+		return false;
+	}
+	std::error_code ec;
+	if (!ghc::filesystem::is_directory(dir, ec))
+		return false;
+	std::string stamp = utcNowIso();
+	for (char& c : stamp)
+		if (c == (char)58)
+			c = (char)95;	// colon -> underscore, a folder-safe stamp
+	const std::string name = dir.filename().string();
+	const ghc::filesystem::path trash = dir.parent_path() / ".trash" / (name + "_" + stamp);
+	ghc::filesystem::create_directories(trash.parent_path(), ec);
+	ghc::filesystem::rename(dir, trash, ec);
+	if (ec)
+	{
+		NOTICE_LOG(NETWORK, "TAS LAB: could not trash %s (%s) - kept", testDir.c_str(), ec.message().c_str());
+		return false;
+	}
+	bump();
+	NOTICE_LOG(NETWORK, "TAS LAB: trashed test %s -> .trash/%s", name.c_str(), (name + "_" + stamp).c_str());
+	return true;
+}
+
 bool setGenerationTagsNotes(const std::string& clipDir, const std::string& genName, const char *tagsCsv, const char *notes)
 {
 	nlohmann::json j = read(clipDir);
@@ -990,6 +1039,16 @@ bool seed(const std::string& clipDir, const std::string& game, const std::string
 	for (const auto& t : tv)
 		tags.push_back(t);
 	meta["tags"] = tags;
+	// Branches groundwork (dev 2026-09-06): every clip is a NODE from birth. A fresh clip is "main" - so if branches
+	// appear later, main is already a first-class, taggable node in the graph. tas_branch::create overwrites this to a
+	// "branch" node (kind/lineage) in the copied clip.json, and registers the child in THIS (root) clip's branches[].
+	nlohmann::json node = nlohmann::json::object();
+	node["id"] = "main";
+	node["kind"] = "main";
+	node["name"] = "main";
+	node["tags"] = nlohmann::json::array();
+	node["color"] = "";
+	meta["node"] = node;
 	return write(clipDir, meta);
 }
 

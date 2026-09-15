@@ -338,6 +338,12 @@ public:
 	bool onenter_ff = false;	// fast-forwarding through the seeded boot; cleared at the handoff pause (gui.cpp)
 	bool replay_bootload = false;	// Replay boot (David, 2026-09-04): the boot handoff seeks State 0 (if the clip has one) while paused, then stays frozen
 	bool macro_fullload = false;	// Play Macro Full load: the boot handoff loads State 0 while paused (gui.cpp); cleared there and in Reset()
+	// TEST LAB macro-lock enforcement (ported from reference/flycast-rr): a FINALIZED test protects its
+	// macro.txt from the perpetual auto-save. macro_locked is read from clip.json "locked" on clip-bind
+	// (BeginClipStats); WriteMacroFile refuses while set unless macro_force_write - the explicit
+	// Overwrite/Finalize bypass. A branch is always editable, so SwitchClipFolder clears it.
+	bool macro_locked = false;
+	bool macro_force_write = false;
 	// Save-to-loaded-macro: the absolute macro .txt this movie was loaded from (set by macroLoadFull / LoadMacroFull).
 	// Empty = no macro loaded this session. loaded_macro_rr = rerecord_count snapshot at load; a differing current
 	// count means the movie was edited since -> the Save-to-loaded button/menu enable on that. Cleared in Reset().
@@ -346,7 +352,8 @@ public:
 	// TAS timeline-lock: the set of savestate SLOTS whose input range is locked (protected).
 	// Replaces the old single states_locked flag: each locked slot protects [its movie frame,
 	// the next state's frame) from EVERY writer (pad record, live/SEND, paint, edit verbs) while
-	// still driving the guest. Read by gui_locked_ranges/gui_frame_locked; toggled in the Timeline.
+	// still driving the guest. Read by gui_locked_ranges/gui_frame_locked; toggled by the range-lock
+	// controls (his Timeline HUD hosted them; that window is unported here - base_prelock still auto-locks).
 	std::set<int> locked_slots;
 	bool base_prelock = true;	// slot 0 (BASE): auto-lock [0, frame(BASE)) - the pre-combo run-up is protected by default
 	// A2: emu-thread-readable snapshot of the locked frame ranges. The GUI thread publishes it each
@@ -355,8 +362,8 @@ public:
 	std::vector<std::pair<u32, u32>> locked_ranges_cache;
 	std::mutex locked_ranges_mtx;
 	bool FrameLockedEmu(u32 frame);		// is this movie frame in a locked range? (emu-thread safe)
-	// F3 on an empty slot: the Timeline shows a red warning for a few seconds (the console
-	// line was the only witness before, and the native console is usually closed).
+	// F3 on an empty slot: these fields drive a few-seconds red warning (his Timeline HUD showed it;
+	// that window is unported here, so for now the console line is the witness - and it is usually closed).
 	double load_fail_at = -100.0;
 	int load_fail_slot = -1;
 	// `[CORRECTED 2026-09-14]` this said "state loads during recording THIS

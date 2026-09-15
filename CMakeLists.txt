@@ -2135,6 +2135,22 @@ add_test(NAME flycast.enginediff_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/enginediff.sh --self-test)
 set_tests_properties(flycast.enginediff_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
 
+# TAS_CLIP STAYS IDENTICAL TO THE PIN. enginediff guards copyLiveSet's extension
+# set; this guards the rest of the module that tracks David verbatim. `[MEASURED
+# 2026-09-15]` a re-measure found our tas_clip had been ported from a snapshot
+# EARLIER than edca8915 and was silently behind on readLocked/setLocked,
+# labTrashTest, and seed()'s main-node groundwork. This compares each such
+# function BODY (order-independent - our functions sit at different line positions)
+# modulo the David->dev comment convention. No emulator, no display.
+add_test(NAME flycast.tasclip_parity
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/tas_clip_parity.sh)
+set_tests_properties(flycast.tasclip_parity PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+
+# ITS ARM. Injects drift into one function body and requires the compare to catch it.
+add_test(NAME flycast.tasclip_parity_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/tas_clip_parity.sh --self-test)
+set_tests_properties(flycast.tasclip_parity_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+
 # THE BRANCH JOURNEY, DRIVEN THROUGH THE REAL MERGE ENGINE. The tas_branch model
 # has unit self-tests; this is the WIRING - the first USER-JOURNEY test of the
 # ported studio. It forks a branch whose movie DIFFERS from main's, then drives

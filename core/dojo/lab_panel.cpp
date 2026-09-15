@@ -375,6 +375,51 @@ static void draw()
 		else
 			gui_display_notification("Test Lab: could not write clip.json", 3000);
 	}
+
+	// FINALIZE: lock this test's macro against the perpetual auto-save
+	// (dojo.macro_locked reads tas_clip::readLocked on the bound folder).
+	bool locked = cur->locked;
+	const bool isCur = cur->dir == hostfs::savestateFolderOverride;
+	if (tasCheckbox("Finalize (lock macro)", &locked) && locked != cur->locked)
+	{
+		// His "Overwrite + lock": when finalizing the BOUND test, write the macro
+		// ONE last time (macro_force_write bypasses the lock we are about to set) so
+		// the finalized file is current, then sync dojo.macro_locked so the auto-save
+		// is protected IN-SESSION - not only on the next clip-bind (BeginClipStats
+		// reads readLocked). A non-bound test just persists the flag.
+		if (locked && isCur)
+		{
+			dojo.macro_force_write = true;
+			dojo.WriteMacroFile();
+			dojo.macro_force_write = false;
+		}
+		tas_clip::setLocked(cur->dir, locked);
+		if (isCur)
+			dojo.macro_locked = locked;
+		NOTICE_LOG(RENDERER, "TAS LAB: %s macro %s", cur->name.c_str(), locked ? "LOCKED" : "unlocked");
+		tas_clip::bump();
+		rescan(true);
+	}
+
+	// SAFE DELETE: move the whole test folder to <lab>/.trash - never a hard
+	// delete (tas_clip::labTrashTest). Refused on the currently-bound test.
+	ImGui::BeginDisabled(isCur);
+	if (tasButton("Delete test (to .trash)"))
+	{
+		const std::string d = cur->dir;
+		if (tas_clip::labTrashTest(d))
+		{
+			gui_display_notification("Test moved to .trash", 2800);
+			selected = -1;
+			selectedDir.clear();
+			rescan(true);
+		}
+		else
+			gui_display_notification("Could not move test - see log", 3500);
+	}
+	ImGui::EndDisabled();
+	if (isCur)
+		tasTip("Switch off this test before deleting it.");
 }
 
 }	// namespace lab

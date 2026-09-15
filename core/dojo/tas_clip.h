@@ -68,6 +68,8 @@ namespace tas_clip
 	bool readTagsNotes(const std::string& clipDir, std::string& tagsCsv, std::string& notes,
 			std::string *created, std::string *mode);					// the browsers' row facts
 	bool writeTagsNotes(const std::string& clipDir, const char *tagsCsv, const char *notes);
+	bool readLocked(const std::string& clipDir);					// top-level "locked": a test's macro is finalized / protected
+	bool setLocked(const std::string& clipDir, bool locked);
 	bool setGenerationTagsNotes(const std::string& clipDir, const std::string& genName, const char *tagsCsv, const char *notes);
 	bool appendGeneration(const std::string& clipDir, const nlohmann::json& entry);	// + generationCount / latestGeneration / schema
 	// After a clip folder rename: macroFile, generations[].name, latestGeneration and contents carry the old name.
@@ -98,9 +100,13 @@ namespace tas_clip
 		std::string notes;						// TOP-LEVEL clip.json notes (click-to-edit)
 		std::string createdUtc, createdLocal;	// clip.json "created" if ISO, else the BASE .state mtime
 		std::string modifiedUtc, modifiedLocal;	// newest top-level file mtime in the test folder
+		bool locked = false;					// clip.json "locked": the macro is FINALIZED (protected from the perpetual auto-save)
 	};
 	int labTests(const std::string& gameName, std::vector<LabTest>& out);				// sorted by name; count
 	std::string labNewTestDir(const std::string& gameName, const std::string& label);	// the next TEST_NN[_label] path (not created)
+	// Delete a test SAFELY (dev 2026-09-05): move the whole folder to <lab>/.trash/<name>_<utc>/ (deleteGenerations rule -
+	// never a hard delete) and bump. Refuses any path not directly under a _lab dir. Returns true on the move.
+	bool labTrashTest(const std::string& testDir);
 
 	struct Generation
 	{
