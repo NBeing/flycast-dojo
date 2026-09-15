@@ -531,6 +531,34 @@ struct OpenGLRenderer : Renderer
 		return { (uintptr_t)fb->getTexture(), gl.ofbo.aspectRatio, false };
 	}
 
+	//! CPU-side RGB24 readback of the last rendered frame, TOP-DOWN. `[ADDED
+	//! 2026-09-15]` for tas_thumb (savestate thumbnails). His GetLastFrameRGB is
+	//! DX9/DX11 only; this is the GL half, so thumbnails work under the GL/llvmpipe
+	//! path the tests run on. Reuses the ofbo readback do_swap_automation uses.
+	//! NO manual flip: the ofbo is rendered with a flipped projection (see
+	//! GetFrameTexture's yUp=false note), so texel row 0 is the image TOP and
+	//! glReadPixels yields top-down directly. Render thread + emulator stopped
+	//! (gui_saveState) is the safe call site.
+	bool GetLastFrameRGB(std::vector<u8>& rgb, int& width, int& height) override
+	{
+		GlFramebuffer *fb = gl.ofbo2.ready ? gl.ofbo2.framebuffer.get() : gl.ofbo.framebuffer.get();
+		if (fb == nullptr || fb->getTexture() == 0)
+			return false;
+		const int w = fb->getWidth(), h = fb->getHeight();
+		if (w <= 0 || h <= 0)
+			return false;
+		rgb.resize((size_t)w * h * 3);
+		GLint prevFbo = 0;
+		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevFbo);
+		fb->bind(GL_READ_FRAMEBUFFER);
+		glPixelStorei(GL_PACK_ALIGNMENT, 1);
+		glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, rgb.data());
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, prevFbo);
+		width = w;
+		height = h;
+		return true;
+	}
+
 	bool RenderLastFrame() override
 	{
 		saveCurrentFramebuffer();

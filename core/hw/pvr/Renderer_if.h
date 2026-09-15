@@ -92,6 +92,12 @@ struct Renderer
 		bool yUp = false;			//!< row 0 is the BOTTOM of the image (GL)
 	};
 	virtual FrameTexture GetFrameTexture() { return {}; }
+
+	//! CPU-side RGB24 readback of the last rendered frame, TOP-DOWN (row 0 = image
+	//! top). Returns false when the backend has no readback path or nothing has
+	//! rendered yet. GL implements it (gles.h); DX9/DX11 have it upstream; used by
+	//! tas_thumb for savestate thumbnails. Call on the render thread, emu stopped.
+	virtual bool GetLastFrameRGB(std::vector<u8>& rgb, int& width, int& height) { return false; }
 };
 
 extern Renderer* renderer;

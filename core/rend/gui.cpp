@@ -76,6 +76,7 @@
 #include "dojo/dojo.h"
 #include "dojo/dojo_gui.h"
 #include "dojo/net_beacon.h"
+#include "dojo/thumbnail.h"
 
 #include "cheats.h"
 
@@ -4795,6 +4796,7 @@ void gui_term()
 	if (inited)
 	{
 		inited = false;
+		tas_thumb::flush();		// let a save-then-quit's thumbnail PNG finish encoding
 		scanner.stop();
 		ImGui::DestroyContext();
 	    EventManager::unlisten(Event::Resume, emuEventCallback);
@@ -4919,6 +4921,11 @@ void gui_saveState()
 		try {
 			emu.stop();
 			dc_savestate(config::SavestateSlot);
+			// Thumbnail: grab the last rendered frame into <state>.png. HERE, not in
+			// dc_savestate - that is also reachable from the emu thread, and the GPU
+			// readback must run on the render thread with the emulator stopped, which
+			// is exactly here. No-op if the backend has no readback (returns false).
+			tas_thumb::captureForState(hostfs::getSavestatePath(config::SavestateSlot, true));
 			if (prev == GuiState::Closed)
 				emu.start();				// was running -> resume
 			else

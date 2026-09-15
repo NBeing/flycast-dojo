@@ -1310,6 +1310,8 @@ if(NOT LIBRETRO)
 	core/dojo/branch_panel.cpp
 	core/dojo/branch_export.cpp
 	core/dojo/branch_export.h
+	core/dojo/thumbnail.cpp
+	core/dojo/thumbnail.h
 	core/dojo/notepad_panel.cpp
 	core/deps/ImGuiColorTextEdit/TextEditor.cpp
 	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp
@@ -2192,6 +2194,20 @@ set_tests_properties(flycast.fsttest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 add_test(NAME flycast.fsttest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/fsttest.sh --self-test)
 set_tests_properties(flycast.fsttest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+
+# SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
+# Saving states must write a NON-BLANK <state>.png - proves the GL readback actually
+# captured the frame (a well-formed blank PNG is the PBO-never-advanced bug). Needs
+# a ROM, Xvfb, ImageMagick, a base clip with a state; SKIP 77 otherwise.
+add_test(NAME flycast.thumbtest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/thumbtest.sh)
+set_tests_properties(flycast.thumbtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+# ITS ARM. dojo:StateThumbnails=no must write NO thumbnail - proves the "a
+# thumbnail appeared" claim can fail (the gate works and the check is not vacuous).
+add_test(NAME flycast.thumbtest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/thumbtest.sh --self-test)
+set_tests_properties(flycast.thumbtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 
 # THE FIVE THINGS UNIT CHECKS CANNOT ASK. docs/CROSS-PROJECT-LESSONS.md calls
 # shell/linux/integration-tests "the best test artefact in the tree - full
