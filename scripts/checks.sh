@@ -93,6 +93,19 @@ if [ "${1:-}" = "--self-test" ]; then
 	exit $rc
 fi
 
+# CAP THE SOFTWARE RASTERIZER. `[MEASURED 2026-09-14]` every test display is
+# Xvfb, so the game renders through Mesa llvmpipe, which spawns one worker
+# thread PER CORE by default: one emulator under test was 369% CPU across 31
+# threads - two flycast threads and TWELVE llvmpipe-N workers - and the suite
+# peaked at load 13.04 on 12 cores when harness_can_fail ran two at once. The
+# user noticed before the sampler did.
+#
+# Measured on tour.lua, all three arms PASS 40/40 with identical wall time:
+#     LP_NUM_THREADS=unset  31 threads   =4  15 threads   =2  11 threads
+# 4 is the default because the oracle and the capture case pace on render
+# throughput; 2 also passed and is one env var away for a quieter machine.
+export LP_NUM_THREADS="${LP_NUM_THREADS:-4}"
+
 log="$(mktemp)"; trap 'rm -f "$log"' EXIT
 ctest --test-dir "$BUILD" --output-on-failure "$@" 2>&1 | tee "$log"
 echo

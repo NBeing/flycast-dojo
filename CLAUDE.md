@@ -698,6 +698,52 @@ own header argues against them. §4 is easy to violate while quoting it.
 
 ---
 
+## The suite's CPU is the software rasterizer, and it is capped now
+
+`[MEASURED 2026-09-14]` "whenever you run your tests my cpu balloons" - the user
+was right, and a load sampler running beside the suite put numbers on it:
+**mean 5.98, peak 13.04, on 12 cores**, the peak when two emulators overlapped.
+One emulator under a test display was **369% CPU across 31 threads**: two
+`flycast` threads, and twelve `llvmpipe-N` workers. Every test display is Xvfb,
+so the game renders through Mesa's `llvmpipe`, which spawns a worker per core.
+
+`LP_NUM_THREADS=4` is exported by `scripts/checks.sh` and `scripts/testrun.sh`
+(overridable). Measured on tour.lua: unset 31 threads, 4 → 15, 2 → 11, all
+PASS 40/40 at identical wall time. 4 rather than 2 because the oracle and the
+capture case pace on render throughput. **Sample load during a run before
+calling a suite quiet** - a 20-second loop over `/proc/loadavg` beside `pgrep
+-c -x flycast` is enough - and `pgrep -c -x Xvfb` must be 0 afterwards.
+
+---
+
+## Kill only PIDs you recorded at spawn. A sweep by name will hit someone else
+
+`[MEASURED 2026-09-14]` A cleanup sweep did `for p in $(pgrep -x Xvfb)`, checked
+`/proc/PID/cmdline` contained `Xvfb`, and killed. One of them was **`:107`,
+launched by `xvfb-run -a ctest … -j2` from a peer session in another repo, 157
+seconds into its run** - live parent, 101 s old, an `xvfb-run` auth path. Every
+tell that it was not ours was in the `ps` line, and "is an Xvfb" is not the
+question; "is one I started" is. That session's remaining GUI cases failed for
+a reason that had nothing to do with its code.
+
+The earlier sweeps that found a `:71` at `ppid 1` seven hours old were
+justified by exactly the evidence this one lacked. The rule that survives:
+record `$!` at spawn, kill that, and never enumerate. Twenty-one peer sessions
+were live on this machine at the time.
+
+---
+
+## Under llvmpipe a paused UI redraws slowly - drive menus, not double-clicks
+
+`[MEASURED 2026-09-14]` Two held 70 ms clicks 80 ms apart never registered as a
+double-click on a paused, llvmpipe-rendered panel, while a single 300 ms held
+right-click opened the context menu first time. A double-click needs two
+presses that each span a frame, inside ImGui's 300 ms window; when the UI
+redraws every ~100 ms that cannot be satisfied. Every action a harness needs
+should also be reachable through a menu item, and a harness should drive that.
+
+---
+
 ## Driving ImGui with xdotool: a plain `click` is too fast to be seen
 
 `[MEASURED 2026-09-14]` `xdotool click 1` presses and releases within one X

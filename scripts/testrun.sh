@@ -43,6 +43,8 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# llvmpipe spawns a render worker per core under Xvfb; see scripts/checks.sh for the measurement.
+export LP_NUM_THREADS="${LP_NUM_THREADS:-4}"
 BIN="${FLYCAST_BIN:-$ROOT/build-dojo7/flycast}"
 ROM="${FLYCAST_TEST_ROM:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
 CLIP="${FLYCAST_TEST_CLIP:-}"
