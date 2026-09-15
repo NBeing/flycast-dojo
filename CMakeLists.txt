@@ -1298,6 +1298,8 @@ if(NOT LIBRETRO)
 	core/dojo/ui_text.cpp
 	core/dojo/ui_text.h
 	core/dojo/ui_text_panel.cpp
+	core/dojo/hotkey_bind.cpp
+	core/dojo/hotkey_bind.h
 	core/dojo/roll_profile.cpp
 	core/dojo/roll_panel.cpp
 	core/dojo/roll_select.cpp

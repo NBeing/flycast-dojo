@@ -33,6 +33,7 @@
 #include "dojo/input_viz.h"
 #include "dojo/fst.h"
 #include "dojo/ui_text.h"
+#include "dojo/hotkey_bind.h"
 #include "oslib/oslib.h"
 #include "debug/gdb_server.h"
 #include "archive/rzip.h"
@@ -102,6 +103,7 @@ int flycast_init(int argc, char* argv[])
 	roll::inputviz::selfTest();
 	roll::fst::selfTest();
 	uitext::selfTest();
+	roll::rebind::selfTest();
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();

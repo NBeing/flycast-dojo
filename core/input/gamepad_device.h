@@ -46,6 +46,17 @@ public:
 	void cancel_detect_input() {
 		_input_detected = nullptr;
 	}
+	/*
+		PUBLIC so a UI that arms several devices at once can tell WHICH one
+		actually fired: a device clears its own callback the moment it invokes
+		it, so "no longer detecting" is the signal. The detect_* setters beside
+		it were already public; this is the matching query.
+
+		Used by core/dojo/hotkey_bind.cpp, which arms a rebind target while
+		leaving the keyboard live so Escape can still cancel - two armed
+		devices, and it has to know which one the press came from.
+	*/
+	bool is_detecting_input() const { return _input_detected != nullptr; }
 	std::shared_ptr<InputMapping> get_input_mapping() { return input_mapper; }
 	void save_mapping(int system = settings.platform.system);
 
@@ -124,7 +135,6 @@ protected:
 		return std::make_shared<IdentityInputMapping>();
 	}
 
-	bool is_detecting_input() { return _input_detected != nullptr; }
 
 	std::string _name;
 	std::string _unique_id;
