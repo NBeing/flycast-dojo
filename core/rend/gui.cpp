@@ -5187,6 +5187,33 @@ void gui_step_frames(int n)
 	}
 }
 
+void gui_pause_for_checkout()
+{
+	const LockGuard lock(guiMutex);
+	if (emu.running())
+	{
+		try {
+			emu.stop();
+		} catch (const FlycastException&) {}
+	}
+	dojo.stepping = false;
+	dojo.buffering = false;
+	gui_setState(GuiState::Paused);
+}
+
+void gui_resume_play()
+{
+	const LockGuard lock(guiMutex);
+	dojo.stepping = false;
+	dojo.buffering = false;
+	if (pausing::active(pausing::USER))
+		pausing::clear(pausing::USER);
+	gui_setState(GuiState::Closed);
+	GamepadDevice::load_system_mappings();
+	if (!emu.running())
+		emu.start();
+}
+
 void gui_open_pause()
 {
 	const LockGuard lock(guiMutex);

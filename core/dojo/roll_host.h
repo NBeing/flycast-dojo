@@ -240,7 +240,12 @@ namespace branch { void selfTest(); }
 	avi_dump. Its one tas_branch dependency is rootOf. Idempotent.
 */
 void registerCapturesPanel();
-namespace captures { void selfTest(); }
+namespace captures
+{
+	void selfTest();
+	std::string clipStamp(const std::string& boundFolder);	// the ROOT clip's folder name; empty = no clip
+	std::string captureDir(const std::string& stamp);		// <data>/captures/<stamp>; empty for an empty stamp
+}
 
 /*
 	Branches: fork a timeline from a state, work on it, merge it back. The graph
@@ -250,7 +255,14 @@ namespace captures { void selfTest(); }
 	window. Idempotent.
 */
 void registerBranchesPanel();
-namespace branch { void panelSelfTest(); }	// the graph's layout/colour arithmetic; selfTest() above is the engine's
+namespace branch { void panelSelfTest(); }
+namespace branch
+{
+	//! The session half of a checkout: pause-checked, SwitchClipFolder, land on
+	//! `loadSlot` (BASE if missing), clear the selection. Also the export's verb.
+	bool checkoutFolder(const std::string& targetDir, int loadSlot, const std::string& label);
+}
+namespace bexport { void selfTest(); void tick(); }	// the graph's layout/colour arithmetic; selfTest() above is the engine's
 
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();

@@ -327,7 +327,7 @@ static const Graph& graph()
 	different name: `fst.running` is roll::frameSkipTestRunning(), and the roll
 	selection is roll::selection() rather than a pair of file statics.
 */
-static bool checkout(const std::string& targetDir, int loadSlot, const std::string& label)
+bool checkoutFolder(const std::string& targetDir, int loadSlot, const std::string& label)
 {
 	if (gui_state != GuiState::Paused)
 	{
@@ -986,10 +986,10 @@ static void draw()
 						mainAnchor = bn.fromSlot;
 						break;
 					}
-			checkout(d.rootDir, mainAnchor, "main");
+			checkoutFolder(d.rootDir, mainAnchor, "main");
 		}
 		else
-			checkout((ghc::filesystem::path(d.rootDir) / "branches" / op.id).string(), op.slot, op.label);
+			checkoutFolder((ghc::filesystem::path(d.rootDir) / "branches" / op.id).string(), op.slot, op.label);
 	}
 	else if (op.type == 2)
 		merge(d.rootDir, op.id);

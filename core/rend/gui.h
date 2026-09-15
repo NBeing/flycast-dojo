@@ -86,6 +86,15 @@ void gui_open_step();
 */
 void gui_step_frames(int n);
 
+/*
+	TWO VERBS FOR THE PER-BRANCH EXPORT, in this file because they need guiMutex.
+	`[PORTED 2026-09-14]` his, minus `dojo.manual_pause` which this tree does
+	not have; the user-pause is our arbiter's, cleared on resume the way
+	gui_open_step() does it.
+*/
+void gui_pause_for_checkout();	//!< force Paused + emu stopped, from any state - branch checkout's precondition
+void gui_resume_play();			//!< continuous playback: Closed + emu running
+
 enum class GuiState {
 	Closed,
 	Commands,

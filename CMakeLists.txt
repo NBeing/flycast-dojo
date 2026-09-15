@@ -1307,6 +1307,8 @@ if(NOT LIBRETRO)
 	core/dojo/branch_selftest.cpp
 	core/dojo/captures_panel.cpp
 	core/dojo/branch_panel.cpp
+	core/dojo/branch_export.cpp
+	core/dojo/branch_export.h
 	core/dojo/roll_profile.cpp
 	core/dojo/roll_panel.cpp
 	core/dojo/roll_select.cpp

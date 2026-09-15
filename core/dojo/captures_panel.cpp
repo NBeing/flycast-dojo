@@ -1,5 +1,6 @@
 #include "ui_text.h"
 #include "tas_branch.h"
+#include "branch_export.h"
 #include "roll_host.h"
 #include "tas_colors.h"
 #include "rend/panel.h"
@@ -248,6 +249,54 @@ static void draw()
 		}
 	}
 	ImGui::Separator();
+
+	// ---- export main + branches, each start to finish ----------------------------------
+	if (!stamp.empty())
+	{
+		if (bexport::active())
+		{
+			tasTextColored(TAS_STAGED, "%s", bexport::progress().c_str());
+			ImGui::SameLine();
+			if (tasButton("Cancel export"))
+				bexport::cancel();
+		}
+		else
+		{
+			bexport::refreshCandidates();
+			const std::vector<bexport::Item>& c = bexport::candidates();
+			std::vector<unsigned char>& on = bexport::checked();
+			if (c.size() > 1)
+			{
+				tasTextDisabled("export, each from its BASE to the end of its movie:");
+				for (size_t i = 0; i < c.size() && i < on.size(); i++)
+				{
+					ImGui::PushID((int)i);
+					bool v = on[i] != 0;
+					if (i > 0)
+						ImGui::SameLine();
+					if (tasCheckbox(c[i].name.c_str(), &v))
+						on[i] = v ? 1 : 0;
+					ImGui::PopID();
+				}
+			}
+			/*
+				NOT GATED ON PAUSED. `[CORRECTED 2026-09-14]` the first cut was, and
+				the screenshot showed why that is wrong: a replay that has run to
+				its end sits in ReplayEnd, not Paused - the most natural moment to
+				export, and the button was grey. The machine's first phase forces
+				the pause itself (gui_pause_for_checkout works from any state), so
+				the panel has nothing to insist on. His is not gated either.
+			*/
+			ImGui::BeginDisabled(recording || starting);
+			if (tasButton(c.size() > 1 ? "Export selected" : "Export main"))
+			{
+				if (!bexport::launch())
+					gui_display_notification("Nothing selected to export", 2500);
+			}
+			ImGui::EndDisabled();
+		}
+		ImGui::Separator();
+	}
 
 	// ---- what is in the folder -------------------------------------------------------
 	rescan(dir, refresh);
