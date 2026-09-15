@@ -4844,28 +4844,38 @@ void gui_save()
 void gui_loadState()
 {
 	const LockGuard lock(guiMutex);
-	if (gui_state == GuiState::Closed && savestateAllowed())
-	{
-		/*
-			TRACED THROUGH, because "the machine stopped after a load" and "the
-			load threw" and "start() never ran" are the same silence from
-			outside. `[MEASURED 2026-09-11]` docs/TEST-PLAN.md carries a
-			reproducible stall here - gui_loadState logs its load and then no
-			frame ever advances - and three hypotheses were eliminated without
-			finding the cause. This is the instrument that was missing.
+	/*
+		ALSO LOAD WHILE FROZEN MID-GAME, and STAY frozen on the loaded frame.
+		`[CORRECTED 2026-09-15]` restored from reference/flycast-rr - his
+		gui_loadState accepts `Closed || Paused || ReplayEnd`; our determinism
+		refactor had narrowed it to `Closed` only. Every TAS reload-while-paused
+		then failed SILENTLY (guistate=Paused refused): the Frame Skip Test's
+		base reload, and branch checkout / merge's "put the machine on the fork
+		frame" (the branch journey found this - its merge logged
+		`gui_loadState: refused - guistate=22`). A load from Closed resumes
+		running as before; a load from Paused/ReplayEnd stays paused, so a
+		read-only replay resumes from the seeked position - David's own comment.
 
-			A load is a deliberate user action a few times a session, so this
-			costs nothing and answers a support question directly.
-		*/
+		The trace stays: `[MEASURED 2026-09-11]` docs/TEST-PLAN.md carries a
+		reproducible stall here (loads, then no frame advances), and this is the
+		instrument that found the regression above too.
+	*/
+	const GuiState prev = gui_state;
+	if ((prev == GuiState::Closed || prev == GuiState::Paused || prev == GuiState::ReplayEnd)
+			&& savestateAllowed())
+	{
 		const bool wasRunning = emu.running();
 		try {
 			emu.stop();
 			const bool stopped = !emu.running();
 			dc_loadstate(config::SavestateSlot);
-			emu.start();
-			NOTICE_LOG(COMMON, "gui_loadState: slot %d, running %s -> stopped %s -> restarted %s",
-					(int)config::SavestateSlot, wasRunning ? "yes" : "no",
-					stopped ? "yes" : "NO", emu.running() ? "yes" : "NO");
+			if (prev == GuiState::Closed)
+				emu.start();				// was running -> resume
+			else
+				gui_setState(GuiState::Paused);	// frozen -> stay on the loaded frame
+			NOTICE_LOG(COMMON, "gui_loadState: slot %d, prev=%d, running %s -> stopped %s -> %s",
+					(int)config::SavestateSlot, (int)prev, wasRunning ? "yes" : "no",
+					stopped ? "yes" : "NO", prev == GuiState::Closed ? "resumed" : "paused");
 		} catch (const FlycastException& e) {
 			// SAY IT BEFORE STOPPING THE GAME. gui_stop_game tears down enough
 			// that the reason can be hard to find afterwards.
@@ -4889,21 +4899,30 @@ void gui_loadState()
 			WARN rather than NOTICE: reaching here means somebody asked for a
 			load and did not get one.
 		*/
-		WARN_LOG(COMMON, "gui_loadState: refused - guistate=%d (needs Closed=%d), allowed=%s",
-				(int)gui_state, (int)GuiState::Closed,
-				savestateAllowed() ? "yes" : "no");
+		WARN_LOG(COMMON, "gui_loadState: refused - guistate=%d (accepts Closed/Paused/ReplayEnd), allowed=%s",
+				(int)gui_state, savestateAllowed() ? "yes" : "no");
 	}
 }
 
 void gui_saveState()
 {
 	const LockGuard lock(guiMutex);
-	if (gui_state == GuiState::Closed && savestateAllowed())
+	// ALSO SAVE WHILE FROZEN MID-GAME, staying frozen afterwards - the twin of the
+	// gui_loadState restore above. `[CORRECTED 2026-09-15]` reference/flycast-rr
+	// accepts `Closed || Paused` here; our determinism refactor had narrowed it to
+	// Closed, so a save-while-paused was refused silently - which is why the Frame
+	// Skip Test's per-variant OUTCOME states (saved from its paused sweep to slots
+	// 1..N for review) were never written.
+	const GuiState prev = gui_state;
+	if ((prev == GuiState::Closed || prev == GuiState::Paused) && savestateAllowed())
 	{
 		try {
 			emu.stop();
 			dc_savestate(config::SavestateSlot);
-			emu.start();
+			if (prev == GuiState::Closed)
+				emu.start();				// was running -> resume
+			else
+				gui_setState(GuiState::Paused);	// frozen -> stay frozen
 		} catch (const FlycastException& e) {
 			gui_stop_game(e.what());
 		}
@@ -4924,9 +4943,8 @@ void gui_saveState()
 			WARN rather than NOTICE: reaching here means somebody asked for a
 			save and did not get one.
 		*/
-		WARN_LOG(COMMON, "gui_saveState: refused - guistate=%d (needs Closed=%d), allowed=%s",
-				(int)gui_state, (int)GuiState::Closed,
-				savestateAllowed() ? "yes" : "no");
+		WARN_LOG(COMMON, "gui_saveState: refused - guistate=%d (accepts Closed/Paused), allowed=%s",
+				(int)gui_state, savestateAllowed() ? "yes" : "no");
 	}
 }
 
