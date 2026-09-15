@@ -63,9 +63,10 @@ skip() { skipped=$((skipped+1)); printf '  skip  %s\n        %s\n' "$1" "$2"; }
 # Kill only what this run started. `pkill -x flycast-dojo` reached the
 # developer's own emulator; the Xvfb pattern is anchored to THIS display number
 # so it cannot match the session's own server.
+XVFB_PID=""
 cleanup() {
     [ -s "$WORK/pid" ] && kill -KILL "$(cat "$WORK/pid")" 2>/dev/null
-    pkill -f "^/usr/bin/Xvfb :$DISPLAY_NUM\b" 2>/dev/null
+    [ -n "$XVFB_PID" ] && kill -KILL "$XVFB_PID" 2>/dev/null   # its own display, by pid
     [ -n "${KEEP_WORK:-}" ] || rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -77,9 +78,16 @@ find_rom() {
 
 start_x() {
     local geom="${1:-800x600x24}"
-    pkill -f "^/usr/bin/Xvfb :$DISPLAY_NUM\b" 2>/dev/null
+    # BY PID, NOT BY PATTERN. `[MEASURED 2026-09-14]` the cleanup here was
+    # `pkill -f "^/usr/bin/Xvfb :71\b"`, and the process's argv[0] is `Xvfb`,
+    # not the absolute path - the anchored pattern matched NOTHING, ever. One
+    # Xvfb :71 survived every suite run (found at 641 s, ppid 1, after a green
+    # run). The same class as the wrong-pid subshell capture fixed above: a
+    # name-based kill does not fail loudly, it fails by leaving the process.
+    [ -n "${XVFB_PID:-}" ] && kill -KILL "$XVFB_PID" 2>/dev/null
     rm -f "/tmp/.X$DISPLAY_NUM-lock"
     Xvfb ":$DISPLAY_NUM" -screen 0 "$geom" >/dev/null 2>&1 &
+    XVFB_PID=$!
     local i
     for i in $(seq 1 40); do
         DISPLAY=":$DISPLAY_NUM" xdpyinfo >/dev/null 2>&1 && return 0
