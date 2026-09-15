@@ -2109,6 +2109,28 @@ add_test(NAME flycast.openarm_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/openarm.sh --self-test)
 set_tests_properties(flycast.openarm_can_fail PROPERTIES TIMEOUT 60)
 
+# OUR TAS ENGINE AND DAVID'S, RUN OVER THE SAME OPERATION AND DIFFED. The only
+# differential test in the tree pointed at a FEATURE rather than the emulator
+# core (that is scripts/reprotest.sh --oracle). `[MEASURED 2026-09-15]`
+# tas_branch.cpp and core/oslib are byte-identical to reference/flycast-rr, so
+# the one behavioral divergence is tas_clip::copyLiveSet - "which files make up a
+# clip" - and it is exactly the fact that drifts silently when one fork gains a
+# sidecar extension the other lacks, quietly dropping a file from a branch or an
+# F8 backup. Aimed where parity is INTENDED, unlike the roll_* modules that
+# deliberately fix his bugs. A compiled harness runs both loop bodies over a
+# fixture; a source-parity check reads both pinned .cpp files so the harness's
+# transcription of his loop cannot go stale. No ROM, no display, no emulator.
+add_test(NAME flycast.enginediff
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/enginediff.sh)
+set_tests_properties(flycast.enginediff PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
+# ITS ARM. Injects a dropped extension into each half - the compiled harness's
+# theirs() and the source-parity compare - and requires the divergence to be
+# caught. Proves the diff can actually fail, in both layers.
+add_test(NAME flycast.enginediff_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/enginediff.sh --self-test)
+set_tests_properties(flycast.enginediff_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
 # THE FIVE THINGS UNIT CHECKS CANNOT ASK. docs/CROSS-PROJECT-LESSONS.md calls
 # shell/linux/integration-tests "the best test artefact in the tree - full
 # RUN/PASS/FAIL/SKIP contract, exit 2 on skip, pixel-level non-vacuity" and
