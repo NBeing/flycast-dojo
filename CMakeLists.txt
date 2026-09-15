@@ -259,6 +259,7 @@ if(NOT "${SENTRY_UPLOAD_URL}" STREQUAL "")
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE core core/deps core/deps/stb core/deps/json)
+target_include_directories(${PROJECT_NAME} PRIVATE core/deps/ImGuiColorTextEdit)	# the Notepad's rich text editor (vendored, ImGui 1.90.4, no imgui_internal)
 if(LIBRETRO)
 	target_include_directories(${PROJECT_NAME} PRIVATE shell/libretro)
 endif()
@@ -1309,6 +1310,9 @@ if(NOT LIBRETRO)
 	core/dojo/branch_panel.cpp
 	core/dojo/branch_export.cpp
 	core/dojo/branch_export.h
+	core/dojo/notepad_panel.cpp
+	core/deps/ImGuiColorTextEdit/TextEditor.cpp
+	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp
 	core/dojo/roll_profile.cpp
 	core/dojo/roll_panel.cpp
 	core/dojo/roll_select.cpp

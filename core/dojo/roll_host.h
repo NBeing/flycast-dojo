@@ -262,7 +262,12 @@ namespace branch
 	//! `loadSlot` (BASE if missing), clear the selection. Also the export's verb.
 	bool checkoutFolder(const std::string& targetDir, int loadSlot, const std::string& label);
 }
-namespace bexport { void selfTest(); void tick(); }	// the graph's layout/colour arithmetic; selfTest() above is the engine's
+namespace bexport { void selfTest(); void tick(); }
+
+//! The Notepad: author + validate TAS notation in a rich editor. A scratchpad -
+//! it does not write the roll (applyPattern owns that). Idempotent.
+void registerNotepadPanel();
+namespace notepad { void selfTest(); }	// the graph's layout/colour arithmetic; selfTest() above is the engine's
 
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();
