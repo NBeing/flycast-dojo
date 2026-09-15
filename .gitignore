@@ -16,3 +16,20 @@ cmake-build-*/
 
 # Dependencies from .gitmodules
 core/deps/breakpad/
+
+# Test / capture video, and never in the repo.
+# `[2026-09-15]` The video-capture tests (shell/linux/integration-tests case 5,
+# and the driven Captures / branch-export panels) MUST produce a real file -
+# "the AVI has pictures in it" cannot be checked without one - so the file is
+# necessary during the test. It is written to a mktemp dir or an XDG_DATA_HOME
+# under /tmp and deleted once the check has read it; a real user's exports live
+# under ~/.local/share/flycast-dojo/captures, not here. These patterns are the
+# belt-and-suspenders: if the emulator is ever run with the repo as its working
+# directory, a CWD-relative `captures/` (the fork's avi_dump path) would land in
+# the tree, and a 2.4 GB MJPEG must never be committable by accident.
+*.avi
+*.mov
+*.mkv
+*.mp4
+*.pcm
+captures/
