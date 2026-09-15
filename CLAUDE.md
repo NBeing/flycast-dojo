@@ -66,13 +66,27 @@
 > - **Frame Skip Test** (`core/dojo/fst.{h,cpp}`) - its runner was already a
 >   standalone state machine behind a public step/running boundary, so the model
 >   separated cleanly: 32 claims over pure sweep arithmetic, no emulator.
+> - **The hotkey rebind engine** (`core/dojo/hotkey_bind.{h,cpp}`) - island 4,
+>   and the worst-undercounted of the four at ~261 lines against the ~150 this
+>   file used to claim. `hotkey_panel.cpp` is a rebind UI now rather than a
+>   cheat sheet, writing to the same mapping it reads.
+> - **UI Text** (`core/dojo/ui_text_panel.cpp`) - built on the shim below.
 >
-> Both follow the same shape and it is worth repeating for the next one: **put
-> the part that can be wrong somewhere a test can reach it.** In both cases that
-> turned out to be a conversion or a piece of arithmetic, not the drawing - and
-> in both cases the sabotage that mattered was the NEGATIVE claim (an inverted
-> ring lights every button that is UP; a merge that does not merge still
-> produces a plausible-looking table).
+> They all follow the same shape, and it is the thing to repeat on the next one:
+> **put the part that can be wrong somewhere a test can reach it.** Each time
+> that turned out NOT to be the drawing - it was a conversion (three
+> representations of "pressed", two inverted), some arithmetic (a 2D sweep
+> flattened to one index), or a precedence decision (what beats what when a
+> press, an Escape and a timeout land on one frame). And each time the
+> load-bearing sabotage was the NEGATIVE claim: an inverted ring lights every
+> button that is UP, a merge that does not merge still produces a plausible
+> table, and a press that beats Escape still binds *something*.
+>
+> **`defW`/`defH` bit twice.** Input Viz clipped P2's buttons off the right edge
+> with a size copied from the fork; the hotkey panel rendered mostly off-screen
+> once its content grew a device selector and a third column. Both were green on
+> every structural signal. A panel whose content changes needs its size revisited
+> in the same commit.
 >
 > ### `[LANDED 2026-09-14]` the UI-text shim is ADOPTED, and that changes the plan
 >
