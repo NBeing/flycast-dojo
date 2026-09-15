@@ -71,6 +71,10 @@
 >   file used to claim. `hotkey_panel.cpp` is a rebind UI now rather than a
 >   cheat sheet, writing to the same mapping it reads.
 > - **UI Text** (`core/dojo/ui_text_panel.cpp`) - built on the shim below.
+> - **Input Sender** (`core/dojo/sender_panel.cpp`) and **Test Lab**
+>   (`core/dojo/lab_panel.cpp`) - both chosen by the CALLER CENSUS rather than by
+>   size, because both of their engines were already here and unreachable. The
+>   Input Sender looked like a 767-line window and was ~200 lines of panel.
 >
 > They all follow the same shape, and it is the thing to repeat on the next one:
 > **put the part that can be wrong somewhere a test can reach it.** Each time
@@ -594,6 +598,34 @@ and raw bindings, colour packing is rarely what you assume. Every entry there
 is something that actually went wrong, not a precaution.
 
 Add to it rather than re-learning.
+
+## A staged clip keeps its state files' NAMES. Only the movie gets renamed
+
+`[MEASURED 2026-09-14]` Slot 0 resolves to `<gamename>.state`, not to whatever
+you called it. An ad-hoc harness that staged a clip as
+
+    cp .../NoBGM_VMU.state  $work/clip/clip.state      # WRONG
+
+gave slot 0 nothing to load, and the Test Lab's "New test from slot 0" correctly
+refused with "No state in that slot" — which from outside is indistinguishable
+from a dead button, and was one step from being reported as a broken port.
+
+`scripts/testrun.sh` already does it correctly and is the thing to copy:
+
+    cp "$CLIP" "$work/clip/clip.flyr"                  # the movie IS renamed
+    for sib in "$(dirname "$CLIP")"/*.state \
+               "$(dirname "$CLIP")"/*.state.* \
+               "$(dirname "$CLIP")"/clip.json; do
+        [ -f "$sib" ] && cp "$sib" "$work/clip/"       # states keep their names
+    done
+
+**The tell is in the emulator's own log**, not in the UI: `Failed to load state -
+could not open <path>` names the file it wanted. Read that before concluding the
+feature is broken — this was the THIRD time in one session that "the harness is
+wrong, not the code" was the answer, after `FLYCAST_ROOT` being read by nothing
+and `( cd / && … & echo $! )` capturing the wrong pid.
+
+---
 
 ## Before porting a window, ask whether its ENGINE is already here and dead
 
