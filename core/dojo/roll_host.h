@@ -209,6 +209,17 @@ void registerStatesPanel();
 //! The hotkey cheat sheet: every TAS action and its LIVE binding. Idempotent.
 void registerHotkeyPanel();
 
+/*
+	The Input Sender: hold / auto-fire arming, and a typed sequence sent live.
+
+	`[MEASURED 2026-09-14]` this panel is what makes `tas_auto`'s hold overlay
+	REACHABLE. The engine is byte-identical to the fork's and `dojo.cpp` consults
+	it every frame, but `tas_auto::arm()` had no callers, so the overlay was
+	always empty. Idempotent.
+*/
+void registerSenderPanel();
+namespace sender { void selfTest(); }
+
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();
 
