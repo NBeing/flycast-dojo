@@ -47,6 +47,7 @@ inline ImVec4 tasDrk(const ImVec4 &c) { return ImVec4(c.x * 0.78f, c.y * 0.78f, 
 // DARK+desaturated = PIANO ROLL sub-state. Hue: green = read/safe, red = write/hot.
 inline const ImVec4 TAS_WATCH      = tasLit(TAS_READ);	// bright green - WATCH (session read-only)
 inline const ImVec4 TAS_READWRITE = ImVec4(0.960f, 0.553f, 0.192f, 1.f);	// orange - READ-WRITE mode (author; a signal stomps the active cell)
+inline const ImVec4 TAS_BRANCH    = ImVec4(0.550f, 0.850f, 0.700f, 1.f);	// branches: the HEAD chip, and a fork-point state ("a branch exists here"). His value, so a colour set on either fork reads the same on both.
 // Legacy names kept as aliases so existing call sites migrate for free - and pick up the new
 // P1/P2 shifts + the bookmark->READ unification at once. New code uses the tokens above.
 inline const ImVec4 TAS_MODULE_COL   = TAS_ACCENT;	// section headers

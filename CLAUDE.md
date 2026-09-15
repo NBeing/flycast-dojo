@@ -37,11 +37,23 @@
 >   the 21,877-line snapshot. Likewise **419 file-scope functions (407 static) and
 >   218 file-scope statics**, against the 351/235 the docs still carry.
 >
-> - **The port drags in four third-party dependencies we do not have**, ~19,700
->   lines: `imgui-node-editor` (11,886 - Branches), `ImGuiColorTextEdit` (5,106 -
->   Notepad and UI Text), `imgui_md` (1,521) and `imgui_markdown` (1,176). Any plan
->   that costs a window without costing its dependency is wrong by an order of
->   magnitude.
+> - **`[CORRECTED 2026-09-14]` the "four third-party dependencies" claim was half
+>   wrong, in the expensive direction.** `imgui-node-editor` (11,886 lines) was
+>   listed as what blocks Branches. A closure survey found it contributes NOTHING
+>   to that window: the graph is a depth-1 star whose layout his code computes
+>   by hand; the library's persistence is explicitly disabled
+>   (`cfg.SettingsFile = nullptr`) in favour of his own sidecar; its editing
+>   subsystem has zero call sites; six of its 46 uses exist only to undo its own
+>   zoom transform; and he re-implemented the same star with `ImDrawList` for
+>   the minimap in the same file. `core/dojo/branch_panel.cpp` draws it with
+>   stock ImGui. `ImGuiColorTextEdit` was likewise sidestepped for UI Text.
+>   What remains genuinely absent: `imgui_md` / `imgui_markdown` (help tooltips)
+>   and `ImGuiColorTextEdit` for the Notepad specifically.
+>
+> - **`[CORRECTED 2026-09-14]` "Captures needs 8 `tas_branch::*` symbols" - it
+>   needs ONE**, `rootOf`, a pure path function that is the identity when no
+>   branch is bound. The port map counted the export machine's symbols against
+>   the window.
 >
 > ### The file is four clumps and a long tail, not one clump
 >
@@ -75,6 +87,18 @@
 >   (`core/dojo/lab_panel.cpp`) - both chosen by the CALLER CENSUS rather than by
 >   size, because both of their engines were already here and unreachable. The
 >   Input Sender looked like a 767-line window and was ~200 lines of panel.
+> - **Captures** (`core/dojo/captures_panel.cpp`) - a panel for OUR recorder
+>   (`core/rend/video_recorder`), writing its `record:` keys; the fork's
+>   `avi_dump` is not built here and never was.
+> - **`tas_branch`** (`core/dojo/tas_branch.{h,cpp}`, his, VERBATIM - keep the
+>   diff against the pin empty) and **Branches** (`core/dojo/branch_panel.cpp`).
+>   The engine needed ~39 lines of plumbing outside itself: `tas_clip::copyLiveSet`
+>   extracted from our `archive()`, `Dojo::FlushLiveClip`, and `prefixHash`
+>   mirrored into clip.json's `states[]` - without which the merge gate's
+>   `PrefixDiverged` verdict is dead and a same-frame/different-inputs merge is
+>   silently accepted. Two things the engine does NOT enforce and the panel
+>   must: depth-1 (create() on a branch dir nests happily), and the fork anchor
+>   is read from the BOUND folder, not the `clipDir` argument.
 >
 > They all follow the same shape, and it is the thing to repeat on the next one:
 > **put the part that can be wrong somewhere a test can reach it.** Each time

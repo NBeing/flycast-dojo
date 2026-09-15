@@ -242,6 +242,16 @@ namespace branch { void selfTest(); }
 void registerCapturesPanel();
 namespace captures { void selfTest(); }
 
+/*
+	Branches: fork a timeline from a state, work on it, merge it back. The graph
+	is drawn with ImDrawList - the node-editor library the fork uses was found
+	to contribute no layout, no persistence and no editing to a depth-1 star.
+	The engine is tas_branch (his, verbatim); this is the session half and the
+	window. Idempotent.
+*/
+void registerBranchesPanel();
+namespace branch { void panelSelfTest(); }	// the graph's layout/colour arithmetic; selfTest() above is the engine's
+
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();
 

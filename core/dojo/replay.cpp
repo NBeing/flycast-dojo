@@ -598,6 +598,29 @@ void Replay::LoadReplayFileV1(std::string path)
 	// }
 }
 
+/*
+	ATTACH ANOTHER CLIP'S MOVIE, IN-SESSION. Replay::Init is boot-only; a branch
+	checkout swaps the clip folder while the game is up, and the roll has to
+	carry the new movie's inputs.
+
+	`[PORTED 2026-09-14]` verbatim from the fork. The line that matters is the
+	CLEAR: LoadReplayFileV1 / ProcessBody APPEND into session_inputs, so without
+	it every cell the old movie had and the new one lacks would survive the
+	switch and play as if it were part of the branch. The folder swap and
+	BeginClipStats are SwitchClipFolder's job, not this function's.
+*/
+void Replay::AttachFile(const std::string& path)
+{
+	DetachFile();
+	dojo.session_inputs.clear();
+	replay_msg = MessageWriter();
+	replay_frame_count = 0;
+	filename = path;
+	LoadReplayFileV1(path);
+	NOTICE_LOG(NETWORK, "TAS BRANCH: AttachFile <- %s (%u frames)", path.c_str(),
+			(u32)dojo.session_inputs.size());
+}
+
 size_t CurlWrite_CallbackFunc_StdString(void *contents, size_t size, size_t nmemb, std::string *s)
 {
 	size_t newLength = size * nmemb;

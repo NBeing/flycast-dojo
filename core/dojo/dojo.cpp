@@ -923,6 +923,57 @@ void Dojo::FlushLiveClip()
 			hostfs::savestateFolderOverride.c_str(), (int)recording_started);
 }
 
+/*
+	SWITCH THE LIVE SESSION TO ANOTHER CLIP FOLDER, while paused. The teardown
+	and swap subset of a clip open: persist the clip being left, re-point the
+	savestate folder, start fresh stats, clear the roll, attach the new clip's
+	movie. Lands EDITABLE - a branch is "resume editing this fork".
+
+	`[PORTED 2026-09-14]` from the fork minus ONE line: his also sets
+	`macro_locked = false`, a member this tree does not have (the lock lives in
+	our Test Lab as a panel-local, not on Dojo). The session lands unlocked
+	here because there is no lock to clear.
+
+	Does NOT load a state or touch the roll selection - the caller owns those
+	(roll::branch::checkout), and must have paused first.
+*/
+void Dojo::SwitchClipFolder(const std::string& dir)
+{
+	if (dir.empty())
+		return;
+	FlushLiveClip();			// persist the clip we are leaving
+	hostfs::savestateFolderOverride = dir;
+	BeginClipStats();			// fresh live_from / counters for the new clip
+	session_inputs.clear();
+	stale_tail_from = ~0u;
+	loaded_macro_path.clear();
+	loaded_macro_rr = rerecord_count;
+	macro_armed = true;			// the roll drives the guest
+	play_match = false;			// editable: WRITE
+	divergence_open = false;
+	// copyLiveSet keeps original names, so scan for the movie rather than
+	// assuming one. AttachFile clears the roll and loads it.
+	std::error_code ec;
+	std::string movie;
+	for (const auto& f : ghc::filesystem::directory_iterator(ghc::filesystem::path(dir), ec))
+	{
+		if (f.is_directory(ec))
+			continue;
+		const std::string ext = f.path().extension().string();
+		if (ext == ".flyr" || ext == ".flyreplay")
+		{
+			movie = f.path().string();
+			break;
+		}
+	}
+	if (!movie.empty())
+		replay.AttachFile(movie);
+	savestate_epoch++;			// force the slot rescan for the new folder
+	NOTICE_LOG(NETWORK, "TAS BRANCH: SwitchClipFolder -> %s (movie=%s, %u roll frames)",
+			dir.c_str(), movie.empty() ? "none" : ghc::filesystem::path(movie).filename().string().c_str(),
+			(u32)session_inputs.size());
+}
+
 void Dojo::WriteClipStats()
 {
 	if (hostfs::savestateFolderOverride.empty())

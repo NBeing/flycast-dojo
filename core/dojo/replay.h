@@ -15,6 +15,7 @@ public:
     // frame, so the file stays valid, history-preserving, and never rewritten in place.
     void AppendEditedFrames(const std::vector<std::pair<u32, std::vector<u8>>>& frames);
     void FlushReplay();		// write the partial (< FRAME_BATCH) tail batch; call when recording ends
+    void AttachFile(const std::string& path);	// branches: in-session attach of another clip's .flyr (Init is boot-only)
 	// "an append target is attached": true for record sessions (CreateReplayFile) and for
 	// loaded replays (Init). False in Just Play - nothing to ossify into.
 	bool HasAppendTarget() const { return !filename.empty(); }
