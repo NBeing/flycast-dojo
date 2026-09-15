@@ -2157,6 +2157,26 @@ add_test(NAME flycast.branchtest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/branchtest.sh --self-test)
 set_tests_properties(flycast.branchtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
 
+# THE FRAME-SKIP / COUNTERFACTUAL JOURNEY, driven through the real runner. Second
+# user-journey test of the studio. dojo:FstProbe arms a fixed four-phase sweep
+# from slot 0 and starts it; the runner's tick() drives it to completion. The
+# CLAIM: N counterfactual variants from ONE base state produce N DISTINCT outcome
+# states (two edges from one node diverge), and re-running the whole sweep over
+# the same fixture reproduces every outcome byte-for-byte (determinism - one node
+# per edge). It also FOUND the gui_loadState/gui_saveState paused-refusal
+# regression (fixed in this branch). Needs a ROM, Xvfb, g++, a base clip with a
+# prefixHash state; runs two sweeps, so a longer timeout.
+add_test(NAME flycast.fsttest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/fsttest.sh)
+set_tests_properties(flycast.fsttest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+
+# ITS ARM. The second sweep's movie is made to DIFFER in the swept region; the
+# outcome states MUST then change. If a changed input produced identical outcomes
+# the sweep would not be running the game - a vacuous reproducibility check.
+add_test(NAME flycast.fsttest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/fsttest.sh --self-test)
+set_tests_properties(flycast.fsttest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+
 # THE FIVE THINGS UNIT CHECKS CANNOT ASK. docs/CROSS-PROJECT-LESSONS.md calls
 # shell/linux/integration-tests "the best test artefact in the tree - full
 # RUN/PASS/FAIL/SKIP contract, exit 2 on skip, pixel-level non-vacuity" and

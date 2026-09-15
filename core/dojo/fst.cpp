@@ -551,8 +551,62 @@ static void writeResults()
 			dir.c_str(), (u32)runs.size());
 }
 
+// ---------------------------------------------------------------------------------------
+// INTEGRATION PROBE, dojo:FstProbe=yes
+//
+// Runs ONCE: force-pause, enter WRITE (the FST authors, so generate() refuses in
+// READ), set a fixed four-phase sweep from slot 0 and START it. The existing
+// tick() below then drives the sweep to completion and writeResults() publishes
+// results.json + "TAS FST RUN: results -> ...". This is the branch of the studio
+// the plan calls the counterfactual: N variants (four skip phases) run from ONE
+// base state - two edges from one node control for time.
+//
+// The probe only ARMS; it asserts nothing. scripts/fsttest.sh owns the CLAIM
+// (the sweep is deterministic - the same counterfactual from the same node lands
+// on the same outcome state) and its sabotage. Off by default; the frame gate
+// lets the replay attach the movie into session_inputs first.
+static void fstProbe()
+{
+	static bool probed = false;
+	if (probed || st.running)
+		return;
+	if (!cfgLoadBool("dojo", "FstProbe", false))
+		return;
+	if (dojo.frame_number.load() < 120)
+		return;
+	config::SavestateSlot.set(0);
+	cfgSetVirtual("config", "Dreamcast.SavestateSlot", "0");
+	if (!slotExists(0))
+		return;			// retry next frame until the host sees the base slot
+	probed = true;
+
+	gui_pause_for_checkout();		// generate() requires Paused
+	dojo.play_match = false;		// enter WRITE - the FST authors; READ refuses
+	const u32 bf = slotFrameOf(0);
+	st.sweep = Sweep();
+	st.sweep.selLo = bf + 5;
+	st.sweep.selHi = bf + 15;
+	st.sweep.P = st.sweep.selLo;	// P == selLo: the plain skip-phase test
+	st.sweep.k0 = 0;
+	st.sweep.k1 = 3;				// four skip phases -> four variants
+	st.sweep.fkOn = false;
+	normalize(st.sweep);
+	st.haveSel = true;				// generate() requires a captured selection
+	st.settle = 5;
+	NOTICE_LOG(NETWORK, "FST PROBE: armed selLo=%u selHi=%u P=%u k=%d..%d base=slot0@%u variants=%d",
+			st.sweep.selLo, st.sweep.selHi, st.sweep.P, st.sweep.k0, st.sweep.k1, bf, st.sweep.Ntot());
+	if (!generate())
+	{
+		NOTICE_LOG(NETWORK, "FST PROBE: generate REFUSED - %s", st.why.c_str());
+		return;
+	}
+	if (!runStart())
+		NOTICE_LOG(NETWORK, "FST PROBE: runStart REFUSED - %s", st.why.c_str());
+}
+
 void tick()
 {
+	fstProbe();		// dojo:FstProbe=yes - one-shot, arms the sweep; tick drives it
 	if (!st.running)
 		return;
 	const double now = os_GetSeconds();
