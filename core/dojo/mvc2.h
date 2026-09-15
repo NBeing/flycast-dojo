@@ -30,8 +30,9 @@ namespace tas_mvc2
 		u8 skipCount = 0;	// counts down; at 0 resets to rate and the game runs an extra logic frame
 		u32 sceneFrame = 0;	// resets between scenes
 		u32 totalFrames = 0;	// since boot
-		u16 comboP1 = 0;	// the combo (hit) meters - David, 2026-09-05: trainer 0x2C289642 / 0x2C289640 -> 0x8C289642 / 0x8C289640
-		u16 comboP2 = 0;	// read as little-endian u16 (the pair sits 2 bytes apart); confirm the width against the CT if a value looks wrong
+		u16 comboP1 = 0;	// GameState mirror of the hit meter (unused; the ORACLE is comboPoll/comboPeek)
+		u16 comboP2 = 0;	// `[CORRECTED 2026-09-15]` the real counter is per-point-char HitsToOpponent, a BYTE at
+							// 0x2685A0 / 0x268B44 (resets on a drop) - NOT the old 0x289642 running total. comboPoll reads it as u8
 	};
 
 	// True once the address map has proven itself on this session: skipRate read a legal value

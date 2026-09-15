@@ -21,8 +21,15 @@ static constexpr u32 SKIP_COUNT    = BASE + 0x289621;
 static constexpr u32 SKIP_TOGGLE   = BASE + 0x289622;	// 255 on the reset/skip frame ("0 0 0 255")
 static constexpr u32 SCENE_FRAME   = BASE + 0x1F9D80;
 static constexpr u32 TOTAL_FRAMES  = BASE + 0x3496B0;
-static constexpr u32 P1_COMBO      = BASE + 0x289642;	// combo meter, u16 LE (David, 2026-09-05; trainer 0x2C289642)
-static constexpr u32 P2_COMBO      = BASE + 0x289640;	// (trainer 0x2C289640)
+// `[CORRECTED 2026-09-15, from dev's 0915 tree]` the DISPLAYED combo counter =
+// per-point-character "hits to opponent" (a BYTE), which RESETS when a combo
+// drops - the true HIT/FAIL signal. The old 0x289642 "Combo_Meter_Value" is a
+// running TOTAL: it keeps climbing across a reset (150 on a clip whose screen
+// showed 11->reset->15), so a peak of it could never express "k landed, k+1
+// dropped" and the FST oracle read as vacuous. Confirmed by his address sweep
+// 2026-09-12. P1_A / P2_A = the point character's slot; read as a BYTE.
+static constexpr u32 P1_COMBO      = BASE + 0x2685A0;	// P1_A_Combo_Meter_HitsToOpponent (trainer 0x2C2685A0)
+static constexpr u32 P2_COMBO      = BASE + 0x268B44;	// P2_A_Combo_Meter_HitsToOpponent (trainer 0x2C268B44)
 
 static bool validated = false;
 static bool reported = false;
@@ -54,21 +61,32 @@ bool peekCombo(u16& p1, u16& p2)
 {
 	if (settings.content.path.empty())
 		return false;
-	p1 = ReadMem16_nommu(P1_COMBO);
-	p2 = ReadMem16_nommu(P2_COMBO);
+	p1 = ReadMem8_nommu(P1_COMBO);	// a BYTE counter; a u16 read leaks the neighbour field
+	p2 = ReadMem8_nommu(P2_COMBO);
 	return true;
 }
 
 void comboPoll()
 {
-	const u16 a = ReadMem16_nommu(P1_COMBO);
-	const u16 b = ReadMem16_nommu(P2_COMBO);
+	const u16 a = ReadMem8_nommu(P1_COMBO);	// BYTE - see the address note above
+	const u16 b = ReadMem8_nommu(P2_COMBO);
 	comboLast1.store(a, std::memory_order_relaxed);
 	comboLast2.store(b, std::memory_order_relaxed);
 	if (a > comboPeak1.load(std::memory_order_relaxed))
 		comboPeak1.store(a, std::memory_order_relaxed);
 	if (b > comboPeak2.load(std::memory_order_relaxed))
 		comboPeak2.store(b, std::memory_order_relaxed);
+	// dojo:ComboProbe - log the counter on every CHANGE, so a real (resetting)
+	// combo is visible and the corrected address/width can be confirmed by
+	// measurement, not just against dev's tree. Edge-triggered, off by default.
+	static u16 pa = 0xffff, pb = 0xffff;
+	if (a != pa || b != pb)
+	{
+		if (cfgLoadBool("dojo", "ComboProbe", false))
+			NOTICE_LOG(NETWORK, "COMBO PROBE: P1=%u P2=%u", (unsigned)a, (unsigned)b);
+		pa = a;
+		pb = b;
+	}
 }
 
 void comboPeakReset()
