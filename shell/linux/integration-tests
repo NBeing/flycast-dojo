@@ -84,7 +84,20 @@ start_x() {
     # Xvfb :71 survived every suite run (found at 641 s, ppid 1, after a green
     # run). The same class as the wrong-pid subshell capture fixed above: a
     # name-based kill does not fail loudly, it fails by leaving the process.
-    [ -n "${XVFB_PID:-}" ] && kill -KILL "$XVFB_PID" 2>/dev/null
+    #
+    # START ONCE, KEEP IT. `[MEASURED 2026-09-14]` the first pid-based version
+    # killed the previous server and respawned on the same display at once, and
+    # the kernel had not always released the old socket: the new Xvfb could
+    # not bind, xdpyinfo never answered, and a case SKIPPED - a different case
+    # each run. (The pattern-based cleanup it replaced never killed anything,
+    # which is why every case had quietly reused the first server for months.)
+    # A server we started that still answers is the server; spawn only when
+    # there is none.
+    if [ -n "${XVFB_PID:-}" ] && kill -0 "$XVFB_PID" 2>/dev/null \
+            && DISPLAY=":$DISPLAY_NUM" xdpyinfo >/dev/null 2>&1; then
+        return 0
+    fi
+    [ -n "${XVFB_PID:-}" ] && { kill -KILL "$XVFB_PID" 2>/dev/null; sleep 1; }
     rm -f "/tmp/.X$DISPLAY_NUM-lock"
     Xvfb ":$DISPLAY_NUM" -screen 0 "$geom" >/dev/null 2>&1 &
     XVFB_PID=$!
