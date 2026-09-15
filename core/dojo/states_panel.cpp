@@ -34,8 +34,12 @@
 	own source says "8 or 6 backups?".
 
 	WHAT IT DOES NOT DO YET, said out loud rather than left to be discovered:
-	no thumbnails (nothing in this tree writes one, and GetLastFrameRGB is
-	DX9/DX11 only - STATES-LIFT G6); no rename (saveSavestateLabel has no
+	no thumbnail DISPLAY in this grid yet - but `[CORRECTED 2026-09-15]`
+	thumbnails ARE written now: tas_thumb (core/dojo/thumbnail.cpp) writes
+	<state>.png on every save, and a GL GetLastFrameRGB readback was added
+	(core/rend/gles/gles.h) so it works here, not only DX9/DX11. Showing them in
+	this grid is the remaining half (branch_panel's drawThumb is the pattern to
+	reuse); no rename (saveSavestateLabel has no
 	callers, G7); no delete (deleteSavestate has none either, G8); no
 	generations pane. Reading is the whole of this slice.
 */
