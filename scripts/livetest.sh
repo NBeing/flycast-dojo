@@ -87,15 +87,38 @@ command -v Xvfb >/dev/null || { echo "livetest: no Xvfb - SKIP"; exit $SKIP; }
 # second copy of that would rot in the quiet direction. deferredslot.lua is the
 # test chosen because loading a state is its whole subject.
 out="$ROOT/build-dojo7/testresults/deferredslot.stdout.log"
-rm -f "$out"
-"$ROOT/scripts/testrun.sh" "$ROOT/scripts/tests/deferredslot.lua" >/dev/null 2>&1
-rc=$?
-if [ ! -s "$out" ]; then
+
+run_once() {
+	rm -f "$out"
+	"$ROOT/scripts/testrun.sh" "$ROOT/scripts/tests/deferredslot.lua" >/dev/null 2>&1
+	rc=$?
+	if [ ! -s "$out" ]; then
+		reason="nolog"
+		return
+	fi
+	reason=$(judge "$out")
+}
+
+# SILENT IS RETRIED ONCE; A REAL VERDICT IS NOT. `[MEASURED 2026-09-16]` under
+# checks.sh -j2 this was the sole flake across two full gates: deferredslot's boot
+# EXITS EARLY (~4.8s) under llvmpipe worker contention, before it reaches steady
+# playback -> load -> the STATE LIVENESS line, so the judge reads "silent" though
+# the feature is wired (it passes every time in isolation). A "silent" is the
+# ABSENCE of a verdict, so retrying it cannot hide a regression: an unwired
+# watchdog is silent on the retry too and still FAILs. "cries-wolf"/"both" are
+# real verdicts and are NEVER retried - they mean the feature spoke and spoke
+# wrongly. "nolog" (testrun's own flock SKIP, or a dead boot) is retried for the
+# same reason a silent is.
+run_once
+if [ "$reason" = "silent" ] || [ "$reason" = "nolog" ]; then
+	echo "livetest: no verdict on the first run ($reason) - retrying once (contention flake guard)"
+	sleep 3
+	run_once
+fi
+if [ "$reason" = "nolog" ]; then
 	echo "livetest: deferredslot produced no log (rc=$rc) - SKIP"
 	exit $SKIP
 fi
-
-reason=$(judge "$out")
 case "$reason" in
 ok)	echo "livetest: PASS - a healthy load reported itself alive, and nothing cried wolf"
 	exit 0 ;;
