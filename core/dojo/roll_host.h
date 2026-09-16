@@ -280,4 +280,13 @@ void registerMacrosPanel();
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();
 
+/*
+	The Timeline HUD: the one glanceable status line - frame, the 3-way mode
+	(READ / READ-WRITE / WRITE), the branch chip, and the MvC2 scene/skip clocks
+	when the map has validated. Reads only; the mode/branch strings are pure
+	functions selfTest() covers without a ROM. Idempotent.
+*/
+void registerTimelinePanel();
+namespace timeline { void selfTest(); }
+
 }	// namespace roll

@@ -1316,6 +1316,7 @@ if(NOT LIBRETRO)
 	core/dojo/ctlserver.h
 	core/dojo/snippets_panel.cpp
 	core/dojo/macros_panel.cpp
+	core/dojo/timeline_panel.cpp
 	core/dojo/notepad_panel.cpp
 	core/deps/ImGuiColorTextEdit/TextEditor.cpp
 	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp
