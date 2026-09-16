@@ -143,6 +143,7 @@ int flycast_init(int argc, char* argv[])
 	roll::registerBranchesPanel();
 	roll::registerNotepadPanel();
 	roll::registerSnippetsPanel();
+	roll::registerMacrosPanel();
 	os_CreateWindow();
 	os_SetupInput();
 

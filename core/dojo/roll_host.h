@@ -273,6 +273,10 @@ namespace notepad { void selfTest(); }	// the graph's layout/colour arithmetic; 
 //! place (overdub/replace) through the roll's funnel, retag, delete. Idempotent.
 void registerSnippetsPanel();
 
+//! The Macros browser: saved clip combos across the game's replays folder - list,
+//! place (via libraryRead -> the snippets path), and Full load. Idempotent.
+void registerMacrosPanel();
+
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();
 

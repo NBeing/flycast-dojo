@@ -1315,6 +1315,7 @@ if(NOT LIBRETRO)
 	core/dojo/ctlserver.cpp
 	core/dojo/ctlserver.h
 	core/dojo/snippets_panel.cpp
+	core/dojo/macros_panel.cpp
 	core/dojo/notepad_panel.cpp
 	core/deps/ImGuiColorTextEdit/TextEditor.cpp
 	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp
@@ -2237,6 +2238,18 @@ set_tests_properties(flycast.snippettest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 
 add_test(NAME flycast.snippettest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/snippettest.sh --self-test)
 set_tests_properties(flycast.snippettest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 200)
+
+# THE MACROS BROWSER (saved clip combos across the replays folder, over roll_library +
+# a scanner). Places a scanned macro into the movie and asserts the row changed. Needs a
+# ROM, Xvfb, a clip; SKIP 77 otherwise.
+add_test(NAME flycast.macrostest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/macrostest.sh)
+set_tests_properties(flycast.macrostest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 200)
+
+# ITS ARM. MacrosProbe=no must not run the probe, so "a macro was placed" can fail.
+add_test(NAME flycast.macrostest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/macrostest.sh --self-test)
+set_tests_properties(flycast.macrostest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 200)
 
 # THE FIVE THINGS UNIT CHECKS CANNOT ASK. docs/CROSS-PROJECT-LESSONS.md calls
 # shell/linux/integration-tests "the best test artefact in the tree - full
