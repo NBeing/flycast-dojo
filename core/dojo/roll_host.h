@@ -289,4 +289,15 @@ void registerUiTextPanel();
 void registerTimelinePanel();
 namespace timeline { void selfTest(); }
 
+/*
+	Journey 3 - record vs send equivalence, by state hash. Not a panel: a
+	read-only probe (dojo:SendEquivProbe=yes|shift) that runs three arms from one
+	base state - neutral, a record-form reference (raw DC_BTN_A, no InjectInput),
+	and the send path (Dojo::InjectInput) - and hashes the machine after each, so
+	scripts/sendequivtest.sh can assert send==record, record!=neutral, and (the
+	sabotage) a one-frame-late send != record. selfTest() covers the pure window
+	forms; tick() drives the probe. Off by default.
+*/
+namespace sendequiv { void selfTest(); void tick(); }
+
 }	// namespace roll

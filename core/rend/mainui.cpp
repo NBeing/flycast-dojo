@@ -31,6 +31,7 @@
 #include "dojo/fst.h"
 #include "dojo/ctlserver.h"
 #include "dojo/branch_export.h"
+#include "dojo/roll_host.h"
 #include "oslib/oslib.h"
 #include "wsi/context.h"
 #include "cfg/option.h"
@@ -391,6 +392,7 @@ bool mainui_rend_frame()
 	}
 
 	roll::fst::tick();	// the Frame Skip Test sweep, if one is running
+	roll::sendequiv::tick();	// dojo:SendEquivProbe - record vs send equivalence, if armed
 	roll::bexport::tick();	// the per-branch video export, if one is running
 	tas_ctl::tick();	// dojo:ControlServer - poll _ctl/cmd.json once per frame (no-op when off)
 

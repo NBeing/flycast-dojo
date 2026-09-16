@@ -1317,6 +1317,7 @@ if(NOT LIBRETRO)
 	core/dojo/snippets_panel.cpp
 	core/dojo/macros_panel.cpp
 	core/dojo/timeline_panel.cpp
+	core/dojo/sendequiv.cpp
 	core/dojo/notepad_panel.cpp
 	core/deps/ImGuiColorTextEdit/TextEditor.cpp
 	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp
@@ -2199,6 +2200,20 @@ set_tests_properties(flycast.fsttest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 add_test(NAME flycast.fsttest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/fsttest.sh --self-test)
 set_tests_properties(flycast.fsttest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+
+# RECORD vs SEND equivalence (journey 3), by state hash. Three arms from one base
+# state - neutral, a record-form reference (raw DC_BTN_A, no InjectInput), and the
+# send path (Dojo::InjectInput). Claim: send==record AND record!=neutral.
+add_test(NAME flycast.sendequivtest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/sendequivtest.sh)
+set_tests_properties(flycast.sendequivtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+# ITS ARM. SendEquivProbe=shift injects the send one frame late; the equivalence
+# MUST then break (match=no). If a shifted send still matched, the state-hash
+# comparison would be blind to frame placement - it would prove nothing.
+add_test(NAME flycast.sendequivtest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/sendequivtest.sh --self-test)
+set_tests_properties(flycast.sendequivtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually

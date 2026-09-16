@@ -112,6 +112,7 @@ int flycast_init(int argc, char* argv[])
 	roll::bexport::selfTest();
 	roll::notepad::selfTest();
 	roll::timeline::selfTest();
+	roll::sendequiv::selfTest();
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();
