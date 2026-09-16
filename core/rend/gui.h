@@ -94,6 +94,7 @@ void gui_step_frames(int n);
 */
 void gui_pause_for_checkout();	//!< force Paused + emu stopped, from any state - branch checkout's precondition
 void gui_resume_play();			//!< continuous playback: Closed + emu running
+void gui_set_driver(int which);	//!< 0 READ / 1 READ-WRITE / 2 WRITE - the control server's set_mode verb
 
 enum class GuiState {
 	Closed,

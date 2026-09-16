@@ -4843,6 +4843,35 @@ void gui_save()
 	boxart.saveDatabase();
 }
 
+// The 3-way session mode, for the control server's set_mode verb. `[PORTED
+// 2026-09-15]` the semantics of dev's tasDriverSet (his dojo_gui.cpp), mapped onto
+// our primitives - we did not port dojo_gui or his gui_enter_readonly, so READ sets
+// play_match directly. 0 READ / 1 READ-WRITE / 2 WRITE (see the Timeline HUD's
+// "play_match ? READ : (macro_armed ? READ-WRITE : WRITE)" 3-way).
+void gui_set_driver(int which)
+{
+	if (which == 0)			// READ - playback only
+	{
+		if (!dojo.play_match)
+		{
+			dojo.play_match = true;
+			gui_display_notification("READ - playback only", 2000);
+		}
+	}
+	else if (which == 1)	// READ-WRITE - a signal stomps the active frame
+	{
+		if (dojo.play_match) { dojo.play_match = false; dojo.divergence_open = false; }
+		dojo.macro_armed = true;
+		gui_display_notification("READ-WRITE - inputs protected; a signal stomps the active frame", 2500);
+	}
+	else					// WRITE - advancing overwrites every frame
+	{
+		if (dojo.play_match) { dojo.play_match = false; dojo.divergence_open = false; }
+		dojo.macro_armed = false;
+		gui_display_notification("WRITE - advancing overwrites every frame", 2500);
+	}
+}
+
 void gui_loadState()
 {
 	const LockGuard lock(guiMutex);

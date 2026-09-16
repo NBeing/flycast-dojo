@@ -180,6 +180,9 @@ public:
 
 	void PollRecordAction(int frame, int size, unsigned char *bits);
 	u32 WriteMacroFile();	// TAS: write session_inputs -> <folder>_macro.txt (teardown + live macro-record auto-save)
+	// Write canon input masks into session_inputs[frame..frame+hold-1] (maple layer, no keystrokes) - the
+	// control server's `input` verb. `[PORTED 2026-09-15]` from dev's 0915 tree.
+	void InjectInput(u32 frame, u16 p1canon, u16 p2canon, u32 hold);
 	void MacroFlush();		// TAS: rewrite it NOW if this session owns a macro and it is stale (Record Macro: always) - ESC / pause / teardown / unloadGame
 	u32 MacroAnchorFrame(bool& hasState0);	// TAS: State 0's frame (macro is relative to it) - else first input frame
 	void RecRecordAction(int frame, int size, unsigned char *bits);

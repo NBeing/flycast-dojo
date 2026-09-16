@@ -105,6 +105,38 @@ u16 comboPeak(int player)
 	return player == 0 ? comboPeak1.load(std::memory_order_relaxed) : comboPeak2.load(std::memory_order_relaxed);
 }
 
+// `[PORTED 2026-09-15]` from dev's 0915 tree - the control server's `read` verb.
+u32 readRam(u32 addr, int width)
+{
+	if (settings.content.path.empty())
+		return 0;
+	if ((addr >> 24) == 0x2C)
+		addr += 0x60000000u;		// Demul -> flycast (same bytes, cached mirror)
+	switch (width)
+	{
+	case 1:  return ReadMem8_nommu(addr);
+	case 2:  return ReadMem16_nommu(addr);
+	default: return ReadMem32_nommu(addr);
+	}
+}
+
+bool readRamSafe(u32 addr, int width, u32& out)
+{
+	if (settings.content.path.empty())
+		return false;
+	if ((addr >> 24) == 0x2C)
+		addr += 0x60000000u;		// Demul -> flycast (same bytes, cached mirror)
+	if (!IsOnRam(addr))
+		return false;			// not work RAM: never touch it
+	switch (width)
+	{
+	case 1:  out = ReadMem8_nommu(addr); break;
+	case 2:  out = ReadMem16_nommu(addr); break;
+	default: out = ReadMem32_nommu(addr); break;
+	}
+	return true;
+}
+
 GameState read()
 {
 	GameState gs;

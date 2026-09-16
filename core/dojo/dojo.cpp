@@ -2931,6 +2931,21 @@ u32 Dojo::MacroAnchorFrame(bool& hasState0)
 		return slots[0].movieFrame;
 	return session_inputs.empty() ? 0 : session_inputs.begin()->first;
 }
+// CONTROL SERVER `input` verb: write canon masks into session_inputs[frame..frame+hold-1] at the maple
+// layer (no keystrokes). `[PORTED 2026-09-15]` from dev's 0915 tree; tasWriteCanonIntoFrame is file-static above.
+void Dojo::InjectInput(u32 frame, u16 p1canon, u16 p2canon, u32 hold)
+{
+	if (hold < 1) hold = 1;
+	for (u32 i = 0; i < hold; i++)
+	{
+		std::vector<u8> row(sizeof(FrameInputs) * MAX_PLAYERS, 0);
+		tasWriteCanonIntoFrame((FrameInputs *)row.data(), p1canon);							// P1 -> bytes 0-11
+		tasWriteCanonIntoFrame((FrameInputs *)(row.data() + sizeof(FrameInputs)), p2canon);	// P2 -> bytes 12-23
+		session_inputs[frame + i] = std::move(row);
+	}
+	NOTICE_LOG(INPUT, "CTL: InjectInput frame %u x%u  p1=0x%03X p2=0x%03X", frame, hold, p1canon, p2canon);
+}
+
 // Build the session macro from session_inputs and write it to <clip-folder>_macro.txt (the Notepad CE text
 // format, openable/editable). Called at teardown AND live during macro recording (David: the file should
 // exist + update as you record, not only when the session ends). No-op without inputs / a clip folder.

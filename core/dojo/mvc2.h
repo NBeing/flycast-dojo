@@ -62,4 +62,10 @@ namespace tas_mvc2
 	void comboPeakReset();
 	u16 comboLast(int player);	// 0 = P1, 1 = P2
 	u16 comboPeak(int player);
+
+	// Generic work-RAM read (Demul 2C.. or flycast 8C.. address; width 1/2/4), for the
+	// control server's `read` verb. `[PORTED 2026-09-15]` from dev's 0915 tree.
+	u32 readRam(u32 addr, int width);
+	// Same, but IsOnRam-checked: false (out untouched) for a non-RAM / out-of-range address.
+	bool readRamSafe(u32 addr, int width, u32& out);
 }

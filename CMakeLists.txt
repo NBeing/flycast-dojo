@@ -1312,6 +1312,8 @@ if(NOT LIBRETRO)
 	core/dojo/branch_export.h
 	core/dojo/thumbnail.cpp
 	core/dojo/thumbnail.h
+	core/dojo/ctlserver.cpp
+	core/dojo/ctlserver.h
 	core/dojo/notepad_panel.cpp
 	core/deps/ImGuiColorTextEdit/TextEditor.cpp
 	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp
@@ -2208,6 +2210,20 @@ set_tests_properties(flycast.thumbtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30
 add_test(NAME flycast.thumbtest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/thumbtest.sh --self-test)
 set_tests_properties(flycast.thumbtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+# THE CONTROL PLANE (tas_ctl, ported from dev's 0915). An external client drives the
+# running emulator via <ctlDir>/_ctl/cmd.json + resp/<seq>.json - the deterministic,
+# keystroke-free journey driver that replaces xdotool for input-driven journeys.
+# Proves the transport + a state-changing verb (save writes a state file on disk).
+add_test(NAME flycast.ctltest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/ctltest.sh)
+set_tests_properties(flycast.ctltest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+# ITS ARM. dojo:ControlServer=no must ignore the command file entirely (no response),
+# so "the control plane answered" can actually fail (the gate works).
+add_test(NAME flycast.ctltest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/ctltest.sh --self-test)
+set_tests_properties(flycast.ctltest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 
 # THE FIVE THINGS UNIT CHECKS CANNOT ASK. docs/CROSS-PROJECT-LESSONS.md calls
 # shell/linux/integration-tests "the best test artefact in the tree - full
