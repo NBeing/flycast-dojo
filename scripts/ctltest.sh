@@ -2,11 +2,11 @@
 # ctltest - the tas_ctl control plane drives the emulator deterministically.
 #
 #   RUN:   scripts/ctltest.sh              (needs a ROM, Xvfb, python3, a clip)
-#   PASS:  an external client, writing <ctlDir>/_ctl/cmd.json and reading
-#          resp/<seq>.json, gets synchronous per-seq answers, and a state-changing
-#          verb (save) has an OBSERVABLE effect - a <base>_<slot>.state on disk. No
-#          keystrokes, no xdotool. (step/input want an authoring session - see below.)
-#   FAIL:  exit 1 (no response, pause not reported, or no state file written).
+#   PASS:  in a TRAINING session, an external client (cmd.json + resp/<seq>.json)
+#          gets synchronous per-seq answers, a `step {n}` advances dojo.frame_number
+#          by EXACTLY n, and `input` injects guest frames - all with no keystrokes,
+#          no xdotool. Training (not a replay) is what lets step land frame-exact.
+#   FAIL:  exit 1 (no response, pause not reported, step off by != n, or no injection).
 #   SKIP:  exit 77 (no ROM / Xvfb / python3 / a clip / build).
 #   SELF:  scripts/ctltest.sh --self-test - boot with dojo:ControlServer=no; the
 #          same cmd.json must be IGNORED (no resp ever appears). The twin exits 0
@@ -57,13 +57,14 @@ nohup Xvfb "$D" -screen 0 900x700x24 >"$OUT/xvfb.log" 2>&1 & XPID=$!; sleep 2
 [ -e "/tmp/.X11-unix/X$DN" ] || { echo "ctltest: SKIP - Xvfb did not come up on $D"; kill "$XPID" 2>/dev/null; exit $SKIP; }
 
 CTLSRV=yes; [ "$SELF" -eq 1 ] && CTLSRV=no
-# boot PAUSED (no AutoPlay/AutoSeek/AutoCapture) so frame_number only moves when the
-# control server's step verb moves it - the whole point of the measurement.
+# TRAINING session (not a replay): the game runs live with no movie driving playback,
+# so `step` advances EXACTLY n frames and re-pauses (a replay free-runs past the target -
+# see the [OPEN] this closes). trainingEnabled() alone makes the session steppable.
 XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	-config dojo:UiIni=no -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
-	-config dojo:Replay=yes -config "dojo:ReplayFilename=$OUT/clip/clip.flyr" \
-	-config dojo:AutoSeekState=-1 -config dojo:AutoLoadNetState=no -config dojo:Transmitting=no -config dojo:Receiving=no \
-	-config dojo:RecordMatches=yes -config "dojo:ControlServer=$CTLSRV" -config "dojo:CtlDir=$OUT/ctl" \
+	-config dojo:Training=yes -config dojo:RecordMatches=yes \
+	-config dojo:AutoLoadNetState=no -config dojo:AutoLoadTrainingNetState=no -config dojo:Transmitting=no -config dojo:Receiving=no \
+	-config "dojo:ControlServer=$CTLSRV" -config "dojo:CtlDir=$OUT/ctl" \
 	-config window:width=900 -config window:height=700 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 & FC=$!
 cleanup() { kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
@@ -83,9 +84,9 @@ send() {
 }
 field() { python3 -c "import json,sys; d=json.load(open('$1')); print(d.get('$2'))" 2>/dev/null; }
 
-# give the emulator time to boot the game and start rendering (so tick() polls)
-for _ in $(seq 1 40); do kill -0 "$FC" 2>/dev/null || break; grep -aq "LOAD REPLAY FILE" <(tr -d '\0' <"$OUT/out.log") && break; sleep 0.5; done
-sleep 6
+# give the emulator time to boot the game to a live, steppable state (so tick() polls)
+for _ in $(seq 1 40); do kill -0 "$FC" 2>/dev/null || break; grep -aq "gui_start_game" <(tr -d '\0' <"$OUT/out.log") && break; sleep 0.5; done
+sleep 10
 
 # PROTOCOL: the server baselines s_lastHandledSeq on the FIRST cmd.json it sees and
 # does NOT execute it (so a stale command left from a prior session is skipped, not
@@ -109,39 +110,51 @@ if [ "$SELF" -eq 1 ]; then
 	exit 1
 fi
 
-# 1) query - the transport works and reports a frame + mode
+# 1) query - transport works, reports a frame + mode
 send 1 query "{}" > "$RQ" 2>/dev/null || { echo "FAIL ctltest - no response to query (control server not answering)"; tr -d '\0' <"$OUT/out.log"|grep -a "CTL\|control" |tail -5; cleanup; exit 1; }
 ok1=$(field "$RQ" ok); mode0=$(field "$RQ" mode)
 echo "ctltest: query -> ok=$ok1 mode=$mode0"
 [ "$ok1" = "True" ] || { echo "FAIL ctltest - query not ok"; cleanup; exit 1; }
 
-# 2) pause - a state-changing verb whose effect is reported back (paused=true).
+# 2) pause - stop the live game so step advances exactly N and re-pauses
 send 2 pause "{}" > "$RQ" 2>/dev/null || { echo "FAIL ctltest - no response to pause"; cleanup; exit 1; }
 paused=$(field "$RQ" paused)
 echo "ctltest: pause -> ok=$(field "$RQ" ok) paused=$paused"
 
-# 3) save {slot} - a state-changing verb with an OBSERVABLE ON-DISK side effect: a
-# <base>_<slot>.state must appear. This is the end-to-end proof - an external client,
-# over the JSON channel with no keystrokes, drove the emulator to write a file.
-SLOT=7
-send 3 save "{\"slot\":$SLOT}" > "$RQ" 2>/dev/null || { echo "FAIL ctltest - no response to save"; cleanup; exit 1; }
-saveok=$(field "$RQ" ok); savedslot=$(field "$RQ" saved_slot)
-echo "ctltest: save slot $SLOT -> ok=$saveok saved_slot=$savedslot"
-sleep 1
-STATEFILE="$(ls "$OUT/clip"/*_"$SLOT".state 2>/dev/null | head -1)"
-tr -d '\0' <"$OUT/out.log" | grep -a "CTL" | tail -4 | sed 's/^/  /'
+# 3) query the pre-step frame
+send 3 query "{}" > "$RQ" 2>/dev/null || { echo "FAIL ctltest - no response to pre-step query"; cleanup; exit 1; }
+f0=$(field "$RQ" frame)
+
+# 4) step N - the deterministic, frame-EXACT advance primitive (the [OPEN] this closes)
+N=10
+send 4 step "{\"n\":$N}" > "$RQ" 2>/dev/null || { echo "FAIL ctltest - no response to step"; cleanup; exit 1; }
+stepok=$(field "$RQ" ok)
+echo "ctltest: step n=$N -> ok=$stepok frame=$(field "$RQ" frame)"
+
+# 5) query - assert the counter advanced by EXACTLY N
+send 5 query "{}" > "$RQ" 2>/dev/null || { echo "FAIL ctltest - no response to post-step query"; cleanup; exit 1; }
+f1=$(field "$RQ" frame)
+
+# 6) input - inject guest input at upcoming frames (maple layer, no keystrokes)
+send 6 input "{\"p1\":16,\"frame\":$f1,\"hold\":5}" > "$RQ" 2>/dev/null || { echo "FAIL ctltest - no response to input"; cleanup; exit 1; }
+inputok=$(field "$RQ" ok)
+echo "ctltest: input p1=0x10 @frame $f1 x5 -> ok=$inputok"
+injlog="$(tr -d '\0' <"$OUT/out.log" | grep -a "CTL: InjectInput" | tail -1)"
+
+tr -d '\0' <"$OUT/out.log" | grep -a "CTL" | tail -5 | sed 's/^/  /'
 cleanup; sleep 1
+echo "ctltest: frame $f0 -> $f1 after step $N"
 
-# NOTE: `step {n}` is intentionally NOT asserted here. In a bare replay it un-pauses
-# and the movie free-runs past the target (the watchdog fires) - a clean N-frame
-# advance needs an authoring/Training session the way the Frame Skip Test gets one
-# via gui_loadState. [OPEN] a Training-session ctltest would exercise step/input.
-
+# --- verdicts ---
 if [ "$paused" != "True" ]; then echo "FAIL ctltest - pause did not report paused=true"; exit 1; fi
-if [ "$saveok" != "True" ]; then echo "FAIL ctltest - save verb returned ok=$saveok"; exit 1; fi
-if [ -z "$STATEFILE" ] || [ ! -s "$STATEFILE" ]; then
-	echo "FAIL ctltest - save verb reported ok but no slot-$SLOT state file was written"
+case "$f0$f1" in *None*|"") echo "FAIL ctltest - missing frame in a response"; exit 1 ;; esac
+if [ "$stepok" != "True" ]; then echo "FAIL ctltest - step verb returned ok=$stepok"; exit 1; fi
+adv=$((f1 - f0))
+if [ "$adv" -ne "$N" ]; then
+	echo "FAIL ctltest - step advanced $adv frames, expected EXACTLY $N ($f0 -> $f1)"
 	exit 1
 fi
-echo "PASS ctltest - the control plane answered per-seq (query/pause/save) and a remote save wrote $(basename "$STATEFILE") ($(stat -c %s "$STATEFILE") bytes)"
+if [ "$inputok" != "True" ]; then echo "FAIL ctltest - input verb returned ok=$inputok"; exit 1; fi
+if [ -z "$injlog" ]; then echo "FAIL ctltest - input verb ok but no InjectInput trace (nothing written)"; exit 1; fi
+echo "PASS ctltest - remote step advanced the frame counter by EXACTLY $N, and input injected guest frames ($injlog)"
 exit 0
