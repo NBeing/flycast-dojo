@@ -1314,6 +1314,7 @@ if(NOT LIBRETRO)
 	core/dojo/thumbnail.h
 	core/dojo/ctlserver.cpp
 	core/dojo/ctlserver.h
+	core/dojo/snippets_panel.cpp
 	core/dojo/notepad_panel.cpp
 	core/deps/ImGuiColorTextEdit/TextEditor.cpp
 	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp
@@ -2224,6 +2225,18 @@ set_tests_properties(flycast.ctltest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 add_test(NAME flycast.ctltest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/ctltest.sh --self-test)
 set_tests_properties(flycast.ctltest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+# THE SNIPPETS BROWSER (the sequence library as a panel, over roll_library). Places a
+# library sequence into the movie through the roll's edit funnel and asserts the row
+# changed. Needs a ROM, Xvfb, a clip; SKIP 77 otherwise.
+add_test(NAME flycast.snippettest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/snippettest.sh)
+set_tests_properties(flycast.snippettest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 200)
+
+# ITS ARM. SnippetProbe=no must not run the probe, so "a snippet was placed" can fail.
+add_test(NAME flycast.snippettest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/snippettest.sh --self-test)
+set_tests_properties(flycast.snippettest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 200)
 
 # THE FIVE THINGS UNIT CHECKS CANNOT ASK. docs/CROSS-PROJECT-LESSONS.md calls
 # shell/linux/integration-tests "the best test artefact in the tree - full

@@ -269,6 +269,10 @@ namespace bexport { void selfTest(); void tick(); }
 void registerNotepadPanel();
 namespace notepad { void selfTest(); }	// the graph's layout/colour arithmetic; selfTest() above is the engine's
 
+//! The Snippets browser: the sequence library (roll_library) as a panel - list,
+//! place (overdub/replace) through the roll's funnel, retag, delete. Idempotent.
+void registerSnippetsPanel();
+
 //! The UI Text editor: rename any label the UI has drawn. Idempotent.
 void registerUiTextPanel();
 
