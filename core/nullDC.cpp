@@ -355,6 +355,32 @@ static void verifyLoadedStateIdempotent(const void *blobA, size_t sizeA)
 	else
 	{
 		/*
+			AN OLDER (or newer) STATE IS A DIFFERENT ON-DISK FORMAT, not a restore
+			bug - and this is the FIRST thing to rule out, because it fakes the
+			worst-looking symptom: a diff at offset 0. The blob's first int32 is
+			its saved version (Serializer's ctor writes it there); re-serializing
+			always writes Current. When they differ, offset 0 AND every field
+			added since differ BY CONSTRUCTION. `[MEASURED 2026-09-15]` a V48 (843)
+			state loaded under a V49 (844) build reads exactly this - the version
+			u32 at offset 0, plus the +8 bytes of SH4 pipeline state (sh4cycles
+			lastUnit/memOps) that V49 added on 2026-09-12. The state still LOADS
+			correctly (its new fields are version-guarded reads, left at defaults);
+			it simply cannot round-trip to a format it predates. Report it plainly
+			and stop - comparing across versions is apples to oranges, and a check
+			that cries "NOT idempotent" on a stale file gets ignored on the day it
+			catches a real desync. Re-save the state under this build to clear it.
+		*/
+		const int32_t fileVer = sizeA >= sizeof(int32_t) ? *(const int32_t *)blobA : 0;
+		if (fileVer != (int32_t)Serializer::Current)
+		{
+			WARN_LOG(SAVESTATE, "STATE VERIFY: state is version %d but this build serializes "
+					"version %d - a diff (from offset 0, plus any field added since) is EXPECTED "
+					"for an older state and is NOT a serializer fault. Re-save it under this build "
+					"for a round-trip-clean state.",
+					(int)fileVer, (int)Serializer::Current);
+			return;
+		}
+		/*
 			A REPAIRED STATE IS *SUPPOSED* TO DIFFER, and saying so here is not
 			politeness - without it this probe becomes a false-positive
 			generator. `[MEASURED 2026-09-11]` the SPG repair turns the raster's
