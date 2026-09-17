@@ -1012,6 +1012,81 @@ at the movie. It is the one arm whose signature is a leak rather than a FAIL.
 `<clip>/branches/*` before and after the create rather than "verifying the root
 exists" - a root that exists proves nothing about a create that did nothing.
 
+### 5.3 `[IN PROGRESS 2026-09-17]` The combo fixture - built, because none was found
+
+**What exists.** Nothing on this machine lands a combo. The audit found no clip,
+state, macro or manifest that records `Combo_Meter_HitsToOpponent >= 1`, and
+David's own notes say his harness PASS "verifies the infrastructure, not that hits
+connect". David ships no DC savestates and no clips; what he ships is raw material
+and a vocabulary: `SPREADSHEET.json` (DC-verified addresses, by name), ~25 DC-native
+snippets in `roll_library`'s format (the `fastVS` boot seeds among them), the
+charselect node graph (`charselect_nodes.json`, cardinals emulator-verified), and
+444 PS2-converted macros that are CANDIDATES, never fixtures (122 are truncated).
+
+**What is built** (`8abee22be`, `df37d12e8`, `7daea7e4a`; the hunt itself is Track A's):
+
+- `core/dojo/combohunt.{h,cpp}` - the contract and RESULT grammar
+  (`COMBO HUNT RESULT: found=yes|no candidate= phase= d= peak= base= after=`),
+  a stub that SAYS it is a stub, wired into the tick strip and the selfTest hub.
+- `core/dojo/mvc2_data/SPREADSHEET.json` - the oracle's NAMES, md5-pinned.
+- `scripts/fixtures/mvc2/RECIPE.toml` - the fixture, pinned per nbneo-rr's rules:
+  the ROM by its bytes (size + sha256; three copies exist, the name is not the
+  identity), the vocabulary by md5 with the two addresses the tree hardcodes pinned
+  by NAME, the savestate-free base by `seqHashMacro`'s own FNV-1a 64 over the
+  `.txt`, the charselect expected sequence, and the result pinned by TWO hashes
+  (machine hash AND the combo byte) plus the PHASE. **Every field the hunt has not
+  measured says `"unmeasured"`**, and the never-regenerate rule is in the file.
+- `scripts/fixtures-check.sh` - four claims, the surface-tour grammar, the
+  `arms.sh` judge, exits 0/1/2/4/77:
+  - F1 fastVS parity, NO emulator: `tas_macro::FromText` + `seqHashMacro`
+    transliterated; `fastVS.txt` 633 / `4db6bf3690958f6b`, `fastVS_mcp.txt` 697 /
+    `442574011190bd6b`.
+  - F2 RECIPE honest: every pin is `unmeasured` or well-shaped WITH a
+    `measured_on`; pinned addresses agree with the spreadsheet by name; the
+    charselect ids agree with `ID_2`'s `Note2` enum; the unmeasured fields are
+    LISTED on every run (10 today).
+  - F3 vocabulary: `SPREADSHEET.json` md5 == pin.
+  - F4 charselect, the first expected SEQUENCE on the machine: boot the globe seed
+    (`dojo:OnEnterFile`), handoff pause, `set_mode READWRITE`, read `ID_2` at the
+    spreadsheet-resolved address through ctlserver (RubyHeart 19), inject
+    D,D,R,R by `input`+`step` (Venom 14), press D (Hulk 13) - David's verified
+    `v_down`. Every verb is one `ctltest.sh` already proves.
+  - `--verify-roms` (size + sha256, measured ok), `--regenerate` (refuses without
+    `FIXTURES_REGENERATE=iknow`; rewrites only no-emulator pins, prints
+    before/after), `--list-sabotage`, `--sabotage hash|recipe|charselect`.
+
+**The honest state of each claim** `[MEASURED 2026-09-17]`:
+
+| claim | state | measured |
+|---|---|---|
+| F1 parity | ok | both seeds match the pins; `library.json` says `fastVS_mcp` is 633 / `4db6bf…` - a STALE INDEX (the file grew by LK x4 at 634..637, the stage pick). The RECIPE pins the file, not the index - this is the failure the check exists for |
+| F2 honest | ok | 14 shape/name claims; 10 fields unmeasured and said so |
+| F3 md5 | ok | `23c1827fc4fe3b04313ee8c944565b20` |
+| F4 charselect | **SKIP 77** | the game boots but never logs `TAS ONENTER: seeded`: `Dojo::SeedOnEnter()` is ported and `dojo:OnEnterFile` registered, but **gui.cpp never calls it** (David's `gui.cpp:1072` does, after the Play-Macro branch). One call wires it; the claim runs unchanged after |
+| arm `hash` | fired | F1 red, F3 green - BEHAVED AS PREDICTED (exit 0) |
+| arm `recipe` | fired | F2 red, F1 green - BEHAVED (exit 0) |
+| arm `charselect` | INCONCLUSIVE | exit 2 while F4 cannot run - not a pass |
+| the hunt | unmeasured | `COMBO HUNT RESULT: found=no … (stub)` until Track A lands |
+
+A run with any SKIP exits 77, never 0: three green no-emulator claims and one
+skipped machine claim is "not proven", and `checks.sh` will say so.
+
+**The phase caveat.** MvC2 skips every 4th frame (`peekSkip`, rate 4). A combo that
+straddles a skip boundary connects on ONE of four phases - David measured "~1/4 of
+the time". A fixture that does not pin its phase is ~75% flaky, so the hunt sweeps
+all four and `[phase].value` is part of the result, not a detail of the run.
+
+**The V48 caveat.** David's savestates are V48; this build serializes V49 (`843` vs
+`844`, `serialize.h`). A V48 state loads but cannot round-trip, so a fixture may
+never pin a state FILE's digest - it pins `oracle::machineHash` AFTER the load, on
+this build. The RECIPE's base is a savestate-free boot snippet for exactly this
+reason: no round-trip, no RTC, no ROM-identity ambiguity, no dead timeline.
+
+**Wheels not reinvented.** The hash is `seqHashMacro` (David's, byte for byte);
+the parser is `tas_macro::FromText`'s rules; the transport is `ctltest.sh`'s
+client; the judge is `arms.sh`; the fixture rules are nbneo-rr's; the exploration
+loop the hunt runs is emuapi's. The one thing genuinely missing was the call site.
+
 ## Two disciplines that are not optional
 
 **Every check must be able to fail, and be seen to fail once.** At tiers 0–1
