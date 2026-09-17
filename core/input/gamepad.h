@@ -149,6 +149,10 @@ enum DreamcastKey
 	EMU_BTN_PANEL_BRANCHES,			// toggle the Branches panel -- TAS
 	EMU_BTN_PANEL_SNIPPETS,			// toggle the Snippets browser -- TAS
 	EMU_BTN_PANEL_MACROS,			// toggle the Macros browser -- TAS
+	// THE BLANKET SWITCH `[2026-09-17]` (David's F5, dojo:TasUi): every studio window
+	// shown or none, the per-window open flags untouched underneath. Unbound by
+	// default like the rest; panels::studioVisible() is the one reader.
+	EMU_BTN_TAS_UI,					// show/hide the whole studio (all panels) -- TAS
 
 	// Real axes
 	DC_AXIS_TRIGGERS	= 0x1000000,

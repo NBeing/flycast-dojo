@@ -1,4 +1,5 @@
 #include "panel.h"
+#include "rend/video_recorder.h"
 #include "cfg/cfg.h"
 #include "imgui.h"
 #include <stdexcept>
@@ -124,10 +125,37 @@ static const char *skipThisFrame = nullptr;
 //! Defined below, beside saveOpenState - it needs keyFor(), which is too.
 static void persistIfChanged();
 
+bool studioWanted()
+{
+	return cfgLoadBool("dojo", "TasUi", true);
+}
+
+bool studioVisible()
+{
+	if (!studioWanted())
+		return false;
+	// hide during a capture for a clean on-screen preview (David; default on)
+	if (videorec::isRecording() && cfgLoadBool("dojo", "HideStudioWhileRecording", true))
+		return false;
+	return true;
+}
+
+bool setStudioVisible(bool on)
+{
+	cfgSetVirtual("dojo", "TasUi", on ? "yes" : "no");	// wins now (a -config launch flag would otherwise shadow the save)
+	cfgSaveBool("dojo", "TasUi", on);						// persists
+	NOTICE_LOG(RENDERER, "PANEL STUDIO: %s", on ? "shown" : "hidden");
+	return on;
+}
+
 void drawStream(Stream s, const char *skipId)
 {
 	// Before drawing: catch a change made since the last frame, whoever made it.
 	persistIfChanged();
+	// The blanket switch: nothing drawn, nothing closed (see panel.h). After the
+	// persist sweep on purpose - an open flag flipped while hidden still persists.
+	if (!studioVisible())
+		return;
 	skipThisFrame = skipId;
 	visitStream(s, [](const Panel& p) {
 		if (skipThisFrame != nullptr && sameId(p.id, skipThisFrame))

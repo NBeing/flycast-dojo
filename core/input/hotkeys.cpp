@@ -46,6 +46,7 @@ static const Action ACTIONS[] = {
 	{ EMU_BTN_PANEL_BRANCHES,       "btn_panel_branches",       "Branches Window"         },
 	{ EMU_BTN_PANEL_SNIPPETS,       "btn_panel_snippets",       "Snippets Window"         },
 	{ EMU_BTN_PANEL_MACROS,         "btn_panel_macros",         "Macros Window"           },
+	{ EMU_BTN_TAS_UI,               "btn_tas_ui",               "Studio (all windows)"    },
 };
 
 const Action *all()   { return ACTIONS; }

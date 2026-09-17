@@ -460,6 +460,8 @@ static void restore()
 	if (!st.snapped)
 		return;
 	rebind::cancel();
+	if (!panels::studioWanted())	// the studio steps leave it shown; a failed show must not veil the user's studio
+		panels::setStudioVisible(true);
 	int np = 0;
 	for (const auto& kv : st.panelsOpen)
 	{
@@ -671,6 +673,60 @@ static void buildSteps()
 		rebindStep(i);
 		openStep(i);
 		closeStep(i);
+	}
+	/*
+		THE STUDIO BLANKET (David's F5, dojo:TasUi; ported 2026-09-17). With the cheat
+		sheet still up: rebind the switch, press it - EVERY window vanishes at once and
+		the sheet's open flag stays true underneath (a veil, not a close) - press it
+		again and everything is back. UI steps: the six-member tuple does not move.
+	*/
+	{
+		static const u32 STUDIO_CODE = ALT | 64;	// Alt+F7, unused by KEYS
+		static std::string g_studioWas;
+		Step r;
+		r.name = "rebind: studio -> Alt+F7";
+		r.begin = [] {
+			const std::shared_ptr<GamepadDevice> kbd = rebind::keyboard();
+			if (kbd == nullptr) { why("no keyboard"); return false; }
+			const std::string was = rebind::bindingName(kbd, EMU_BTN_TAS_UI);
+			g_studioWas = was.empty() ? "unbound" : was;
+			rebind::arm(EMU_BTN_TAS_UI, kbd);
+			if (!rebind::active()) { why("arm refused"); return false; }
+			return true;
+		};
+		r.act = [] { return injectKey(STUDIO_CODE); };
+		r.verify = [] {
+			const std::shared_ptr<GamepadDevice> kbd = rebind::keyboard();
+			const std::shared_ptr<InputMapping> map = kbd != nullptr ? kbd->get_input_mapping() : nullptr;
+			if (map == nullptr) { why("no mapping"); return false; }
+			const u32 got = map->get_button_code(0, EMU_BTN_TAS_UI);
+			if (got != STUDIO_CODE) { why("bound code %u, wanted %u", got, STUDIO_CODE); return false; }
+			why("%s -> %s", g_studioWas.c_str(), rebind::bindingName(kbd, EMU_BTN_TAS_UI).c_str());
+			return true;
+		};
+		add(r);
+		Step h;
+		h.name = "studio: hide (all windows)";
+		h.needsPrev = true;
+		h.act = [] { return injectKey(STUDIO_CODE); };
+		h.verify = [hotkeysIdx] {
+			if (panels::studioVisible()) { why("still visible (TasUi=%s)", panels::studioWanted() ? "yes" : "no"); return false; }
+			const panels::Panel *p = panels::find(KEYS[hotkeysIdx].panel);
+			if (p == nullptr || !*p->open) { why("the sheet's open flag was CLOSED - a veil must not close"); return false; }
+			why("hidden; the sheet's open flag still true underneath");
+			return true;
+		};
+		add(h);
+		Step w;
+		w.name = "studio: show (all windows)";
+		w.needsPrev = true;
+		w.act = [] { return injectKey(STUDIO_CODE); };
+		w.verify = [] {
+			if (!panels::studioVisible()) { why("still hidden (TasUi=%s)", panels::studioWanted() ? "yes" : "no"); return false; }
+			why("shown again");
+			return true;
+		};
+		add(w);
 	}
 	// and the sheet last. Its close step's needsPrev looks at the previous step
 	// (the last panel's close), which is the right dependency: the phase ended clean.

@@ -128,6 +128,21 @@ struct Panel
 	two is worse than a lookup.
 */
 
+/*
+	THE BLANKET SWITCH `[2026-09-17]` (David's F5, key dojo:TasUi, default yes).
+	studioWanted() is the key alone - what the user asked for. studioVisible() is
+	what drawStream honours: the key AND "not hidden for a capture"
+	(dojo:HideStudioWhileRecording, default yes - the .mov is the pre-overlay
+	framebuffer either way, so this is purely the on-screen preview). Neither
+	touches a panel's `open`: hidden is a veil over the registry, not a close, and
+	lifting it brings every window back where it was. The Game panel is drawn by
+	hand in gui.cpp and never goes through drawStream, so the picture stays.
+*/
+bool studioWanted();
+bool studioVisible();
+//! Writes the key (virtual, so it wins now, AND saved, so it persists) and traces
+//! `PANEL STUDIO: shown|hidden`. Returns the new state.
+bool setStudioVisible(bool on);
 //! Register a panel. Call before the first frame; the registry does not own
 //! the descriptor's strings or its bool, so both must outlive the process.
 void add(const Panel& p);

@@ -384,6 +384,16 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 					panels::toggle(panel);
 			}
 			break;
+		// THE BLANKET SWITCH (David's F5, dojo:TasUi; ported 2026-09-17, PORT-DEFECT-CENSUS §3):
+		// one key, every studio window on or off. Individual windows keep their own
+		// open flags underneath - panels::drawStream is the one place that reads it.
+		case EMU_BTN_TAS_UI:
+			if (pressed && gui_hotkey_allowed())
+			{
+				const bool on = panels::setStudioVisible(!panels::studioWanted());
+				NOTICE_LOG(INPUT, "hotkey: TAS_UI -> %s", on ? "shown" : "hidden");
+			}
+			break;
 		/*
 			SLOT CYCLING WRAPS, and it goes through hostfs::clampSavestateSlot
 			rather than doing its own arithmetic - that function is the one
