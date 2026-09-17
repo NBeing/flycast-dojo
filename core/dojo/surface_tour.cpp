@@ -257,6 +257,41 @@ static void buildSteps()
 	g_names.clear();
 	auto add = [&](Step s) { Rec r; r.step = std::move(s); st.steps.push_back(std::move(r)); };
 
+	/*
+		SHOW IT - step the game ONE frame after every load.
+
+		`[MEASURED 2026-09-17]` the user, watching: "the load state was never shown
+		because of pause". The whole tour runs Paused, and while Paused the renderer
+		never presents - so after gui_loadState the screen kept the PRE-load picture.
+		The load verified (the frame number matched) and the human never saw it.
+		gui_step_frames(1) runs exactly one frame, which forces a present, and the
+		stop side in gui_display_osd returns the machine to Paused. It is also a
+		claim of its own: the step lands frame-exact, +1. Kind::Record because it
+		moves the machine and deserves the longer dwell for the eye.
+	*/
+	static u32 g_showFrom = 0;
+	auto show = [&](const char *name) {
+		Step s;
+		s.name = name;
+		s.kind = Kind::Record;
+		s.needsPrev = true;			// showing a load that did not happen is not a claim
+		s.maxWaitMs = 3000;			// the frame runs on the emu thread; poll the return to Paused
+		s.act = [] {
+			if (gui_state != GuiState::Paused) { why("not paused before the step"); return false; }
+			g_showFrom = dojo.frame_number.load();
+			gui_step_frames(1);
+			return true;
+		};
+		s.verify = [] {
+			const u32 fr = dojo.frame_number.load();
+			if (gui_state != GuiState::Paused) { why("still running at frame %u", fr); return false; }
+			if (fr != g_showFrom + 1) { why("frame %u, expected %u+1", fr, g_showFrom); return false; }
+			why("frame %u presented", fr);
+			return true;
+		};
+		add(s);
+	};
+
 	// 1. load David's base state
 	{
 		Step s;
@@ -275,6 +310,7 @@ static void buildSteps()
 		};
 		add(s);
 	}
+	show("show: David's base state (1 frame)");
 
 	// 2-15. rebind every window's key through the real engine
 	for (int i = 0; i < NKEYS; i++)
@@ -368,6 +404,7 @@ static void buildSteps()
 	hook("states: label round-trip",         Kind::Click,  hooks::statesLabelRoundTrip);
 	hook("savestate: save slot 99",          Kind::Record, hooks::saveScratchSlot);
 	hook("savestate: load slot 99",          Kind::Record, hooks::loadScratchSlot, /*needsPrev*/ true);
+	show("show: slot 99 (1 frame)");
 	hook("slot: next",                       Kind::Click,  hooks::slotNext);
 	hook("slot: prev",                       Kind::Click,  hooks::slotPrev);
 	hook("driver: READ",                     Kind::Click,  hooks::driverRead);
@@ -380,7 +417,9 @@ static void buildSteps()
 	hook("macros: place",                    Kind::Click,  hooks::macrosPlace);
 	hook("branch: create from slot 0",       Kind::Record, hooks::branchCreate);
 	hook("branch: checkout",                 Kind::Record, hooks::branchCheckout, true);
+	show("show: the branch (1 frame)");
 	hook("branch: back to main",             Kind::Record, hooks::branchBackToMain, true);
+	show("show: main again (1 frame)");
 	hook("test lab: add test from slot 0",   Kind::Click,  hooks::labAddTest);
 	// Trash follows add directly so needsPrev names the step it depends on.
 	hook("test lab: trash the tour test",    Kind::Click,  hooks::labTrashTest, true);

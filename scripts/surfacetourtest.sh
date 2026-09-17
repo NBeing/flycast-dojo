@@ -36,9 +36,10 @@ ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 EXE="${FLYCAST_BIN:-$ROOT/build-dojo7/flycast}"
 ROM="${FLYCAST_TEST_ROM:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
 # The pass floor: scored steps minus the optional ones. `[MEASURED 2026-09-17]` the
-# default tour is 66 steps, 2 of them optional (captures: start/stop, which SKIP without
-# a recorder), so 64 must PASS. Overridable so a track can run against a partial tour.
-FLOOR="${TOUR_FLOOR:-64}"
+# default tour is 70 steps (66 + a 1-frame "show" after each of the four loads, so a
+# human actually sees the loaded picture), 2 of them optional (captures: start/stop,
+# which SKIP without a recorder), so 68 must PASS. Overridable for a partial tour.
+FLOOR="${TOUR_FLOOR:-68}"
 SELF=0; WATCH=0; WATCHCLIP=""
 case "${1:-}" in
 	--self-test) SELF=1 ;;

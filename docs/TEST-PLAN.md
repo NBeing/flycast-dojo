@@ -724,9 +724,13 @@ headless; `scripts/surfacetourtest.sh --watch <clip.flyr>` plays the same run on
 your real screen with an on-screen banner saying what is being tested, one step
 per second, so you can watch it and agree.
 
-**What it does, in order** (66 steps at the default; `dojo:TourSlow=yes` adds the
+**What it does, in order** (70 steps at the default; `dojo:TourSlow=yes` adds the
 FST sweep and a branch export): load the game and David's savestate (slot 0,
-BASE); **rebind every window's hotkey through the real rebind engine** - fourteen
+BASE) and **step one frame to show it** - the whole tour runs Paused and a paused
+renderer never presents, so without that step the screen kept the pre-load picture
+(the user caught this watching: "the load state was never shown because of
+pause"; a 1-frame show follows every load now, and is itself a frame-exact
+claim); **rebind every window's hotkey through the real rebind engine** - fourteen
 of them, `rebind::arm`, the engine's own 0.2 s arming gate, `rebind::tick`; **open
 and close every window with those hotkeys**, interleaved so only one is up at a
 time; then the features one by one - a roll edit and its undo, a States label
@@ -763,8 +767,10 @@ close SKIPs, every one of the 14 rebinds still PASSes, `opens=13`, `failed=1
 skipped=1` - it reddens at the claim, not the setup. The twin exits 0 only on
 exactly that shape.
 
-**Measured on landing:** normal `passed=66 failed=0 skipped=0`, traces
-`opens=14 rebinds=14 loads=4`, ~3 min at the human's 1 s bpm; `hotkeytest`
+**Measured on landing:** normal `passed=70 failed=0 skipped=0`, traces
+`opens=14 rebinds=14 loads=5`, each show step `frame N presented`, ~3 min at
+the human's 1 s bpm - and the same 66-step first cut passed 66/66 on the user's
+real display before the show steps were added; `hotkeytest`
 (real keys through the new 14-case dispatch) and `selftest` (the new
 `SURFACE TOUR SELFTEST`, 12 claims on the pure step machine) still green;
 `hotkeyaudit` 65 actions consistent. Two defects the tour found on its first
