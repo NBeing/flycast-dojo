@@ -107,6 +107,41 @@ bool sabotaged(const char *cls)
 	return false;
 }
 
+/*
+	THE ARM DECLARATIONS - ONE OWNER. For every class the runner says, at start, the
+	one step the arm must redden and one step that must stay green, by the exact
+	names buildSteps() emits. The harness judge (scripts/lib/arms.sh, the lifted
+	arms.lua rules) parses these lines and keeps no table of its own - a second
+	copy of this table is the drift both source repos already paid for.
+
+	mustBreak == "" means NOTHING may redden: gate-can-pass (the whole run must go
+	green with the class parser engaged - a gate that can never pass is as useless
+	as one that can never fail) and write-clobber (`[MEASURED 2026-09-17]` the WRITE
+	clobber does not manifest on this fixture - see the enter-authoring step - so
+	the arm is inconclusive-by-design here and must not fake a redden).
+*/
+struct ArmDecl { const char *cls; const char *mustBreak; const char *mustNotBreak; };
+static const ArmDecl ARMS[] = {
+	{ "open",          "open: pianoroll",                     "rebind: pianoroll -> Ctrl+F1" },
+	{ "rebind",        "rebind: macros -> Alt+F6",            "rebind: snippets -> Alt+F5" },
+	{ "show",          "show: David's base state (1 frame)",  "load slot 0 (David's base)" },
+	{ "write-clobber", "",                                    "savestate: load slot 99" },
+	{ "gate-can-pass", "",                                    "open: pianoroll" },
+	{ "flip",          "roll: flip a cell + undo",            "states: label round-trip" },
+	{ "label",         "states: label round-trip",            "roll: flip a cell + undo" },
+	{ "save",          "savestate: save slot 99",             "states: label round-trip" },
+	{ "branch",        "branch: create from slot 0",          "test lab: add test from slot 0" },
+};
+static const int NARMS = (int)(sizeof(ARMS) / sizeof(ARMS[0]));
+
+static const ArmDecl *armDeclOf(const char *cls)
+{
+	for (int i = 0; i < NARMS; i++)
+		if (strcmp(ARMS[i].cls, cls) == 0)
+			return &ARMS[i];
+	return nullptr;
+}
+
 //! Verdict rules, in precedence: needsPrev -> SKIP; optional+false -> SKIP; else PASS/FAIL.
 static int judge(bool ok, bool optional, bool needsPrev, bool prevPassed)
 {
@@ -278,6 +313,7 @@ struct Rec
 	int verdict = -1;
 	std::string why;
 	Facts facts;
+	int armMsOverride = -1;		//!< the `rebind` arm: act at t=0, inside the engine's deaf window
 };
 
 enum class Phase { Idle, WaitReady, Setup, Begin, Act, Dwell, Verify, Restore, Done };
@@ -466,10 +502,16 @@ static void buildSteps()
 		s.kind = Kind::Record;
 		s.needsPrev = true;			// showing a load that did not happen is not a claim
 		s.maxWaitMs = 3000;			// the frame runs on the emu thread; poll the return to Paused
-		s.act = [] {
+		// THE `show` ARM: skip the step for David's base show ONLY, and do not fake
+		// anything - the step's own verify then reads frame == g_showFrom (FAIL) and
+		// the gate reads a declared mover that moved nothing (VACUOUS). Both clauses
+		// see it honestly; a faked frame+1 would test only the verify.
+		const bool sab = sabotaged("show") && strcmp(name, "show: David's base state (1 frame)") == 0;
+		s.act = [sab] {
 			if (gui_state != GuiState::Paused) { why("not paused before the step"); return false; }
 			g_showFrom = dojo.frame_number.load();
-			gui_step_frames(1);
+			if (!sab)
+				gui_step_frames(1);
 			return true;
 		};
 		s.verify = [] {
@@ -548,6 +590,13 @@ static void buildSteps()
 			return true;
 		};
 		add(s);
+		// THE `rebind` ARM: for the macros rebind ONLY, act at t=0 - inside the
+		// engine's 0.2 s deaf window (gamepad_device.cpp detectButtonOrAxisInput sets
+		// _detection_start_time = now + 0.2), so the press falls through to normal
+		// dispatch (Alt+F6 is unbound: nothing happens), the binding is never written,
+		// and the verify reads the old code. Its open/close cascade SKIPs via needsPrev.
+		if (sabotaged("rebind") && strcmp(k.panel, "macros") == 0)
+			st.steps.back().armMsOverride = 0;
 	};
 	auto openStep = [&](int i) {
 		Step s;
@@ -619,10 +668,32 @@ static void buildSteps()
 		gui_set_driver(1) sets macro_armed itself; the assignment documents intent.
 	*/
 	{
+		// THE `write-clobber` ARM: restore the old ordering - enter WRITE (macro_armed
+		// off), where a frame-step is DOCUMENTED to overwrite the row it advances into
+		// with neutral. `[MEASURED 2026-09-17]` on this fixture the movie hash on
+		// "show: slot 99 (1 frame)" does NOT move under WRITE either (the rows it steps
+		// into already hold neutral, or a step past the movie frontier does not record),
+		// so this arm is INCONCLUSIVE-BY-DESIGN here: the class stays, it is declared
+		// with mustBreak "" and logs itself as such - it must never fake a redden.
+		const bool wc = sabotaged("write-clobber");
 		Step s;
 		s.name = "driver: READ-WRITE (enter authoring)";
-		s.act = [] { gui_set_driver(1); dojo.macro_armed = true; return true; };
-		s.verify = [] {
+		s.act = [wc] {
+			if (wc)
+			{
+				gui_set_driver(2); dojo.macro_armed = false;
+				NOTICE_LOG(RENDERER, "SURFACE TOUR: arm write-clobber inconclusive-by-design (movie unchanged on this fixture)");
+				return true;
+			}
+			gui_set_driver(1); dojo.macro_armed = true; return true;
+		};
+		s.verify = [wc] {
+			if (wc)
+			{
+				if (session::mode() != session::Mode::Write || dojo.play_match || dojo.macro_armed) { why("mode=%s", session::label()); return false; }
+				why("WRITE (the write-clobber arm)");
+				return true;
+			}
 			if (session::mode() != session::Mode::ReadWrite || dojo.play_match || !dojo.macro_armed) { why("mode=%s", session::label()); return false; }
 			return true;
 		};
@@ -652,8 +723,17 @@ static void buildSteps()
 	// The cycle ENDS in READ-WRITE, so every later show/capture step steps a frame
 	// in the authoring mode (see step 44).
 	hook("driver: READ",                     Kind::Click,  hooks::driverRead);
-	hook("driver: WRITE",                    Kind::Click,  hooks::driverWrite);
-	hook("driver: READ-WRITE",               Kind::Click,  hooks::driverReadWrite);
+	if (sabotaged("write-clobber"))
+	{
+		// the old ordering, restored: the cycle ends in WRITE
+		hook("driver: READ-WRITE",           Kind::Click,  hooks::driverReadWrite);
+		hook("driver: WRITE",                Kind::Click,  hooks::driverWrite);
+	}
+	else
+	{
+		hook("driver: WRITE",                Kind::Click,  hooks::driverWrite);
+		hook("driver: READ-WRITE",           Kind::Click,  hooks::driverReadWrite);
+	}
 	hook("sender: send \"5LP _ _ 5LP\"",     Kind::Record, hooks::senderSend);
 	hook("sender: stop",                     Kind::Click,  hooks::senderStop, true);
 	hook("notepad: analyze",                 Kind::Click,  hooks::notepadAnalyze);
@@ -974,11 +1054,27 @@ static void init()
 	// arm asks sabotaged("<class>") where it lives (a hook in its feature's TU).
 	g_sabotage = parseSabotage(mode);
 	st.sabotage = sabotaged("open");
+	// The runner is the source of truth for the arm matrix: say what it knows
+	// (always - the harness's --list-sabotage reads a dry boot), then declare each
+	// ARMED class's target and control by exact step name for the judge.
+	{
+		std::string known;
+		for (int i = 0; i < NARMS; i++) known += (known.empty() ? "" : "+") + std::string(ARMS[i].cls);
+		NOTICE_LOG(RENDERER, "SURFACE TOUR: arms known: %s", known.c_str());
+	}
 	if (!g_sabotage.empty())
 	{
 		std::string all;
 		for (const std::string& c : g_sabotage) all += (all.empty() ? "" : "+") + c;
 		NOTICE_LOG(RENDERER, "SURFACE TOUR: sabotage armed: %s", all.c_str());
+		for (const std::string& c : g_sabotage)
+		{
+			const ArmDecl *d = armDeclOf(c.c_str());
+			if (d == nullptr)
+				NOTICE_LOG(RENDERER, "SURFACE TOUR: arm %s UNKNOWN (not in the matrix)", c.c_str());
+			else
+				NOTICE_LOG(RENDERER, "SURFACE TOUR: arm %s must_break=\"%s\" must_not_break=\"%s\"", d->cls, d->mustBreak, d->mustNotBreak);
+		}
 	}
 	st.slow = cfgLoadBool("dojo", "TourSlow", false);
 	st.bpmMs = cfgLoadInt("dojo", "TourBpmMs", 1000);
@@ -1068,7 +1164,10 @@ void tick()
 
 	case Phase::Act:
 	{
-		if ((now - st.t0) * 1000.0 < st.armMs)
+		// A per-step override exists for exactly one arm (`rebind`: 0 ms, inside the
+		// engine's deaf window); every other step waits the clamped TourArmMs.
+		const int armMs = st.steps[st.cur].armMsOverride >= 0 ? st.steps[st.cur].armMsOverride : st.armMs;
+		if ((now - st.t0) * 1000.0 < armMs)
 			return;
 		// A focused text field makes gui_hotkey_allowed() refuse every key. Ask the
 		// banner body to clear focus and try again next frame, a few times.
@@ -1182,6 +1281,32 @@ void selfTest()
 				&& expectOf("branch: checkout").converge && !expectOf("show: slot 99 (1 frame)").converge && !expectOf("captures: start").converge);
 		claim("a sender step is a UI step today (nothing reaches the machine without a step)",
 				expectOf("sender: send \"5LP _ _ 5LP\"").machine == MExp::Unchanged);
+	}
+
+	// ---- sabotage classes: the grammar and the declaration table ----------------------
+	{
+		auto is = [](const std::vector<std::string>& v, std::initializer_list<const char *> want) {
+			if (v.size() != want.size()) return false;
+			size_t i = 0;
+			for (const char *w : want) if (v[i++] != w) return false;
+			return true;
+		};
+		claim("bare 'sabotage' is the open arm", is(parseSabotage("sabotage"), { "open" }));
+		claim("'sabotage:open+flip' arms both, in order", is(parseSabotage("sabotage:open+flip"), { "open", "flip" }));
+		claim("'yes' arms nothing", parseSabotage("yes").empty());
+		claim("'sabotage:' with no class arms nothing", parseSabotage("sabotage:").empty());
+		claim("a trailing or doubled '+' is tolerated", is(parseSabotage("sabotage:open++flip+"), { "open", "flip" }));
+		claim("every declared class names a control that must stay green",
+				[] { for (int i = 0; i < NARMS; i++) if (ARMS[i].mustNotBreak[0] == '\0') return false; return true; }());
+		claim("gate-can-pass and write-clobber break nothing (an empty target)",
+				armDeclOf("gate-can-pass") != nullptr && armDeclOf("gate-can-pass")->mustBreak[0] == '\0'
+				&& armDeclOf("write-clobber") != nullptr && armDeclOf("write-clobber")->mustBreak[0] == '\0');
+		claim("every other class names the one step it must redden",
+				[] { for (int i = 0; i < NARMS; i++) { const std::string c = ARMS[i].cls; if (c != "gate-can-pass" && c != "write-clobber" && ARMS[i].mustBreak[0] == '\0') return false; } return true; }());
+		claim("an unknown class resolves to nothing, never to a neighbour", armDeclOf("opens") == nullptr && armDeclOf("") == nullptr);
+		claim("the nine classes are all declared",
+				NARMS == 9 && armDeclOf("open") && armDeclOf("rebind") && armDeclOf("show") && armDeclOf("flip")
+				&& armDeclOf("label") && armDeclOf("save") && armDeclOf("branch"));
 	}
 	NOTICE_LOG(RENDERER, "SURFACE TOUR SELFTEST: %d passed, %d failed", pass, fail);
 }
