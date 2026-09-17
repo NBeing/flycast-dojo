@@ -84,16 +84,16 @@ absent) and `keys` (David's `tas_golden::keys`, a module ours does not have).
 | `PlayTestLocked` | `rend/gui.cpp:4693` | none | (b) Play-Test lands READ/locked **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
 | `OnEnterHandoff` | `dojo/dojo.cpp:1834` (early handoff N frames into the seed) | none | (b) harness flag **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
 | `SendMerge` | `rend/gui.cpp:1039` | none | (b) see 1b |
-| `PurgeStale` | `rend/gui.cpp:5147` | none | (b) auto-purge stale states after a rewind |
+| `PurgeStale` | `rend/gui.cpp:5147` | none | (b) auto-purge stale states after a rewind **LANDED 2026-09-17 `f81414268`** - mainui purgeStaleTick on rewind_log growth; measured by scripts/purgestaletest.sh (slot 7 orphaned by an edit at F-20, purged; `--sabotage off` reddens) |
 | `BaseHoldMs` | `rend/mainui.cpp:186` | none | (a) see #17 |
-| `HoldStepFPS`, `HoldStepRampMs` | `rend/mainui.cpp:123, 133`, `rend/gui.cpp:4615, 4622` | renamed `HoldStepRate` (`input/hold_repeat.cpp:83`); no ramp equivalent | (c) rename; ramp absent |
-| `ShowHotkeyOverlay` | `rend/gui.cpp:996` | replaced by the panels registry's per-panel key | (c) |
+| `HoldStepFPS`, `HoldStepRampMs` | `rend/mainui.cpp:123, 133`, `rend/gui.cpp:4615, 4622` | renamed `HoldStepRate` (`input/hold_repeat.cpp:83`); no ramp equivalent | (c) rename; ramp absent **RampMs LANDED 2026-09-17 `2245c0c59`** (closed-form ramp in HoldRepeat, HOLDREPEAT SELFTEST 11/11); `HoldStepFPS` stays the rename (`HoldStepRate`), not read here by design |
+| `ShowHotkeyOverlay` | `rend/gui.cpp:996` | replaced by the panels registry's per-panel key | (c) **not read here, by design** (the panels registry key `Panel.hotkeys` persists the cheat sheet) |
 | `StartupPrompt` | `rend/gui.cpp:4241` | none (only a comment, `dojo/replay.cpp:450`) | (a) no startup prompt in ours; tracked DIVERGENCE #12 |
-| `TasUi`, `HideStudioWhileRecording`, `CapturePausedFrames` | `rend/gui.cpp:4421, 6188 / 557 / 567` | none | (b)/(c) F5 blanket studio hide + capture options; ours has no `EMU_BTN_TAS_UI` |
-| `MenuGamepadNav`, `InputTrace` | `rend/gui.cpp:170, 2534 / 633` | none | (b) debugging/ghost-input flags |
-| `Skin`, `GlobalFont` | `rend/gui.cpp:331 / 515` | none | (c) cosmetic |
-| `StatesOpen`, `StatesThumbW`, `StatesBoardCols`, `StatesPreview`, `SlotBrowserSort`, `SlotBrowserHideEmpty` | `rend/gui.cpp:6173 / 5822,6286 / 5776 / 5956 / 5754 / 5755` | `dojo/states_panel.cpp` reads only probe/trace keys | (c) for `StatesOpen`; whether ours' States panel offers sort/hide-empty/thumb-width: uncertain |
-| `AutoLoadStateSlot`, `AutoPauseFrame`, `AutoPausePng`, `DumpEveryStep`, `DumpLoadFrame`, `DumpOnGameTick` | `rend/mainui.cpp:205 / 253 / 261 / 473 / 368 / 482` | none (ours has its own: `LoadProbeSlot`, `AutoSeekState`, `StepProbe`…) | (b) David's Windows-harness flags |
+| `TasUi`, `HideStudioWhileRecording`, `CapturePausedFrames` | `rend/gui.cpp:4421, 6188 / 557 / 567` | none | (b)/(c) F5 blanket studio hide + capture options; ours has no `EMU_BTN_TAS_UI` **ALL THREE LANDED 2026-09-17** - `ba432e1bc` panels::studioVisible() (the blanket veil, EMU_BTN_TAS_UI/btn_tas_ui; tour 77/77 with the hide/show steps) + hide-while-recording; `f6dffd4f8` videorec::wantsFrame() dedup, measured `60 paused duplicates skipped` on the tour capture |
+| `MenuGamepadNav`, `InputTrace` | `rend/gui.cpp:170, 2534 / 633` | none | (b) debugging/ghost-input flags **BOTH LANDED 2026-09-17** - `4ffb19412` (`UI: MenuGamepadNav=yes|no` at init, both measured); `23c5e685c` the tracer whole, scripts/inputtracetest.sh (named press, 3 lines/400 frames, `--sabotage silent` reddens) |
+| `Skin`, `GlobalFont` | `rend/gui.cpp:331 / 515` | none | (c) cosmetic **not read here, by design** (cosmetic; this tree has no skin/font layer to consume them) |
+| `StatesOpen`, `StatesThumbW`, `StatesBoardCols`, `StatesPreview`, `SlotBrowserSort`, `SlotBrowserHideEmpty` | `rend/gui.cpp:6173 / 5822,6286 / 5776 / 5956 / 5754 / 5755` | `dojo/states_panel.cpp` reads only probe/trace keys | (c) for `StatesOpen`; whether ours' States panel offers sort/hide-empty/thumb-width: uncertain **not read here, by design** (`StatesOpen` -> `Panel.states`; the wall options are the panel's own) |
+| `AutoLoadStateSlot`, `AutoPauseFrame`, `AutoPausePng`, `DumpEveryStep`, `DumpLoadFrame`, `DumpOnGameTick` | `rend/mainui.cpp:205 / 253 / 261 / 473 / 368 / 482` | none (ours has its own: `LoadProbeSlot`, `AutoSeekState`, `StepProbe`…) | (b) David's Windows-harness flags **not read here, by design** (David's Windows-harness flags; ours are `LoadProbeSlot`, `AutoSeekState`, `StepProbe`, ...) |
 
 ## Recommendations (port vs delete) — DECISIONS OPEN
 
@@ -129,12 +129,14 @@ checkbox (~15 lines).
 (~35 lines), lock UI (~58 lines), `load_fail_*` (~5), `live_from_*` States lines
 (~15), `loaded_macro_path` save-back (~50 + a button).
 
-**Delete / ignore (keys):** the six harness flags, `Skin`, `GlobalFont`,
-`ShowHotkeyOverlay`, `StatesOpen`, `HoldStepFPS` (renamed). Decide explicitly on
-`TasUi` / `HideStudioWhileRecording` / `CapturePausedFrames` / `MenuGamepadNav` /
-`InputTrace` / `PurgeStale` / `OnEnterHandoff` / `TestLabBoot` / `PlayTestLocked`:
-none has a consumer here, so a launch profile passing them is silently inert —
-document or port.
+**Keys, resolved 2026-09-17 (the user's call: FIX, not document-as-inert):** every
+key with a consumer in David's tree that could have one here is now read - TasUi,
+HideStudioWhileRecording, CapturePausedFrames, MenuGamepadNav, InputTrace, PurgeStale,
+HoldStepRampMs (this batch), SendMerge, BaseHoldMs, PlayMacro*, PlayTestLocked,
+OnEnterHandoff (earlier batches). Not read here, by design, and listed as such in
+docs/HOTKEYS.md "Launch keys": the six Windows-harness flags, Skin, GlobalFont,
+ShowHotkeyOverlay, StatesOpen and the wall options, HoldStepFPS (renamed HoldStepRate),
+TestLabBoot (no consumer: the Test Lab is in-session here).
 
 ## Totals
 

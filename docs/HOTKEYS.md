@@ -154,7 +154,7 @@ is not a thing to leave off by accident."*
 |---|---|---|
 | `PAUSE`, `FFORWARD`, `MENU`, `ESCAPE` | **free** | already dispatchable here; they need a registry row and nothing else |
 | ~~`HOTKEY_HELP`~~ | **LANDED** | it was the cheapest high-value item, and it cost 3 edits |
-| `TAS_UI` — blanket show/hide | cheap per window | but it is a convention every panel must adopt |
+| ~~`TAS_UI`~~ — blanket show/hide | **LANDED 2026-09-17** | not per window after all: the panels registry draws every studio window from one loop, so `panels::studioVisible()` in `drawStream` is the whole convention. `btn_tas_ui` "Studio (all windows)", unbound by default; `dojo:TasUi` persists it; a veil, never a close (open flags survive). The tour proves it with the cheat sheet up: hide (every window gone, the sheet's flag still true) and show |
 | `STEP` hold-to-scrub | ~65 lines | we have `gui_open_step()`; the scrub is additive |
 | ~~`SAVESTATE` hold-to-overwrite-BASE~~ | **LANDED 2026-09-17** | both halves: slot 0 (BASE) and a branch fork point (`tas_branch::forkSlots` was already here, uncalled). Once a state exists there, a plain F1 tap is BLOCKED (`hotkey: SAVESTATE slot N BLOCKED - hold F1 for M ms`); F1 HELD for `dojo:BaseHoldMs` (default 1000) overwrites it (`... written after hold`). An empty slot saves on a tap. `hotkeys::baseHold()` in `core/input/hold_repeat.h`; the tour proves both (`base: tap blocked`, `base: hold writes`), arm `base` |
 | `LOADSTATE` seek-vs-rewind | **large** | ~120 lines and it *is* the re-recording core |
@@ -489,4 +489,40 @@ The Sender's Send button now honours two options on its own row: **Wait for Fram
 `dojo:WaitForFrameskip` / `dojo:FrameskipOffset` - the send is held until MvC2's next skip frame and
 injected at skip+N; `TAS SEND: frameskip release at frame N (...)`) and **MERGE sends** (`dojo:SendMerge`,
 seeded every boot - OR the send into the cells it lands on instead of replacing them).
+
+## Launch keys: what this tree reads, and what it deliberately does not `[2026-09-17]`
+
+The fork's launch profiles pass `-config dojo:<Key>=...` flags. A key nobody reads is
+a flag that silently does nothing, which `docs/PORT-DEFECT-CENSUS.md` §3 found 32 of.
+The decision was to FIX them - make each one consumed - rather than document them as
+inert; this is the list that resulted. A key in the second table is not a gap: each
+has a reason, and a launch profile that passes one gets nothing on purpose.
+
+### Read here (every one measured)
+
+| key | default | what it does | measured by |
+|---|---|---|---|
+| `TasUi` | yes | the studio blanket: every panel drawn or none (a veil; open flags survive). Toggle: `btn_tas_ui` | surfacetourtest `studio: hide/show` |
+| `HideStudioWhileRecording` | yes | the veil drops during a capture (the .mov is pre-overlay either way) | the tour's captures steps run under it |
+| `CapturePausedFrames` | no | =no dedups presents by guest frame (`[rec] stopped: ... N paused duplicates skipped`) | the tour capture: 60 skipped |
+| `MenuGamepadNav` | yes | pads drive ImGui menu nav; =no keeps them as controllers only. `UI: MenuGamepadNav=` at init | both values, headless |
+| `InputTrace` | no | names every non-neutral input (`TAS INPUT: ...`), silent when neutral, throttled | scripts/inputtracetest.sh |
+| `PurgeStale` | no | after a rewind/edit, delete the states it orphaned (BASE kept) | scripts/purgestaletest.sh |
+| `HoldStepRampMs` | 1000 | the held-STEP scrub eases from 15/s to `HoldStepRate` over this; inert at rate <= 15 | HOLDREPEAT SELFTEST |
+| `HoldStepDelay`, `HoldStepRate` | 300, 8 | the held-STEP repeat (David's `HoldStepFPS` is `HoldStepRate` here) | HOLDREPEAT SELFTEST |
+| `BaseHoldMs` | 1000 | how long F1 must be HELD to overwrite a guarded slot | surfacetourtest `base:` steps |
+| `SendMerge` | no | MERGE sends (union onto the cell) instead of replace | SENDER SELFTEST |
+| `PlayMacroClip`, `PlayMacroFile`, `PlayMacroStage`, `OnEnterFile`, `OnEnterHandoff`, `PlayTestLocked` | - | the boot handoff and the OnEnter seed | scripts/boothandofftest.sh, fixtures-check F4 |
+| `Panel.<id>` | per panel | a panel's open flag, written by the registry | selftest PANEL |
+
+### Not read here, by design
+
+| key | why |
+|---|---|
+| `ShowHotkeyOverlay` | the cheat sheet is a panel; `Panel.hotkeys` persists it |
+| `StatesOpen`, `StatesThumbW`, `StatesBoardCols`, `StatesPreview`, `SlotBrowserSort`, `SlotBrowserHideEmpty` | `Panel.states` is the open flag; the wall's options are the panel's own |
+| `HoldStepFPS` | renamed `HoldStepRate` |
+| `Skin`, `GlobalFont` | cosmetic; no skin/font layer exists here to consume them |
+| `TestLabBoot` | David's pre-boot lab-scratch launcher; the Test Lab is in-session here |
+| `AutoLoadStateSlot`, `AutoPauseFrame`, `AutoPausePng`, `DumpEveryStep`, `DumpLoadFrame`, `DumpOnGameTick` | David's Windows-harness flags; this tree's are `LoadProbeSlot`, `AutoSeekState`, `StepProbe`, the `dojo:<X>Probe` family |
 
