@@ -72,8 +72,14 @@ globe_hash    = "442574011190bd6b"
 # 633 / 4db6bf3690958f6b - the boot seed's numbers. The index went stale when the
 # file grew (David's own comment on Rescan: "frames/players/hash went stale"), which
 # is exactly why this RECIPE pins the .txt and not the index.
-machine_hash  = "unmeasured"   # oracle::machineHash at the base the hunt used
-machine_frame = "unmeasured"   # the guest frame the base sits on
+# THE HUNT'S BASE `[MEASURED 2026-09-17]`: not the boot seed after all - slot 0 of the
+# tour's clip (David's V48 state; Sonson(B) vs Marrow(B), IN A MATCH, skip=1/4). The
+# boot seeds reach the globe, not a fight; the combo needs a fight. The hash is
+# oracle::machineHash AFTER the load on this build (XXH32, 8 hex) - never the V48
+# file's digest, which cannot round-trip under V49.
+machine_hash  = "27FA5D20"     # oracle::machineHash at the base the hunt used
+machine_frame = 9928           # the guest frame the base sits on
+machine_slot  = 0
 
 [charselect]
 # The first expected SEQUENCE: one byte, no combo, emulator-verified by David
@@ -95,22 +101,34 @@ settle      = 45              # neutral frames after the globe seed before the f
 # CANDIDATE until observed connecting on THIS build - PS2-converted inputs never
 # become a fixture by provenance alone.
 name        = "Combo_Dhalsim97_OK"
-source      = "unmeasured"   # path under davids_fly the hunt read it from
-frames      = "unmeasured"
+file        = "candidates/Combo_Dhalsim97_pcsx2_macro.txt"   # the copy in this tree; the hunt names it <stem>[a-b]
+source      = "davids_fly/0915/flycast-rr/mvc2_data/Dhalsim Revisited Replays/03_Boat2_Combo_Dhalsim97_OK_SS/Combo_Dhalsim97_pcsx2_macro.txt"
+frames      = 6707             # the file's own header: FrameMax=6707 (physical 46722, rerecords 1646)
+hash        = "2cbafba30a4c25fc"   # seqHashMacro over the .txt, like the seeds (F1's rule)
+md5         = "bf15f85827e063a3f5c7570a60db383c"
+window      = "4212-5699"      # the file's CLIP LIKELY BEGINS/ENDS HERE markers - trust the markers, not the burst heuristic
 
 [phase]
 # 0..3: which of the four frameskip phases the base sits on when the candidate
 # connects. The hunt sweeps all four and records the winning one here.
-value       = "unmeasured"
+value       = 0
 skip_rate   = 4
+# `[MEASURED 2026-09-17]` PHASE-INSENSITIVE ON THIS BASE: the hunt's `all` sweep gave
+# peak=19 on all four phases, with four DISTINCT end hashes. The phase is pinned
+# because the RULE stands (a straddling combo connects on one phase); this candidate
+# happens to be robust to it, and the four hashes say the machine did differ.
 
 [result]
 # Pinned by TWO hashes. `after_hash` is oracle::machineHash after the candidate
 # ran; `combo_peak` is Combo_Meter_HitsToOpponent's peak over the run (>= 1 is a
 # hit that CONNECTED). Both are the hunt's `COMBO HUNT RESULT:` line, verbatim.
-found       = "unmeasured"   # yes | no
-candidate   = "unmeasured"
-delay       = "unmeasured"
-combo_peak  = "unmeasured"
-after_hash  = "unmeasured"
-measured_on = ""             # ISO date + commit of the build that measured it; empty == never
+# `[MEASURED 2026-09-17]` the hunt's own line, verbatim (mode=macro, 1 candidate ran):
+#   COMBO HUNT RESULT: found=yes candidate=Combo_Dhalsim97_pcsx2[4212-5699] phase=0 d=0
+#                      peak=19 base=27FA5D20 after=64FF89AB
+# scripts/combohunttest.sh holds every field of a fresh run against these.
+found       = "yes"          # yes | no
+candidate   = "Combo_Dhalsim97_pcsx2[4212-5699]"
+delay       = 0
+combo_peak  = 19
+after_hash  = "64FF89AB"
+measured_on = "2026-09-17 dojo7 combohunt 1b3d9b901 (Track A); re-measured by Track B the same day"

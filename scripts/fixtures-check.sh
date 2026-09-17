@@ -160,7 +160,8 @@ elif cmd=='honest':                 # honest <recipe> <sheet> -> lines: "ok|FAIL
     ok(d.get('schema')==1,'schema == 1')
     for s in ('rom','vocabulary','base','charselect','candidate','phase','result'):
         ok(s in d,'section [%s] present'%s)
-    hexre=lambda v: isinstance(v,str) and len(v)==16 and all(c in '0123456789abcdef' for c in v)
+    # machine hashes are oracle::machineHash (XXH32, 8 upper hex, the hunt's %08X); the seeds' are seqHashMacro (16 lower hex)
+    hexre=lambda v: isinstance(v,str) and len(v) in (8,16) and all(c in '0123456789abcdefABCDEF' for c in v)
     measured_on=d['result'].get('measured_on','')
     pins={'base.machine_hash':hexre,'base.machine_frame':lambda v:isinstance(v,int) and v>=0,
           'candidate.source':lambda v:isinstance(v,str) and v!='','candidate.frames':lambda v:isinstance(v,int) and v>0,
@@ -276,15 +277,18 @@ echo "fixtures-check: RECIPE $RECIPE"
 
 # ---- F1 fastVS parity (no emulator) -------------------------------------------------------
 f1ok=1; f1txt=""
-for pair in "boot_seed:boot_frames:boot_hash" "globe_seed:globe_frames:globe_hash"; do
-	IFS=: read -r fkey nkey hkey <<<"$pair"
-	rel="$(py get "$RECIPE" base "$fkey")"; f="$FIX/$rel"
+# the two seeds AND the candidate (a CANDIDATE by provenance - PS2-converted - pinned by the
+# same rule so the file the hunt ran cannot drift under the RECIPE's result).
+for pair in "base:boot_seed:boot_frames:boot_hash" "base:globe_seed:globe_frames:globe_hash" "candidate:file:frames:hash"; do
+	IFS=: read -r sect fkey nkey hkey <<<"$pair"
+	rel="$(py get "$RECIPE" "$sect" "$fkey")"; f="$FIX/$rel"
 	[ "$fkey" = boot_seed ] && [ -n "$BOOT_OVERRIDE" ] && f="$BOOT_OVERRIDE"
 	[ -f "$f" ] || { echo "fixtures-check: SKIP - fixture input absent: $f"; exit $SKIP; }
 	read -r n h < <(py hash "$f")
-	wn=$(py get "$RECIPE" base "$nkey"); wh=$(py get "$RECIPE" base "$hkey")
+	wn=$(py get "$RECIPE" "$sect" "$nkey"); wh=$(py get "$RECIPE" "$sect" "$hkey")
 	if [ "$n" = "$wn" ] && [ "$h" = "$wh" ]; then f1txt="$f1txt $(basename "$rel")=$n/$h"
 	else f1ok=0; f1txt="$f1txt $(basename "$rel")=$n/$h EXPECTED $wn/$wh"; fi
+	[ "$sect" = base ] || continue		# only the seeds have a library.json entry
 	idx=$(py index "$FIX/snippets/library.json" "$(basename "$rel")")
 	[ "$idx" = "$n $h" ] || echo "  note F1  library.json says $(basename "$rel") is ${idx:-absent} - a STALE INDEX (the file is $n/$h); the RECIPE pins the file, not the index"
 done
