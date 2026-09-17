@@ -15,6 +15,11 @@
 #                                   well-shaped WITH a measured_on, and the resolved
 #                                   addresses it pins agree with SPREADSHEET.json by NAME.
 #            F3 vocabulary        - SPREADSHEET.json's md5 is the RECIPE's pin.
+#            V1 vmu               - the VMU image is present and its md5 is the RECIPE's pin.
+#                                   THE FIXTURE IS THE ROM AND THE VMU: `[MEASURED 2026-09-17]`
+#                                   a sandbox's fresh XDG_DATA_HOME has an EMPTY VMU, the game
+#                                   opens on "Press the Start button to create a file", and
+#                                   every seed press lands one screen late. F4 stages it.
 #            F4 charselect        - the first EXPECTED SEQUENCE on the real machine: boot the
 #                                   globe seed, read ID_2 (RubyHeart 19), walk D,D,R,R (Venom
 #                                   14), press D (Hulk 13) - David's verified "v_down", read
@@ -30,8 +35,10 @@
 #          control green AND the control ran): `hash` corrupts ONE frame of a temp copy of
 #          the boot seed (F1 must redden, F3 stays green); `recipe` pins a fake machine_hash
 #          with no measured_on (F2 must redden, F1 stays green); `charselect` expects
-#          Venom+D == 14 (F4 must redden, F1 stays green; INCONCLUSIVE exit 2 while F4
-#          cannot run). Inverted exits as above.
+#          Venom+D == 14 (F4 must redden, F1 stays green); `vmu` boots with NO VMU staged -
+#          the create-save prompt eats the seed (F4 must redden with "never reached the
+#          globe - globe=0", V1 stays green). INCONCLUSIVE exit 2 when the target could not
+#          run. Inverted exits as above.
 #   ROMS:  --verify-roms - the ROM at $FLYCAST_TEST_ROM (default David's NoBGM_VMU.cdi) is
 #          present and its size + sha256 are the RECIPE's [rom] pins (three copies exist on
 #          this machine; identity is the bytes, never the name).
@@ -57,7 +64,7 @@ RECIPE="${FIXTURES_RECIPE:-$FIX/RECIPE.toml}"
 SPREADSHEET="$ROOT/core/dojo/mvc2_data/SPREADSHEET.json"
 SPREADSHEET_MD5_CONST="23c1827fc4fe3b04313ee8c944565b20"	# the copy's md5 the day it was taken
 ARMS="$ROOT/scripts/lib/arms.sh"
-KNOWN_ARMS="hash recipe charselect"
+KNOWN_ARMS="hash recipe charselect vmu"
 
 usage() { echo "usage: $0 [--verify-roms | --regenerate | --list-sabotage | --sabotage <class> | --self-test | --no-emu]   (exit 2: usage)"; exit 2; }
 MODE=check; ARM=""; NOEMU=0
@@ -81,6 +88,7 @@ if [ "$MODE" = list ]; then
 	echo "hash        F1 fastVS parity     - one frame of a temp copy of the boot seed flipped; F1 must redden, F3 must stay green"
 	echo "recipe      F2 RECIPE honest     - a fake machine_hash pinned with no measured_on; F2 must redden, F1 must stay green"
 	echo "charselect  F4 charselect        - Venom+D expected 14 (it is 13, Hulk); F4 must redden, F1 must stay green"
+	echo "vmu         F4 charselect        - no VMU staged: the create-save prompt eats the seed; F4 must redden (globe=0), V1 must stay green"
 	exit 0
 fi
 
@@ -245,7 +253,7 @@ if [ "$MODE" = regen ]; then
 fi
 
 # ---- arm the sabotage (a temp copy; the tree is never modified) -----------------------------
-BOOT_OVERRIDE=""; EXPECT_OVERRIDE=""
+BOOT_OVERRIDE=""; EXPECT_OVERRIDE=""; NOVMU=0
 case "$ARM" in
 	hash)
 		BOOT_OVERRIDE="$OUT/fastVS_corrupt.txt"
@@ -258,6 +266,9 @@ case "$ARM" in
 	charselect)
 		EXPECT_OVERRIDE=14
 		echo "SABOTAGE armed: charselect - Venom+D is now expected to read 14 (Venom itself), not 13" ;;
+	vmu)
+		NOVMU=1
+		echo "SABOTAGE armed: vmu - F4 boots with NO VMU staged (the sandbox's empty card; the create-save prompt eats the seed)" ;;
 esac
 [ -n "$ARM" ] && echo "SABOTAGE arm $ARM: the run below is EXPECTED to be red"
 
@@ -293,6 +304,15 @@ m=$(py md5 "$SPREADSHEET"); wm=$(py get "$RECIPE" vocabulary spreadsheet_md5)
 if [ "$m" = "$wm" ] && [ "$m" = "$SPREADSHEET_MD5_CONST" ]; then claim F3 ok "vocabulary: SPREADSHEET.json md5 $m == RECIPE pin == the copy's md5"
 else claim F3 FAIL "vocabulary: SPREADSHEET.json md5 $m, RECIPE $wm, copy $SPREADSHEET_MD5_CONST"; fi
 
+# ---- V1 the VMU (no emulator) --------------------------------------------------------------
+# The fixture is the ROM AND the VMU: David's seeds presume a card that already holds the
+# MvC2 save. Absent => the whole run is SKIP (a fixture input is missing), like a missing seed.
+VMU="$FIX/$(py get "$RECIPE" vmu file)"
+[ -f "$VMU" ] || { echo "fixtures-check: SKIP - fixture input absent: $VMU"; exit $SKIP; }
+vm=$(py md5 "$VMU"); wvm=$(py get "$RECIPE" vmu md5); vsz=$(stat -c %s "$VMU"); wvsz=$(py get "$RECIPE" vmu size)
+if [ "$vm" = "$wvm" ] && [ "$vsz" = "$wvsz" ]; then claim V1 ok "vmu: $(basename "$VMU") $vsz bytes md5 $vm == RECIPE [vmu] pins"
+else claim V1 FAIL "vmu: $(basename "$VMU") $vsz bytes md5 $vm, RECIPE $wvsz / $wvm"; fi
+
 # ---- F4 charselect (emulator) --------------------------------------------------------------
 f4() {
 	[ "$NOEMU" -eq 0 ] || { claim F4 SKIP "charselect: --no-emu"; return; }
@@ -313,7 +333,10 @@ f4() {
 	{ cat "$globe"; for _ in $(seq 1 "$settle"); do echo "."; done; } > "$seed"
 	read -r n _ < <(py hash "$seed")
 
-	mkdir -p "$OUT/cfg/flycast-dojo" "$OUT/data" "$OUT/ctl/_ctl/resp"
+	mkdir -p "$OUT/cfg/flycast-dojo" "$OUT/data/flycast-dojo" "$OUT/ctl/_ctl/resp"
+	# stage the VMU (V1's pinned image) where the sandboxed emulator will look for its card;
+	# the `vmu` arm leaves the sandbox's card EMPTY and the seed must fail to reach the globe.
+	if [ "$NOVMU" -eq 0 ]; then cp "$VMU" "$OUT/data/flycast-dojo/$(basename "$VMU")"; fi
 	local DN=$((172 + ($$ % 60))); while [ -e "/tmp/.X11-unix/X$DN" ] || [ -e "/tmp/.X$DN-lock" ]; do DN=$((DN+1)); [ "$DN" -gt 260 ] && { claim F4 SKIP "charselect: no free display"; return; }; done
 	local D=":$DN"
 	nohup Xvfb "$D" -screen 0 900x700x24 >"$OUT/xvfb.log" 2>&1 & local XPID=$!; sleep 2
@@ -401,6 +424,7 @@ if [ -n "$ARM" ]; then
 		hash)       target=F1; control=F3; what="one corrupt frame in the boot seed" ;;
 		recipe)     target=F2; control=F1; what="a fake pin with no measured_on" ;;
 		charselect) target=F4; control=F1; what="Venom+D expected to read Venom" ;;
+		vmu)        target=F4; control=V1; what="no VMU staged - the create-save prompt eats the seed" ;;
 	esac
 	# an arm whose target could not run is INCONCLUSIVE, not a pass - the judge says so when
 	# the target is not in SEEN, so a SKIPped target is struck from SEEN before judging.
