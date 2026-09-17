@@ -1,0 +1,103 @@
+# RECIPE.toml - the MvC2 combo fixture, pinned. `[2026-09-17]`
+#
+# NEVER REGENERATE THIS FILE TO MAKE A RED GATE GREEN. A pin that moved is a
+# finding, not a chore: either the emulator changed (a bug, or a change that must
+# be understood and named) or the fixture's inputs changed (then the RECIPE says
+# which ones, by hash, and the old pin is kept in git). `fixtures-check.sh
+# --regenerate` refuses without FIXTURES_REGENERATE=iknow, rewrites ONLY the
+# no-emulator pins it can recompute, and prints every before/after.
+#
+# Two disciplines lifted from nbneo-rr's fixture rules:
+#   - a result is pinned by TWO hashes: the machine hash AND the game byte (the
+#     combo counter). "The picture can be identical while the state is not."
+#   - the PHASE is part of the result. MvC2 skips every 4th frame; a combo that
+#     straddles a skip boundary connects on ONE of four phases (David measured
+#     "~1/4 of the time"). A fixture that does not pin its phase is ~75% flaky.
+#
+# HONESTY: every field whose value is the string "unmeasured" has NOT been measured
+# on this build. The hunt (core/dojo/combohunt.cpp, dojo:ComboHunt) fills them and
+# records `measured_on` beside them; fixtures-check.sh lists them on every run so an
+# unmeasured fixture can never read as a pinned one.
+
+schema = 1
+
+[rom]
+# Identity is the file's bytes, not its name: three copies of NoBGM_VMU.cdi live on
+# this machine and the RECIPE must not care which one booted. `game_dir` is what
+# Replay::get_game_name() folders replays under - the tree's own ROM label.
+file     = "NoBGM_VMU.cdi"
+size     = 794236079
+sha256   = "e30be4d3deedd140efc3b79b53e8738281eb5d386b8f0dd67694df56ee6535bb"
+game_dir = "Marvel vs. Capcom 2 (USA)"
+
+[vocabulary]
+# David's DC-verified address vocabulary. Every address the fixture reads is
+# resolved BY NAME through this file at run time; the two addresses below are
+# pinned so a re-keyed spreadsheet is caught, not silently followed.
+spreadsheet        = "core/dojo/mvc2_data/SPREADSHEET.json"
+spreadsheet_md5    = "23c1827fc4fe3b04313ee8c944565b20"
+combo_field        = "Combo_Meter_HitsToOpponent"   # the DC-verified combo byte
+combo_p1_a         = "0x2C2685A0"                    # what mvc2.cpp hardcodes; must agree
+combo_p2_a         = "0x2C268B44"
+cursor_field       = "ID_2"                          # char-select cursor, per point char
+cursor_p1_a        = "0x2C268341"
+
+[base]
+# The savestate-free base: David's DC-native boot snippet, power-on -> VS mode.
+# No savestate => no V48/V49 round-trip, no RTC, no dead timeline. Frames and the
+# hash are seqHashMacro's (FNV-1a 64 over each frame's p1,p2 canon u16 - the
+# library.json index's own hash) and are recomputed by fixtures-check.sh from the
+# .txt with no emulator.
+kind          = "snippet"
+boot_seed     = "snippets/fastVS.txt"       # handoff on STAGE SELECT
+boot_frames   = 633
+boot_hash     = "4db6bf3690958f6b"
+globe_seed    = "snippets/fastVS_mcp.txt"   # + LK x4 at 634..637: picks the stage -> the char-select globe
+globe_frames  = 697
+globe_hash    = "442574011190bd6b"
+# `[MEASURED 2026-09-17]` library.json's entry for fastVS_mcp.txt still says
+# 633 / 4db6bf3690958f6b - the boot seed's numbers. The index went stale when the
+# file grew (David's own comment on Rescan: "frames/players/hash went stale"), which
+# is exactly why this RECIPE pins the .txt and not the index.
+machine_hash  = "unmeasured"   # oracle::machineHash at the base the hunt used
+machine_frame = "unmeasured"   # the guest frame the base sits on
+
+[charselect]
+# The first expected SEQUENCE: one byte, no combo, emulator-verified by David
+# (mvc2_data/charselect_nodes.json, mcp/verify_grid.py: "v_down" Venom + D ->
+# Hulk). The P1 cursor starts on RubyHeart; plan() walks vertical-then-horizontal.
+nodes       = "charselect_nodes.json"
+start       = "RubyHeart"     # ID_2 == 19 at the globe
+start_id    = 19
+path        = ["D", "D", "R", "R"]   # RubyHeart -> Venom
+via         = "Venom"
+via_id      = 14
+press       = "D"
+expect      = "Hulk"
+expect_id   = 13
+settle      = 45              # neutral frames after the globe seed before the first press (David's setup_match)
+
+[candidate]
+# The hunt's first candidate: David's human-graded, marker-bracketed window. A
+# CANDIDATE until observed connecting on THIS build - PS2-converted inputs never
+# become a fixture by provenance alone.
+name        = "Combo_Dhalsim97_OK"
+source      = "unmeasured"   # path under davids_fly the hunt read it from
+frames      = "unmeasured"
+
+[phase]
+# 0..3: which of the four frameskip phases the base sits on when the candidate
+# connects. The hunt sweeps all four and records the winning one here.
+value       = "unmeasured"
+skip_rate   = 4
+
+[result]
+# Pinned by TWO hashes. `after_hash` is oracle::machineHash after the candidate
+# ran; `combo_peak` is Combo_Meter_HitsToOpponent's peak over the run (>= 1 is a
+# hit that CONNECTED). Both are the hunt's `COMBO HUNT RESULT:` line, verbatim.
+found       = "unmeasured"   # yes | no
+candidate   = "unmeasured"
+delay       = "unmeasured"
+combo_peak  = "unmeasured"
+after_hash  = "unmeasured"
+measured_on = ""             # ISO date + commit of the build that measured it; empty == never
