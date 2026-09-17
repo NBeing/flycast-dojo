@@ -2313,6 +2313,18 @@ foreach(arm poke moving gate-can-pass)
 	set_tests_properties(flycast.reprotest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" TIMEOUT 900)
 endforeach()
 
+# THE BOOT HANDOFF (ported 2026-09-17; docs/TEST-PLAN.md §5.5, PORT-DEFECT-CENSUS #1-#5):
+# a replay boot loads State 0 at the boot pause, a staged Play-Macro pair loads State 0
+# then injects the macro RELATIVE to it, OnEnterHandoff pauses N frames into a seed.
+# Arms: noload (skip the State-0 load), absolute (inject at 0, David's oversight).
+add_test(NAME flycast.boothandofftest COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/boothandofftest.sh)
+set_tests_properties(flycast.boothandofftest PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
+foreach(arm noload absolute)
+	add_test(NAME flycast.boothandofftest_can_fail_${arm}
+		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/boothandofftest.sh --sabotage ${arm})
+	set_tests_properties(flycast.boothandofftest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
+endforeach()
+
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually
 # captured the frame (a well-formed blank PNG is the PBO-never-advanced bug). Needs
