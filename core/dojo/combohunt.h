@@ -43,6 +43,7 @@ namespace combohunt {
 
 void tick();		//!< mainui.cpp, beside the other probes; no-op unless dojo:ComboHunt
 void selfTest();	//!< dojo:PanelSelfTest - the pure parts (candidate table, phase math)
+bool running();		//!< armed and not yet finished - the roll is a variant, not the clip's own
 
 }	// namespace combohunt
 }	// namespace roll
