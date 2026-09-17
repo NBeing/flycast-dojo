@@ -140,5 +140,9 @@ std::string bindingName(const std::shared_ptr<GamepadDevice>& dev, DreamcastKey 
 //! Gated on `dojo:PanelSelfTest`. One line per claim; no devices, no frame.
 void selfTest();
 
+//! `dojo:RebindProbe=write|nosave|verify` - the cross-process persistence journey
+//! (rebind survives a restart). Off by default; ticked once devices are up.
+void probeTick();
+
 }	// namespace rebind
 }	// namespace roll

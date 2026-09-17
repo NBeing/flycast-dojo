@@ -288,6 +288,71 @@ std::string bindingName(const std::shared_ptr<GamepadDevice>& dev, DreamcastKey 
 	return std::string();
 }
 
+/*
+	`dojo:RebindProbe` - the CROSS-PROCESS persistence journey (rebind survives a
+	restart). A rebind's whole point is that it is remembered next time, and an
+	in-process "reload" cannot prove it: loadMapping() -> find_mapping() ->
+	LoadMapping() caches by filename, so a same-process reload hands back the very
+	object just edited. So this is driven across TWO boots that share one config
+	sandbox, the way coldboot_pair is:
+
+	  write  : rebind EMU_BTN_FFORWARD to a distinctive code, SAVE to disk, log it.
+	           (replays tick()'s post-detection block - clear/set/dirty/save.)
+	  nosave : the same rebind, but the save is SKIPPED - the sabotage. After a
+	           restart the binding must be GONE; if it survived, either the save is
+	           not what persists (an exit-flush would be a real bug) or the verify
+	           is not really reading a fresh process.
+	  verify : a fresh boot reads what EMU_BTN_FFORWARD is bound to and logs it.
+
+	scripts/rebindtest.sh owns the claim: write -> restart -> verify reads the code
+	back; the nosave twin -> restart -> verify does NOT. Off by default; the frame
+	gate lets the keyboard device register first.
+*/
+void probeTick()
+{
+	static bool done = false;
+	static int waited = 0;
+	if (done)
+		return;
+	const std::string mode = cfgLoadStr("dojo", "RebindProbe", "");
+	if (mode.empty() || mode == "no")
+		return;
+	const std::shared_ptr<GamepadDevice> kbd = keyboard();
+	if (kbd == nullptr || kbd->get_input_mapping() == nullptr)
+	{
+		if (++waited < 180)
+			return;					// the keyboard device has not registered yet
+		NOTICE_LOG(INPUT, "REBIND PROBE: no mappable keyboard device - cannot run");
+		done = true;
+		return;
+	}
+	done = true;
+	const DreamcastKey action = EMU_BTN_FFORWARD;
+	const u32 CODE = 48879;			// 0xBEEF - a code no real key uses, so a readback is unambiguous
+	const std::shared_ptr<InputMapping> map = kbd->get_input_mapping();
+
+	if (mode == "verify")
+	{
+		const u32 got = map->get_button_code(0, action);
+		NOTICE_LOG(INPUT, "REBIND PROBE: verify action=%d readback=%u expected=%u persisted=%s",
+				(int)action, got, CODE, got == CODE ? "yes" : "no");
+		return;
+	}
+
+	// write / nosave: the exact block tick() runs once a press is detected.
+	map->clear_button(0, action);
+	map->clear_axis(0, action);
+	map->set_button(0, action, CODE);
+	const bool save = (mode != "nosave");
+	if (save)
+	{
+		map->set_dirty();
+		kbd->save_mapping();
+	}
+	NOTICE_LOG(INPUT, "REBIND PROBE: wrote action=%d code=%u saved=%s on [%s]",
+			(int)action, CODE, save ? "yes" : "no", kbd->name().c_str());
+}
+
 void selfTest()
 {
 	if (!cfgLoadBool("dojo", "PanelSelfTest", false))

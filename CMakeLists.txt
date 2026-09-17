@@ -2215,6 +2215,19 @@ add_test(NAME flycast.sendequivtest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/sendequivtest.sh --self-test)
 set_tests_properties(flycast.sendequivtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 
+# HOTKEY REBIND persists a restart (journey). Two boots share one config sandbox:
+# boot 1 rebinds + saves, boot 2 (fresh process) reads the code back off disk.
+add_test(NAME flycast.rebindtest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/rebindtest.sh)
+set_tests_properties(flycast.rebindtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+# ITS ARM. RebindProbe=nosave skips the save; after the restart the binding MUST
+# be gone. If an unsaved rebind survived, either an exit-flush persists it or the
+# verify never read a fresh process - and the persist claim would prove nothing.
+add_test(NAME flycast.rebindtest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/rebindtest.sh --self-test)
+set_tests_properties(flycast.rebindtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually
 # captured the frame (a well-formed blank PNG is the PBO-never-advanced bug). Needs
