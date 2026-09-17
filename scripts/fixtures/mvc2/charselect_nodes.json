@@ -1,0 +1,1315 @@
+{
+  "_doc": "MvC2 character-select node graph. neighbors[dir] = character one press of dir away (dir in U/UR/R/DR/D/DL/L/UL; diagonals are single presses). assists A/B/C = alpha/beta/gamma (Assist_Value 0/1/2). Layout is a vertical torus; screen rows [6,6,8,8,8,8,6,6] top->bottom. CARDINALS (U/D/L/R) are emulator-VERIFIED incl. the 8->6 width fold (col6->4, col7->5). Diagonals are rule-derived (vertical THEN horizontal) and verified for the interior and for DR/DL/UR; a few corner UL cases wrap irregularly around the globe and are approximate.",
+  "screen_layout": [
+    [
+      "CaptainCommando",
+      "Wolverine",
+      "ShumaGorath",
+      "Thanos",
+      "Felicia",
+      "Megaman"
+    ],
+    [
+      "Amingo",
+      "Cyclops",
+      "WolverineB",
+      "WarMachine",
+      "Dan",
+      "Guile"
+    ],
+    [
+      "Sonson",
+      "Marrow",
+      "Psylocke",
+      "SilverSamurai",
+      "Sabretooth",
+      "Ken",
+      "BBHood",
+      "Ryu"
+    ],
+    [
+      "RubyHeart",
+      "Cable",
+      "Iceman",
+      "Gambit",
+      "Blackheart",
+      "Charlie",
+      "Akuma",
+      "Zangief"
+    ],
+    [
+      "Hayato",
+      "CaptainAmerica",
+      "SpiderMan",
+      "Juggernaut",
+      "Spiral",
+      "Dhalsim",
+      "Jin",
+      "Anakaris"
+    ],
+    [
+      "TronBonne",
+      "DoctorDoom",
+      "Venom",
+      "Magneto",
+      "Colossus",
+      "MBison",
+      "Morrigan",
+      "Sakura"
+    ],
+    [
+      "Jill",
+      "Rogue",
+      "Hulk",
+      "IronMan",
+      "Cammy",
+      "StriderHiryu"
+    ],
+    [
+      "ChunLi",
+      "OmegaRed",
+      "Storm",
+      "Sentinel",
+      "Servbot",
+      "Roll"
+    ]
+  ],
+  "start": {
+    "P1": "RubyHeart",
+    "P2": "Cable"
+  },
+  "nodes": {
+    "RubyHeart": {
+      "id": 19,
+      "hex": "0x13",
+      "name": "Ruby Heart",
+      "screen_row": 3,
+      "screen_col": 0,
+      "assists": {
+        "A": "Anti-Air",
+        "B": "Capture",
+        "C": "Enhance"
+      },
+      "neighbors": {
+        "U": "Sonson",
+        "UR": "Marrow",
+        "R": "Cable",
+        "DR": "CaptainAmerica",
+        "D": "Hayato",
+        "DL": "Anakaris",
+        "L": "Zangief",
+        "UL": "Ryu"
+      }
+    },
+    "Cable": {
+      "id": 23,
+      "hex": "0x17",
+      "name": "Cable",
+      "screen_row": 3,
+      "screen_col": 1,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Variety"
+      },
+      "neighbors": {
+        "U": "Marrow",
+        "UR": "Psylocke",
+        "R": "Iceman",
+        "DR": "SpiderMan",
+        "D": "CaptainAmerica",
+        "DL": "Hayato",
+        "L": "RubyHeart",
+        "UL": "Sonson"
+      }
+    },
+    "Iceman": {
+      "id": 9,
+      "hex": "0x09",
+      "name": "Iceman",
+      "screen_row": 3,
+      "screen_col": 2,
+      "assists": {
+        "A": "Projectile",
+        "B": "Variety",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "Psylocke",
+        "UR": "SilverSamurai",
+        "R": "Gambit",
+        "DR": "Juggernaut",
+        "D": "SpiderMan",
+        "DL": "CaptainAmerica",
+        "L": "Cable",
+        "UL": "Marrow"
+      }
+    },
+    "Gambit": {
+      "id": 40,
+      "hex": "0x28",
+      "name": "Gambit",
+      "screen_row": 3,
+      "screen_col": 3,
+      "assists": {
+        "A": "Projectile",
+        "B": "Expansion",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "SilverSamurai",
+        "UR": "Sabretooth",
+        "R": "Blackheart",
+        "DR": "Spiral",
+        "D": "Juggernaut",
+        "DL": "SpiderMan",
+        "L": "Iceman",
+        "UL": "Psylocke"
+      }
+    },
+    "Blackheart": {
+      "id": 53,
+      "hex": "0x35",
+      "name": "Blackheart",
+      "screen_row": 3,
+      "screen_col": 4,
+      "assists": {
+        "A": "Ground",
+        "B": "Anti-Air",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "Sabretooth",
+        "UR": "Ken",
+        "R": "Charlie",
+        "DR": "Dhalsim",
+        "D": "Spiral",
+        "DL": "Juggernaut",
+        "L": "Gambit",
+        "UL": "SilverSamurai"
+      }
+    },
+    "Charlie": {
+      "id": 33,
+      "hex": "0x21",
+      "name": "Charlie",
+      "screen_row": 3,
+      "screen_col": 5,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "Ken",
+        "UR": "BBHood",
+        "R": "Akuma",
+        "DR": "Jin",
+        "D": "Dhalsim",
+        "DL": "Spiral",
+        "L": "Blackheart",
+        "UL": "Sabretooth"
+      }
+    },
+    "Akuma": {
+      "id": 30,
+      "hex": "0x1E",
+      "name": "Akuma",
+      "screen_row": 3,
+      "screen_col": 6,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "BBHood",
+        "UR": "Ryu",
+        "R": "Zangief",
+        "DR": "Anakaris",
+        "D": "Jin",
+        "DL": "Dhalsim",
+        "L": "Charlie",
+        "UL": "Ken"
+      }
+    },
+    "Zangief": {
+      "id": 1,
+      "hex": "0x01",
+      "name": "Zangief",
+      "screen_row": 3,
+      "screen_col": 7,
+      "assists": {
+        "A": "Ground",
+        "B": "Throw",
+        "C": "Air Throw"
+      },
+      "neighbors": {
+        "U": "Ryu",
+        "UR": "Sonson",
+        "R": "RubyHeart",
+        "DR": "Hayato",
+        "D": "Anakaris",
+        "DL": "Jin",
+        "L": "Akuma",
+        "UL": "BBHood"
+      }
+    },
+    "Hayato": {
+      "id": 18,
+      "hex": "0x12",
+      "name": "Hayato",
+      "screen_row": 4,
+      "screen_col": 0,
+      "assists": {
+        "A": "Expansion",
+        "B": "Anti-Air",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "RubyHeart",
+        "UR": "Cable",
+        "R": "CaptainAmerica",
+        "DR": "DoctorDoom",
+        "D": "TronBonne",
+        "DL": "Sakura",
+        "L": "Anakaris",
+        "UL": "Zangief"
+      }
+    },
+    "CaptainAmerica": {
+      "id": 11,
+      "hex": "0x0B",
+      "name": "Captain America",
+      "screen_row": 4,
+      "screen_col": 1,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Dash"
+      },
+      "neighbors": {
+        "U": "Cable",
+        "UR": "Iceman",
+        "R": "SpiderMan",
+        "DR": "Venom",
+        "D": "DoctorDoom",
+        "DL": "TronBonne",
+        "L": "Hayato",
+        "UL": "RubyHeart"
+      }
+    },
+    "SpiderMan": {
+      "id": 12,
+      "hex": "0x0C",
+      "name": "Spider-Man",
+      "screen_row": 4,
+      "screen_col": 2,
+      "assists": {
+        "A": "Capture",
+        "B": "Expansion",
+        "C": "Anti-Air"
+      },
+      "neighbors": {
+        "U": "Iceman",
+        "UR": "Gambit",
+        "R": "Juggernaut",
+        "DR": "Magneto",
+        "D": "Venom",
+        "DL": "DoctorDoom",
+        "L": "CaptainAmerica",
+        "UL": "Cable"
+      }
+    },
+    "Juggernaut": {
+      "id": 41,
+      "hex": "0x29",
+      "name": "Juggernaut",
+      "screen_row": 4,
+      "screen_col": 3,
+      "assists": {
+        "A": "Ground",
+        "B": "Dash",
+        "C": "Variety"
+      },
+      "neighbors": {
+        "U": "Gambit",
+        "UR": "Blackheart",
+        "R": "Spiral",
+        "DR": "Colossus",
+        "D": "Magneto",
+        "DL": "Venom",
+        "L": "SpiderMan",
+        "UL": "Iceman"
+      }
+    },
+    "Spiral": {
+      "id": 49,
+      "hex": "0x31",
+      "name": "Spiral",
+      "screen_row": 4,
+      "screen_col": 4,
+      "assists": {
+        "A": "Projectile",
+        "B": "Variety",
+        "C": "Ground"
+      },
+      "neighbors": {
+        "U": "Blackheart",
+        "UR": "Charlie",
+        "R": "Dhalsim",
+        "DR": "MBison",
+        "D": "Colossus",
+        "DL": "Magneto",
+        "L": "Juggernaut",
+        "UL": "Gambit"
+      }
+    },
+    "Dhalsim": {
+      "id": 37,
+      "hex": "0x25",
+      "name": "Dhalsim",
+      "screen_row": 4,
+      "screen_col": 5,
+      "assists": {
+        "A": "Projectile",
+        "B": "Ground",
+        "C": "Anti-Air"
+      },
+      "neighbors": {
+        "U": "Charlie",
+        "UR": "Akuma",
+        "R": "Jin",
+        "DR": "Morrigan",
+        "D": "MBison",
+        "DL": "Colossus",
+        "L": "Spiral",
+        "UL": "Blackheart"
+      }
+    },
+    "Jin": {
+      "id": 55,
+      "hex": "0x37",
+      "name": "Jin",
+      "screen_row": 4,
+      "screen_col": 6,
+      "assists": {
+        "A": "Expansion",
+        "B": "Anti-Air",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "Akuma",
+        "UR": "Zangief",
+        "R": "Anakaris",
+        "DR": "Sakura",
+        "D": "Morrigan",
+        "DL": "MBison",
+        "L": "Dhalsim",
+        "UL": "Charlie"
+      }
+    },
+    "Anakaris": {
+      "id": 4,
+      "hex": "0x04",
+      "name": "Anakaris",
+      "screen_row": 4,
+      "screen_col": 7,
+      "assists": {
+        "A": "Ground",
+        "B": "Throw",
+        "C": "Variety"
+      },
+      "neighbors": {
+        "U": "Zangief",
+        "UR": "RubyHeart",
+        "R": "Hayato",
+        "DR": "TronBonne",
+        "D": "Sakura",
+        "DL": "Morrigan",
+        "L": "Jin",
+        "UL": "Akuma"
+      }
+    },
+    "TronBonne": {
+      "id": 16,
+      "hex": "0x10",
+      "name": "Tron Bonne",
+      "screen_row": 5,
+      "screen_col": 0,
+      "assists": {
+        "A": "Throw",
+        "B": "Anti-Air",
+        "C": "Projectile"
+      },
+      "neighbors": {
+        "U": "Hayato",
+        "UR": "CaptainAmerica",
+        "R": "DoctorDoom",
+        "DR": "Rogue",
+        "D": "Jill",
+        "DL": "StriderHiryu",
+        "L": "Sakura",
+        "UL": "Anakaris"
+      }
+    },
+    "DoctorDoom": {
+      "id": 15,
+      "hex": "0x0F",
+      "name": "Doctor Doom",
+      "screen_row": 5,
+      "screen_col": 1,
+      "assists": {
+        "A": "Variety",
+        "B": "Anti-Air",
+        "C": "Projectile"
+      },
+      "neighbors": {
+        "U": "CaptainAmerica",
+        "UR": "SpiderMan",
+        "R": "Venom",
+        "DR": "Hulk",
+        "D": "Rogue",
+        "DL": "Jill",
+        "L": "TronBonne",
+        "UL": "Hayato"
+      }
+    },
+    "Venom": {
+      "id": 14,
+      "hex": "0x0E",
+      "name": "Venom",
+      "screen_row": 5,
+      "screen_col": 2,
+      "assists": {
+        "A": "Expansion",
+        "B": "Variety",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "SpiderMan",
+        "UR": "Juggernaut",
+        "R": "Magneto",
+        "DR": "IronMan",
+        "D": "Hulk",
+        "DL": "Rogue",
+        "L": "DoctorDoom",
+        "UL": "CaptainAmerica"
+      }
+    },
+    "Magneto": {
+      "id": 44,
+      "hex": "0x2C",
+      "name": "Magneto",
+      "screen_row": 5,
+      "screen_col": 3,
+      "assists": {
+        "A": "Projectile",
+        "B": "Capture",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "Juggernaut",
+        "UR": "Spiral",
+        "R": "Colossus",
+        "DR": "Cammy",
+        "D": "IronMan",
+        "DL": "Hulk",
+        "L": "Venom",
+        "UL": "SpiderMan"
+      }
+    },
+    "Colossus": {
+      "id": 50,
+      "hex": "0x32",
+      "name": "Colossus",
+      "screen_row": 5,
+      "screen_col": 4,
+      "assists": {
+        "A": "Dash",
+        "B": "Anti-Air",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "Spiral",
+        "UR": "Dhalsim",
+        "R": "MBison",
+        "DR": "StriderHiryu",
+        "D": "Cammy",
+        "DL": "IronMan",
+        "L": "Magneto",
+        "UL": "Juggernaut"
+      }
+    },
+    "MBison": {
+      "id": 38,
+      "hex": "0x26",
+      "name": "M.Bison",
+      "screen_row": 5,
+      "screen_col": 5,
+      "assists": {
+        "A": "Projectile",
+        "B": "Variety",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "Dhalsim",
+        "UR": "Jin",
+        "R": "Morrigan",
+        "DR": "Jill",
+        "D": "StriderHiryu",
+        "DL": "Cammy",
+        "L": "Colossus",
+        "UL": "Spiral"
+      }
+    },
+    "Morrigan": {
+      "id": 3,
+      "hex": "0x03",
+      "name": "Morrigan",
+      "screen_row": 5,
+      "screen_col": 6,
+      "assists": {
+        "A": "Anti-Air",
+        "B": "Projectile",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "Jin",
+        "UR": "Anakaris",
+        "R": "Sakura",
+        "DR": "StriderHiryu",
+        "D": "Cammy",
+        "DL": "IronMan",
+        "L": "MBison",
+        "UL": "Dhalsim"
+      }
+    },
+    "Sakura": {
+      "id": 34,
+      "hex": "0x22",
+      "name": "Sakura",
+      "screen_row": 5,
+      "screen_col": 7,
+      "assists": {
+        "A": "Dash",
+        "B": "Projectile",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "Anakaris",
+        "UR": "Hayato",
+        "R": "TronBonne",
+        "DR": "Jill",
+        "D": "StriderHiryu",
+        "DL": "Cammy",
+        "L": "Morrigan",
+        "UL": "Jin"
+      }
+    },
+    "Jill": {
+      "id": 17,
+      "hex": "0x11",
+      "name": "Jill",
+      "screen_row": 6,
+      "screen_col": 0,
+      "assists": {
+        "A": "Heal",
+        "B": "Dash",
+        "C": "Projectile"
+      },
+      "neighbors": {
+        "U": "TronBonne",
+        "UR": "DoctorDoom",
+        "R": "Rogue",
+        "DR": "OmegaRed",
+        "D": "ChunLi",
+        "DL": "Roll",
+        "L": "StriderHiryu",
+        "UL": "Sakura"
+      }
+    },
+    "Rogue": {
+      "id": 10,
+      "hex": "0x0A",
+      "name": "Rogue",
+      "screen_row": 6,
+      "screen_col": 1,
+      "assists": {
+        "A": "Anti-Air",
+        "B": "Dash",
+        "C": "Throw"
+      },
+      "neighbors": {
+        "U": "DoctorDoom",
+        "UR": "Venom",
+        "R": "Hulk",
+        "DR": "Storm",
+        "D": "OmegaRed",
+        "DL": "ChunLi",
+        "L": "Jill",
+        "UL": "TronBonne"
+      }
+    },
+    "Hulk": {
+      "id": 13,
+      "hex": "0x0D",
+      "name": "Hulk",
+      "screen_row": 6,
+      "screen_col": 2,
+      "assists": {
+        "A": "Ground",
+        "B": "Dash",
+        "C": "Anti-Air"
+      },
+      "neighbors": {
+        "U": "Venom",
+        "UR": "Magneto",
+        "R": "IronMan",
+        "DR": "Sentinel",
+        "D": "Storm",
+        "DL": "OmegaRed",
+        "L": "Rogue",
+        "UL": "DoctorDoom"
+      }
+    },
+    "IronMan": {
+      "id": 51,
+      "hex": "0x33",
+      "name": "Iron Man",
+      "screen_row": 6,
+      "screen_col": 3,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "Magneto",
+        "UR": "Colossus",
+        "R": "Cammy",
+        "DR": "Servbot",
+        "D": "Sentinel",
+        "DL": "Storm",
+        "L": "Hulk",
+        "UL": "Venom"
+      }
+    },
+    "Cammy": {
+      "id": 36,
+      "hex": "0x24",
+      "name": "Cammy",
+      "screen_row": 6,
+      "screen_col": 4,
+      "assists": {
+        "A": "Anti-Air",
+        "B": "Dash",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "Morrigan",
+        "UR": "Sakura",
+        "R": "StriderHiryu",
+        "DR": "Roll",
+        "D": "Servbot",
+        "DL": "Sentinel",
+        "L": "IronMan",
+        "UL": "MBison"
+      }
+    },
+    "StriderHiryu": {
+      "id": 5,
+      "hex": "0x05",
+      "name": "Strider Hiryu",
+      "screen_row": 6,
+      "screen_col": 5,
+      "assists": {
+        "A": "Ground",
+        "B": "Variety",
+        "C": "Projectile"
+      },
+      "neighbors": {
+        "U": "Sakura",
+        "UR": "TronBonne",
+        "R": "Jill",
+        "DR": "ChunLi",
+        "D": "Roll",
+        "DL": "Servbot",
+        "L": "Cammy",
+        "UL": "Morrigan"
+      }
+    },
+    "ChunLi": {
+      "id": 27,
+      "hex": "0x1B",
+      "name": "Chun-Li",
+      "screen_row": 7,
+      "screen_col": 0,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "Jill",
+        "UR": "Rogue",
+        "R": "OmegaRed",
+        "DR": "Wolverine",
+        "D": "CaptainCommando",
+        "DL": "Megaman",
+        "L": "Roll",
+        "UL": "StriderHiryu"
+      }
+    },
+    "OmegaRed": {
+      "id": 48,
+      "hex": "0x30",
+      "name": "Omega Red",
+      "screen_row": 7,
+      "screen_col": 1,
+      "assists": {
+        "A": "Throw",
+        "B": "Anti-Air",
+        "C": "Ground"
+      },
+      "neighbors": {
+        "U": "Rogue",
+        "UR": "Hulk",
+        "R": "Storm",
+        "DR": "ShumaGorath",
+        "D": "Wolverine",
+        "DL": "CaptainCommando",
+        "L": "ChunLi",
+        "UL": "Jill"
+      }
+    },
+    "Storm": {
+      "id": 42,
+      "hex": "0x2A",
+      "name": "Storm",
+      "screen_row": 7,
+      "screen_col": 2,
+      "assists": {
+        "A": "Projectile",
+        "B": "Expansion",
+        "C": "Variety"
+      },
+      "neighbors": {
+        "U": "Hulk",
+        "UR": "IronMan",
+        "R": "Sentinel",
+        "DR": "Thanos",
+        "D": "ShumaGorath",
+        "DL": "Wolverine",
+        "L": "OmegaRed",
+        "UL": "Rogue"
+      }
+    },
+    "Sentinel": {
+      "id": 52,
+      "hex": "0x34",
+      "name": "Sentinel",
+      "screen_row": 7,
+      "screen_col": 3,
+      "assists": {
+        "A": "Projectile",
+        "B": "Launcher",
+        "C": "Ground"
+      },
+      "neighbors": {
+        "U": "IronMan",
+        "UR": "Cammy",
+        "R": "Servbot",
+        "DR": "Felicia",
+        "D": "Thanos",
+        "DL": "ShumaGorath",
+        "L": "Storm",
+        "UL": "Hulk"
+      }
+    },
+    "Servbot": {
+      "id": 58,
+      "hex": "0x3A",
+      "name": "Servbot",
+      "screen_row": 7,
+      "screen_col": 4,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "Cammy",
+        "UR": "StriderHiryu",
+        "R": "Roll",
+        "DR": "Megaman",
+        "D": "Felicia",
+        "DL": "Thanos",
+        "L": "Sentinel",
+        "UL": "IronMan"
+      }
+    },
+    "Roll": {
+      "id": 29,
+      "hex": "0x1D",
+      "name": "Roll",
+      "screen_row": 7,
+      "screen_col": 5,
+      "assists": {
+        "A": "Projectile",
+        "B": "Variety",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "StriderHiryu",
+        "UR": "Jill",
+        "R": "ChunLi",
+        "DR": "CaptainCommando",
+        "D": "Megaman",
+        "DL": "Felicia",
+        "L": "Servbot",
+        "UL": "Cammy"
+      }
+    },
+    "CaptainCommando": {
+      "id": 56,
+      "hex": "0x38",
+      "name": "Captain Commando",
+      "screen_row": 0,
+      "screen_col": 0,
+      "assists": {
+        "A": "Ground",
+        "B": "Anti-Air",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "ChunLi",
+        "UR": "OmegaRed",
+        "R": "Wolverine",
+        "DR": "Cyclops",
+        "D": "Amingo",
+        "DL": "Guile",
+        "L": "Megaman",
+        "UL": "Roll"
+      }
+    },
+    "Wolverine": {
+      "id": 7,
+      "hex": "0x07",
+      "name": "Wolverine",
+      "screen_row": 0,
+      "screen_col": 1,
+      "assists": {
+        "A": "Expansion",
+        "B": "Anti-Air",
+        "C": "Dash"
+      },
+      "neighbors": {
+        "U": "OmegaRed",
+        "UR": "Storm",
+        "R": "ShumaGorath",
+        "DR": "WolverineB",
+        "D": "Cyclops",
+        "DL": "Amingo",
+        "L": "CaptainCommando",
+        "UL": "ChunLi"
+      }
+    },
+    "ShumaGorath": {
+      "id": 45,
+      "hex": "0x2D",
+      "name": "Shuma-Gorath",
+      "screen_row": 0,
+      "screen_col": 2,
+      "assists": {
+        "A": "Projectile",
+        "B": "Expansion",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "Storm",
+        "UR": "Sentinel",
+        "R": "Thanos",
+        "DR": "WarMachine",
+        "D": "WolverineB",
+        "DL": "Cyclops",
+        "L": "Wolverine",
+        "UL": "OmegaRed"
+      }
+    },
+    "Thanos": {
+      "id": 54,
+      "hex": "0x36",
+      "name": "Thanos",
+      "screen_row": 0,
+      "screen_col": 3,
+      "assists": {
+        "A": "Capture",
+        "B": "Dash",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "Sentinel",
+        "UR": "Servbot",
+        "R": "Felicia",
+        "DR": "Dan",
+        "D": "WarMachine",
+        "DL": "WolverineB",
+        "L": "ShumaGorath",
+        "UL": "Storm"
+      }
+    },
+    "Felicia": {
+      "id": 32,
+      "hex": "0x20",
+      "name": "Felicia",
+      "screen_row": 0,
+      "screen_col": 4,
+      "assists": {
+        "A": "Expansion",
+        "B": "Ground",
+        "C": "Variety"
+      },
+      "neighbors": {
+        "U": "Servbot",
+        "UR": "Roll",
+        "R": "Megaman",
+        "DR": "Guile",
+        "D": "Dan",
+        "DL": "WarMachine",
+        "L": "Thanos",
+        "UL": "Sentinel"
+      }
+    },
+    "Megaman": {
+      "id": 28,
+      "hex": "0x1C",
+      "name": "Megaman",
+      "screen_row": 0,
+      "screen_col": 5,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "Roll",
+        "UR": "ChunLi",
+        "R": "CaptainCommando",
+        "DR": "Amingo",
+        "D": "Guile",
+        "DL": "Dan",
+        "L": "Felicia",
+        "UL": "Servbot"
+      }
+    },
+    "Amingo": {
+      "id": 21,
+      "hex": "0x15",
+      "name": "Amingo",
+      "screen_row": 1,
+      "screen_col": 0,
+      "assists": {
+        "A": "Heal",
+        "B": "Enhance",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "CaptainCommando",
+        "UR": "Wolverine",
+        "R": "Cyclops",
+        "DR": "Marrow",
+        "D": "Sonson",
+        "DL": "Ryu",
+        "L": "Guile",
+        "UL": "Megaman"
+      }
+    },
+    "Cyclops": {
+      "id": 6,
+      "hex": "0x06",
+      "name": "Cyclops",
+      "screen_row": 1,
+      "screen_col": 1,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "Wolverine",
+        "UR": "ShumaGorath",
+        "R": "WolverineB",
+        "DR": "Psylocke",
+        "D": "Marrow",
+        "DL": "Sonson",
+        "L": "Amingo",
+        "UL": "CaptainCommando"
+      }
+    },
+    "WolverineB": {
+      "id": 57,
+      "hex": "0x39",
+      "name": "Wolverine-B",
+      "screen_row": 1,
+      "screen_col": 2,
+      "assists": {
+        "A": "Ground",
+        "B": "Launcher",
+        "C": "Varietey"
+      },
+      "neighbors": {
+        "U": "ShumaGorath",
+        "UR": "Thanos",
+        "R": "WarMachine",
+        "DR": "SilverSamurai",
+        "D": "Psylocke",
+        "DL": "Marrow",
+        "L": "Cyclops",
+        "UL": "Wolverine"
+      }
+    },
+    "WarMachine": {
+      "id": 46,
+      "hex": "0x2E",
+      "name": "War Machine",
+      "screen_row": 1,
+      "screen_col": 3,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Variety"
+      },
+      "neighbors": {
+        "U": "Thanos",
+        "UR": "Felicia",
+        "R": "Dan",
+        "DR": "Sabretooth",
+        "D": "SilverSamurai",
+        "DL": "Psylocke",
+        "L": "WolverineB",
+        "UL": "ShumaGorath"
+      }
+    },
+    "Dan": {
+      "id": 35,
+      "hex": "0x23",
+      "name": "Dan",
+      "screen_row": 1,
+      "screen_col": 4,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Variety"
+      },
+      "neighbors": {
+        "U": "Felicia",
+        "UR": "Megaman",
+        "R": "Guile",
+        "DR": "Ryu",
+        "D": "BBHood",
+        "DL": "Ken",
+        "L": "WarMachine",
+        "UL": "Thanos"
+      }
+    },
+    "Guile": {
+      "id": 2,
+      "hex": "0x02",
+      "name": "Guile",
+      "screen_row": 1,
+      "screen_col": 5,
+      "assists": {
+        "A": "Anti-Air",
+        "B": "Projectile",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "Megaman",
+        "UR": "CaptainCommando",
+        "R": "Amingo",
+        "DR": "Sonson",
+        "D": "Ryu",
+        "DL": "BBHood",
+        "L": "Dan",
+        "UL": "Felicia"
+      }
+    },
+    "Sonson": {
+      "id": 20,
+      "hex": "0x14",
+      "name": "Sonson",
+      "screen_row": 2,
+      "screen_col": 0,
+      "assists": {
+        "A": "Heal",
+        "B": "Projectile",
+        "C": "Anti-Air"
+      },
+      "neighbors": {
+        "U": "Amingo",
+        "UR": "Cyclops",
+        "R": "Marrow",
+        "DR": "Cable",
+        "D": "RubyHeart",
+        "DL": "Zangief",
+        "L": "Ryu",
+        "UL": "Guile"
+      }
+    },
+    "Marrow": {
+      "id": 22,
+      "hex": "0x16",
+      "name": "Marrow",
+      "screen_row": 2,
+      "screen_col": 1,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "Cyclops",
+        "UR": "WolverineB",
+        "R": "Psylocke",
+        "DR": "Iceman",
+        "D": "Cable",
+        "DL": "RubyHeart",
+        "L": "Sonson",
+        "UL": "Amingo"
+      }
+    },
+    "Psylocke": {
+      "id": 8,
+      "hex": "0x08",
+      "name": "Psylocke",
+      "screen_row": 2,
+      "screen_col": 2,
+      "assists": {
+        "A": "Anti-Air",
+        "B": "Projectile",
+        "C": "Balance"
+      },
+      "neighbors": {
+        "U": "WolverineB",
+        "UR": "WarMachine",
+        "R": "SilverSamurai",
+        "DR": "Gambit",
+        "D": "Iceman",
+        "DL": "Cable",
+        "L": "Marrow",
+        "UL": "Cyclops"
+      }
+    },
+    "SilverSamurai": {
+      "id": 47,
+      "hex": "0x2F",
+      "name": "Silver Samurai",
+      "screen_row": 2,
+      "screen_col": 3,
+      "assists": {
+        "A": "Ground",
+        "B": "Projectile",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "WarMachine",
+        "UR": "Dan",
+        "R": "Sabretooth",
+        "DR": "Blackheart",
+        "D": "Gambit",
+        "DL": "Iceman",
+        "L": "Psylocke",
+        "UL": "WolverineB"
+      }
+    },
+    "Sabretooth": {
+      "id": 43,
+      "hex": "0x2B",
+      "name": "Sabretooth",
+      "screen_row": 2,
+      "screen_col": 4,
+      "assists": {
+        "A": "Expansion",
+        "B": "Projectile",
+        "C": "Launcher"
+      },
+      "neighbors": {
+        "U": "Dan",
+        "UR": "Guile",
+        "R": "Ken",
+        "DR": "Charlie",
+        "D": "Blackheart",
+        "DL": "Gambit",
+        "L": "SilverSamurai",
+        "UL": "WarMachine"
+      }
+    },
+    "Ken": {
+      "id": 39,
+      "hex": "0x27",
+      "name": "Ken",
+      "screen_row": 2,
+      "screen_col": 5,
+      "assists": {
+        "A": "Anti-Air",
+        "B": "Projectile",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "Guile",
+        "UR": "Amingo",
+        "R": "BBHood",
+        "DR": "Akuma",
+        "D": "Charlie",
+        "DL": "Blackheart",
+        "L": "Sabretooth",
+        "UL": "Dan"
+      }
+    },
+    "BBHood": {
+      "id": 31,
+      "hex": "0x1F",
+      "name": "B.B. Hood",
+      "screen_row": 2,
+      "screen_col": 6,
+      "assists": {
+        "A": "Projectile",
+        "B": "Anti-Air",
+        "C": "Variety"
+      },
+      "neighbors": {
+        "U": "Dan",
+        "UR": "Guile",
+        "R": "Ryu",
+        "DR": "Zangief",
+        "D": "Akuma",
+        "DL": "Charlie",
+        "L": "Ken",
+        "UL": "WarMachine"
+      }
+    },
+    "Ryu": {
+      "id": 0,
+      "hex": "0x00",
+      "name": "Ryu",
+      "screen_row": 2,
+      "screen_col": 7,
+      "assists": {
+        "A": "Anti-Air",
+        "B": "Projectile",
+        "C": "Expansion"
+      },
+      "neighbors": {
+        "U": "Guile",
+        "UR": "Amingo",
+        "R": "Sonson",
+        "DR": "RubyHeart",
+        "D": "Zangief",
+        "DL": "Akuma",
+        "L": "BBHood",
+        "UL": "Dan"
+      }
+    }
+  }
+}
