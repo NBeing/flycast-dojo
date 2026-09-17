@@ -1,5 +1,6 @@
 #include "surface_tour.h"
 #include "hotkey_bind.h"
+#include "oracle.h"
 #include "dojo.h"
 #include "session.h"
 #include "roll_host.h"
@@ -19,9 +20,11 @@
 #include <cfloat>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <deque>
 #include <string>
 #include <vector>
+#include <xxhash.h>
 
 // types.h defines a debug-assert macro named `verify(x)`; Step::verify is a member
 // of the frozen contract, and this file never uses the assert.
@@ -76,6 +79,131 @@ static int judge(bool ok, bool optional, bool needsPrev, bool prevPassed)
 
 static const char *verdictText(int v) { return v == 1 ? "PASS" : v == 0 ? "FAIL" : v == 2 ? "SKIP" : "..."; }
 
+//! The facts ledger, one per step - documented at struct Rec below, where it lives.
+struct Facts
+{
+	bool beforeOk = false, afterOk = false;	//!< the machine was stopped when read
+	u32 machineBefore = 0, machineAfter = 0;
+	u64 movieBefore = 0,   movieAfter = 0;
+	u32 panelsBefore = 0,  panelsAfter = 0;		//!< open mask, every panel but surfacetour/game
+	u32 bindingsBefore = 0, bindingsAfter = 0;	//!< XXH32 over the TAS actions' codes
+	int slotBefore = 0,    slotAfter = 0;
+	int modeBefore = 0,    modeAfter = 0;		//!< session::mode()
+	u32 frameBefore = 0,   frameAfter = 0;
+	int gate = -1;								//!< -1 not judged, 0 ok, 1 VACUOUS, 2 LEAK, 3 unmeasured
+	std::string gateWhy;
+};
+
+// ---- the gate's pure half, covered by selfTest() -----------------------------------
+//
+// WHAT EACH STEP IS DECLARED TO DO to the machine and to the movie, by name prefix.
+// A RUNNER-SIDE TABLE, not a Step field: the contract is frozen, and nbneo-rr's
+// lesson (FlowStep::moves_machine, capture.cpp:555-560) is that BOTH directions
+// must be asserted - a mover that moved nothing is vacuous, and a UI step that
+// moved the machine is a leak, "a structural verb that quietly grew transport
+// behaviour". The prefixes are the step names buildSteps() emits.
+enum class MExp : u8 { Unchanged, Moved, Any };			//!< the machine
+enum class VExp : u8 { Unchanged, Moved, Any };			//!< the movie
+struct Expect
+{
+	MExp machine;
+	VExp movie;
+	bool converge;		//!< a mover that must LAND WHERE ANOTHER MOVER LANDED (an assertion, not an exemption)
+	const char *label;
+};
+
+static bool startsWith(const char *s, const char *p) { return strncmp(s, p, strlen(p)) == 0; }
+
+static Expect expectOf(const char *name)
+{
+	// Loads and the 1-frame shows revisit the same two machine states over and over
+	// (slot 0, and slot 0 + one frame); nbneo-rr's must_converge is the honest way to
+	// say so - each must pair with another mover on an identical hash, or it is the
+	// disagreement the journey exists to find.
+	if (startsWith(name, "load slot 0"))                 return { MExp::Moved,     VExp::Unchanged, true,  "mover/converge" };
+	if (startsWith(name, "show: slot 99"))               return { MExp::Moved,     VExp::Unchanged, false, "mover" };
+	if (startsWith(name, "show:"))                       return { MExp::Moved,     VExp::Unchanged, true,  "mover/converge" };
+	// `[MEASURED 2026-09-17]` the machine is ALREADY in the state slot 99 holds when it
+	// is loaded (saved two UI steps earlier, nothing moved it since): aa983314 ->
+	// aa983314. "Moved" is false by construction; the honest claim is IDENTITY - the
+	// loaded machine equals the hash recorded when it was saved (gateStep's floor).
+	if (startsWith(name, "savestate: load slot 99"))     return { MExp::Any,       VExp::Unchanged, true,  "identity" };
+	if (startsWith(name, "roll: flip a cell + undo"))    return { MExp::Unchanged, VExp::Unchanged, false, "netzero" };
+	if (startsWith(name, "snippets: place"))             return { MExp::Unchanged, VExp::Moved,     false, "movie-mover" };
+	if (startsWith(name, "macros: place"))               return { MExp::Unchanged, VExp::Moved,     false, "movie-mover" };
+	// The branch's slot 0 is a COPY of main's, so checkout lands where load slot 0
+	// did; the movie is a copy too but is re-attached from disk - not asserted.
+	if (startsWith(name, "branch: checkout"))            return { MExp::Moved,     VExp::Any,       true,  "mover/converge" };
+	if (startsWith(name, "branch: back to main"))        return { MExp::Moved,     VExp::Any,       true,  "mover/converge" };
+	if (startsWith(name, "captures:"))                   return { MExp::Moved,     VExp::Unchanged, false, "mover" };
+	if (startsWith(name, "FST:"))                        return { MExp::Moved,     VExp::Unchanged, false, "mover" };
+	if (startsWith(name, "branch export:"))              return { MExp::Moved,     VExp::Any,       false, "mover" };
+	// "sender: send" is a UI step TODAY: playLive is consumed only at a maple poll and
+	// the tour never steps here, so nothing reaches the machine or the movie. The
+	// game-level module (not yet authorized) is what makes it a mover.
+	return { MExp::Unchanged, VExp::Unchanged, false, "ui" };
+}
+
+//! Did anything in the whole tuple move? (nbneo-rr's `changed`, our six members.)
+static bool tupleChanged(const Facts& f)
+{
+	return f.machineAfter != f.machineBefore || f.movieAfter != f.movieBefore
+		|| f.panelsAfter != f.panelsBefore || f.bindingsAfter != f.bindingsBefore
+		|| f.slotAfter != f.slotBefore || f.modeAfter != f.modeBefore;
+}
+
+/*
+	The per-step gate verdict from the facts and the expectation. 0 ok, 1 VACUOUS
+	(a declared mover that moved nothing), 2 LEAK (a declared non-mover that moved
+	the machine or the movie), 3 unmeasured (either capture found the machine
+	running). `[DEVIATION from nbneo-rr]` their no-op gate requires EVERY pressed
+	step to move the tuple or bring its own instrument; our UI steps' read-back
+	verify IS their instrument (it returns false unless the artifact changed), so
+	the no-op gate here applies to declared movers only, and UI steps are held to
+	LEAK.
+*/
+static int gateVerdict(const Facts& f, const Expect& e, std::string& why)
+{
+	if (!f.beforeOk || !f.afterOk) { why = "the machine was running at a capture"; return 3; }
+	const bool mMoved = f.machineAfter != f.machineBefore;
+	const bool vMoved = f.movieAfter != f.movieBefore;
+	if (e.machine == MExp::Moved && !mMoved)
+	{
+		why = "vacuous: the machine did not move";
+		return 1;
+	}
+	if (e.movie == VExp::Moved && !vMoved)
+	{
+		why = "vacuous: the movie did not move";
+		return 1;
+	}
+	if (e.machine == MExp::Unchanged && mMoved)
+	{
+		char b[96];
+		snprintf(b, sizeof(b), "leak: a UI step moved the machine %08x -> %08x", f.machineBefore, f.machineAfter);
+		why = b;
+		return 2;
+	}
+	if (e.movie == VExp::Unchanged && vMoved)
+	{
+		why = "leak: the movie moved under a step that must leave it alone";
+		return 2;
+	}
+	why = tupleChanged(f) ? "" : "nothing in the tuple moved";
+	return 0;
+}
+
+//! The override rule: a gate finding turns a PASS into a FAIL; it never touches a
+//! SKIP (nothing ran) and never rescues a FAIL.
+static int applyGate(int verdict, int gate)
+{
+	if (verdict == 1 && (gate == 1 || gate == 2))
+		return 0;
+	return verdict;
+}
+
+static const char *gateText(int g) { return g == 0 ? "ok" : g == 1 ? "VACUOUS" : g == 2 ? "LEAK" : g == 3 ? "unmeasured" : "-"; }
+
 // ---- state --------------------------------------------------------------------
 
 static char g_why[256] = "";
@@ -89,11 +217,27 @@ void why(const char *fmt, ...)
 }
 const char *lastWhy() { return g_why; }
 
+/*
+	THE FACTS LEDGER - the machine, the movie and the surface EITHER SIDE of a step.
+
+	`[PORTED 2026-09-17]` nbneo-rr's FlowStepFacts (shell/gui/capture.cpp:444-494),
+	the ledger its flow_gates() judges ~90 journey steps by. Their rule, kept: the
+	hash "and nothing derived from it" - 'which state am I in' is the question,
+	never 'is this recent'. Captured only while the emulator is STOPPED (oracle.h):
+	a running machine is not a value, and a step that could not be measured says so
+	(unmeasured) rather than comparing noise.
+
+	"CHANGED" IS THE TUPLE, NOT THE HASH ALONE (capture.cpp:30303-30314): a UI step
+	legitimately leaves the machine alone and a mover legitimately leaves the
+	windows alone, so each member answers a different question and the gate reads
+	the pair (machine, movie) it was declared to care about.
+*/
 struct Rec
 {
 	Step step;
 	int verdict = -1;
 	std::string why;
+	Facts facts;
 };
 
 enum class Phase { Idle, WaitReady, Setup, Begin, Act, Dwell, Verify, Restore, Done };
@@ -118,6 +262,12 @@ static struct State
 	bool playMatch = false;
 	int slot = 0;
 	int passed = 0, failed = 0, skipped = 0;
+	// the gate's own reference points and tallies
+	u32 setupHash = 0;				//!< the machine at Setup (Paused, before step 1)
+	bool haveSetupHash = false;
+	u32 hash99 = 0;					//!< the machine right after "savestate: save slot 99" settled
+	bool haveHash99 = false;
+	int gateOk = 0, vacuous = 0, leak = 0, unmeasured = 0;
 } st;
 
 bool focusClearRequested() { return st.focusClear; }
@@ -408,13 +558,32 @@ static void buildSteps()
 	// (the last panel's close), which is the right dependency: the phase ended clean.
 	closeStep(hotkeysIdx);
 
-	// 44. enter authoring - every feature step below runs in WRITE
+	/*
+		44. enter authoring in READ-WRITE, not WRITE.
+
+		The DOCUMENTED contract (docs/tas-fork/CANON_readwrite_model.md:98,
+		dojo.cpp:582): in WRITE every advanced frame is overwritten by the pad,
+		neutral included ("the stomp lands on the frame you advance INTO"), while
+		READ-WRITE preserves a cell that carries no signal - the ceremony
+		sendequiv.cpp:160-186 and fst.cpp:445 run before stepping. So the feature
+		phase authors in READ-WRITE, which is what a stepping author wants.
+
+		`[MEASURED 2026-09-17] HONEST NOTE:` the movie-hash gate did NOT redden the
+		1-frame "show" steps under the old WRITE ordering - movie=88cbd30188935e26
+		both sides of every show, in WRITE and in READ-WRITE alike. The clobber the
+		doc warns of did not manifest on this fixture (the frames stepped into,
+		9929/9930, evidently already hold neutral rows, or a tour-driven step past
+		the movie frontier does not record). So this change rests on the DOCUMENTED
+		contract, not on a gate we can see fail here; the gate holds shows to
+		"machine moved, movie unchanged" in both modes and that is what it measured.
+		gui_set_driver(1) sets macro_armed itself; the assignment documents intent.
+	*/
 	{
 		Step s;
-		s.name = "driver: WRITE (enter authoring)";
-		s.act = [] { gui_set_driver(2); return true; };
+		s.name = "driver: READ-WRITE (enter authoring)";
+		s.act = [] { gui_set_driver(1); dojo.macro_armed = true; return true; };
 		s.verify = [] {
-			if (session::mode() != session::Mode::Write || dojo.play_match) { why("mode=%s", session::label()); return false; }
+			if (session::mode() != session::Mode::ReadWrite || dojo.play_match || !dojo.macro_armed) { why("mode=%s", session::label()); return false; }
 			return true;
 		};
 		add(s);
@@ -438,9 +607,13 @@ static void buildSteps()
 	show("show: slot 99 (1 frame)");
 	hook("slot: next",                       Kind::Click,  hooks::slotNext);
 	hook("slot: prev",                       Kind::Click,  hooks::slotPrev);
+	// The cycle ENDS in READ-WRITE, so every later show/capture step steps a frame
+	// without clobbering a movie row (see step 44).
+	// The cycle ENDS in READ-WRITE, so every later show/capture step steps a frame
+	// in the authoring mode (see step 44).
 	hook("driver: READ",                     Kind::Click,  hooks::driverRead);
-	hook("driver: READ-WRITE",               Kind::Click,  hooks::driverReadWrite);
 	hook("driver: WRITE",                    Kind::Click,  hooks::driverWrite);
+	hook("driver: READ-WRITE",               Kind::Click,  hooks::driverReadWrite);
 	hook("sender: send \"5LP _ _ 5LP\"",     Kind::Record, hooks::senderSend);
 	hook("sender: stop",                     Kind::Click,  hooks::senderStop, true);
 	hook("notepad: analyze",                 Kind::Click,  hooks::notepadAnalyze);
@@ -510,10 +683,205 @@ static bool ready()
 	return true;
 }
 
+// ---- the gate's live half ------------------------------------------------------------
+
+static u32 panelsMask()
+{
+	u32 m = 0, bit = 1;
+	for (const panels::Panel& p : panels::all())
+	{
+		if (strcmp(p.id, "surfacetour") == 0 || strcmp(p.id, "game") == 0)
+			continue;
+		if (*p.open) m |= bit;
+		bit <<= 1;
+	}
+	return m;
+}
+
+static u32 bindingsFold()
+{
+	const std::shared_ptr<GamepadDevice> kbd = rebind::keyboard();
+	const std::shared_ptr<InputMapping> map = kbd != nullptr ? kbd->get_input_mapping() : nullptr;
+	std::vector<u32> codes;
+	for (int i = 0; i < hotkeys::count(); i++)
+		codes.push_back(map != nullptr ? map->get_button_code(0, hotkeys::all()[i].id) : (u32)-1);
+	return codes.empty() ? 0 : (u32)XXH32(codes.data(), codes.size() * sizeof(u32), 0);
+}
+
+//! One side of the ledger. The machine hash is read ONLY if the emulator is stopped;
+//! everything else is host state and is always safe to read.
+static void capture(Facts& f, bool before)
+{
+	const bool stopped = oracle::machineStopped();
+	const u32 mh = stopped ? oracle::machineHash() : 0;
+	const u64 vh = oracle::movieHash();
+	const u32 pm = panelsMask(), bf = bindingsFold();
+	const int sl = (int)config::SavestateSlot, md = (int)session::mode();
+	const u32 fr = dojo.frame_number.load();
+	if (before)
+	{
+		f.beforeOk = stopped; f.machineBefore = mh; f.movieBefore = vh; f.panelsBefore = pm;
+		f.bindingsBefore = bf; f.slotBefore = sl; f.modeBefore = md; f.frameBefore = fr;
+	}
+	else
+	{
+		f.afterOk = stopped; f.machineAfter = mh; f.movieAfter = vh; f.panelsAfter = pm;
+		f.bindingsAfter = bf; f.slotAfter = sl; f.modeAfter = md; f.frameAfter = fr;
+	}
+}
+
+/*
+	G3/G4/G7 for one settled step: the tuple verdict, then the per-mover NON-VACUITY
+	FLOOR THAT CAN FIRE UNDER THE MODE TESTED (nbneo0909's rule - a floor that cannot
+	fire is worse than none): a show must land exactly +1 frame; a load must leave the
+	machine Paused (its verify already says so) and, for slot 99, on the very hash
+	recorded when it was saved (the IDENTITY claim).
+*/
+static void gateStep(Rec& r, int n)
+{
+	Facts& f = r.facts;
+	const Expect e = expectOf(r.step.name);
+	std::string why;
+	int g = gateVerdict(f, e, why);
+	if (g == 0)
+	{
+		if (startsWith(r.step.name, "show:") && f.frameAfter != f.frameBefore + 1)
+		{
+			g = 1;
+			char b[96];
+			snprintf(b, sizeof(b), "vacuous: a show must step exactly one frame (%u -> %u)", f.frameBefore, f.frameAfter);
+			why = b;
+		}
+		else if (startsWith(r.step.name, "savestate: load slot 99") && st.haveHash99 && f.machineAfter != st.hash99)
+		{
+			g = 1;
+			char b[96];
+			snprintf(b, sizeof(b), "identity: loaded %08x but slot 99 was saved at %08x", f.machineAfter, st.hash99);
+			why = b;
+		}
+	}
+	if (startsWith(r.step.name, "savestate: save slot 99") && f.afterOk)
+	{
+		st.hash99 = f.machineAfter;
+		st.haveHash99 = true;
+	}
+	f.gate = g;
+	f.gateWhy = why;
+	NOTICE_LOG(RENDERER, "SURFACE TOUR: gate %d/%d \"%s\" machine=%08x->%08x movie=%016llx->%016llx expect=%s -> %s (%s)",
+			n, (int)st.steps.size(), r.step.name, f.machineBefore, f.machineAfter,
+			(unsigned long long)f.movieBefore, (unsigned long long)f.movieAfter, e.label, gateText(g), why.c_str());
+}
+
+/*
+	THE SUMMARY - nbneo-rr's flow_gates() (capture.cpp:30273-30404), in the grammar
+	lifted from tests/transport-target-check.py: two spaces, `ok  G<n>  <claim with
+	the measured count inlined>`, or `FAIL G<n>  <measured> <why>:` and one indented
+	offender per line. In their order: the guard fired (G1), every step completed
+	(G2), no mover was a no-op (G3), no UI step leaked (G4), movers landed on DISTINCT
+	states unless they declared convergence (G5), a declared convergence actually
+	converged (G5b), and enough movers were measured for G5 to have compared anything
+	(G6). Returns the number of red gates.
+*/
+static int gateSummary()
+{
+	const int n = (int)st.steps.size();
+	int settled = 0, measured = 0, movers = 0, red = 0;
+	std::vector<int> offenders;
+	for (int i = 0; i < n; i++)
+	{
+		const Rec& r = st.steps[i];
+		if (r.verdict == 1 || r.verdict == 0) settled++;
+		if (r.verdict == 2) continue;
+		if (r.facts.gate >= 0 && r.facts.gate != 3) measured++;
+		if (expectOf(r.step.name).machine == MExp::Moved && r.facts.gate == 0) movers++;
+	}
+	// G1: the guard fired. bind-guard's inversion - assert the counter reached the
+	// count FIRST, because a gate that judged nothing reports zero findings too.
+	int judged = 0;
+	for (int i = 0; i < n; i++) if (st.steps[i].verdict != 2 && st.steps[i].facts.gate >= 0) judged++;
+	if (judged == settled) NOTICE_LOG(RENDERER, "  ok  G1  the gate judged all %d settled step(s)", settled);
+	else { red++; NOTICE_LOG(RENDERER, "  FAIL G1  %d/%d settled step(s) were judged by the gate - the gate itself is decorative", judged, settled); }
+	// G2: every step completed (SKIPs are dependencies, not completions)
+	if (settled + st.skipped == n) NOTICE_LOG(RENDERER, "  ok  G2  all %d step(s) completed (%d settled, %d skipped)", n, settled, st.skipped);
+	else { red++; NOTICE_LOG(RENDERER, "  FAIL G2  %d of %d step(s) completed", settled + st.skipped, n); }
+	// G3: no-op movers
+	offenders.clear();
+	for (int i = 0; i < n; i++) if (st.steps[i].facts.gate == 1) offenders.push_back(i);
+	if (offenders.empty()) NOTICE_LOG(RENDERER, "  ok  G3  no mover changed nothing (%d mover(s) moved)", movers);
+	else
+	{
+		red++;
+		NOTICE_LOG(RENDERER, "  FAIL G3  %d/%d mover(s) pressed a verb and changed NOTHING - a no-op is a verb that did not fire:", (int)offenders.size(), movers + (int)offenders.size());
+		for (int i : offenders) NOTICE_LOG(RENDERER, "           %s   [%s]", st.steps[i].step.name, st.steps[i].facts.gateWhy.c_str());
+	}
+	// G4: leaks
+	offenders.clear();
+	for (int i = 0; i < n; i++) if (st.steps[i].facts.gate == 2) offenders.push_back(i);
+	if (offenders.empty()) NOTICE_LOG(RENDERER, "  ok  G4  no UI step leaked into the machine or the movie (%d judged)", judged);
+	else
+	{
+		red++;
+		NOTICE_LOG(RENDERER, "  FAIL G4  %d UI step(s) moved the machine or the movie - a structural verb that grew transport behaviour:", (int)offenders.size());
+		for (int i : offenders) NOTICE_LOG(RENDERER, "           %s   [%s]", st.steps[i].step.name, st.steps[i].facts.gateWhy.c_str());
+	}
+	// G5: movers land on DISTINCT states, unless they declared convergence - and a
+	// declared convergence is an ASSERTION: it must pair with another mover.
+	// A pairing candidate is a mover OR a step that declared convergence (an IDENTITY
+	// step like "load slot 99" moves nothing by construction and still has to land
+	// where another mover did - `[MEASURED 2026-09-17]` walking movers only left it
+	// unpaired and G5b red against its own partner, aa983314).
+	auto candidate = [&](int k) {
+		const Rec& r = st.steps[k];
+		const Expect e = expectOf(r.step.name);
+		return (e.machine == MExp::Moved || e.converge) && r.verdict != 2 && r.facts.gate == 0;
+	};
+	std::vector<bool> paired(n, false);
+	int distinctRed = 0;
+	for (int i = 0; i < n; i++)
+	{
+		const Rec& a = st.steps[i];
+		const Expect ea = expectOf(a.step.name);
+		if (!candidate(i)) continue;
+		for (int j = i + 1; j < n; j++)
+		{
+			const Rec& b = st.steps[j];
+			const Expect eb = expectOf(b.step.name);
+			if (!candidate(j)) continue;
+			if (a.facts.machineAfter != b.facts.machineAfter) continue;
+			if (ea.converge || eb.converge) { paired[i] = paired[j] = true; continue; }
+			if (distinctRed == 0) red++;
+			distinctRed++;
+			NOTICE_LOG(RENDERER, "  FAIL G5  steps \"%s\" and \"%s\" both declare that they move the machine and both left it at %08x - one moved nothing, or one replayed the other",
+					a.step.name, b.step.name, a.facts.machineAfter);
+		}
+	}
+	if (distinctRed == 0) NOTICE_LOG(RENDERER, "  ok  G5  every non-converging mover landed on a distinct machine (%d mover(s))", movers);
+	int loneRed = 0;
+	for (int i = 0; i < n; i++)
+	{
+		const Rec& a = st.steps[i];
+		if (!expectOf(a.step.name).converge || a.verdict == 2 || a.facts.gate != 0 || paired[i]) continue;
+		if (loneRed == 0) red++;
+		loneRed++;
+		NOTICE_LOG(RENDERER, "  FAIL G5b step \"%s\" declares it must land where another mover landed, and it left the machine at %08x, which no other mover reached",
+				a.step.name, a.facts.machineAfter);
+	}
+	if (loneRed == 0) NOTICE_LOG(RENDERER, "  ok  G5b every declared convergence paired with another mover");
+	// G6: the mover floor
+	if (movers >= 2) NOTICE_LOG(RENDERER, "  ok  G6  %d mover(s) measured, so G5 compared something", movers);
+	else { red++; NOTICE_LOG(RENDERER, "  FAIL G6  only %d mover(s) measured, so the distinctness gate compares nothing and passes by saying nothing", movers); }
+	// G7: the unmeasured count is stated, never hidden
+	if (st.unmeasured == 0) NOTICE_LOG(RENDERER, "  ok  G7  every judged step was measured on a stopped machine (%d)", measured);
+	else NOTICE_LOG(RENDERER, "  ok  G7  %d step(s) unmeasured (the machine was running at a capture) - stated, not counted", st.unmeasured);
+	return red;
+}
+
 static void finish(const char *mode)
 {
-	NOTICE_LOG(RENDERER, "SURFACE TOUR RESULT: passed=%d failed=%d skipped=%d total=%d mode=%s",
-			st.passed, st.failed, st.skipped, (int)st.steps.size(), mode);
+	const int red = gateSummary();
+	// APPEND-ONLY: the fields before mode= are what every existing extractor reads.
+	NOTICE_LOG(RENDERER, "SURFACE TOUR RESULT: passed=%d failed=%d skipped=%d total=%d mode=%s gate_ok=%d vacuous=%d leak=%d unmeasured=%d gates_red=%d",
+			st.passed, st.failed, st.skipped, (int)st.steps.size(), mode, st.gateOk, st.vacuous, st.leak, st.unmeasured, red);
 	st.phase = Phase::Done;
 }
 
@@ -534,6 +902,20 @@ static void settle(bool ok)
 	Rec& r = st.steps[st.cur];
 	r.verdict = judge(ok, r.step.optional, r.step.needsPrev, prevPassed());
 	r.why = (r.step.needsPrev && !prevPassed()) ? "previous step did not pass" : lastWhy();
+	// THE GATE, on every settled step: the ledger's right side, then the tuple verdict.
+	// A finding turns a PASS into a FAIL by name; a SKIP is left alone (nothing ran).
+	if (r.verdict != 2)
+	{
+		capture(r.facts, /*before*/ false);
+		gateStep(r, st.cur + 1);
+		const int over = applyGate(r.verdict, r.facts.gate);
+		if (over != r.verdict)
+		{
+			r.verdict = over;
+			r.why = r.facts.gateWhy;
+		}
+		if (r.facts.gate == 0) st.gateOk++; else if (r.facts.gate == 1) st.vacuous++; else if (r.facts.gate == 2) st.leak++; else st.unmeasured++;
+	}
 	if (r.verdict == 1) st.passed++; else if (r.verdict == 0) st.failed++; else st.skipped++;
 	NOTICE_LOG(RENDERER, "SURFACE TOUR: step %d/%d \"%s\" -> %s (%s)",
 			st.cur + 1, (int)st.steps.size(), r.step.name, verdictText(r.verdict), r.why.c_str());
@@ -600,9 +982,15 @@ void tick()
 			if (p != nullptr && *p->open) { *p->open = false; closed++; }
 		}
 		buildSteps();
-		NOTICE_LOG(RENDERER, "SURFACE TOUR: ready frame=%u slot0frame=%u kbd=[%s] steps=%d mode=%s (closed %d)",
+		// The machine at Setup, stated for the record. `[MEASURED 2026-09-17]` it is NOT
+		// slot 0: AutoSeekState's load lands after ready() fires (ready read frame=121,
+		// slot 0 is 9928), so "load slot 0" is a real MOVER from here, not idempotent.
+		st.haveSetupHash = oracle::machineStopped();
+		st.setupHash = st.haveSetupHash ? oracle::machineHash() : 0;
+		NOTICE_LOG(RENDERER, "SURFACE TOUR: ready frame=%u slot0frame=%u kbd=[%s] steps=%d mode=%s (closed %d) setup machine=%08x movie=%016llx",
 				dojo.frame_number.load(), st.slot0frame, rebind::keyboard()->name().c_str(),
-				(int)st.steps.size(), st.sabotage ? "sabotage" : "yes", closed);
+				(int)st.steps.size(), st.sabotage ? "sabotage" : "yes", closed, st.setupHash,
+				(unsigned long long)oracle::movieHash());
 		st.cur = 0;
 		st.t0 = now;
 		st.phase = Phase::Begin;
@@ -618,6 +1006,7 @@ void tick()
 			settle(false);
 			return;
 		}
+		capture(r.facts, /*before*/ true);		// the ledger's left side, before begin()
 		if (r.step.begin && !r.step.begin())
 		{
 			settle(false);
@@ -713,6 +1102,38 @@ void selfTest()
 			[] { for (int i = 0; i < NKEYS; i++) if ((KEYS[i].code & InputMapping::KEY_MOD_MASK) == 0) return false; return true; }());
 	claim("every key in the table maps to a registered toggle action",
 			[] { for (int i = 0; i < NKEYS; i++) if (hotkeys::panelFor(KEYS[i].action) == nullptr || strcmp(hotkeys::panelFor(KEYS[i].action), KEYS[i].panel) != 0) return false; return true; }());
+
+	// ---- the gate's pure half ----------------------------------------------------
+	{
+		Facts f;
+		f.beforeOk = f.afterOk = true;
+		f.machineBefore = f.machineAfter = 0x1111; f.movieBefore = f.movieAfter = 0x22;
+		std::string w;
+		claim("a UI step that moved nothing is ok", gateVerdict(f, expectOf("open: pianoroll"), w) == 0);
+		claim("a mover that moved nothing is VACUOUS", gateVerdict(f, expectOf("show: the branch (1 frame)"), w) == 1 && w.rfind("vacuous", 0) == 0);
+		claim("a movie-mover that left the movie alone is VACUOUS", gateVerdict(f, expectOf("snippets: place"), w) == 1);
+		f.machineAfter = 0x1112;
+		claim("a UI step that moved the machine is a LEAK", gateVerdict(f, expectOf("rebind: states -> Ctrl+F3"), w) == 2 && w.rfind("leak", 0) == 0);
+		claim("a mover that moved the machine is ok", gateVerdict(f, expectOf("show: the branch (1 frame)"), w) == 0);
+		// Vacuity is judged BEFORE leak: a show whose machine did not move is vacuous
+		// whatever the movie did. The clobber claim therefore moves the machine too.
+		f.machineAfter = 0x1112; f.movieAfter = 0x23;
+		claim("a show that moved the MOVIE is a LEAK (the WRITE-clobber, caught)", gateVerdict(f, expectOf("show: slot 99 (1 frame)"), w) == 2);
+		claim("a branch checkout does not assert the movie either way", gateVerdict(f, expectOf("branch: back to main"), w) == 0);	// machine moved, movie Any
+		f.machineAfter = 0x1111;
+		claim("...but is vacuous when the machine did not move", gateVerdict(f, expectOf("branch: back to main"), w) == 1);
+		f.beforeOk = false;
+		claim("a capture on a running machine is unmeasured, never a finding", gateVerdict(f, expectOf("show: x"), w) == 3);
+		claim("the tuple sees a window flip the hash cannot", [] { Facts g; g.panelsBefore = 1; g.panelsAfter = 3; return tupleChanged(g); }());
+		claim("a gate finding turns PASS into FAIL", applyGate(1, 1) == 0 && applyGate(1, 2) == 0);
+		claim("...never rescues a FAIL and never touches a SKIP", applyGate(0, 0) == 0 && applyGate(2, 1) == 2 && applyGate(2, 2) == 2);
+		claim("an ok gate leaves a PASS alone", applyGate(1, 0) == 1 && applyGate(1, 3) == 1);
+		claim("loads, shows and checkouts declare convergence; slot 99's show and the captures do not",
+				expectOf("load slot 0 (David's base)").converge && expectOf("show: David's base state (1 frame)").converge
+				&& expectOf("branch: checkout").converge && !expectOf("show: slot 99 (1 frame)").converge && !expectOf("captures: start").converge);
+		claim("a sender step is a UI step today (nothing reaches the machine without a step)",
+				expectOf("sender: send \"5LP _ _ 5LP\"").machine == MExp::Unchanged);
+	}
 	NOTICE_LOG(RENDERER, "SURFACE TOUR SELFTEST: %d passed, %d failed", pass, fail);
 }
 
