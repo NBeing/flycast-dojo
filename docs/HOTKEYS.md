@@ -476,3 +476,17 @@ input focus — and `xdotool search --name "Flycast"` returned nothing there, so
 window at 0,0 and the coordinates happened to land. **A UI harness can be
 half-connected and look entirely healthy.** `hotkeytest` guards this by treating
 an empty window handle as a SKIP rather than continuing.
+
+## In-panel keys `[2026-09-17]`
+
+Not hotkeys (no binding, no chord table) - ImGui shortcuts that work while the panel has focus:
+
+| panel | key | does |
+|---|---|---|
+| Piano Roll | **Ctrl+Z** / **Ctrl+Shift+Z** | undo / redo the last edit (the Undo / Redo buttons beside them; TASEditor muscle memory, David's dojo_gui.cpp:14009). An undo/redo is itself an edit and logs `ROLL UNDO\|REDO:` |
+
+The Sender's Send button now honours two options on its own row: **Wait for Frameskip** (+ `skip+N`,
+`dojo:WaitForFrameskip` / `dojo:FrameskipOffset` - the send is held until MvC2's next skip frame and
+injected at skip+N; `TAS SEND: frameskip release at frame N (...)`) and **MERGE sends** (`dojo:SendMerge`,
+seeded every boot - OR the send into the cells it lands on instead of replacing them).
+

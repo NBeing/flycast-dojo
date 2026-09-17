@@ -1301,3 +1301,21 @@ before the first tick), so the switch stays in the test-only TU and the handoff 
 `cmd.json` it sees (prime with a seq-0 query, as fixtures-check does), and a `$(send ...)`
 runs in a subshell, so the sequence number is the caller's to bump - both are now comments
 in the script.
+
+### 5.6 `[LANDED 2026-09-17]` The small ports - eight census items, seven landed, one already here
+
+docs/PORT-DEFECT-CENSUS.md "Port, small", one commit each, each measured where a surface existed:
+
+| item | commit | measured |
+|---|---|---|
+| Undo / Redo reach the user (Ctrl+Z / Ctrl+Shift+Z + buttons) | `67ac52ba3` | tour step 47/74 `roll: redo the flip + undo` PASS; `--sabotage flip` BEHAVED; RollEditProbe walks undo->redo->undo |
+| `<state>.wave` on save - **and the audio tap that feeds it** | `ce5495cc4` | thumbtest W1: 0/4 states carried a `.wave` before the tap, 4/4 after. THE FINDING: David's `audiostream.cpp:53` `tas_wave::onSample` was never ported, so `measured` stayed 0 and this tree had NEVER written an `audio.env` or a `.wave` - every consumer, no producer (one line in `core/audio`, outside the batch's file list, stated) |
+| paused sidecar autosave tick (audio.env / skip.map / .flyr tail, 2 s) | `588d7f32d` | thumbtest S1: both files present + 4 `TAS SIDECAR` lines BEFORE teardown (the sandbox copies neither) |
+| macro-save stamp on the Timeline | `346fc6bdc` | TIMELINE SELFTEST 12/12 (5 formatting claims); the failure path is measured only by WriteMacroFile's log line - the read-only-dir sandbox was not built |
+| MERGE sends (boot seed + checkbox) | `363e6c6f3` | SENDER SELFTEST 18/18 (+2: the key seeds the atomic on/off) |
+| Wait for Frameskip + skip+N + arm + release trace | `363e6c6f3` | tour step 61/74 `sender: send held for frameskip` PASS `(released; frame 9930 -> 9938)` - inside the 8 stepped frames, i.e. a skip frame (deadline +60); declared a machine+movie mover, tour 74/74 gate_ok=74 |
+| States: "live = gen NN (restored)" | `396b3c982` | a status-row text line; not separately measured (stated) |
+| `load_fail_*` (F3 on an empty slot) | - | NOT PORTED: `dc_loadstate` already warns + toasts "Save state not found" here |
+
+Rule kept: a claim that needs a surface the tree does not have is reported, not faked. selftest.sh 39 suites /
+658 claims / 0 failed; sendequivtest PASS after the Sender change; tour FLOOR 72 (74 steps).
