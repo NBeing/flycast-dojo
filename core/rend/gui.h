@@ -66,6 +66,10 @@ void gui_setOnScreenKeyboardCallback(void (*callback)(bool show));
 void gui_save();
 void gui_loadState();
 void gui_saveState();
+//! Overwriting this slot needs a HELD F1 (dojo:BaseHoldMs): slot 0 (BASE), or a
+//! slot a branch forks from - and only when a state actually exists there.
+//! `[PORTED 2026-09-17]` from the TAS fork's gui_slot_overwrite_guarded.
+bool gui_slot_overwrite_guarded(int slot);
 
 void gui_open_pause();
 void gui_open_step();

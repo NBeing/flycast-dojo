@@ -12,7 +12,10 @@
 #include "input/gamepad.h"
 #include "input/gamepad_device.h"
 #include "input/mapping.h"
+#include "input/hold_repeat.h"
 #include "oslib/oslib.h"
+#include "stdclass.h"
+#include <fstream>
 #include "cfg/cfg.h"
 #include "cfg/option.h"
 #include "log/LogManager.h"
@@ -102,6 +105,182 @@ bool statesLabelRoundTrip()
 		why("wrote=%d readback=%d restored=%d back=%d", wrote, readBack, restored, back);
 		return false;
 	}
+	return true;
+}
+
+// ---- the BASE guard (surface_tour.h v3) ----------------------------------------------
+//
+// Driven through the KEY, not a verb: injectKey presses and releases the bound
+// SAVESTATE code on the keyboard device, so the dispatch's guard (gamepad_device.cpp)
+// is what is exercised. The truth is read back two ways - the guard's own counters
+// (hotkeys::baseHoldStats) AND the slot-0 file's bytes - so a guard that counted a
+// block while the file changed, or the reverse, cannot pass.
+
+static u64 fileFnv(const std::string& p)
+{
+	std::ifstream in(p, std::ios::binary);
+	if (!in)
+		return 0;
+	u64 h = 1469598103934665603ull;
+	char buf[65536];
+	while (in.read(buf, sizeof(buf)) || in.gcount() > 0)
+		for (std::streamsize i = 0; i < in.gcount(); i++)
+			h = (h ^ (u8)buf[i]) * 1099511628211ull;
+	return h;
+}
+
+static const char *const kSlotExts[] = { "", ".frame", ".png", ".label" };
+
+//! Copy slot 0's files aside (<file>.tourbak) so the hold step can restore them:
+//! the tour's later steps (branch create, test lab add) build on David's base.
+static void backupSlot0()
+{
+	const std::string base = hostfs::getSavestatePath(0, false);
+	for (const char *ext : kSlotExts)
+	{
+		std::error_code ec;
+		const std::string src = base + ext, dst = base + ext + ".tourbak";
+		ghc::filesystem::remove(dst, ec);
+		if (exists(src))
+			ghc::filesystem::copy_file(src, dst, ec);
+	}
+}
+
+static void restoreSlot0()
+{
+	tas_thumb::flush();	// the thumbnail worker may still be writing <state>.png for the hold's save
+	const std::string base = hostfs::getSavestatePath(0, false);
+	for (const char *ext : kSlotExts)
+	{
+		std::error_code ec;
+		const std::string dst = base + ext, bak = base + ext + ".tourbak";
+		ghc::filesystem::remove(dst, ec);
+		if (exists(bak))
+			ghc::filesystem::rename(bak, dst, ec);
+	}
+}
+
+static u32 savestateKeyCode()
+{
+	const std::shared_ptr<GamepadDevice> kbd = rebind::keyboard();
+	if (kbd == nullptr || kbd->get_input_mapping() == nullptr)
+		return 0;
+	return kbd->get_input_mapping()->get_button_code(0, EMU_BTN_SAVESTATE);
+}
+
+bool baseTapBlocked()
+{
+	ensureAuthoring();
+	const std::string path = hostfs::getSavestatePath(0, false);
+	if (!exists(path))
+	{
+		why("slot 0 holds no state - nothing to guard");
+		return false;
+	}
+	const int user = (int)config::SavestateSlot;
+	setSlot(0);
+	backupSlot0();
+	const u64 before = fileFnv(path);
+	const int blocked0 = hotkeys::baseHoldStats().blocked, written0 = hotkeys::baseHoldStats().written;
+	bool sent;
+	if (surfacetour::sabotaged("base"))
+	{
+		// SABOTAGE "base": the restored defect is "F1 saves on press" - the tap writes.
+		// The read-back below (bytes + counters) is the instrument that must expose it.
+		gui_saveState();
+		sent = true;
+	}
+	else
+	{
+		const u32 code = savestateKeyCode();
+		if (code == 0) { setSlot(user); why("SAVESTATE is unbound on the keyboard"); return false; }
+		sent = surfacetour::injectKey(code);	// press + release: a TAP, well inside BaseHoldMs
+	}
+	setSlot(user);
+	if (!sent)
+	{
+		restoreSlot0();
+		return false;
+	}
+	const u64 after = fileFnv(path);
+	const int blocked = hotkeys::baseHoldStats().blocked - blocked0;
+	const int written = hotkeys::baseHoldStats().written - written0;
+	// ALWAYS restore: under the `base` arm the tap DID write, and the hold step (its
+	// own backup, no needsPrev) and every later slot-0 step must still see David's
+	// base - a sabotaged tap must not leak into the control's fixture.
+	restoreSlot0();
+	if (after != before || blocked != 1 || written != 0)
+	{
+		why("file %s, blocked=%d written=%d (want unchanged, 1, 0)", after == before ? "unchanged" : "CHANGED", blocked, written);
+		return false;
+	}
+	why("tap BLOCKED, slot 0 bytes unchanged (fnv %016llx)", (unsigned long long)before);
+	return true;
+}
+
+bool baseHoldWrites()
+{
+	// A polled hook (the runner's captures-stop shape): the first call presses and
+	// returns false; each later call polls; the call that sees the write releases the
+	// key, restores slot 0 from its own copy, and returns true. A hook-local
+	// deadline releases the key and restores on timeout, so a red step never leaves
+	// F1 down or the sandbox's slot 0 overwritten.
+	static int phase = 0;			// 0 idle, 1 held, 2 done (one-shot per tour)
+	static double pressedAt = 0;
+	static u64 before = 0;
+	static int written0 = 0, user = 0;
+	const std::string path = hostfs::getSavestatePath(0, false);
+	const int holdMs = cfgLoadInt("dojo", "BaseHoldMs", 1000);
+	if (phase == 2)
+		return true;
+	if (phase == 0)
+	{
+		ensureAuthoring();
+		if (!exists(path)) { why("slot 0 holds no state"); return false; }
+		const u32 code = savestateKeyCode();
+		const std::shared_ptr<GamepadDevice> kbd = rebind::keyboard();
+		if (code == 0 || kbd == nullptr) { why("SAVESTATE is unbound on the keyboard"); return false; }
+		user = (int)config::SavestateSlot;
+		setSlot(0);
+		backupSlot0();		// its OWN copy - this step must run (and restore) even when the tap step went red
+		before = fileFnv(path);
+		written0 = hotkeys::baseHoldStats().written;
+		kbd->gamepad_btn_input(code, true);		// press and HOLD - the release comes from the poll
+		pressedAt = os_GetSeconds();
+		phase = 1;
+		why("holding F1 (%d ms to go)", holdMs);
+		return false;
+	}
+	const int written = hotkeys::baseHoldStats().written - written0;
+	const double heldMs = (os_GetSeconds() - pressedAt) * 1000.0;
+	if (written < 1)
+	{
+		if (heldMs < holdMs + 2500.0)
+		{
+			why("holding F1 (%d of %d ms)", (int)heldMs, holdMs);
+			return false;
+		}
+		const u32 code = savestateKeyCode();
+		if (rebind::keyboard() != nullptr) rebind::keyboard()->gamepad_btn_input(code, false);
+		setSlot(user);
+		restoreSlot0();
+		phase = 2;	// do not re-press on later polls
+		why("held %d ms, the guard never wrote (written=%d)", (int)heldMs, written);
+		return false;
+	}
+	const u64 after = fileFnv(path);
+	const u32 code = savestateKeyCode();
+	if (rebind::keyboard() != nullptr) rebind::keyboard()->gamepad_btn_input(code, false);
+	setSlot(user);
+	const bool changed = after != before;
+	restoreSlot0();
+	phase = 2;
+	if (!changed)
+	{
+		why("the guard counted a write but slot 0's bytes did not change");
+		return false;
+	}
+	why("hold matured at %d ms, slot 0 rewritten (%016llx -> %016llx) then restored", (int)heldMs, (unsigned long long)before, (unsigned long long)after);
 	return true;
 }
 

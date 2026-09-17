@@ -127,6 +127,26 @@ void probeTick();
 //! translation units ask this instead of reading cfg themselves - one parser.
 bool sabotaged(const char *cls);
 
+/*
+	v3 `[2026-09-17]` - THE BASE GUARD. Additive; v1 and v2 stand.
+
+	Two hooks drive the F1 key itself through the keyboard device (the tour's
+	injectKey path), so what is exercised is the guard in the dispatch, not a
+	verb behind it:
+	  base: tap blocked   press+release F1 on slot 0 (which holds a state): the
+	                      state file is UNCHANGED and the guard counted a BLOCK
+	  base: hold writes   press F1, wait > dojo:BaseHoldMs, release: the guard
+	                      counted a WRITE and the file changed; slot 0 is then
+	                      RESTORED from the copy the tap step took
+	Class `base` (hooks): the restored defect is "F1 saves on press" - the tap
+	step calls gui_saveState() directly instead of the key; `base: tap blocked`
+	must redden, `base: hold writes` must stay green.
+*/
+namespace hooks {
+bool baseTapBlocked();
+bool baseHoldWrites();      //!< polled: act presses, verify waits for the write
+}
+
 }	// namespace surfacetour
 
 // Declared here so no track has to edit another's translation unit to reach these: both

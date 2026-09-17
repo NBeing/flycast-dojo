@@ -131,6 +131,7 @@ static const ArmDecl ARMS[] = {
 	{ "label",         "states: label round-trip",            "roll: flip a cell + undo" },
 	{ "save",          "savestate: save slot 99",             "states: label round-trip" },
 	{ "branch",        "branch: create from slot 0",          "test lab: add test from slot 0" },
+	{ "base",          "base: tap blocked",                   "base: hold writes" },
 };
 static const int NARMS = (int)(sizeof(ARMS) / sizeof(ARMS[0]));
 
@@ -203,6 +204,11 @@ static Expect expectOf(const char *name)
 	// aa983314. "Moved" is false by construction; the honest claim is IDENTITY - the
 	// loaded machine equals the hash recorded when it was saved (gateStep's floor).
 	if (startsWith(name, "savestate: load slot 99"))     return { MExp::Any,       VExp::Unchanged, true,  "identity" };
+	// The BASE guard writes (or refuses to write) a FILE; the six-member tuple does
+	// not move - the slot is set to 0 and restored inside the hook. A UI step, held
+	// to LEAK like every other; the read-back (bytes + the guard's counters) is the
+	// instrument.
+	if (startsWith(name, "base:"))                       return { MExp::Unchanged, VExp::Unchanged, false, "ui" };
 	if (startsWith(name, "roll: flip a cell + undo"))    return { MExp::Unchanged, VExp::Unchanged, false, "netzero" };
 	if (startsWith(name, "snippets: place"))             return { MExp::Unchanged, VExp::Moved,     false, "movie-mover" };
 	if (startsWith(name, "macros: place"))               return { MExp::Unchanged, VExp::Moved,     false, "movie-mover" };
@@ -713,6 +719,24 @@ static void buildSteps()
 	};
 	hook("roll: flip a cell + undo",         Kind::Click,  hooks::rollEditFlipUndo);
 	hook("states: label round-trip",         Kind::Click,  hooks::statesLabelRoundTrip);
+	// THE BASE GUARD (surface_tour.h v3): a tap on slot 0 must be BLOCKED, a hold must
+	// write. Both through the F1 key itself. The hold is POLLED (the captures-stop
+	// shape): the act presses, the verify waits for the guard to count the write,
+	// then releases and restores slot 0 from its own copy. INDEPENDENT of the tap
+	// step on purpose: it is the `base` arm's CONTROL, and a control that SKIPs when
+	// the target reddens makes the arm INCONCLUSIVE (`[MEASURED 2026-09-17]` it did,
+	// with needsPrev set here).
+	hook("base: tap blocked",                Kind::Click,  hooks::baseTapBlocked);
+	{
+		Step s;
+		s.name = "base: hold writes";
+		s.kind = Kind::Record;
+		s.needsPrev = false;
+		s.maxWaitMs = cfgLoadInt("dojo", "BaseHoldMs", 1000) + 6000;
+		s.act = [] { why(""); hooks::baseHoldWrites(); return true; };
+		s.verify = [] { return hooks::baseHoldWrites(); };
+		add(s);
+	}
 	hook("savestate: save slot 99",          Kind::Record, hooks::saveScratchSlot);
 	hook("savestate: load slot 99",          Kind::Record, hooks::loadScratchSlot, /*needsPrev*/ true);
 	show("show: slot 99 (1 frame)");
@@ -1304,9 +1328,12 @@ void selfTest()
 		claim("every other class names the one step it must redden",
 				[] { for (int i = 0; i < NARMS; i++) { const std::string c = ARMS[i].cls; if (c != "gate-can-pass" && c != "write-clobber" && ARMS[i].mustBreak[0] == '\0') return false; } return true; }());
 		claim("an unknown class resolves to nothing, never to a neighbour", armDeclOf("opens") == nullptr && armDeclOf("") == nullptr);
-		claim("the nine classes are all declared",
-				NARMS == 9 && armDeclOf("open") && armDeclOf("rebind") && armDeclOf("show") && armDeclOf("flip")
-				&& armDeclOf("label") && armDeclOf("save") && armDeclOf("branch"));
+		claim("the ten classes are all declared",
+				NARMS == 10 && armDeclOf("open") && armDeclOf("rebind") && armDeclOf("show") && armDeclOf("flip")
+				&& armDeclOf("label") && armDeclOf("save") && armDeclOf("branch") && armDeclOf("base"));
+		claim("the base arm targets the tap and controls with the hold",
+				armDeclOf("base") && strcmp(armDeclOf("base")->mustBreak, "base: tap blocked") == 0
+				&& strcmp(armDeclOf("base")->mustNotBreak, "base: hold writes") == 0);
 	}
 	NOTICE_LOG(RENDERER, "SURFACE TOUR SELFTEST: %d passed, %d failed", pass, fail);
 }

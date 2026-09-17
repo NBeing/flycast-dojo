@@ -171,10 +171,50 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 				gui_loadState();
 			break;
 		case EMU_BTN_SAVESTATE:
+			/*
+				BASE (slot 0) IS WRITE-PROTECTED, and so is a slot a branch forks
+				from. `[PORTED 2026-09-17]` docs/PORT-DEFECT-CENSUS.md #17: "Once it
+				holds a state, a plain F1 tap is rejected - F1 must be HELD for
+				BaseHoldMs (default 1 s) to overwrite it." The hold is
+				hotkeys::baseHold(); the frame loop (mainui) performs the write
+				when it matures. Every other slot saves instantly on press.
+
+				THE RELEASE IS HANDLED FIRST AND UNCONDITIONALLY (the STEP rule
+				below, verbatim) - on THIS key a swallowed release would not strand
+				a scrub, it would overwrite BASE a second later with nobody
+				touching anything. A release that cancels an immature hold IS the
+				rejected tap, and that is where it is reported.
+			*/
+			if (!pressed)
+			{
+				if (hotkeys::baseHold().release())
+				{
+					const int gslot = (int)config::SavestateSlot;
+					const int holdMs = cfgLoadInt("dojo", "BaseHoldMs", 1000);
+					hotkeys::baseHoldStats().blocked++;
+					NOTICE_LOG(INPUT, "hotkey: SAVESTATE slot %d BLOCKED - hold F1 for %d ms (%s)",
+							gslot, holdMs, gslot == 0 ? "BASE" : "a branch fork point");
+					gui_display_notification(gslot == 0 ? "Slot 0 is BASE - HOLD F1 to overwrite"
+							: "This state is a branch fork point - HOLD F1 to overwrite", 2500);
+				}
+				break;
+			}
 			// NOT WHILE TYPING. Deliberately only that - a menu being open is
 			// still fine for these four, exactly as before.
-			if (pressed && !gui_keyboard_captured())
-				gui_saveState();
+			if (gui_keyboard_captured())
+				break;
+			if (gui_slot_overwrite_guarded((int)config::SavestateSlot))
+			{
+				const int holdMs = cfgLoadInt("dojo", "BaseHoldMs", 1000);
+				if (hotkeys::baseHold().press(os_GetSeconds(), holdMs / 1000.0))
+				{
+					hotkeys::baseHoldStats().armed++;
+					NOTICE_LOG(INPUT, "hotkey: SAVESTATE slot %d hold armed - %d ms to overwrite",
+							(int)config::SavestateSlot, holdMs);
+				}
+				break;
+			}
+			gui_saveState();
 			break;
 
 		case EMU_BTN_PAUSE:

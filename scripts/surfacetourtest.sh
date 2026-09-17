@@ -60,12 +60,12 @@ ROM="${FLYCAST_TEST_ROM:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
 # default tour is 70 steps (66 + a 1-frame "show" after each of the four loads, so a
 # human actually sees the loaded picture), 2 of them optional (captures: start/stop,
 # which SKIP without a recorder), so 68 must PASS. Overridable for a partial tour.
-FLOOR="${TOUR_FLOOR:-68}"
+FLOOR="${TOUR_FLOOR:-70}"	# 72 steps since the BASE guard pair (2026-09-17); two of slack, as before
 SELF=0; WATCH=0; WATCHCLIP=""; ARM=""
 # The classes this harness knows how to judge - MIRRORS surface_tour.h v2 and is checked
 # against the runner's own `SURFACE TOUR: arms known:` line on every armed run, so the
 # two lists cannot drift silently.
-KNOWN_ARMS="open+rebind+show+write-clobber+gate-can-pass+flip+label+save+branch"
+KNOWN_ARMS="open+rebind+show+write-clobber+gate-can-pass+flip+label+save+branch+base"
 usage() { echo "usage: $0 [--self-test | --sabotage <class> | --list-sabotage | --watch <clip.flyr>]   (exit 2: usage)"; exit 2; }
 case "${1:-}" in
 	"")               ;;
@@ -276,6 +276,7 @@ if [ "$SELF" -eq 1 ]; then
 		label)         WHAT="setSlotLabel skipped, the intended label reported as written" ;;
 		save)          WHAT="the scratch save lands in slot 98 while claiming slot 99" ;;
 		branch)        WHAT="tas_branch::create skipped, the create reported as done" ;;
+		base)          WHAT="the BASE guard skipped - F1 SAVES ON PRESS, the tap step writes slot 0 through gui_saveState()" ;;
 	esac
 	# SEEN = every step that RAN (PASS or FAIL); a SKIPped control did not run, and a
 	# control that did not run cannot be "left green" (arms.lua rule 3).

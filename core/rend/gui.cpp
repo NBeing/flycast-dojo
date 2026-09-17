@@ -76,6 +76,7 @@
 #include "dojo/dojo.h"
 #include "dojo/dojo_gui.h"
 #include "dojo/net_beacon.h"
+#include "dojo/tas_branch.h"	// gui_slot_overwrite_guarded: forkSlots
 #include "dojo/thumbnail.h"
 
 #include "cheats.h"
@@ -5349,4 +5350,17 @@ void gui_open_pause()
 void gui_locked_ranges(std::vector<std::pair<u32, u32>>& out)
 {
 	out.clear();
+}
+
+// Overwriting this slot needs a held F1 (like BASE): slot 0, OR a branch fork point
+// (a state a branch hangs off as its jump-off / merge anchor - moving it desyncs the
+// branch). Only guarded when a state actually exists there. `[PORTED 2026-09-17]`
+// verbatim in meaning from David's gui.cpp; docs/PORT-DEFECT-CENSUS.md #17.
+bool gui_slot_overwrite_guarded(int slot)
+{
+	if (!file_exists(hostfs::getSavestatePath(slot, false)))
+		return false;
+	if (slot == 0)
+		return true;
+	return tas_branch::forkSlots(hostfs::savestateFolderOverride).count(slot) > 0;
 }

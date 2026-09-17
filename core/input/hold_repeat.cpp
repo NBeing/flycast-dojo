@@ -84,6 +84,63 @@ HoldRepeat& stepHold()
 	return h;
 }
 
+// ---- HoldOnce: the BASE overwrite guard ------------------------------------------
+
+bool HoldOnce::press(double now, double delay)
+{
+	if (held_)
+		return false;	// the OS repeating the key, not a new press
+	held_ = true;
+	fired_ = false;
+	pressedAt_ = now;
+	delay_ = delay < 0 ? 0 : delay;
+	return true;
+}
+
+bool HoldOnce::tick(double now)
+{
+	if (!held_ || fired_)
+		return false;
+	if (now - pressedAt_ + 1e-9 < delay_)
+		return false;
+	fired_ = true;	// EXACTLY ONCE: a held key must not overwrite BASE every frame after it matures
+	return true;
+}
+
+bool HoldOnce::release()
+{
+	// UNCONDITIONAL, like HoldRepeat::release() and for the same reason - only
+	// here a latched hold would go on to OVERWRITE BASE, not just spin a scrub.
+	const bool cancelled = held_ && !fired_;
+	held_ = false;
+	fired_ = false;
+	pressedAt_ = 0;
+	delay_ = 0;
+	return cancelled;
+}
+
+double HoldOnce::progress(double now) const
+{
+	if (!held_)
+		return 0.0;
+	if (delay_ <= 0.0)
+		return 1.0;
+	const double p = (now - pressedAt_) / delay_;
+	return p < 0.0 ? 0.0 : (p > 1.0 ? 1.0 : p);
+}
+
+HoldOnce& baseHold()
+{
+	static HoldOnce h;
+	return h;
+}
+
+BaseHoldStats& baseHoldStats()
+{
+	static BaseHoldStats s;
+	return s;
+}
+
 }	// namespace hotkeys
 
 // ---- SELF-TEST ------------------------------------------------------------
@@ -207,6 +264,70 @@ void holdRepeatSelfTest()
 	}
 
 	NOTICE_LOG(RENDERER, "HOLDREPEAT SELFTEST: %d passed, %d failed", pass, fail);
+
+	// ---- BASEHOLD: the overwrite guard's state machine, time as a parameter ----
+	// The four behaviours the rule names: a tap is rejected (and SAYS so), a hold
+	// matures once and only once, a release before maturity cancels, and the
+	// object is usable again afterwards. Every negative claim is paired with a
+	// positive one in the same fixture, for the reason the block above records.
+	int bpass = 0, bfail = 0;
+	auto bclaim = [&](const char *what, bool ok) {
+		(ok ? bpass : bfail)++;
+		NOTICE_LOG(RENDERER, "BASEHOLD SELFTEST: %s  %s", ok ? "PASS" : "FAIL", what);
+	};
+	{	// A TAP IS BLOCKED: press, release before the delay -> nothing fired, and
+		// the release reports the cancellation (that is the BLOCKED trace's source).
+		HoldOnce h;
+		const bool down = h.press(100.0, 1.0);
+		const bool early = h.tick(100.5);
+		const bool cancelled = h.release();
+		bclaim("a tap (press + release before BaseHoldMs) fires nothing and is reported BLOCKED",
+				down && !early && cancelled && !h.held());
+	}
+	{	// A HOLD MATURES ONCE. Ticked well past maturity, it fires on the first
+		// tick at/after the delay and never again - a held key must not overwrite
+		// BASE every frame.
+		HoldOnce h;
+		h.press(100.0, 1.0);
+		const bool before = h.tick(100.99);
+		const bool at = h.tick(101.0);
+		int again = 0;
+		for (int i = 1; i <= 50; i++) if (h.tick(101.0 + i * 0.1)) again++;
+		const bool cancelled = h.release();
+		bclaim("a hold fires exactly once, at maturity, and the release after it is NOT a block",
+				!before && at && again == 0 && !cancelled);
+	}
+	{	// THE OS REPEATS KEYS. A second press with no release is not a new hold
+		// and must not restart the clock (or a held F1 would never mature).
+		HoldOnce h;
+		const bool first = h.press(100.0, 1.0);
+		const bool again = h.press(100.9, 1.0);
+		const bool fired = h.tick(101.0);
+		bclaim("an OS key-repeat does not restart the hold clock", first && !again && fired);
+	}
+	{	// A LOST RELEASE IS HARMLESS, twice, and the object still works: on this
+		// hold a latch would OVERWRITE BASE, so the recovery path has teeth.
+		HoldOnce h;
+		const bool r1 = h.release();
+		const bool r2 = h.release();
+		bclaim("a release with no press, twice, blocks nothing and leaves the key usable",
+				!r1 && !r2 && !h.held() && h.press(100.0, 0.5) && h.held());
+	}
+	{	// progress() is a HUD number: 0 unheld, climbs, clamps at 1.
+		HoldOnce h;
+		const double idle = h.progress(100.0);
+		h.press(100.0, 2.0);
+		const double half = h.progress(101.0);
+		const double past = h.progress(105.0);
+		bclaim("progress reads 0 unheld, 0.5 halfway, 1 past maturity",
+				idle == 0.0 && half > 0.49 && half < 0.51 && past == 1.0);
+	}
+	{	// BaseHoldMs = 0 is "no guard": a press matures on the first tick.
+		HoldOnce h;
+		h.press(100.0, 0.0);
+		bclaim("a zero delay matures on the first tick (BaseHoldMs=0 disables the guard)", h.tick(100.0));
+	}
+	NOTICE_LOG(RENDERER, "BASEHOLD SELFTEST: %d passed, %d failed", bpass, bfail);
 }
 
 }	// namespace hotkeys

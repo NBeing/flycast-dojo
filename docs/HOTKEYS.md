@@ -156,7 +156,7 @@ is not a thing to leave off by accident."*
 | ~~`HOTKEY_HELP`~~ | **LANDED** | it was the cheapest high-value item, and it cost 3 edits |
 | `TAS_UI` — blanket show/hide | cheap per window | but it is a convention every panel must adopt |
 | `STEP` hold-to-scrub | ~65 lines | we have `gui_open_step()`; the scrub is additive |
-| `SAVESTATE` hold-to-overwrite-BASE | medium | take the slot-0 half; the fork-point half drags in a 633-line branch model |
+| ~~`SAVESTATE` hold-to-overwrite-BASE~~ | **LANDED 2026-09-17** | both halves: slot 0 (BASE) and a branch fork point (`tas_branch::forkSlots` was already here, uncalled). Once a state exists there, a plain F1 tap is BLOCKED (`hotkey: SAVESTATE slot N BLOCKED - hold F1 for M ms`); F1 HELD for `dojo:BaseHoldMs` (default 1000) overwrites it (`... written after hold`). An empty slot saves on a tap. `hotkeys::baseHold()` in `core/input/hold_repeat.h`; the tour proves both (`base: tap blocked`, `base: hold writes`), arm `base` |
 | `LOADSTATE` seek-vs-rewind | **large** | ~120 lines and it *is* the re-recording core |
 | `TOGGLE_READONLY` | **large** | a three-way cycle that is the movie mode model |
 | `INPUT_VIZ` | large, game-coupled | ~390 lines, and it reads MvC2 guest RAM |

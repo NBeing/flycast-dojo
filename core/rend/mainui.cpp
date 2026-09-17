@@ -393,6 +393,20 @@ bool mainui_rend_frame()
 				gui_open_step();
 		}
 	}
+	/*
+		THE BASE OVERWRITE HOLD MATURES HERE. `[PORTED 2026-09-17]` the dispatch only
+		ARMS it (gamepad_device.cpp, EMU_BTN_SAVESTATE); the write fires once the
+		hold has lasted dojo:BaseHoldMs, so a stray tap can never destroy the
+		combo-start bookmark. tick() answers true exactly once per hold.
+	*/
+	if (hotkeys::baseHold().tick(os_GetSeconds()))
+	{
+		hotkeys::baseHoldStats().written++;
+		NOTICE_LOG(INPUT, "hotkey: SAVESTATE slot %d written after hold (%d ms)",
+				(int)config::SavestateSlot, cfgLoadInt("dojo", "BaseHoldMs", 1000));
+		gui_display_notification("BASE overwritten", 1500);
+		gui_saveState();
+	}
 
 	roll::fst::tick();	// the Frame Skip Test sweep, if one is running
 	roll::sendequiv::tick();	// dojo:SendEquivProbe - record vs send equivalence, if armed

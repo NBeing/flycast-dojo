@@ -963,6 +963,23 @@ of either tree greps for the same thing).
 | `label` | hooks | `setSlotLabel` skipped, the intended label reported | `states: label round-trip` | `roll: flip a cell + undo` | vacuous=0 leak=0 |
 | `save` | hooks | the save lands in slot 98 while claiming 99 | `savestate: save slot 99` | `states: label round-trip` | vacuous=0 leak=0 |
 | `branch` | hooks | `tas_branch::create` skipped, reported as done | `branch: create from slot 0` | `test lab: add test from slot 0` | vacuous=0 leak=0 `[MEASURED]` (the count read-back fails the step outright) |
+| `base` | hooks | "F1 saves on press" - the tap step calls `gui_saveState()` instead of the key (the defect the BASE guard exists for; docs/PORT-DEFECT-CENSUS.md #17) | `base: tap blocked` | `base: hold writes` | the file-bytes + guard-counter read-back fails the step outright |
+
+**The BASE guard, in the tour** `[LANDED 2026-09-17]`. Slot 0 is the state every
+seek returns to, and dojo7 had no guard at all - F1 saved on press
+(docs/PORT-DEFECT-CENSUS.md #17). Ported onto `HoldRepeat`'s sibling
+`hotkeys::baseHold()` (`core/input/hold_repeat.h`): once slot 0 (or a branch fork
+point, `tas_branch::forkSlots`) holds a state, a tap is BLOCKED and a hold of
+`dojo:BaseHoldMs` (default 1000) writes, the release handled first and
+unconditionally. Two tour steps drive the F1 KEY itself (`base: tap blocked`,
+`base: hold writes` - polled, the captures-stop shape) and read the truth back two
+ways, the guard's own counters AND the slot-0 file's bytes; each restores slot 0
+from its own copy, so the `base` arm's control cannot SKIP when its target reddens
+(`[MEASURED]` it did with `needsPrev`, and the arm was INCONCLUSIVE - rule 6 again).
+Measured: 72/72, gate_ok=72; `tap BLOCKED, slot 0 bytes unchanged (fnv
+d0cca4b6cf51f23b)`; `hold matured at 2010-2047 ms, slot 0 rewritten (d0cca4b6cf51f23b
+-> 1ac7b3942bbdb65e) then restored`; arm `base` BEHAVED AS PREDICTED; `BASEHOLD
+SELFTEST: 6 passed, 0 failed`.
 
 **The exit convention is INVERTED for an armed run** (`scripts/surfacetourtest.sh
 --sabotage <cls>`; `--self-test` == `--sabotage open`; `--list-sabotage` prints

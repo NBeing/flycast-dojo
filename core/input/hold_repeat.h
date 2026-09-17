@@ -81,6 +81,54 @@ private:
 */
 HoldRepeat& stepHold();
 
+/*
+	A KEY THAT DOES NOTHING ON A TAP AND ONE THING WHEN HELD LONG ENOUGH.
+
+	The BASE overwrite guard, ported 2026-09-17 (docs/PORT-DEFECT-CENSUS.md #17).
+	`[SOURCE]` the TAS fork: "Slot 0 (BASE) is write-protected. Once it holds a
+	state, a plain F1 tap is rejected - F1 must be HELD for BaseHoldMs (default
+	1 s) to overwrite it. BASE is the state every seek returns to; losing it costs
+	a whole session." Same for a slot a branch forks from (its jump-off anchor).
+
+	The dispatch presses and releases it; the frame loop ticks it and performs the
+	write when tick() says the hold matured. A tap is a press and a release before
+	maturity: tick() never fires, and the release reports it as BLOCKED. The
+	release rule above applies verbatim - unconditional, always safe - and on
+	THIS hold a swallowed release would not strand a scrub, it would overwrite
+	BASE a second later with nobody touching anything.
+*/
+class HoldOnce
+{
+public:
+	//! A key went down; `delay` seconds from `now` the hold matures. Returns
+	//! true for a fresh press, false for an OS repeat of a press already held.
+	bool press(double now, double delay);
+	//! Time passed. Returns true EXACTLY ONCE per hold, when it matures.
+	bool tick(double now);
+	//! The key came up. Returns true when this release CANCELLED an immature
+	//! hold (a tap) - the caller reports that as BLOCKED. Unconditional.
+	bool release();
+	bool held() const { return held_; }
+	bool matured() const { return held_ && fired_; }
+	//! 0..1 of the way to maturity, for a HUD bar; 0 when not held.
+	double progress(double now) const;
+
+private:
+	bool   held_ = false;
+	bool   fired_ = false;
+	double pressedAt_ = 0;
+	double delay_ = 0;
+};
+
+//! The BASE / fork-point overwrite hold. `dojo:BaseHoldMs` (default 1000) is
+//! read at each press, so the TAS menu can change it live.
+HoldOnce& baseHold();
+
+//! What the guard has done this process - the tour reads these back to prove a
+//! tap was BLOCKED and a hold WROTE, instead of trusting the log.
+struct BaseHoldStats { int blocked = 0; int armed = 0; int written = 0; };
+BaseHoldStats& baseHoldStats();
+
 //! Runs under dojo:PanelSelfTest, like the other seams in this tree.
 void holdRepeatSelfTest();
 
