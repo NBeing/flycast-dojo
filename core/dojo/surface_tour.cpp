@@ -67,6 +67,46 @@ static int clampArmMs(int ms) { return ms < 200 ? 200 : ms; }
 //! The sabotage: the same key with Shift held is a chord nothing is bound to.
 static u32 sabotageCode(u32 code) { return code | InputMapping::KEY_MOD_SHIFT; }
 
+/*
+	SABOTAGE CLASSES (surface_tour.h v2). `sabotage[:<cls>[+<cls>...]]` - '+' because
+	the -config parser cuts a value at the first comma; bare "sabotage" == "open" so
+	the existing twin keeps its meaning. Pure, so selfTest can cover the grammar.
+*/
+static std::vector<std::string> parseSabotage(const std::string& mode)
+{
+	std::vector<std::string> out;
+	if (mode == "sabotage")
+	{
+		out.push_back("open");
+		return out;
+	}
+	const std::string pfx = "sabotage:";
+	if (mode.compare(0, pfx.size(), pfx) != 0)
+		return out;
+	std::string cur;
+	for (size_t i = pfx.size(); i <= mode.size(); i++)
+	{
+		if (i == mode.size() || mode[i] == '+')
+		{
+			if (!cur.empty()) out.push_back(cur);
+			cur.clear();
+		}
+		else
+			cur += mode[i];
+	}
+	return out;
+}
+
+static std::vector<std::string> g_sabotage;		//!< the armed classes, parsed once in init()
+
+bool sabotaged(const char *cls)
+{
+	for (const std::string& c : g_sabotage)
+		if (c == cls)
+			return true;
+	return false;
+}
+
 //! Verdict rules, in precedence: needsPrev -> SKIP; optional+false -> SKIP; else PASS/FAIL.
 static int judge(bool ok, bool optional, bool needsPrev, bool prevPassed)
 {
@@ -889,7 +929,7 @@ static void abort(const char *reason)
 {
 	NOTICE_LOG(RENDERER, "SURFACE TOUR: aborted - %s", reason);
 	restore();
-	finish(st.sabotage ? "sabotage" : "yes");
+	finish(g_sabotage.empty() ? "yes" : "sabotage");
 }
 
 static bool prevPassed()
@@ -930,7 +970,16 @@ static void init()
 	st.inited = true;
 	const std::string mode = cfgLoadStr("dojo", "SurfaceTour", "");
 	st.enabled = !(mode.empty() || mode == "no");
-	st.sabotage = (mode == "sabotage");
+	// v2: sabotage classes. The runner's own "open" arm keeps its bool; every other
+	// arm asks sabotaged("<class>") where it lives (a hook in its feature's TU).
+	g_sabotage = parseSabotage(mode);
+	st.sabotage = sabotaged("open");
+	if (!g_sabotage.empty())
+	{
+		std::string all;
+		for (const std::string& c : g_sabotage) all += (all.empty() ? "" : "+") + c;
+		NOTICE_LOG(RENDERER, "SURFACE TOUR: sabotage armed: %s", all.c_str());
+	}
 	st.slow = cfgLoadBool("dojo", "TourSlow", false);
 	st.bpmMs = cfgLoadInt("dojo", "TourBpmMs", 1000);
 	st.recordMs = cfgLoadInt("dojo", "TourRecordMs", 2000);
@@ -989,7 +1038,7 @@ void tick()
 		st.setupHash = st.haveSetupHash ? oracle::machineHash() : 0;
 		NOTICE_LOG(RENDERER, "SURFACE TOUR: ready frame=%u slot0frame=%u kbd=[%s] steps=%d mode=%s (closed %d) setup machine=%08x movie=%016llx",
 				dojo.frame_number.load(), st.slot0frame, rebind::keyboard()->name().c_str(),
-				(int)st.steps.size(), st.sabotage ? "sabotage" : "yes", closed, st.setupHash,
+				(int)st.steps.size(), g_sabotage.empty() ? "yes" : "sabotage", closed, st.setupHash,
 				(unsigned long long)oracle::movieHash());
 		st.cur = 0;
 		st.t0 = now;
@@ -1070,7 +1119,7 @@ void tick()
 
 	case Phase::Restore:
 		restore();
-		finish(st.sabotage ? "sabotage" : "yes");
+		finish(g_sabotage.empty() ? "yes" : "sabotage");
 		return;
 
 	default:

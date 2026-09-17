@@ -97,6 +97,36 @@ bool exportDone();                                // surface_tour_hooks.cpp (bex
 void probeTick();
 }
 
+/*
+	v2 `[2026-09-17]` - SABOTAGE CLASSES. Additive; every v1 signature above stands.
+
+	dojo:SurfaceTour=sabotage[:<class>[+<class>...]]   ('+', because the -config
+	parser cuts a value at the first comma; bare "sabotage" == "open").
+
+	An arm is a RESTORED DEFECT that shipped or was measured, never an invention,
+	and it lives in the tour's own step table or hook - NEVER behind a switch in a
+	feature's shipping code (that would ship a way to turn the guard off). Each
+	arm names the ONE step it must redden and the steps that must stay green; the
+	harness judges it with the lifted arms.lua rules (applied / broke its target /
+	left its control green and the control RAN) and INCONCLUSIVE when the target
+	never ran. The machine/movie hash oracle itself has NO named sabotage - it is
+	falsified by a hand edit, once, and recorded.
+
+	Classes (the runner logs `SURFACE TOUR: sabotage armed: <classes>` at start):
+	  open           wrong chord on the piano roll's open       (runner)
+	  rebind         press inside the engine's 0.2 s deaf window (runner)
+	  show           skip the 1-frame step, fake frame+1         (runner)
+	  write-clobber  run the feature phase in WRITE              (runner) - measure first
+	  gate-can-pass  break nothing: the whole gate must go GREEN (runner)
+	  flip           build the roll edit, skip ApplyEdit          (roll_panel.cpp hook)
+	  label          skip setSlotLabel, report the intended label (hooks)
+	  save           save to slot 98, claim 99                    (hooks)
+	  branch         skip tas_branch::create, verify the root     (hooks)
+*/
+//! True when the tour was started with that sabotage class armed. Hooks in other
+//! translation units ask this instead of reading cfg themselves - one parser.
+bool sabotaged(const char *cls);
+
 }	// namespace surfacetour
 
 // Declared here so no track has to edit another's translation unit to reach these: both
