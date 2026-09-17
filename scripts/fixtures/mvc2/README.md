@@ -11,7 +11,7 @@ and the graph the first machine claim is checked against.
 | `snippets/fastVS_mcp.txt` | the same + LK x4 at 634..637 (the stage pick) -> the char-select globe | F1: 697 frames / `442574011190bd6b` |
 | `snippets/library.json` | David's index of his snippet library, copied verbatim | NOT pinned - its `fastVS_mcp` entry is stale (633 / `4db6bf…`); F1 prints that as a note |
 | `charselect_nodes.json` | David's char-select node graph (cardinals emulator-verified) | the `[charselect]` section of the RECIPE |
-| `vmu_save_A1.bin` | David's VMU. **The fixture is the ROM and the VMU**: a fresh sandbox's empty card opens the game on "Press the Start button to create a file" and every seed press lands one screen late | V1: 131072 bytes / md5 `08baab93cdd2f4fcea3e8bf8d199d3ca`; staged into `<XDG_DATA_HOME>/flycast-dojo/` before F4 boots |
+| `vmu_save_A1.bin` | The card, MADE by `fixtures-check --make-vmu` (this build, one Start on the create-save prompt, accepted only if F4 passes on it; byte-deterministic). **The fixture is the ROM and the VMU**: a fresh sandbox's empty card opens the game on "Press the Start button to create a file" and every seed press lands one screen late | V1: 131072 bytes / md5 `de5110ca408f30398762c1b32ad8881d`; staged into `<XDG_DATA_HOME>/flycast-dojo/` before F4 boots |
 | `candidates/Combo_Dhalsim97_pcsx2_macro.txt` | David's PS2-converted candidate; markers 4212-5699. A CANDIDATE by provenance - a fixture only because the hunt observed it connect (peak 19) | F1: 6707 frames / `2cbafba30a4c25fc`; `scripts/combohunttest.sh` H1-H6 |
 
 ## Running

@@ -42,6 +42,10 @@
 #   ROMS:  --verify-roms - the ROM at $FLYCAST_TEST_ROM (default David's NoBGM_VMU.cdi) is
 #          present and its size + sha256 are the RECIPE's [rom] pins (three copies exist on
 #          this machine; identity is the bytes, never the name).
+#   MAKE:  --make-vmu - the card is a RECIPE, not an artifact: boot this build with an EMPTY
+#          card, press Start on the create-save prompt, accept the card only if F4 passes on
+#          it, then copy it into the tree and rewrite the [vmu] pins. REFUSED over an existing
+#          card unless FIXTURES_REGENERATE=iknow (a pin is a pin). Exit 0/1/2/77.
 #   REGEN: --regenerate - REFUSED unless FIXTURES_REGENERATE=iknow. Recomputes only the
 #          no-emulator pins (snippet frames/hashes, spreadsheet md5), prints every
 #          before/after, and never touches a result field: those are the hunt's.
@@ -66,12 +70,13 @@ SPREADSHEET_MD5_CONST="23c1827fc4fe3b04313ee8c944565b20"	# the copy's md5 the da
 ARMS="$ROOT/scripts/lib/arms.sh"
 KNOWN_ARMS="hash recipe charselect vmu"
 
-usage() { echo "usage: $0 [--verify-roms | --regenerate | --list-sabotage | --sabotage <class> | --self-test | --no-emu]   (exit 2: usage)"; exit 2; }
+usage() { echo "usage: $0 [--verify-roms | --regenerate | --make-vmu | --list-sabotage | --sabotage <class> | --self-test | --no-emu]   (exit 2: usage)"; exit 2; }
 MODE=check; ARM=""; NOEMU=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--verify-roms) MODE=roms ;;
 		--regenerate) MODE=regen ;;
+		--make-vmu) MODE=makevmu ;;
 		--list-sabotage) MODE=list ;;
 		--sabotage) shift; [ $# -gt 0 ] || usage; ARM="$1" ;;
 		--self-test) ARM=hash ;;
@@ -317,41 +322,33 @@ else claim F3 FAIL "vocabulary: SPREADSHEET.json md5 $m, RECIPE $wm, copy $SPREA
 # The fixture is the ROM AND the VMU: David's seeds presume a card that already holds the
 # MvC2 save. Absent => the whole run is SKIP (a fixture input is missing), like a missing seed.
 VMU="$FIX/$(py get "$RECIPE" vmu file)"
-[ -f "$VMU" ] || { echo "fixtures-check: SKIP - fixture input absent: $VMU"; exit $SKIP; }
+[ -f "$VMU" ] || [ "$MODE" = makevmu ] || { echo "fixtures-check: SKIP - fixture input absent: $VMU"; exit $SKIP; }
+if [ "$MODE" = makevmu ] && [ ! -f "$VMU" ]; then echo "  V1 skipped: no card yet - --make-vmu makes it"; else
 vm=$(py md5 "$VMU"); wvm=$(py get "$RECIPE" vmu md5); vsz=$(stat -c %s "$VMU"); wvsz=$(py get "$RECIPE" vmu size)
 if [ "$vm" = "$wvm" ] && [ "$vsz" = "$wvsz" ]; then claim V1 ok "vmu: $(basename "$VMU") $vsz bytes md5 $vm == RECIPE [vmu] pins"
 else claim V1 FAIL "vmu: $(basename "$VMU") $vsz bytes md5 $vm, RECIPE $wvsz / $wvm"; fi
+fi
 
-# ---- F4 charselect (emulator) --------------------------------------------------------------
-f4() {
-	[ "$NOEMU" -eq 0 ] || { claim F4 SKIP "charselect: --no-emu"; return; }
-	[ -x "$EXE" ] || { claim F4 SKIP "charselect: not built ($EXE)"; return; }
-	[ -f "$ROM" ] || { claim F4 SKIP "charselect: no ROM ($ROM)"; return; }
-	command -v Xvfb >/dev/null || { claim F4 SKIP "charselect: no Xvfb"; return; }
+# ---- the sandbox (shared by F4 and --make-vmu) ---------------------------------------------
+# sandbox_up <seed.txt> <vmu-file-or-empty> : a fresh RECORD boot (the seed needs power-on
+# frame 0), Training so step lands frame-exact (ctltest), the control server on an explicit
+# CtlDir so no clip is needed. Sets FC XPID BASE LOG D; on failure sets WHY and returns 1.
+# The card: staged from <vmu-file> into the sandbox's XDG_DATA_HOME, or left EMPTY when "".
+sandbox_up() {
+	local seed="$1" vmu="$2"
+	WHY=""
+	[ -x "$EXE" ] || { WHY="not built ($EXE)"; return 1; }
+	[ -f "$ROM" ] || { WHY="no ROM ($ROM)"; return 1; }
+	command -v Xvfb >/dev/null || { WHY="no Xvfb"; return 1; }
 	if [ -n "$(find "$ROOT/core" -newer "$EXE" -name '*.cpp' -o -newer "$EXE" -name '*.h' 2>/dev/null | head -1)" ]; then
-		claim F4 SKIP "charselect: refusing to report on a stale binary (rebuild flycast)"; return; fi
-	local globe="$FIX/$(py get "$RECIPE" base globe_seed)" settle start_id via_id expect_id path press cursor
-	settle=$(py get "$RECIPE" charselect settle); start_id=$(py get "$RECIPE" charselect start_id)
-	via_id=$(py get "$RECIPE" charselect via_id); expect_id="${EXPECT_OVERRIDE:-$(py get "$RECIPE" charselect expect_id)}"
-	path=$(py get "$RECIPE" charselect path); press=$(py get "$RECIPE" charselect press)
-	cursor=$(py addr "$SPREADSHEET" "$(py get "$RECIPE" vocabulary cursor_field)" P1_A)	# resolved by NAME, never typed here
-	[ -f "$globe" ] || { claim F4 SKIP "charselect: globe seed absent ($globe)"; return; }
-	# the seed the emulator plays: the globe seed + settle neutral frames; the handoff pause lands
-	# on the last line, ON the globe, and the walk is injected live from there.
-	local seed="$OUT/seed.txt" n
-	{ cat "$globe"; for _ in $(seq 1 "$settle"); do echo "."; done; } > "$seed"
-	read -r n _ < <(py hash "$seed")
-
+		WHY="refusing to report on a stale binary (rebuild flycast)"; return 1; fi
+	rm -rf "$OUT/cfg" "$OUT/data" "$OUT/ctl"
 	mkdir -p "$OUT/cfg/flycast-dojo" "$OUT/data/flycast-dojo" "$OUT/ctl/_ctl/resp"
-	# stage the VMU (V1's pinned image) where the sandboxed emulator will look for its card;
-	# the `vmu` arm leaves the sandbox's card EMPTY and the seed must fail to reach the globe.
-	if [ "$NOVMU" -eq 0 ]; then cp "$VMU" "$OUT/data/flycast-dojo/$(basename "$VMU")"; fi
-	local DN=$((172 + ($$ % 60))); while [ -e "/tmp/.X11-unix/X$DN" ] || [ -e "/tmp/.X$DN-lock" ]; do DN=$((DN+1)); [ "$DN" -gt 260 ] && { claim F4 SKIP "charselect: no free display"; return; }; done
-	local D=":$DN"
-	nohup Xvfb "$D" -screen 0 900x700x24 >"$OUT/xvfb.log" 2>&1 & local XPID=$!; sleep 2
-	[ -e "/tmp/.X11-unix/X$DN" ] || { kill "$XPID" 2>/dev/null; claim F4 SKIP "charselect: Xvfb did not come up on $D"; return; }
-	# a fresh RECORD boot (the seed needs power-on frame 0), Training so step lands frame-exact
-	# (ctltest), the control server on an explicit CtlDir so no clip is needed.
+	[ -n "$vmu" ] && cp "$vmu" "$OUT/data/flycast-dojo/vmu_save_A1.bin"
+	local DN=$((172 + ($$ % 60))); while [ -e "/tmp/.X11-unix/X$DN" ] || [ -e "/tmp/.X$DN-lock" ]; do DN=$((DN+1)); [ "$DN" -gt 260 ] && { WHY="no free display"; return 1; }; done
+	D=":$DN"
+	nohup Xvfb "$D" -screen 0 900x700x24 >"$OUT/xvfb.log" 2>&1 & XPID=$!; sleep 2
+	[ -e "/tmp/.X11-unix/X$DN" ] || { kill "$XPID" 2>/dev/null; WHY="Xvfb did not come up on $D"; return 1; }
 	XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 		-config dojo:UiIni=no -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
 		-config dojo:Training=yes -config dojo:RecordMatches=yes -config dojo:Replay=no \
@@ -359,69 +356,139 @@ f4() {
 		-config "dojo:OnEnterFile=$seed" \
 		-config dojo:ControlServer=yes -config "dojo:CtlDir=$OUT/ctl" \
 		-config window:width=900 -config window:height=700 -config window:fullscreen=no \
-		"$ROM" > "$OUT/out.log" 2>&1 & local FC=$!
-	local BASE="$OUT/ctl/_ctl" LOG="$OUT/out.log"
-	teardown() { kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
-	logged() { tr -d '\0' < "$LOG" | grep -a -- "$1" > /dev/null; }
-	send() {	# send <seq> <verb> <args-json> -> resp json on stdout (ctltest's client, verbatim)
-		local seq="$1" verb="$2" args="${3:-{\}}" i
-		printf '{"seq":%s,"verb":"%s","args":%s}\n' "$seq" "$verb" "$args" > "$BASE/cmd.json.tmp"
-		mv -f "$BASE/cmd.json.tmp" "$BASE/cmd.json"
-		for i in $(seq 1 100); do
-			[ -f "$BASE/resp/$seq.json" ] && { cat "$BASE/resp/$seq.json"; return 0; }
-			kill -0 "$FC" 2>/dev/null || return 1
-			sleep 0.2
-		done
-		return 1
-	}
-	field() { python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d.get(sys.argv[2]))" "$1" "$2" 2>/dev/null; }
-
-	# (a) the seed must be SEEDED - the one engine trace that says the boot plays it.
-	local i seeded=0
-	for i in $(seq 1 80); do kill -0 "$FC" 2>/dev/null || break; logged "TAS ONENTER: seeded" && { seeded=1; break; }; logged "gui_start_game" && [ "$i" -gt 30 ] && break; sleep 0.5; done
-	if [ "$seeded" -eq 0 ]; then
-		teardown
-		if logged "gui_start_game"; then
-			claim F4 SKIP "charselect: the OnEnter seed is NOT WIRED in this build - the game booted but never logged 'TAS ONENTER: seeded' (Dojo::SeedOnEnter exists; gui.cpp never calls it - David's gui.cpp:1072 does, after the Play-Macro branch)"
-		else claim F4 SKIP "charselect: the emulator never reached gui_start_game ($(tr -d '\0' < "$LOG" | grep -a -c '' ) log lines)"; fi
-		return
-	fi
-	# (b) the handoff pause: paused at frame >= the seed length (fast-forwarded through the boot).
+		"$ROM" > "$OUT/out.log" 2>&1 & FC=$!
+	BASE="$OUT/ctl/_ctl"; LOG="$OUT/out.log"
+	return 0
+}
+teardown() { kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
+logged() { tr -d '\0' < "$LOG" | grep -a -- "$1" > /dev/null; }
+send() {	# send <seq> <verb> <args-json> -> resp json on stdout (ctltest's client, verbatim)
+	local seq="$1" verb="$2" args="${3:-{\}}" i
+	printf '{"seq":%s,"verb":"%s","args":%s}\n' "$seq" "$verb" "$args" > "$BASE/cmd.json.tmp"
+	mv -f "$BASE/cmd.json.tmp" "$BASE/cmd.json"
+	for i in $(seq 1 100); do
+		[ -f "$BASE/resp/$seq.json" ] && { cat "$BASE/resp/$seq.json"; return 0; }
+		kill -0 "$FC" 2>/dev/null || return 1
+		sleep 0.2
+	done
+	return 1
+}
+field() { python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d.get(sys.argv[2]))" "$1" "$2" 2>/dev/null; }
+# wait_seeded : the seed must be SEEDED - the one engine trace that says the boot plays it.
+# Returns 1 with WHY when it never is (the binary is not OnEnter-wired, or no boot at all).
+wait_seeded() {
+	local i
+	for i in $(seq 1 80); do kill -0 "$FC" 2>/dev/null || break; logged "TAS ONENTER: seeded" && return 0; logged "gui_start_game" && [ "$i" -gt 30 ] && break; sleep 0.5; done
+	if logged "gui_start_game"; then
+		WHY="the OnEnter seed is NOT WIRED in this build - the game booted but never logged 'TAS ONENTER: seeded' (Dojo::SeedOnEnter exists; gui.cpp never calls it - David's gui.cpp:1072 does, after the Play-Macro branch)"
+	else WHY="the emulator never reached gui_start_game ($(tr -d '\0' < "$LOG" | grep -a -c '' ) log lines)"; fi
+	return 1
+}
+# wait_handoff <n> : the handoff pause - paused at frame >= the seed length (fast-forwarded
+# through the boot). Leaves SEQ at the next free sequence number. Returns 1 with WHY.
+wait_handoff() {
+	local n="$1" i r fr paused=False
 	printf '{"seq":0,"verb":"query","args":{}}\n' > "$BASE/cmd.json.tmp"; mv -f "$BASE/cmd.json.tmp" "$BASE/cmd.json"; sleep 2
-	local seq=1 r fr paused=False
+	SEQ=1
 	for i in $(seq 1 120); do
-		r=$(send $seq query "{}") || { teardown; claim F4 SKIP "charselect: control server not answering (seq $seq)"; return; }; seq=$((seq+1))
+		r=$(send $SEQ query "{}") || { WHY="control server not answering (seq $SEQ)"; return 1; }; SEQ=$((SEQ+1))
 		fr=$(field "$r" frame); paused=$(field "$r" paused)
-		[ "$paused" = True ] && [ "${fr:-0}" -ge "$n" ] && break
+		[ "$paused" = True ] && [ "${fr:-0}" -ge "$n" ] && return 0
 		sleep 1
 	done
-	if [ "$paused" != True ] || [ "${fr:-0}" -lt "$n" ]; then teardown; claim F4 SKIP "charselect: no handoff pause at frame >= $n (paused=$paused frame=$fr)"; return; fi
-	# (c) READ-WRITE so injected cells DRIVE the guest (the seed only borrows it; a Record Movie handoff restores WRITE).
-	r=$(send $seq set_mode '{"mode":"READWRITE"}'); seq=$((seq+1)); local mode; mode=$(field "$r" mode)
-	rd() { local a; a=$(send $seq read "{\"addr\":\"$cursor\",\"width\":1}"); seq=$((seq+1)); field "$a" value; }
-	local v0 v1 v2 f
+	WHY="no handoff pause at frame >= $n (paused=$paused frame=$fr)"; return 1
+}
+# press <p1-canon-bits> <hold-frames> <step-frames> : one press at the current frame, then step.
+press() {
+	local r f
+	r=$(send $SEQ query "{}"); SEQ=$((SEQ+1)); f=$(field "$r" frame)
+	send $SEQ input "{\"p1\":$1,\"frame\":$f,\"hold\":$2}" >/dev/null; SEQ=$((SEQ+1))
+	send $SEQ step "{\"n\":$3}" >/dev/null; SEQ=$((SEQ+1))
+}
+
+# ---- F4 charselect (emulator) --------------------------------------------------------------
+f4() {
+	[ "$NOEMU" -eq 0 ] || { claim F4 SKIP "charselect: --no-emu"; return; }
+	local globe="$FIX/$(py get "$RECIPE" base globe_seed)" settle start_id via_id expect_id path press_dir cursor
+	settle=$(py get "$RECIPE" charselect settle); start_id=$(py get "$RECIPE" charselect start_id)
+	via_id=$(py get "$RECIPE" charselect via_id); expect_id="${EXPECT_OVERRIDE:-$(py get "$RECIPE" charselect expect_id)}"
+	path=$(py get "$RECIPE" charselect path); press_dir=$(py get "$RECIPE" charselect press)
+	cursor=$(py addr "$SPREADSHEET" "$(py get "$RECIPE" vocabulary cursor_field)" P1_A)	# resolved by NAME, never typed here
+	[ -f "$globe" ] || { claim F4 SKIP "charselect: globe seed absent ($globe)"; return; }
+	# the seed the emulator plays: the globe seed + settle neutral frames; the handoff pause lands
+	# on the last line, ON the globe, and the walk is injected live from there.
+	local seed="$OUT/seed.txt" n
+	{ cat "$globe"; for _ in $(seq 1 "$settle"); do echo "."; done; } > "$seed"
+	read -r n _ < <(py hash "$seed")
+	# the card: V1's pinned image (or the caller's, for --make-vmu); the `vmu` arm leaves the
+	# sandbox's card EMPTY and the seed must fail to reach the globe.
+	local card="$VMU"; [ "$NOVMU" -eq 0 ] || card=""
+	sandbox_up "$seed" "$card" || { claim F4 SKIP "charselect: $WHY"; return; }
+	wait_seeded || { teardown; claim F4 SKIP "charselect: $WHY"; return; }
+	wait_handoff "$n" || { teardown; claim F4 SKIP "charselect: $WHY"; return; }
+	# READ-WRITE so injected cells DRIVE the guest (the seed only borrows it; a Record Movie handoff restores WRITE).
+	local r mode; r=$(send $SEQ set_mode '{"mode":"READWRITE"}'); SEQ=$((SEQ+1)); mode=$(field "$r" mode)
+	rd() { local a; a=$(send $SEQ read "{\"addr\":\"$cursor\",\"width\":1}"); SEQ=$((SEQ+1)); field "$a" value; }
+	local v0 v1 v2 d
 	v0=$(rd)
 	# the walk: each press is ONE frame (press-edge; a held direction moves once), then a gap frame.
 	local bits; declare -A bits=([U]=1 [D]=2 [L]=4 [R]=8)
-	for d in ${path//,/ }; do
-		r=$(send $seq query "{}"); seq=$((seq+1)); f=$(field "$r" frame)
-		send $seq input "{\"p1\":${bits[$d]},\"frame\":$f,\"hold\":1}" >/dev/null; seq=$((seq+1))
-		send $seq step '{"n":3}' >/dev/null; seq=$((seq+1))
-	done
+	for d in ${path//,/ }; do press "${bits[$d]}" 1 3; done
 	v1=$(rd)
-	r=$(send $seq query "{}"); seq=$((seq+1)); f=$(field "$r" frame)
-	send $seq input "{\"p1\":${bits[$press]},\"frame\":$f,\"hold\":1}" >/dev/null; seq=$((seq+1))
-	send $seq step '{"n":6}' >/dev/null; seq=$((seq+1))
+	press "${bits[$press_dir]}" 1 6
 	v2=$(rd)
 	tr -d '\0' < "$LOG" | grep -a "CTL: \|TAS ONENTER" | tail -4 | sed 's/^/       /'
 	teardown
-	local m="globe=$v0 (want $start_id) after $path=$v1 (want $via_id) after $press=$v2 (want $expect_id) mode=$mode seed=$n frames @$cursor"
+	local m="globe=$v0 (want $start_id) after $path=$v1 (want $via_id) after $press_dir=$v2 (want $expect_id) mode=$mode seed=$n frames @$cursor"
 	if [ "$v0" = "$start_id" ] && [ "$v1" = "$via_id" ] && [ "$v2" = "$expect_id" ]; then
 		claim F4 ok "charselect: ID_2 $v0 -> $v1 -> $v2 == RubyHeart -> Venom -> Hulk ($m)"
 	elif [ "$v0" != "$start_id" ]; then
 		claim F4 FAIL "charselect: never reached the globe - $m"
 	else claim F4 FAIL "charselect: the cursor did not go where the graph predicts - $m"; fi
 }
+
+# ---- --make-vmu (emulator) -----------------------------------------------------------------
+# THE RECIPE, NOT THE ARTIFACT. `[MEASURED 2026-09-17]` an empty card boots the game onto
+# "A Memory Card with 5 blocks of empty space is required for save. Press the Start button
+# to create a file." (frame ~118 of a reios boot); ONE Start there prints "A file has been
+# created." and the card is written (md5 e72afc.. -> de5110..); no confirm screen. So the
+# card is made HERE, by this build, from nothing: boot with an EMPTY card under a 130-frame
+# neutral seed (the handoff pause lands on the prompt), press Start, step past the write,
+# stop. It is ACCEPTED only if F4 passes on it - a card that does not carry the seeds to the
+# globe is not the fixture - and only then copied into the tree and pinned by bytes.
+make_vmu() {
+	local dest="$FIX/vmu_save_A1.bin"
+	echo "fixtures-check --make-vmu: the card is made by this build (one Start on the create-save prompt), then F4 must pass on it"
+	if [ -f "$dest" ] && [ "${FIXTURES_REGENERATE:-}" != "iknow" ]; then
+		echo "REFUSED - $dest exists and it is a PIN. NEVER REGENERATE TO MAKE A RED GATE GREEN; set FIXTURES_REGENERATE=iknow to remake it and SAY WHY in the commit (exit 2)"; return 2; fi
+	local seed="$OUT/neutral130.txt"; for _ in $(seq 1 130); do echo "."; done > "$seed"
+	sandbox_up "$seed" "" || { echo "fixtures-check --make-vmu: SKIP - $WHY"; return $SKIP; }
+	wait_seeded || { teardown; echo "fixtures-check --make-vmu: SKIP - $WHY"; return $SKIP; }
+	wait_handoff 130 || { teardown; echo "fixtures-check --make-vmu: SKIP - $WHY"; return $SKIP; }
+	local card="$OUT/data/flycast-dojo/vmu_save_A1.bin" before after
+	before=$(py md5 "$card")
+	send $SEQ set_mode '{"mode":"READWRITE"}' >/dev/null; SEQ=$((SEQ+1))
+	press 256 3 330		# Start (CANON_START = 1<<8), held 3 frames; 330 frames covers the write and the fade
+	sleep 2; teardown
+	after=$(py md5 "$card")
+	echo "  card: empty $before -> after one Start $after ($(stat -c %s "$card") bytes)"
+	[ "$before" != "$after" ] || { echo "FAIL fixtures-check --make-vmu - the card did not change: the Start never created the file (exit 1)"; return 1; }
+	cp "$card" "$OUT/made_vmu.bin"
+	# ACCEPTANCE: F4 on the made card, before anything touches the tree.
+	VMU="$OUT/made_vmu.bin"; NOVMU=0
+	f4
+	if [ "$FAILED" -ne 0 ] || grep -aq '^F4$' "$SKIPIDS"; then
+		echo "FAIL fixtures-check --make-vmu - F4 did not pass on the made card; nothing written (exit 1)"; return 1; fi
+	local old="(none)"; [ -f "$dest" ] && old="$(py md5 "$dest")"
+	cp "$OUT/made_vmu.bin" "$dest"
+	local sz; sz=$(stat -c %s "$dest")
+	py setpin "$RECIPE" "$OUT/r1.toml" vmu.size "$sz" \
+		&& py setpin "$OUT/r1.toml" "$OUT/r2.toml" vmu.md5 "\"$after\"" \
+		&& py setpin "$OUT/r2.toml" "$RECIPE" vmu.source "\"fixtures-check --make-vmu ($(date +%F)): this build, one Start on the create-save prompt, accepted by F4\""
+	echo "fixtures-check --make-vmu: wrote $dest ($sz bytes) md5 $old -> $after; RECIPE [vmu] pins rewritten - review the diff and SAY WHY in the commit"
+	return 0
+}
+if [ "$MODE" = makevmu ]; then make_vmu; exit $?; fi
 f4
 
 echo "FIXTURES RESULT: passed=$PASSED failed=$FAILED skipped=$SKIPPED unmeasured=$UNMEASURED"

@@ -36,12 +36,16 @@ game_dir = "Marvel vs. Capcom 2 (USA)"
 # showed the VMU prompt ("A Memory Card with 5 blocks ... Press the Start button to
 # create a file") - a sandbox's fresh XDG_DATA_HOME has an EMPTY VMU, the whole
 # menu flow shifts one screen, and every seed press lands on the wrong screen.
-# David's seeds presume his VMU already holds the MvC2 save. Staged into
-# <XDG_DATA_HOME>/flycast-dojo/ before boot; pinned by bytes.
+# David's seeds presume a card that already holds the MvC2 save. The card is a
+# RECIPE, not an artifact: `fixtures-check --make-vmu` boots THIS build on an empty
+# card, presses Start once on the prompt ("A file has been created."), accepts the
+# card only if F4 passes on it, and pins it by bytes. `[MEASURED 2026-09-17]` two
+# makes gave the same md5 - the card is byte-deterministic. Staged into
+# <XDG_DATA_HOME>/flycast-dojo/ before boot.
 file   = "vmu_save_A1.bin"
-size   = 131072
-md5    = "08baab93cdd2f4fcea3e8bf8d199d3ca"
-source = "davids_fly/0915/flycast-rr/build/data/vmu_save_A1.bin"
+size = 131072
+md5 = "de5110ca408f30398762c1b32ad8881d"
+source = "fixtures-check --make-vmu (2026-09-17): this build, one Start on the create-save prompt, accepted by F4"
 
 [vocabulary]
 # David's DC-verified address vocabulary. Every address the fixture reads is

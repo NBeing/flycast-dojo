@@ -942,6 +942,12 @@ of either tree greps for the same thing).
    of the arm is a separate, per-class check (below) - because the gate is the
    second instrument, and an arm that the gate files under the wrong verdict is
    an arm that only one instrument caught.
+6. An arm makes its own precondition true - it never borrows it from the
+   fixture's current state. `[MEASURED 2026-09-17]` `fixtures-check --sabotage
+   recipe` claimed "a fake pin with no measured_on" but only faked the pin; it
+   was green while `measured_on` happened to be empty, and the day the hunt
+   filled it the arm broke nothing (ctest `can_fail_recipe`, exit 4). Both
+   halves of the lie are now the arm's own doing.
 
 **The classes** - `dojo:SurfaceTour=sabotage[:<cls>[+<cls>]]` (`+`, because the
 `-config` parser cuts at the first comma; bare `sabotage` == `open`):
@@ -1031,8 +1037,10 @@ the hunt itself is Track A's, `5de4a3875`/`1b3d9b901`):
   emuapi's exploration loop on the FST's ceremony, swept over the four phases.
 - `core/dojo/mvc2_data/SPREADSHEET.json` - the oracle's NAMES, md5-pinned; the
   combo byte is resolved BY NAME (`TAS MVC2: combo oracle by NAME - …`).
-- `scripts/fixtures/mvc2/vmu_save_A1.bin` - David's VMU (131072 bytes, md5
-  `08baab93…`). **The fixture is the ROM AND the VMU** (below).
+- `scripts/fixtures/mvc2/vmu_save_A1.bin` - the card, MADE by `fixtures-check
+  --make-vmu` (131072 bytes, md5 `de5110…`; byte-deterministic across makes).
+  **The fixture is the ROM AND the VMU** (below). It was David's card for one
+  commit (`7b0bac068`, md5 `08baab93…`); a recipe replaced the artifact.
 - `scripts/fixtures/mvc2/candidates/Combo_Dhalsim97_pcsx2_macro.txt` - David's
   PS2-converted candidate (6707 frames, `seqHashMacro` `2cbafba30a4c25fc`, markers
   4212-5699): a CANDIDATE by provenance, a fixture only because the hunt observed
@@ -1076,7 +1084,7 @@ the hunt itself is Track A's, `5de4a3875`/`1b3d9b901`):
 | F1 parity | ok | both seeds and the candidate match the pins; `library.json` says `fastVS_mcp` is 633 / `4db6bf…` - a STALE INDEX (the file grew by LK x4 at 634..637, the stage pick). The RECIPE pins the file, not the index - this is the failure the check exists for |
 | F2 honest | ok | 34 shape/name claims; 0 fields unmeasured (10 the day it was written) |
 | F3 md5 | ok | `23c1827fc4fe3b04313ee8c944565b20` |
-| V1 vmu | ok | `vmu_save_A1.bin` 131072 bytes, md5 `08baab93cdd2f4fcea3e8bf8d199d3ca` |
+| V1 vmu | ok | `vmu_save_A1.bin` 131072 bytes, md5 `de5110ca408f30398762c1b32ad8881d` - made by `--make-vmu` (one Start on the create-save prompt; accepted only because F4 passed on it; two makes identical) |
 | F4 charselect | **ok** | `ID_2 19 -> 14 -> 13 == RubyHeart -> Venom -> Hulk (… mode=READWRITE seed=742 frames @0x2C268341)` - the first time this tree predicted what the game would do and read it back. Two things had to land first (below): the `SeedOnEnter` wire and the VMU |
 | arm `hash` | fired | F1 red, F3 green - BEHAVED AS PREDICTED (exit 0) |
 | arm `recipe` | fired | F2 red, F1 green - BEHAVED (exit 0) |
