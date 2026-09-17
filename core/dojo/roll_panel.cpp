@@ -1260,8 +1260,19 @@ bool surfacetour::hooks::rollEditFlipUndo()
 	const s64 first = dojo.ApplyEdit(e, "tour: roll flip");
 	const bool changed = rowOf(f) != before;
 	const bool grew    = dojo.undo_stack.size() > depth;
-	const bool undone  = dojo.ApplyUndo();
-	const bool restored = rowOf(f) == before;
+	/*
+		SABOTAGE "flip" (surface_tour.h v2): the restored defect is an UNDO that silently
+		does nothing while reporting success - the hook skips ApplyUndo and says undone.
+		The hook LIES; the gate must catch it. WHY THE UNDO AND NOT THE FLIP: the runner's
+		expectation for this step is movie NET-ZERO (flip then undo leaves the movie as it
+		was). A skipped FLIP also leaves the movie as it was - net-zero cannot tell a
+		flip-then-undo from nothing-at-all, so that arm would be invisible to the gate. A
+		skipped UNDO leaves the flipped row in the movie: the movie hash moves, the
+		net-zero expectation reddens the step. That is the arm the gate can see.
+	*/
+	const bool lie = surfacetour::sabotaged("flip");
+	const bool undone  = lie ? true : dojo.ApplyUndo();
+	const bool restored = lie ? true : (rowOf(f) == before);
 	if (!(changed && grew && undone && restored))
 	{
 		surfacetour::why("frame=%u first=%lld changed=%d grew=%d undone=%d restored=%d",

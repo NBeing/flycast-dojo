@@ -2256,14 +2256,21 @@ add_test(NAME flycast.surfacetourtest
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh)
 set_tests_properties(flycast.surfacetourtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 
-# ITS ARM. SurfaceTour=sabotage injects the WRONG chord on the very first open step,
-# so `PANEL TOGGLE: pianoroll -> open` never appears. The twin exits 0 iff that step
-# FAILED by name while every one of the 14 rebinds still PASSED - the tour reddens
-# at the claim, not the setup. A wrong chord that still "opened" a window is a tour
-# that proves nothing.
-add_test(NAME flycast.surfacetourtest_can_fail
-	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh --self-test)
-set_tests_properties(flycast.surfacetourtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+# ITS ARMS. `--sabotage <class>` restores ONE measured defect (surface_tour.h v2 lists
+# the classes; `scripts/surfacetourtest.sh --list-sabotage` prints them) and the twin
+# exits 0 iff the tour reddened exactly where that defect predicts: the arm APPLIED,
+# it broke the step it targets, and it LEFT its control step green - the lifted
+# arms.lua rules (scripts/lib/arms.sh). Exit 4 = the arm failed to fire, the gate is
+# decorative; exit 2 = INCONCLUSIVE (the target never ran). `open` is the item-1 arm
+# (wrong chord on the piano roll's open); `gate-can-pass` breaks nothing and demands
+# the whole gate go green, so an arm can never pass by reddening everything. The
+# other classes (rebind, show, write-clobber) run on demand - write-clobber is
+# inconclusive-by-design on a fixture where the phase does not clobber.
+foreach(arm open flip save branch gate-can-pass)
+	add_test(NAME flycast.surfacetourtest_can_fail_${arm}
+		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh --sabotage ${arm})
+	set_tests_properties(flycast.surfacetourtest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+endforeach()
 
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually

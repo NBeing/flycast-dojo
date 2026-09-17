@@ -5,6 +5,7 @@
 #include "session.h"
 #include "tas_branch.h"
 #include "tas_clip.h"
+#include "thumbnail.h"
 #include "branch_export.h"
 #include "rend/gui.h"
 #include "rend/video_recorder.h"
@@ -87,7 +88,10 @@ bool statesLabelRoundTrip()
 	}
 	const std::string was = v0.label;
 	const char *want = "tour label";
-	const bool wrote = h->setSlotLabel(0, want);
+	// SABOTAGE "label" (surface_tour.h v2): the restored defect is a sidecar write that
+	// silently did nothing - setSlotLabel is skipped and reports success. The read-back
+	// through slotView stays HONEST; it is the instrument that must expose the defect.
+	const bool wrote = surfacetour::sabotaged("label") ? true : h->setSlotLabel(0, want);
 	SlotView v1;
 	const bool readBack = h->slotView(0, v1) && v1.label == want;
 	const bool restored = h->setSlotLabel(0, was);
@@ -107,9 +111,27 @@ bool saveScratchSlot()
 {
 	ensureAuthoring();
 	const int user = (int)config::SavestateSlot;
-	setSlot(kScratchSlot);
+	// SABOTAGE "save" (surface_tour.h v2): the restored defect is a save that lands in
+	// the WRONG slot (98) while the step claims 99. The file check at 99 below is the
+	// honest instrument; it must expose the defect. The stray 98 is removed here so the
+	// sandbox never carries a state the tour did not mean to leave.
+	const bool wrongSlot = surfacetour::sabotaged("save");
+	setSlot(wrongSlot ? kScratchSlot - 1 : kScratchSlot);
 	gui_saveState();				// synchronous while Paused: dc_savestate runs before it returns
 	setSlot(user);
+	if (wrongSlot)
+	{
+		// `[MEASURED 2026-09-17]` the thumbnail is encoded on a worker thread, so a remove
+		// that runs straight after gui_saveState races it and a stray <state>.png lands a
+		// moment later (and the branch step then copies it). Drain the worker first.
+		tas_thumb::flush();
+		const std::string stray = hostfs::getSavestatePath(kScratchSlot - 1, false);
+		for (const char *ext : { "", ".frame", ".png", ".label" })
+		{
+			std::error_code ec;
+			ghc::filesystem::remove(stray + ext, ec);
+		}
+	}
 	const std::string path = hostfs::getSavestatePath(kScratchSlot, false);
 	if (!exists(path))
 	{
@@ -248,10 +270,29 @@ bool branchCreate()
 		return false;
 	}
 	g_root = head;
-	g_branchDir = tas_branch::create(head, 0, v.frame, "tour", "tour", "surface tour");
-	if (g_branchDir.empty() || !exists(g_branchDir))
+	// READ BACK THE BRANCH COUNT, not just the returned path: a create that silently
+	// did nothing and handed back an existing dir would read as success otherwise.
+	const std::string bdir = head + "/branches";
+	auto countBranches = [&]() {
+		size_t n = 0;
+		std::error_code ec;
+		if (ghc::filesystem::is_directory(bdir, ec))
+			for (const auto& e : ghc::filesystem::directory_iterator(bdir, ec))
+				if (e.is_directory(ec)) n++;
+		return n;
+	};
+	const size_t nBefore = countBranches();
+	// SABOTAGE "branch" (surface_tour.h v2): the restored defect is a create that silently
+	// does nothing. The count read-back is the honest instrument that must expose it;
+	// checkout/back then SKIP via needsPrev.
+	if (surfacetour::sabotaged("branch"))
+		g_branchDir.clear();
+	else
+		g_branchDir = tas_branch::create(head, 0, v.frame, "tour", "tour", "surface tour");
+	const size_t nAfter = countBranches();
+	if (nAfter <= nBefore || g_branchDir.empty() || !exists(g_branchDir))
 	{
-		why("create returned '%s'", g_branchDir.c_str());
+		why("branches %zu -> %zu, create returned '%s'", nBefore, nAfter, g_branchDir.c_str());
 		return false;
 	}
 	return true;

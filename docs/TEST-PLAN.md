@@ -913,6 +913,105 @@ its fixture. Nothing exists today that lands a combo: no clip, state, macro or
 manifest on this machine records the combo byte >= 1, and David's own notes
 say his PASS "verifies the infrastructure, not that hits connect".
 
+### 5.2 `[LANDED 2026-09-17]` Sabotage per module - one restored defect per class
+
+Item 1 had one arm (the wrong chord on the piano roll's open). One arm proves
+one guard. This item gives every guard class its own arm and ONE judge, so a
+guard that goes decorative is caught by name, and so the judge itself is the
+same one emuapi already uses (`arms.lua:119-160`, lifted byte-for-byte into
+`scripts/lib/arms.sh` - same three rules, same lines, same markers, so a reader
+of either tree greps for the same thing).
+
+**The arm rules** (surface_tour.h v2, the frozen contract):
+
+1. An arm is a RESTORED DEFECT that shipped or was measured, never an invention.
+2. It lives in the tour's step table or hook - NEVER behind a switch in a
+   feature's shipping code (that would ship a way to turn the guard off).
+   Hooks in other translation units ask `surfacetour::sabotaged("<cls>")`; one
+   parser, in the runner.
+3. Each arm names the ONE step it must redden and ONE control step that must
+   stay green - and the control must have RUN (a SKIPped control did not run;
+   arms.lua rule 3). The runner declares both on the log
+   (`SURFACE TOUR: arm <cls> must_break="…" must_not_break="…"`) and lists what it
+   knows (`SURFACE TOUR: arms known: …`); the harness checks its own list against
+   that line and falls back to a table, loudly, only if a declaration is absent.
+4. The machine/movie hash oracle has NO named sabotage - it is falsified by a
+   hand edit, once, and recorded (§5.1).
+5. Vacuity is not an input to the judge under an arm: a run that is supposed to
+   be broken has no business reporting on its own coverage. What the GATE made
+   of the arm is a separate, per-class check (below) - because the gate is the
+   second instrument, and an arm that the gate files under the wrong verdict is
+   an arm that only one instrument caught.
+
+**The classes** - `dojo:SurfaceTour=sabotage[:<cls>[+<cls>]]` (`+`, because the
+`-config` parser cuts at the first comma; bare `sabotage` == `open`):
+
+| class | where | the restored defect | must_break | must_not_break | gate signature |
+|---|---|---|---|---|---|
+| `open` | runner | wrong chord on the piano roll's open | `open: pianoroll` | `rebind: pianoroll -> Ctrl+F1` | vacuous=0 leak=0 (a FAIL, not a vacuity) |
+| `rebind` | runner | press inside the engine's 0.2 s deaf window | `rebind: macros -> Alt+F6` | `rebind: snippets -> Alt+F5` | vacuous=0 leak=0 |
+| `show` | runner | skip the 1-frame step, fake frame+1 | `show: David's base state (1 frame)` | `load slot 0 (David's base)` | **vacuous >= 1** `[MEASURED, Track A]` - a mover that moved nothing; G3 IS the second catch |
+| `write-clobber` | runner | run the feature phase in WRITE | `show: slot 99 (1 frame)` | `savestate: load slot 99` | inconclusive-by-design on a fixture the phase does not clobber -> exit 2 |
+| `gate-can-pass` | runner | NOTHING - the inverse arm | (none) | `open: pianoroll` | the WHOLE gate green: failed=0, vacuous=0 leak=0, gate_ok >= floor, no `FAIL G` in the runner's block; else exit 4 |
+| `flip` | roll_panel.cpp hook | the UNDO is skipped while reporting success | `roll: flip a cell + undo` | `states: label round-trip` | **leak >= 1** `[MEASURED]` - see below |
+| `label` | hooks | `setSlotLabel` skipped, the intended label reported | `states: label round-trip` | `roll: flip a cell + undo` | vacuous=0 leak=0 |
+| `save` | hooks | the save lands in slot 98 while claiming 99 | `savestate: save slot 99` | `states: label round-trip` | vacuous=0 leak=0 |
+| `branch` | hooks | `tas_branch::create` skipped, reported as done | `branch: create from slot 0` | `test lab: add test from slot 0` | vacuous=0 leak=0 `[MEASURED]` (the count read-back fails the step outright) |
+
+**The exit convention is INVERTED for an armed run** (`scripts/surfacetourtest.sh
+--sabotage <cls>`; `--self-test` == `--sabotage open`; `--list-sabotage` prints
+the classes): **0** the arm fired as predicted (`SABOTAGE BEHAVED AS PREDICTED`) ·
+**4** it FAILED TO FIRE - the target stayed green, the guard is decorative ·
+**2** INCONCLUSIVE - the target never ran, or inconclusive-by-design
+(`SABOTAGE INCONCLUSIVE`) · **1** it fired but BROKE ITS CONTROL (a demolition,
+not a measurement) or the tally lies (`SABOTAGE DID NOT BEHAVE AS PREDICTED: N`)
+· **5** no gate on the RESULT line · **77** SKIP, never confused with any of these.
+ctest registers `flycast.surfacetourtest_can_fail_{open,flip,save,branch,gate-can-pass}`;
+the rest run on demand.
+
+**`[MEASURED 2026-09-17]` flip must skip the UNDO, not the flip.** The header's
+one-line sketch says "build the roll edit, skip ApplyEdit". Measured against the
+gate, that arm would be caught only by the hook's own `changed` read-back, and
+the gate would see a step that moved nothing - a vacuity, the weakest verdict.
+The runner's expectation for `roll: flip a cell + undo` is movie NET-ZERO and
+machine unchanged. Skipping the UNDO instead (and lying `undone=restored=true`)
+leaves the flipped row in the movie, the movie hash moves, and the gate reddens
+the step as a leak - the log line is
+`step 46/70 "roll: flip a cell + undo" -> FAIL (leak: the movie moved under a
+step that must leave it alone)`, RESULT `failed=1 gate_ok=69 vacuous=0 leak=1`.
+So for this class `leak >= 1` is the arm WORKING and the harness requires it;
+`leak=0` would mean the row was undone after all, or the oracle is not looking
+at the movie. It is the one arm whose signature is a leak rather than a FAIL.
+
+**Measured, one line per arm, all against the runner's own declarations:**
+
+- `open`: `step 6/70 "open: pianoroll" -> FAIL (open=false captured=no)`, close
+  SKIPped, `failed=1 gate_ok=69 vacuous=0 leak=0`; 14/14 rebinds PASSED.
+- `flip`: as above; the label round-trip (control) PASSED.
+- `label`: `step 47/70 "states: label round-trip" -> FAIL (wrote=1 readback=0
+  restored=1 back=1)` - the honest read-back exposes the lie; `failed=1 gate_ok=70
+  vacuous=0 leak=0`; the flip+undo (control) PASSED.
+- `save`: `step 48/70 "savestate: save slot 99" -> FAIL (no file at …_99.state)`,
+  load/show 99 SKIP via needsPrev, and `step 70/70 "savestate: delete slot 99"
+  -> FAIL (nothing to delete …)` - an honest downstream consequence, not a second
+  arm; `failed=2 gate_ok=68 vacuous=0 leak=0`. No stray `*_98.state*` in the
+  sandbox after the run: the thumbnail worker is drained (`tas_thumb::flush()`)
+  before the stray is removed, because without that the `.state.png` landed a
+  moment after the remove and the branch step copied it.
+- `branch`: `step 61/70 "branch: create from slot 0" -> FAIL (branches 0 -> 0,
+  create returned '')`, checkout/show/back/show SKIP via needsPrev; `failed=1
+  gate_ok=66 vacuous=0 leak=0`. Side effect worth knowing: with the branch
+  checkout and return skipped, `load slot 0 (David's base)` loses its convergence
+  partner and the runner's own G5b goes red (`gates_red=1`) - a true reading of
+  a tour that skipped four steps, and not what the arm is judged on.
+- unarmed: still `passed=70 failed=0 gate_ok=70 vacuous=0 leak=0`, all eight
+  harness gates ok.
+
+**Deviations from the header's sketch, both toward a stronger instrument:**
+`flip` skips the undo, not the edit (above); `branch` reads back the COUNT of
+`<clip>/branches/*` before and after the create rather than "verifying the root
+exists" - a root that exists proves nothing about a create that did nothing.
+
 ## Two disciplines that are not optional
 
 **Every check must be able to fail, and be seen to fail once.** At tiers 0–1
