@@ -35,6 +35,8 @@
 #include "dojo/hotkey_bind.h"
 #include "dojo/surface_tour.h"
 #include "dojo/combohunt.h"
+#include "dojo/tas_wave.h"
+#include "dojo/tas_ruler.h"
 #include "oslib/oslib.h"
 #include "wsi/context.h"
 #include "cfg/option.h"
@@ -358,6 +360,42 @@ static void loadProbe()
 			before, afterLoad, afterLoad != before ? "LOADED" : "NO CHANGE");
 }
 
+// Sidecar autosave while PAUSED (lifted from David's gui.cpp:4197-4220, 2026-09-17; docs/PORT-
+// DEFECT-CENSUS.md §2 - measuredFrames/seenFrames were defined for this and never read). Every
+// 2 s of pause: the waveform (audio.env) and the skip map (skip.map) when they changed, and the
+// un-batched TAIL of the .flyr (a recording appends every 120 frames and on every edit; the
+// < 120-frame tail was teardown-only). A crash then costs seconds, not the session. Off the
+// wall clock, not the frame counter - pause is exactly when the frame counter stops.
+static void sidecarAutosaveTick()
+{
+	static u32 lastWave = ~0u, lastSkip = ~0u;
+	static double lastAt = 0;
+	if (gui_state != GuiState::Paused || hostfs::savestateFolderOverride.empty())
+		return;
+	const double now = os_GetSeconds();
+	if (now - lastAt < 2.0)
+		return;
+	lastAt = now;
+	int wrote = 0;
+	const u32 wv = tas_wave::version();
+	if (wv != lastWave && tas_wave::measuredFrames() > 0)
+	{
+		if (tas_wave::saveClip(hostfs::savestateFolderOverride)) wrote |= 1;
+		lastWave = wv;
+	}
+	const u32 sv = tas_ruler::version();
+	if (sv != lastSkip && tas_ruler::seenFrames() > 0)
+	{
+		if (tas_ruler::saveClip(hostfs::savestateFolderOverride)) wrote |= 2;
+		lastSkip = sv;
+	}
+	if (dojo.recording_started && dojo.replay.HasAppendTarget())
+		dojo.replay.FlushReplay();	// no-op unless a partial batch is pending
+	if (wrote)
+		NOTICE_LOG(NETWORK, "TAS SIDECAR: autosave while paused -> %s%s (frame %u)",
+				(wrote & 1) ? "audio.env " : "", (wrote & 2) ? "skip.map" : "", dojo.frame_number.load());
+}
+
 bool mainui_rend_frame()
 {
 	FC_PROFILE_SCOPE;
@@ -408,6 +446,7 @@ bool mainui_rend_frame()
 		gui_saveState();
 	}
 
+	sidecarAutosaveTick();	// paused: audio.env / skip.map / the .flyr tail, every 2 s (crash insurance)
 	roll::fst::tick();	// the Frame Skip Test sweep, if one is running
 	roll::sendequiv::tick();	// dojo:SendEquivProbe - record vs send equivalence, if armed
 	roll::rebind::probeTick();	// dojo:RebindProbe - rebind-persists-a-restart, if armed

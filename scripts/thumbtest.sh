@@ -75,7 +75,12 @@ XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	"$ROM" > "$OUT/out.log" 2>&1 & FC=$!
 cleanup() { kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
 for _ in $(seq 1 150); do kill -0 "$FC" 2>/dev/null || break; tr -d '\0' < "$OUT/out.log" | grep -aq "TAS FST RUN: results ->" && break; sleep 1; done
-sleep 2
+# S1 (2026-09-17): the paused sidecar autosave tick. The sandbox copies NO audio.env / skip.map,
+# so their presence BEFORE teardown is the tick's doing, not the teardown flush's. The FST
+# sweep ends Paused; the tick fires every 2 s of pause, so wait 5.
+sleep 5
+S1_ENV=0; S1_MAP=0; [ -s "$OUT/clip/audio.env" ] && S1_ENV=1; [ -s "$OUT/clip/skip.map" ] && S1_MAP=1
+S1_LOG=$(tr -d '\0' < "$OUT/out.log" | grep -a -c 'TAS SIDECAR: autosave while paused')
 cleanup; sleep 1
 
 tr -d '\0' < "$OUT/out.log" | grep -a "TAS thumb\|TAS FST RUN: results" | sed 's/.*: //' | tail -4 | sed 's/^/  /'
@@ -110,6 +115,18 @@ if [ "$bad" -ne 0 ]; then
 	echo "FAIL thumbtest - $bad/$N thumbnail(s) blank or undersized (a well-formed blank PNG is the PBO-never-advanced bug)"
 	exit 1
 fi
+
+# W1 (2026-09-17): every state the sweep wrote has its <state>.wave sidecar beside it - the
+# audio leading up to the state (tas_wave::writeStateSnapshot, defined and never called until
+# now: docs/PORT-DEFECT-CENSUS.md §2). Only the states this run wrote (*_[0-9].state) count.
+wmiss=0; wn=0
+for st in "$OUT/clip"/*_[0-9].state; do [ -f "$st" ] || continue; wn=$((wn+1)); [ -s "$st.wave" ] || { wmiss=$((wmiss+1)); echo "  no .wave beside $(basename "$st")"; }; done
+if [ "$wn" -eq 0 ]; then echo "FAIL thumbtest - W1: the sweep wrote no *_N.state to check for .wave sidecars"; exit 1; fi
+if [ "$wmiss" -ne 0 ]; then echo "FAIL thumbtest - W1: $wmiss/$wn state(s) have no .wave sidecar"; exit 1; fi
+echo "  W1 ok: $wn/$wn state(s) carry a .wave sidecar"
+# S1: see above - the files existed while the emulator was still alive and paused.
+if [ "$S1_ENV" -eq 1 ] && [ "$S1_MAP" -eq 1 ] && [ "$S1_LOG" -ge 1 ]; then echo "  S1 ok: audio.env + skip.map written by the paused autosave tick before teardown ($S1_LOG tick log line(s))"
+else echo "FAIL thumbtest - S1: paused autosave tick did not write both sidecars before teardown (audio.env=$S1_ENV skip.map=$S1_MAP tick_logs=$S1_LOG)"; exit 1; fi
 
 # DISPLAY WIRING: the F4 States grid must be able to GET a thumbnail handle for an
 # occupied slot through the host (the "remaining half" states_panel flagged). The
