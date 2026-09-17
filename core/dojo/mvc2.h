@@ -1,6 +1,7 @@
 #pragma once
 #include "types.h"
 #include <string>
+#include <vector>
 
 // T1 of the scripted-input roadmap: the MvC2 (Dreamcast) memory probe.
 //
@@ -63,6 +64,16 @@ namespace tas_mvc2
 	void comboPeakReset();
 	u16 comboLast(int player);	// 0 = P1, 1 = P2
 	u16 comboPeak(int player);
+
+	// THE COMBO SERIES - David's comboSample (0915 testrun.cpp: `{frame, p1, p2}` per sampled
+	// frame into manifest.json) lifted onto the emulator loop: comboPoll appends a sample on
+	// every CHANGE of either meter since comboSeriesReset(), frame-stamped. On change rather
+	// than every frame, so it is bounded (4096) and a 1500-frame run stays a few dozen rows;
+	// a reader that wants "the meter at frame f" holds the last sample at or before f. Take it
+	// while the machine is stopped (a copy) - the hunt writes it per candidate.
+	struct ComboSample { u32 frame; u16 p1, p2; };
+	void comboSeriesReset();
+	std::vector<ComboSample> comboSeriesTake();
 
 	// Generic work-RAM read (Demul 2C.. or flycast 8C.. address; width 1/2/4), for the
 	// control server's `read` verb. `[PORTED 2026-09-15]` from dev's 0915 tree.

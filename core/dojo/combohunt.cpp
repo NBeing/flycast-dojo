@@ -41,8 +41,9 @@
 	             Dhalsim97 is the intended one); the window is the file's own
 	             "CLIP LIKELY BEGINS/ENDS HERE" markers (trust the markers, not
 	             the burst heuristic), overridable by dojo:ComboHuntWindow=a-b
-	  singles    LP HP LK HK, each held 2 frames, x delay d in 0..3
-	each swept over phase 0..3 (blank rows inserted at base+1, the FST's axis).
+	  singles    LP HP LK HK, each held 2 frames, at t0 offsets 0..6 (a single
+	             blanks its window, so phase pin and delay collapse - measured)
+	movie and macro swept over phase 0..3 (blank rows at base+1, the FST's axis).
 
 	dojo:ComboHunt = yes | all | movie | macro | singles
 	  yes      every candidate, stop at the first found=yes
@@ -71,7 +72,7 @@ struct Outcome
 	u32 hash = 0;
 	u32 frames = 0;
 	u32 t0 = 0;
-	std::vector<std::pair<u32, u16>> series;	// (frame, P1 combo) on change - David's comboSample shape
+	std::vector<tas_mvc2::ComboSample> series;	// the meters on change, from the emulator loop (mvc2.h)
 };
 
 struct State
@@ -212,14 +213,13 @@ void buildCandidates()
 	st.cands.clear();
 	const bool every = st.mode == "yes" || st.mode == "all";
 	auto push = [&](const Candidate& base) {
-		for (int d = 0; d <= (base.cls == "singles" ? 3 : 0); d++)
-			for (int ph = 0; ph < 4; ph++)
-			{
-				Candidate c = base;
-				c.d = d;
-				c.phase = ph;
-				st.cands.push_back(c);
-			}
+		for (int ph = 0; ph < 4; ph++)
+		{
+			Candidate c = base;
+			c.d = 0;
+			c.phase = ph;
+			st.cands.push_back(c);
+		}
 	};
 	if (every || st.mode == "movie")
 	{
@@ -253,7 +253,17 @@ void buildCandidates()
 			c.p1 = { b.canon, b.canon };
 			c.p2 = { 0, 0 };
 			c.run = 60;
-			push(c);
+			// PHASE AND DELAY COLLAPSE FOR A SINGLE. `[MEASURED 2026-09-17]` phase=1,d=0
+			// and phase=0,d=1 ended on the same hash (57DC1EEB) - a single blanks its
+			// window, so the phase pin's inserted blanks and the delay are the same
+			// thing: press later. 4x4 was 16 runs of 7 outcomes. Sweep t0 once.
+			for (int k = 0; k <= 6; k++)
+			{
+				Candidate v = c;
+				v.phase = std::min(k, 3);
+				v.d = k - v.phase;
+				st.cands.push_back(v);
+			}
 		}
 	}
 }
@@ -336,7 +346,7 @@ void writeResults()
 		e["machineHash"] = o.hash;
 		nlohmann::json series = nlohmann::json::array();
 		for (const auto& s : o.series)
-			series.push_back({ { "frame", s.first }, { "p1", s.second } });
+			series.push_back({ { "frame", s.frame }, { "p1", s.p1 }, { "p2", s.p2 } });
 		e["combo"] = series;
 		cands.push_back(e);
 	}
@@ -484,9 +494,9 @@ void tick()
 		dojo.stale_tail_from = ~0u;
 		dojo.macro_armed = true;
 		tas_mvc2::comboPeakReset();
+		tas_mvc2::comboSeriesReset();
 		Outcome& o = st.out[st.cur];
 		o.t0 = t0Of(c);
-		o.series.clear();
 		st.stopFrame = o.t0 + (u32)c.p1.size() + c.run;
 		{
 			const u32 fr = dojo.frame_number.load();
@@ -497,12 +507,8 @@ void tick()
 		st.at = now;
 		return;
 	}
-	case 3:		// run to the stop frame, sampling the counter on change
+	case 3:		// run to the stop frame (the series records itself on the emulator loop)
 	{
-		Outcome& o = st.out[st.cur];
-		const u16 last = tas_mvc2::comboLast(0);
-		if (o.series.empty() ? last != 0 : o.series.back().second != last)
-			o.series.push_back({ dojo.frame_number.load(), last });
 		if (gui_state == GuiState::Paused)
 		{
 			if (dojo.frame_number.load() >= st.stopFrame)
@@ -526,6 +532,7 @@ void tick()
 		o.peak2 = tas_mvc2::comboPeak(1);
 		o.hash = oracle::machineHash();
 		o.frames = dojo.frame_number.load() - st.baseFrame;
+		o.series = tas_mvc2::comboSeriesTake();
 		NOTICE_LOG(NETWORK, "COMBO HUNT: candidate %s phase=%d d=%d peak=%u hash=%08X frames=%u (t0=%u len=%u p2peak=%u)",
 				c.name.c_str(), c.phase, c.d, (unsigned)o.peak1, o.hash, o.frames, o.t0, (u32)c.p1.size(), (unsigned)o.peak2);
 		if (o.peak1 >= 1 && st.found < 0)
@@ -600,6 +607,21 @@ void selfTest()
 		const std::string text = "# CLIP LIKELY BEGINS HERE: frame 42  (~0.7s)\n# CLIP LIKELY ENDS HERE:   frame 99\n.\n";
 		claim("clip markers parse", macroMarker(text, "CLIP LIKELY BEGINS HERE") == 42 && macroMarker(text, "CLIP LIKELY ENDS HERE") == 99);
 		claim("...and a missing marker is 0", macroMarker(text, "NO SUCH MARKER") == 0);
+	}
+	{
+		// The singles table: seven DISTINCT t0 per button, none repeated (the
+		// measured phase/delay collapse), and the movie/macro classes untouched.
+		st.mode = "singles";
+		buildCandidates();
+		bool distinct = st.cands.size() == 28;
+		for (size_t i = 0; distinct && i < st.cands.size(); i++)
+			for (size_t k = i + 1; k < st.cands.size(); k++)
+				if (st.cands[i].name == st.cands[k].name && t0Of(st.cands[i]) == t0Of(st.cands[k]))
+					distinct = false;
+		claim("singles sweep 7 distinct t0 per button (28 runs, no phase/delay duplicates)", distinct);
+		st.mode = "movie";
+		buildCandidates();
+		claim("the movie class is four phases", st.cands.size() == 4 && st.cands[3].phase == 3 && st.cands[3].d == 0);
 	}
 	st = State();
 	NOTICE_LOG(RENDERER, "COMBOHUNT SELFTEST: %d passed, %d failed", pass, fail);

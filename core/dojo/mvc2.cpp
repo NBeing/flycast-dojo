@@ -1,4 +1,5 @@
 #include "mvc2.h"
+#include "dojo.h"
 #include "cfg/cfg.h"
 #include "emulator.h"
 #include "hw/sh4/sh4_mem.h"
@@ -10,6 +11,7 @@
 #include <atomic>
 #include <fstream>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <vector>
 
@@ -40,6 +42,8 @@ static constexpr u32 P2_COMBO      = BASE + 0x268B44;	// P2_A_Combo_Meter_HitsTo
 static bool validated = false;
 static bool reported = false;
 static std::atomic<u16> comboLast1{0}, comboLast2{0}, comboPeak1{0}, comboPeak2{0};	// written on the emulator loop, read by the GUI
+static std::mutex seriesMutex;
+static std::vector<ComboSample> series;		// the on-change series, emulator loop -> GUI (copied out)
 
 bool mapValidated()
 {
@@ -129,6 +133,10 @@ void comboPoll()
 			NOTICE_LOG(NETWORK, "COMBO PROBE: P1=%u P2=%u", (unsigned)a, (unsigned)b);
 		pa = a;
 		pb = b;
+		// The series (see mvc2.h): the same edge, frame-stamped, kept.
+		const std::lock_guard<std::mutex> lock(seriesMutex);
+		if (series.size() < 4096)
+			series.push_back({ dojo.frame_number.load(), a, b });
 	}
 }
 
@@ -136,6 +144,18 @@ void comboPeakReset()
 {
 	comboPeak1.store(0, std::memory_order_relaxed);
 	comboPeak2.store(0, std::memory_order_relaxed);
+}
+
+void comboSeriesReset()
+{
+	const std::lock_guard<std::mutex> lock(seriesMutex);
+	series.clear();
+}
+
+std::vector<ComboSample> comboSeriesTake()
+{
+	const std::lock_guard<std::mutex> lock(seriesMutex);
+	return series;
 }
 
 u16 comboLast(int player)
