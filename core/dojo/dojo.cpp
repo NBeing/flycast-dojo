@@ -1,4 +1,5 @@
 #include "dojo.h"
+#include "input/hold_repeat.h"
 #include "session.h"
 #include "dojo/session.h"
 #include "movie.h"
@@ -949,7 +950,6 @@ void Dojo::SwitchClipFolder(const std::string& dir)
 	session_inputs.clear();
 	stale_tail_from = ~0u;
 	loaded_macro_path.clear();
-	loaded_macro_rr = rerecord_count;
 	macro_armed = true;			// the roll drives the guest
 	play_match = false;			// editable: WRITE
 	macro_locked = false;		// a branch is always editable, even off a finalized test
@@ -1298,11 +1298,6 @@ void Dojo::ArchiveGeneration()
 	char name[192];
 	snprintf(name, sizeof(name), "%s_gen_%02d", ghc::filesystem::path(hostfs::savestateFolderOverride).filename().string().c_str(), gen);
 	snapshot_prompt_name = name;
-	snapshot_prompt_num = gen;
-	snapshot_prompt_files = copied;
-	snapshot_prompt_bytes = bytes;
-	snapshot_prompt_frame = frame_number.load();
-	snapshot_prompt_movie = (u32)session_inputs.size();
 	snapshot_prompt_pending = true;
 	snapshot_reveal = true;	// the F8 hotkey opens + focuses States; its Generations pane puts the cursor in this row's Tags cell
 	NOTICE_LOG(NETWORK, "TAS GEN: snapshot %s (%d files, %.1f MB) at frame %u - tag prompt raised", name, copied, bytes / 1048576.0, frame_number.load());
@@ -1311,13 +1306,15 @@ void Dojo::ArchiveGeneration()
 // Entering the End-of-Replay screen has to release every TAS hold. The screen takes keyboard
 // focus, so a key held at that moment may never deliver its keyup here - and a latched hold either
 // spins the scrub loop on a dead movie or, on BASE, matures into an unattended overwrite.
+// `[MEASURED 2026-09-17]` this released only the DEAD copies of the holds (docs/PORT-DEFECT-CENSUS.md,
+// finding X): step_held was a write-only member while the live hold is hotkeys::stepHold(), so the
+// belt-and-braces at replay end did nothing. It now releases the real one - always safe, per its contract.
 void Dojo::ReleaseTasHolds()
 {
-	step_held = false;
+	hotkeys::stepHold().release();
 	slot_held = false;
 	slot_next_repeat = 0;
 	save_hold_since = 0;
-	shift_held_since = 0;
 }
 
 // ---- T3: input fidelity (gate G1) ------------------------------------------------------------
@@ -1972,15 +1969,13 @@ bool Dojo::LoadMacroFull(const std::string& clipDir, const std::string& macroFil
 	// the one-shot Full-load flag the handoff consumes to load State 0 while paused.
 	hostfs::savestateFolderOverride = clipDir;
 	// (research 2026-09-04) the Full boot skipped BeginClipStats: no live_from, counters inherited from the previous clip,
-	// and the wave / skip stores started EMPTY so their next save truncated the clip's audio.env / skip.map. Before
-	// loaded_macro_rr below, since this zeroes rerecord_count.
+	// and the wave / skip stores started EMPTY so their next save truncated the clip's audio.env / skip.map.
 	BeginClipStats();
 	boot_ready_arm = true;	// the handoff pause announces the loaded clip and opens F4
 	stepping = true;
 	target_step_frame = 0;
 	macro_fullload = true;
 	loaded_macro_path = macroFile;		// remember the file so the Macros window can save the edited movie back to it
-	loaded_macro_rr = rerecord_count;	// relative snapshot (not necessarily 0); nothing zeroes rerecord_count mid-macro-session, so a later edit bumps it -> enables save-back
 	NOTICE_LOG(NETWORK, "TAS MACRO FULL: %u macro frames staged from '%s'; clip '%s' - State 0 + macro inject at the boot pause (relative to State 0's frame)",
 			(u32)macro_pending.size(), macroFile.c_str(), clipDir.c_str());
 	return true;
@@ -2006,7 +2001,6 @@ bool Dojo::LoadClipState0Boot(const std::string& clipDir)
 	target_step_frame = 0;
 	macro_fullload = true;	// the handoff loads State 0 while paused (shared with the Full load)
 	loaded_macro_path.clear();	// no save-back target: the roll is empty, the macro lives in the stage buffer
-	loaded_macro_rr = rerecord_count;
 	NOTICE_LOG(NETWORK, "TAS MACRO STAGE: clip '%s' - State 0 at the boot pause, empty roll (the macro is staged)", clipDir.c_str());
 	return true;
 }
@@ -3061,7 +3055,6 @@ void Dojo::Reset()
 	macro_fullload = false;	// an aborted Play Macro Full load (quit mid-boot) must not leak its deferred State-0 arm
 	macro_pending.clear();	// and drop any macro rows not yet injected at the handoff
 	loaded_macro_path.clear();	// a fresh session has no loaded macro until a Full load sets it again
-	loaded_macro_rr = 0;
 	live_from_gen.clear();
 	live_from_local.clear();
 	live_from_edited = false;

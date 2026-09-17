@@ -128,9 +128,6 @@ public:
 	// Generations pane drops the cursor in the new generation's Tags cell. A one-shot, consumed once that row is loaded.
 	bool snapshot_reveal = false;
 	std::string snapshot_prompt_name;
-	int snapshot_prompt_num = 0, snapshot_prompt_files = 0;
-	u64 snapshot_prompt_bytes = 0;
-	u32 snapshot_prompt_frame = 0, snapshot_prompt_movie = 0;
 	// LIVE FROM (David, 2026-09-04): after a pre-boot restore the live files came from a snapshot; clip.json restoredFrom
 	// says which. Read at session open, shown top right and in F4, so a session on restored files knows it.
 	std::string live_from_gen, live_from_local;
@@ -294,9 +291,9 @@ public:
 	bool stepping = false;
 	bool buffering = false;
 	u32 target_step_frame = 0;
-	bool step_held = false;			// STEP key currently held (hold-to-frame-advance)
-	double next_step_time = 0;		// os_GetSeconds() deadline of the next held-scrub step (accumulator pacing)
-	double step_held_since = 0;		// os_GetSeconds() when STEP was pressed (hold-repeat debounce)
+	// The STEP hold lives in hotkeys::stepHold() (input/hold_repeat.h) - the step_held /
+	// next_step_time / step_held_since trio that David's mainui paced with was ported
+	// as dead members and deleted (docs/PORT-DEFECT-CENSUS.md #15, 2026-09-17).
 	// TAS clip stats (persisted into clip.json; *_base are the values already on disk so counters
 	// accumulate across sessions rather than resetting each time the clip is opened)
 	// The input MODE's cell-write axis (CANON_readwrite_model.md), under !play_match:
@@ -348,10 +345,9 @@ public:
 	bool macro_locked = false;
 	bool macro_force_write = false;
 	// Save-to-loaded-macro: the absolute macro .txt this movie was loaded from (set by macroLoadFull / LoadMacroFull).
-	// Empty = no macro loaded this session. loaded_macro_rr = rerecord_count snapshot at load; a differing current
-	// count means the movie was edited since -> the Save-to-loaded button/menu enable on that. Cleared in Reset().
+	// Empty = no macro loaded this session. Cleared in Reset(). (loaded_macro_rr, the rerecord snapshot, was
+	// write-only in BOTH trees - David's enable reads only the path - and was deleted; CENSUS #8.)
 	std::string loaded_macro_path;
-	u32 loaded_macro_rr = 0;
 	// TAS timeline-lock: the set of savestate SLOTS whose input range is locked (protected).
 	// Replaces the old single states_locked flag: each locked slot protects [its movie frame,
 	// the next state's frame) from EVERY writer (pad record, live/SEND, paint, edit verbs) while
@@ -391,8 +387,6 @@ public:
 	double save_hold_since = 0;		// os_GetSeconds() when F1 was pressed on an existing BASE slot
 	bool save_hold_done = false;	// that hold matured and the BASE overwrite already fired
 	// On-screen hotkey cheat sheet: toggled by its hotkey, or peeked at by holding Shift.
-	bool hotkey_overlay = false;
-	double shift_held_since = 0;
 	double save_blocked_at = 0;		// os_GetSeconds() of the last REJECTED BASE tap (HUD red flash)
 	double save_flash_at = 0;		// os_GetSeconds() of the last savestate write (HUD green flash)
 	int save_flash_slot = -1;		// which slot that write went to, so the flash cannot follow F2
@@ -400,7 +394,6 @@ public:
 	// this an overwrite would not show up until the next periodic rescan.
 	std::atomic<u32> savestate_epoch{0};
 
-	void ResetPause();
 	void Reset();
 };
 
