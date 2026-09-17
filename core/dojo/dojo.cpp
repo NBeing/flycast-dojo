@@ -1312,9 +1312,9 @@ void Dojo::ArchiveGeneration()
 void Dojo::ReleaseTasHolds()
 {
 	hotkeys::stepHold().release();
+	hotkeys::baseHold().release();	// the BASE (slot 0) hold, ported 2026-09-17 - same contract, always safe
 	slot_held = false;
 	slot_next_repeat = 0;
-	save_hold_since = 0;
 }
 
 // ---- T3: input fidelity (gate G1) ------------------------------------------------------------

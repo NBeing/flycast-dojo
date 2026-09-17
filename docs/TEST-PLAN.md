@@ -1235,6 +1235,8 @@ class, and a green here must not be read as one.
 | default (2 runs) | `ok run1 == run2 (12 frames of hashes, identical)` · `REPRO CLASS: reproducible` · `reprotest: reproducible across processes` - the legacy lines byte-identical | 9.7 s |
 | `--sweep` | `runs=6 pairs=15 disagree=0 class=reproducible first=- vacuous=0 mode=from-state seq=12` | 29 s |
 | `--cold --sweep` | `runs=6 pairs=15 disagree=0 class=reproducible ... mode=cold` | 29 s |
+| `--sweep`, `FLYCAST_REPRO_SEQ=600` (one-off, 2026-09-17, HEAD `24367e9e0`) | `runs=6 pairs=15 disagree=0 class=reproducible first=- vacuous=0 mode=from-state seq=600` | ~3 min |
+| `--cold --sweep`, `FLYCAST_REPRO_SEQ=600` (same) | `runs=6 pairs=15 disagree=0 class=reproducible first=- vacuous=0 mode=cold seq=600` | ~3 min |
 | `--sabotage poke` | `first divergence run1/poke at frame 100 (machine)`, same for run2 → `deterministic-divergence at frame 100` → BEHAVED AS PREDICTED, classifier named it | 14 s |
 | `--sabotage moving` | pokeA at 103, pokeB at 107 (all five pairs) → `nondeterministic (first divergence moves: 103,107)` → BEHAVED, classifier named it | 20 s |
 | `--sabotage gate-can-pass` | reproducible → the gate CAN pass | 9 s |

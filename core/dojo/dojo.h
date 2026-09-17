@@ -384,12 +384,6 @@ public:
 	double slot_held_since = 0;
 	double slot_next_repeat = 0;
 
-	double save_hold_since = 0;		// os_GetSeconds() when F1 was pressed on an existing BASE slot
-	bool save_hold_done = false;	// that hold matured and the BASE overwrite already fired
-	// On-screen hotkey cheat sheet: toggled by its hotkey, or peeked at by holding Shift.
-	double save_blocked_at = 0;		// os_GetSeconds() of the last REJECTED BASE tap (HUD red flash)
-	double save_flash_at = 0;		// os_GetSeconds() of the last savestate write (HUD green flash)
-	int save_flash_slot = -1;		// which slot that write went to, so the flash cannot follow F2
 	// Bumped on every savestate write. The HUD and the States window cache their directory scan; without
 	// this an overwrite would not show up until the next periodic rescan.
 	std::atomic<u32> savestate_epoch{0};

@@ -2267,7 +2267,7 @@ set_tests_properties(flycast.surfacetourtest PROPERTIES SKIP_RETURN_CODE 77 TIME
 # the whole gate go green, so an arm can never pass by reddening everything. The
 # other classes (rebind, show, write-clobber) run on demand - write-clobber is
 # inconclusive-by-design on a fixture where the phase does not clobber.
-foreach(arm open flip save branch gate-can-pass)
+foreach(arm open flip save branch gate-can-pass base)
 	add_test(NAME flycast.surfacetourtest_can_fail_${arm}
 		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh --sabotage ${arm})
 	set_tests_properties(flycast.surfacetourtest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
