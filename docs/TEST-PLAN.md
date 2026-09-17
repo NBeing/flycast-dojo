@@ -1157,3 +1157,78 @@ SUCCEEDS, depending on how big the log is.
 **A skipped check is not a passing one.** `ctest` reports a skip as green and
 exits 0. `scripts/checks.sh` exits 2 on any skip, and it caught a real
 intermittent skip within hours of being written.
+
+### 5.4 `[LANDED 2026-09-17]` Harness #2 - per-frame divergence, swept
+
+**What existed** (the wheel, ~70% of it): `scripts/reprotest.sh` (two processes,
+same input, same hashes required; `--cold`, `--oracle <other-fork>`, `--self-test`
+poke arm, `--runs N`, empty-run SKIP), `scripts/tests/repro/hash_sequence.lua`
+(the per-frame machine hash keyed by the GUEST frame - the lesson
+`differential_history.lua` paid for), and `scripts/tests/open/replay_determinism.lua`,
+which already names the one known in-process divergence (the 1-byte
+`cycle_counter` on restore-vs-continue). nbneo-rr had no generic N-arm sweep
+either; what was lifted from it is the measurement that sizes N ("6 runs found
+12 divergences, 2 found 8") and the rule that non-vacuity comes BEFORE equality.
+
+**What this adds** (`66b85bed5`, `d6514c4ca`):
+
+- **The record grew.** `REPRO <frame> <machine-hash> in=<input-digest> c=<p1>/<p2>`.
+  The input digest is the MOVIE ROW at that frame for both players
+  (`flycast.movie.getButtons`, names sorted, `absent` when there is no row -
+  never digested as empty), a multiplicative hash mod 2^32 so it needs no bit
+  operators. **Its domain is the row the guest was fed, not what the guest did
+  with it.** It travels so a disagreement can be told apart: same row, different
+  machine = emulation nondeterminism (this harness's subject); different row =
+  an INPUT DESYNC (a movie/replay defect, said so on the line). `c=` is the MvC2
+  combo counters, resolved BY NAME from SPREADSHEET.json in the harness and
+  handed to the Lua as `FLYCAST_REPRO_COMBO_P1/P2` - the game-state series
+  riding in the same sequence, "it comboed on frame N" beside "the machine was
+  identical on frame N". The Lua hardcodes no address.
+- **All pairs, first divergent frame, a class.** `--sweep` = 6 runs; every mode
+  compares every pair and prints `first divergence run<i>/run<j> at frame F
+  (machine|input|both)`. One classifier line: `REPRO CLASS: reproducible` /
+  `deterministic-divergence at frame F` (every disagreeing pair diverges at the
+  SAME frame - a bug you can bisect) / `nondeterministic (first divergence
+  moves: F1,F2)` (a race, a clock, host state) / `input-desync`. RESULT line,
+  append-only: `REPROTEST RESULT: runs= pairs= disagree= class= first= vacuous=
+  mode= seq=`.
+- **Exit codes kept apart**: 0 reproducible · 1 NOT reproducible · 2 usage ·
+  3 the harness failed to run (a run died, timed out, or sampled different
+  frames - not a verdict) · 5 VACUOUS (a run whose hashes never moved, checked
+  on EVERY run before any diff; two frozen machines agree) · 77 skip.
+- **Arms** (`--sabotage`, `--list-sabotage`; `--self-test` is `--sabotage poke`
+  and keeps its legacy lines - docs/STATE-COVERAGE.md greps them): `poke` (a
+  fixed-frame perturbation: the class MUST be deterministic-divergence at that
+  frame), `moving` (two runs perturbed at START+3 and START+7 via
+  `FLYCAST_REPRO_POKE_AT`: the class MUST be nondeterministic with a moving
+  frame), `gate-can-pass`. Judged by `scripts/lib/arms.sh` over R1 non-vacuity /
+  R2 unarmed pairs (control) / R3 all pairs (target), plus the class each arm
+  predicts. Inverted exit 0 fired / 4 decorative / 2 inconclusive.
+
+**The claim class, in nbneo's words.** A green sweep certifies that this build
+reproduces ITSELF across processes on this input. It never certifies emulation
+correctness: "A CORRECT PICTURE OF THE WRONG THING" is reproducible too.
+Correctness is the oracle's (§5.1) and the fixture's (§5.3) claim - a different
+class, and a green here must not be read as one.
+
+**Measured 2026-09-17** (tour clip `2026-09-08T02_38_29Z`, START 100, SEQ 12):
+
+| run | verdict | time |
+|---|---|---|
+| default (2 runs) | `ok run1 == run2 (12 frames of hashes, identical)` · `REPRO CLASS: reproducible` · `reprotest: reproducible across processes` - the legacy lines byte-identical | 9.7 s |
+| `--sweep` | `runs=6 pairs=15 disagree=0 class=reproducible first=- vacuous=0 mode=from-state seq=12` | 29 s |
+| `--cold --sweep` | `runs=6 pairs=15 disagree=0 class=reproducible ... mode=cold` | 29 s |
+| `--sabotage poke` | `first divergence run1/poke at frame 100 (machine)`, same for run2 → `deterministic-divergence at frame 100` → BEHAVED AS PREDICTED, classifier named it | 14 s |
+| `--sabotage moving` | pokeA at 103, pokeB at 107 (all five pairs) → `nondeterministic (first divergence moves: 103,107)` → BEHAVED, classifier named it | 20 s |
+| `--sabotage gate-can-pass` | reproducible → the gate CAN pass | 9 s |
+
+The record: `REPRO 100 753832078 in=93521b66 c=0/0`. No real nondeterminism was
+found on this build at this depth (12 frames from the state, 6 processes, warm
+and cold). That is a statement about SEQ=12 from frame 100 - `FLYCAST_REPRO_SEQ`
+and `FLYCAST_REPRO_START` widen it, and a wider sweep is the next thing to
+measure, not to assume.
+
+**Not built, said plainly:** the `input-desync` branch has no arm. Feeding one
+process a different movie row mid-replay needs `movie.setButtons` on a movie
+that is not editable in READ mode, or a second clip; neither is an honest
+one-line arm. Until one exists, that branch is reasoned, not measured.
