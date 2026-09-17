@@ -60,7 +60,7 @@ ROM="${FLYCAST_TEST_ROM:-$HOME/dev/davids_fly/NoBGM_VMU.cdi}"
 # default tour is 70 steps (66 + a 1-frame "show" after each of the four loads, so a
 # human actually sees the loaded picture), 2 of them optional (captures: start/stop,
 # which SKIP without a recorder), so 68 must PASS. Overridable for a partial tour.
-FLOOR="${TOUR_FLOOR:-70}"	# 72 steps since the BASE guard pair (2026-09-17); two of slack, as before
+FLOOR="${TOUR_FLOOR:-71}"	# 73 steps since the BASE guard pair + roll redo (2026-09-17); two of slack, as before
 SELF=0; WATCH=0; WATCHCLIP=""; ARM=""
 # The classes this harness knows how to judge - MIRRORS surface_tour.h v2 and is checked
 # against the runner's own `SURFACE TOUR: arms known:` line on every armed run, so the

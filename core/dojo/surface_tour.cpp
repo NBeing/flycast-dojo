@@ -230,6 +230,7 @@ static Expect expectOf(const char *name)
 	// instrument.
 	if (startsWith(name, "base:"))                       return { MExp::Unchanged, VExp::Unchanged, false, "ui" };
 	if (startsWith(name, "roll: flip a cell + undo"))    return { MExp::Unchanged, VExp::Unchanged, false, "netzero" };
+	if (startsWith(name, "roll: redo the flip + undo"))  return { MExp::Unchanged, VExp::Unchanged, false, "netzero" };
 	if (startsWith(name, "snippets: place"))             return { MExp::Unchanged, VExp::Moved,     false, "movie-mover" };
 	if (startsWith(name, "macros: place"))               return { MExp::Unchanged, VExp::Moved,     false, "movie-mover" };
 	// The branch's slot 0 is a COPY of main's, so checkout lands where load slot 0
@@ -738,6 +739,7 @@ static void buildSteps()
 		add(s);
 	};
 	hook("roll: flip a cell + undo",         Kind::Click,  hooks::rollEditFlipUndo);
+	hook("roll: redo the flip + undo",       Kind::Click,  hooks::rollEditRedoUndo, true);
 	hook("states: label round-trip",         Kind::Click,  hooks::statesLabelRoundTrip);
 	// THE BASE GUARD (surface_tour.h v3): a tap on slot 0 must be BLOCKED, a hold must
 	// write. Both through the F1 key itself. The hold is POLLED (the captures-stop

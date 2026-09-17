@@ -652,6 +652,7 @@ bool exportDone()
 struct Entry { const char *name; bool (*fn)(); };
 static const Entry kHooks[] = {
 	{ "rollEditFlipUndo",     rollEditFlipUndo },
+	{ "rollEditRedoUndo",     rollEditRedoUndo },
 	{ "statesLabelRoundTrip", statesLabelRoundTrip },
 	{ "saveScratchSlot",      saveScratchSlot },
 	{ "loadScratchSlot",      loadScratchSlot },

@@ -205,9 +205,13 @@ static void draw()
 
 			const bool undone = dojo.ApplyUndo();
 			const bool restored = rowOf(f) == before;
-			NOTICE_LOG(RENDERER, "ROLL PROBE: undo=%s restored=%s  => %s",
-					undone ? "yes" : "NO", restored ? "yes" : "NO",
-					(changed && grew && undone && restored) ? "PASS" : "FAIL");
+			// and the REDO half (2026-09-17): the edit comes back, then a second undo leaves the movie as found
+			const bool redone    = dojo.ApplyRedo();
+			const bool reapplied = rowOf(f) == after;
+			const bool reundone  = dojo.ApplyUndo() && rowOf(f) == before;
+			NOTICE_LOG(RENDERER, "ROLL PROBE: undo=%s restored=%s redo=%s reapplied=%s undo-again=%s  => %s",
+					undone ? "yes" : "NO", restored ? "yes" : "NO", redone ? "yes" : "NO", reapplied ? "yes" : "NO", reundone ? "yes" : "NO",
+					(changed && grew && undone && restored && redone && reapplied && reundone) ? "PASS" : "FAIL");
 		}
 	}
 
@@ -456,6 +460,34 @@ static void draw()
 			ImGui::SetNextItemWidth(96.f);
 			ImGui::Combo("paint every", &paintGap, "row\0" "2nd row\0" "3rd row\0");
 			ImGui::SameLine();
+
+			// UNDO / REDO, lifted from David's dojo_gui.cpp:13995-14016 (2026-09-17). The stacks
+			// existed and the tour's hook drove ApplyUndo, but NO user control reached either
+			// (docs/PORT-DEFECT-CENSUS.md §2: ApplyRedo uncalled - and ApplyUndo was only ever
+			// called by probes). Buttons here; Ctrl+Z / Ctrl+Shift+Z while the roll has focus,
+			// TASEditor muscle memory. An undo/redo is itself an edit and logs like one.
+			auto undoToast = [](bool did, bool redo) {
+				char m[96];
+				if (!did) snprintf(m, sizeof(m), "Nothing to %s", redo ? "redo" : "undo");
+				else      snprintf(m, sizeof(m), "%s - frames restored", redo ? "Redid the edit" : "Undid the edit");
+				gui_display_notification(m, 1500);
+				NOTICE_LOG(RENDERER, "ROLL %s: %s (undo depth %zu, redo depth %zu)", redo ? "REDO" : "UNDO", m,
+						dojo.undo_stack.size(), dojo.redo_stack.size());
+			};
+			ImGui::BeginDisabled(dojo.undo_stack.empty());
+			if (tasButton("Undo")) undoToast(dojo.ApplyUndo(), false);
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::BeginDisabled(dojo.redo_stack.empty());
+			if (tasButton("Redo")) undoToast(dojo.ApplyRedo(), true);
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && ImGui::GetIO().KeyCtrl
+					&& ImGui::IsKeyPressed(ImGuiKey_Z, false))
+			{
+				if (ImGui::GetIO().KeyShift) undoToast(dojo.ApplyRedo(), true);
+				else                         undoToast(dojo.ApplyUndo(), false);
+			}
 
 			// ALWAYS DRAWN, DISABLED WHEN THERE IS NOTHING TO ACT ON.
 			//
@@ -1277,6 +1309,31 @@ bool surfacetour::hooks::rollEditFlipUndo()
 	{
 		surfacetour::why("frame=%u first=%lld changed=%d grew=%d undone=%d restored=%d",
 				f, (long long)first, changed, grew, undone, restored);
+		return false;
+	}
+	return true;
+}
+
+// The redo half of the roll's history, driven the frame after the flip+undo step left the
+// flipped edit on the redo stack: redo brings it back (movie moves), undo takes it away again
+// (net-zero, the same expectation as the flip step). needsPrev on the flip step in the runner.
+bool surfacetour::hooks::rollEditRedoUndo()
+{
+	if (!movie::authored()) { surfacetour::why("no movie loaded"); return false; }
+	if (dojo.redo_stack.empty()) { surfacetour::why("redo stack empty - the flip step left nothing to redo"); return false; }
+	const u32 f = movie::end() > 4 ? movie::end() - 4 : 0;
+	auto rowOf = [&](u32 fr) -> Row {
+		auto it = dojo.session_inputs.find(fr);
+		return it == dojo.session_inputs.end() ? Row() : it->second;
+	};
+	const Row before = rowOf(f);
+	const bool redone    = dojo.ApplyRedo();
+	const bool reapplied = rowOf(f) != before;
+	const bool undone    = dojo.ApplyUndo();
+	const bool restored  = rowOf(f) == before;
+	if (!(redone && reapplied && undone && restored))
+	{
+		surfacetour::why("frame=%u redone=%d reapplied=%d undone=%d restored=%d", f, redone, reapplied, undone, restored);
 		return false;
 	}
 	return true;

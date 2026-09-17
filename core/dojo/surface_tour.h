@@ -66,7 +66,8 @@ void registerSurfaceTourPanel();      //!< nullDC.cpp, after registerTimelinePan
 // (state, file, mapping) and returns that; it calls why() before returning false.
 namespace hooks {
 constexpr int kScratchSlot = 99;
-bool rollEditFlipUndo();                          // roll_panel.cpp
+bool rollEditFlipUndo();
+bool rollEditRedoUndo();                          // roll_panel.cpp (v4, 2026-09-17): redo the flip, undo again                          // roll_panel.cpp
 bool statesLabelRoundTrip();                      // surface_tour_hooks.cpp (Host::setSlotLabel/slotView)
 bool saveScratchSlot();
 bool loadScratchSlot();
