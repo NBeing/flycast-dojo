@@ -79,6 +79,8 @@
 #include "dojo/net_beacon.h"
 #include "dojo/tas_branch.h"	// gui_slot_overwrite_guarded: forkSlots
 #include "dojo/thumbnail.h"
+#include "dojo/tas_wave.h"
+#include "dojo/tas_ruler.h"
 
 #include "cheats.h"
 
@@ -5095,6 +5097,13 @@ void gui_saveState()
 			// readback must run on the render thread with the emulator stopped, which
 			// is exactly here. No-op if the backend has no readback (returns false).
 			tas_thumb::captureForState(hostfs::getSavestatePath(config::SavestateSlot, true));
+			// TAS waveform: the audio leading up to this state stays beside it (<state>.wave - an
+			// abandoned branch keeps its sound), and the clip timeline + skip map are flushed too so a
+			// killed session does not lose them. Lifted from David's gui.cpp:4908-4910 (2026-09-17;
+			// docs/PORT-DEFECT-CENSUS.md §2 - writeStateSnapshot was defined here and never called).
+			tas_wave::writeStateSnapshot(hostfs::getSavestatePath(config::SavestateSlot, true), dojo.frame_number.load());
+			tas_wave::saveClip(hostfs::savestateFolderOverride);
+			tas_ruler::saveClip(hostfs::savestateFolderOverride);
 			if (prev == GuiState::Closed)
 				emu.start();				// was running -> resume
 			else

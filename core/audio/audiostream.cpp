@@ -3,6 +3,7 @@
 #include "rend/video_recorder.h"
 #endif
 #include "cfg/option.h"
+#include "dojo/tas_wave.h"
 
 struct SoundFrame { s16 l; s16 r; };
 
@@ -50,6 +51,11 @@ AudioBackend *AudioBackend::getBackend(const std::string& slug)
 
 void WriteSample(s16 r, s16 l)
 {
+	// TAS waveform: the per-frame envelope the piano roll draws (pre-volume, so it reads while
+	// muted). `[MEASURED 2026-09-17]` this tap was never ported: tas_wave had every consumer
+	// (onFrameEnd, saveClip, writeStateSnapshot, the roll lane) and no producer, so `measured`
+	// stayed 0 and audio.env / <state>.wave were never written. David's audiostream.cpp:53.
+	tas_wave::onSample(l, r);
 	Buffer[writePtr].r = r * config::AudioVolume.dbPower();
 	Buffer[writePtr].l = l * config::AudioVolume.dbPower();
 
