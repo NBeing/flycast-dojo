@@ -167,7 +167,13 @@ void gui_init()
 	}
 
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+	// Gamepad menu navigation (David; dojo:MenuGamepadNav, default yes; ported 2026-09-17).
+	// This fork binds analog DIRECTIONS to hotkeys, so a stick that drifts past its dead
+	// zone both fires them and walks menus on its own - =no takes pads out of menu nav
+	// while keeping them as controllers. Logged once so a launch profile can prove it took.
+	if (cfgLoadBool("dojo", "MenuGamepadNav", true))
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+	NOTICE_LOG(RENDERER, "UI: MenuGamepadNav=%s", (io.ConfigFlags & ImGuiConfigFlags_NavEnableGamepad) ? "yes" : "no");
 	// DOCKING. Vendored ImGui is the 1.90.4 DOCKING branch (same version as the
 	// master build it replaced, API superset), so tool windows can be dragged
 	// together, tabbed and split. Viewports are deliberately NOT enabled: the
