@@ -1,4 +1,5 @@
 #include "combohunt.h"
+#include "mvc2.h"
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
 #include <string>
@@ -28,6 +29,7 @@ void selfTest()
 {
 	if (!cfgLoadBool("dojo", "PanelSelfTest", false))
 		return;
+	tas_mvc2::selfTest();		// SPREADSHEET SELFTEST: the field dictionary the hunt's oracle resolves through
 	NOTICE_LOG(RENDERER, "COMBOHUNT SELFTEST: 0 passed, 0 failed");
 }
 

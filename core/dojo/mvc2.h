@@ -1,5 +1,6 @@
 #pragma once
 #include "types.h"
+#include <string>
 
 // T1 of the scripted-input roadmap: the MvC2 (Dreamcast) memory probe.
 //
@@ -68,4 +69,41 @@ namespace tas_mvc2
 	u32 readRam(u32 addr, int width);
 	// Same, but IsOnRam-checked: false (out untouched) for a non-RAM / out-of-range address.
 	bool readRamSafe(u32 addr, int width, u32& out);
+
+	// ---- THE FIELD DICTIONARY: David's SPREADSHEET.json, the oracle's NAMES --------------------
+	//
+	// `[2026-09-17]` core/dojo/mvc2_data/SPREADSHEET.json (302178 bytes, md5
+	// 23c1827fc4fe3b04313ee8c944565b20) is his DC-verified address vocabulary: per-character
+	// fields as `Base + hexOffset` in six blocks (P1/P2 x A/B/C), per-player fields (P1_/P2_),
+	// and system addresses - Demul-mapped (0x2C......), which is +0x60000000 from flycast's
+	// 0x8C...... . Every address a probe asserts on should be resolved BY NAME here, so a
+	// test reads "Combo_Meter_HitsToOpponent" and not a constant nobody can check; the
+	// constants above stay as the FALLBACK and as the selfTest's cross-check.
+	//
+	// Loaded at first use from, in order: dojo:Mvc2Data (a file path), the data dirs
+	// (mvc2_data/SPREADSHEET.json), then the source tree beside this file. Logged once.
+	struct Field
+	{
+		std::string name, group, type, note1, note2;
+		u32 offset = 0;			// hexOffset inside a character block (per-slot fields only)
+		int width = 1;			// Byte 1; "2 Bytes"/Word 2; "4 Bytes"/Float/Pointer 4
+		bool perSlot = false;	// P1_A_..P2_C_ keys present (a character-block field)
+		bool perPlayer = false;	// P1_/P2_ keys present (Player1And2Addresses)
+		u32 demul[2][3] = {};	// [player][slot] Demul address, 0 = absent
+		u32 demulPlayer[2] = {};
+		u32 demulSystem = 0;	// SystemMemoryAddresses "Address"
+	};
+	bool field(const char *name, Field& out);				// false = no such name
+	// The FLYCAST address (0x8C......) of `name` for player 0/1 and slot 0..2 (A/B/C);
+	// per-player fields ignore slot, system fields ignore both. 0 = unresolvable.
+	u32 addrOf(const char *name, int player = 0, int slot = 0);
+	u32 toFlycast(u32 demulAddr);							// 0x2C.. -> 0x8C.. (others unchanged)
+	u32 toDemul(u32 flycastAddr);							// the inverse
+	// Note2 enums ("13: Hulk"): the label for `value`, false when the field has no such entry.
+	bool enumLabel(const char *name, u32 value, std::string& label);
+	u32 charBase(int player, int slot);						// addrOf("Base", ...) - the block start
+	bool isPoint(int player, int slot);						// reads Is_Point (a loaded game; false otherwise)
+	int fieldCount();										// 0 = the dictionary did not load
+	const std::string& dictionaryPath();					// where it loaded from ("" = nowhere)
+	void selfTest();										// SPREADSHEET SELFTEST - dojo:PanelSelfTest
 }
