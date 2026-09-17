@@ -31,6 +31,58 @@
 #   --runs N                  N runs instead of 2 (N>=3).
 #   --timeout N               per-run seconds; default 180. The oracle needs
 #                             more (300 measured at ORACLE_SEQ=260).
+#   --sweep                   HARNESS #2 `[2026-09-17]` (docs/TEST-PLAN.md §5.4):
+#                             6 runs unless --runs says otherwise - nbneo-rr's
+#                             measurement: 6 runs found 12 divergences where 2
+#                             found 8. Every mode now compares ALL PAIRS, names
+#                             the FIRST DIVERGENT FRAME per disagreeing pair and
+#                             whether it is machine, input or both, and CLASSIFIES.
+#   --sabotage <class>        an arm that restores one failure shape (list below);
+#   --list-sabotage           inverted exit: 0 the arm fired as predicted, 4 it
+#                             did not (the check is decorative), 2 INCONCLUSIVE.
+#                             --self-test == --sabotage poke (its lines are kept).
+#
+# THE RECORD each run emits (scripts/tests/repro/hash_sequence.lua):
+#     REPRO <frame> <machine-hash> in=<input-digest> c=<p1>/<p2>
+# The input digest is the MOVIE ROW at that frame, both players. It travels so a
+# disagreement can be told apart: same row, different machine = emulation
+# nondeterminism (this harness's subject); different row = an INPUT DESYNC - the
+# two processes did not feed the guest the same inputs, which is a movie/replay
+# defect, not emulation. c= is the MvC2 combo counters, resolved BY NAME from
+# SPREADSHEET.json here and handed to the Lua (it hardcodes nothing).
+#
+# THE CLASSIFIER (one line, `REPRO CLASS: ...`), over the disagreeing pairs:
+#     reproducible                          no pair disagrees
+#     deterministic-divergence at frame F   every disagreeing pair first diverges
+#                                           at the SAME frame - a bug you can bisect
+#     nondeterministic (first divergence moves: F1,F2,..)
+#                                           the first divergence MOVES between
+#                                           pairs - a race, a clock, host state
+#     input-desync                          some pair diverges on the input digest
+# and the RESULT line (append-only grammar):
+#     REPROTEST RESULT: runs=N pairs=P disagree=D class=<class> first=<F|-> vacuous=<n> mode=<from-state|cold> seq=<SEQ>
+#
+# EXIT CODES, kept apart on purpose (a harness that cannot run is not a verdict):
+#     0   reproducible            1   NOT reproducible (a real verdict)
+#     2   usage                   3   the harness failed to run (a run died, timed
+#                                     out, or sampled different frames)
+#     5   VACUOUS (a run's hashes never changed across the sequence, or SEQ<2) -
+#         checked on EVERY run BEFORE any comparison; two frozen machines agree
+#     77  SKIP (a prerequisite is missing)
+#
+# ARMS (`--sabotage`): `poke` - one extra run perturbs one word of guest RAM at
+# the first sample; it MUST disagree and, because the poke is at a FIXED frame,
+# the classifier MUST say deterministic-divergence at that frame. `moving` - two
+# extra runs poked at DIFFERENT frames (FLYCAST_REPRO_POKE_AT); the classifier
+# MUST say nondeterministic with a moving first frame. `gate-can-pass` - nothing
+# armed; the run MUST be reproducible ("a gate that can never pass is as useless
+# as one that can never fail"). Judged by scripts/lib/arms.sh (applied / broke
+# its target / left its control green) plus the class the arm predicts.
+#
+# WHAT A GREEN SWEEP CERTIFIES: that this build reproduces ITSELF across
+# processes on this input. Never that the emulation is correct - "A CORRECT
+# PICTURE OF THE WRONG THING" (nbneo-rr) is reproducible too. Correctness is the
+# oracle's and the fixture's claim (§5.1, §5.3), a different class.
 #
 # COLD BOOT. docs/STATE-COVERAGE.md asks for a cold-boot-twice probe because
 # that is what caught nbneo's init-residue bugs (a CPU zeroed once per PROCESS
@@ -73,18 +125,45 @@ OUT="${FLYCAST_TEST_OUT:-$ROOT/build-dojo7/testresults}"
 luaLogFor() { echo "$OUT/$(basename "$1" .lua).lua.log"; }
 SKIP=77
 
-RUNS=2; COLD=0; SELFTEST=0; TIMEOUT=180; ORACLE=""
+RUNS=2; RUNS_SET=0; COLD=0; SELFTEST=0; TIMEOUT=180; ORACLE=""; SWEEP=0; ARM=""
+KNOWN_ARMS="poke moving gate-can-pass"
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--cold)       COLD=1; shift ;;
 		--from-state) COLD=0; shift ;;
-		--self-test)  SELFTEST=1; shift ;;
+		--self-test)  SELFTEST=1; ARM=poke; shift ;;
+		--sabotage)   ARM="$2"; shift 2 ;;
+		--list-sabotage)
+			echo "poke          one extra run perturbs one word at the first sample; must disagree; class must be deterministic-divergence at the first sampled frame"
+			echo "moving        two extra runs poked at DIFFERENT frames; class must be nondeterministic with a moving first frame"
+			echo "gate-can-pass nothing armed; the runs must be reproducible (exit 0 fired / 4 the gate cannot pass)"
+			exit 0 ;;
+		--sweep)      SWEEP=1; shift ;;
 		--oracle)     ORACLE="$2"; shift 2 ;;
-		--runs)       RUNS="$2"; shift 2 ;;
+		--runs)       RUNS="$2"; RUNS_SET=1; shift 2 ;;
 		--timeout)    TIMEOUT="$2"; shift 2 ;;
 		*) echo "reprotest: unknown argument $1" >&2; exit 2 ;;
 	esac
 done
+if [ -n "$ARM" ]; then
+	case " $KNOWN_ARMS " in *" $ARM "*) ;; *) echo "reprotest: unknown sabotage class '$ARM' (known: $KNOWN_ARMS)" >&2; exit 2 ;; esac
+	[ "$ARM" = poke ] && SELFTEST=1	# the legacy lines stay - docs and scripts grep them
+fi
+[ "$SWEEP" -eq 1 ] && [ "$RUNS_SET" -eq 0 ] && RUNS=6
+SEQ="${FLYCAST_REPRO_SEQ:-12}"; START="${FLYCAST_REPRO_START:-100}"
+export FLYCAST_REPRO_SEQ="$SEQ" FLYCAST_REPRO_START="$START"
+
+# The combo counters, resolved BY NAME from the tree's SPREADSHEET copy and handed
+# to the Lua as flycast 0x8C.. addresses (Demul 0x2C.. + 0x60000000, the same join
+# tas_mvc2::toFlycast makes). Absent spreadsheet => the Lua prints c=-/- and says so.
+SPREADSHEET="$ROOT/core/dojo/mvc2_data/SPREADSHEET.json"
+if [ -f "$SPREADSHEET" ] && command -v python3 >/dev/null; then
+	read -r cp1 cp2 < <(python3 -c '
+import json,sys
+e=json.load(open(sys.argv[1]))["SPREADSHEET"]["PlayerMemoryAddresses"]["Combo_Meter_HitsToOpponent"]
+print(hex(int(e["P1_A_Combo_Meter_HitsToOpponent"],16)+0x60000000), hex(int(e["P2_A_Combo_Meter_HitsToOpponent"],16)+0x60000000))' "$SPREADSHEET" 2>/dev/null || echo "")
+	if [ -n "${cp1:-}" ]; then export FLYCAST_REPRO_COMBO_P1="$cp1" FLYCAST_REPRO_COMBO_P2="$cp2"; fi
+fi
 
 # ONE RUN CANNOT ANSWER A REPRODUCIBILITY QUESTION. Without this, --runs 1
 # walks past an empty comparison loop and prints "reproducible across
@@ -149,7 +228,10 @@ one_run() {
 	# Both record formats: REPRO (hash_sequence, keyed by guest frame) and OR
 	# (oracle_probe, unkeyed because the two forks share no clock). One
 	# extraction so --oracle and the normal modes cannot drift apart.
-	grep -aoE 'REPRO [0-9]+ [0-9]+|OR [0-9]+|OR-MOVED (true|false)' "$LOG" > "$work/$label.seq" || true
+	# The whole REPRO record travels (frame, machine hash, input digest, combo pair)
+	# so the comparison below can name WHAT diverged, not only that something did.
+	# A pre-2026-09-17 log (no in=/c=) still extracts: the tail is optional.
+	grep -aoE 'REPRO [0-9]+ [0-9]+( in=[^ ]+ c=[^ ]+)?|OR [0-9]+|OR-MOVED (true|false)' "$LOG" > "$work/$label.seq" || true
 	cp "$LOG" "$work/$label.lua.log"
 	echo "  $label: $(wc -l < "$work/$label.seq") samples"
 }
@@ -449,28 +531,148 @@ for i in $(seq 1 "$RUNS"); do
 	fi
 done
 
-rc=0
-for i in $(seq 2 "$RUNS"); do
-	if diff -q "$work/run1.seq" "$work/run$i.seq" >/dev/null; then
-		echo "ok   run1 == run$i  ($(wc -l < "$work/run1.seq") frames of hashes, identical)"
-	else
-		echo "BAD  run1 != run$i"; diff "$work/run1.seq" "$work/run$i.seq" | head -8; rc=1
-	fi
+# ---- harness #2: every run, every pair, the first divergent frame, a class ------------------
+# Case bookkeeping in surfacetourtest's grammar, so scripts/lib/arms.sh can judge an arm:
+#   R1  every run sampled AND moved (non-vacuity - checked BEFORE any comparison)
+#   R2  the unarmed runs agree pairwise (the control every arm must leave green)
+#   R3  ALL runs agree pairwise, armed ones included (the target an arm must redden)
+SEEN="$work/seen"; BROKEN="$work/broken"; : > "$SEEN"; : > "$BROKEN"; FAILED=0
+case_() { echo "$1" >> "$SEEN"; [ "$2" = ok ] || { echo "$1" >> "$BROKEN"; FAILED=$((FAILED+1)); }; }
+
+# vacuity <label> : 0 when the run's machine hashes changed at least once
+vacuity() {
+	local n u
+	n=$(grep -c '^REPRO ' "$work/$1.seq" || true)
+	u=$(awk '$1=="REPRO"{print $3}' "$work/$1.seq" | sort -u | wc -l)
+	[ "$n" -ge 2 ] && [ "$u" -ge 2 ]
+}
+# firstdiv <a> <b> : prints nothing when identical, else "<frame> machine|input|both|frames"
+# (frames = the two runs did not sample the same guest frames - not a verdict, exit 3).
+firstdiv() {
+	awk 'FNR==NR { if ($1=="REPRO") { h[$2]=$3; d[$2]=$4 } ; next }
+	     $1=="REPRO" {
+	         if (!($2 in h)) { print $2 " frames"; exit }
+	         hm = (h[$2] != $3); im = (d[$2] != $4)
+	         if (hm || im) { print $2 " " (hm && im ? "both" : (hm ? "machine" : "input")); exit }
+	     }' "$work/$1.seq" "$work/$2.seq"
+}
+
+LABELS=(); for i in $(seq 1 "$RUNS"); do LABELS+=("run$i"); done
+PAIRS=0; DISAGREE=0; FIRSTS=""; KINDS=""; VACUOUS=0; FRAMES_BAD=0
+
+# (R1) non-vacuity, EVERY run, BEFORE equality. Two frozen machines agree perfectly.
+for l in "${LABELS[@]}"; do
+	if ! vacuity "$l"; then VACUOUS=$((VACUOUS+1)); echo "BAD  $l: the machine hash never changed across $(grep -c '^REPRO ' "$work/$l.seq" || true) samples - VACUOUS"; fi
 done
+[ "$SEQ" -ge 2 ] || { VACUOUS=$((VACUOUS+1)); echo "BAD  SEQ=$SEQ - one sample per run compares nothing"; }
+if [ "$VACUOUS" -eq 0 ]; then case_ R1 ok; else case_ R1 FAIL; fi
 
-if [ "$SELFTEST" -eq 1 ]; then
-	# The sabotage arm. Without it, "the two runs agreed" is unfalsifiable: a
-	# comparison that cannot report a difference agrees with everything.
-	one_run poke FLYCAST_REPRO_POKE=1
-	if [ "$(wc -l < "$work/poke.seq")" -eq 0 ]; then
-		echo "reprotest: SKIP - the poke run produced no samples" >&2; exit $SKIP
+# compare <i> <j> : one pair; legacy lines kept for run1-vs-others (docs and scripts grep them)
+compare() {
+	local a="$1" b="$2" fd
+	PAIRS=$((PAIRS+1))
+	fd=$(firstdiv "$a" "$b")
+	if [ -z "$fd" ]; then
+		echo "ok   $a == $b  ($(wc -l < "$work/$a.seq") frames of hashes, identical)"
+		return 0
 	fi
-	if diff -q "$work/run1.seq" "$work/poke.seq" >/dev/null; then
-		echo "BAD  the poked run MATCHED - the comparison cannot detect a difference"; rc=1
-	else
-		echo "ok   the poked run differs - the comparison can fail"
-	fi
+	echo "BAD  $a != $b"; diff "$work/$a.seq" "$work/$b.seq" | head -8 || true
+	local f="${fd% *}" kind="${fd#* }"
+	if [ "$kind" = frames ]; then FRAMES_BAD=$((FRAMES_BAD+1)); echo "     $a/$b sampled different guest frames (from $f) - the harness did not run the same experiment twice"; return 1; fi
+	DISAGREE=$((DISAGREE+1)); FIRSTS="$FIRSTS $f"; KINDS="$KINDS $kind"
+	case "$kind" in
+		machine) echo "first divergence $a/$b at frame $f (machine)" ;;
+		input)   echo "first divergence $a/$b at frame $f (input) - the two processes fed the guest DIFFERENT rows here: an input desync, not emulation nondeterminism" ;;
+		both)    echo "first divergence $a/$b at frame $f (both) - the rows differ AND the machine differs" ;;
+	esac
+	return 1
+}
+
+# (R2) the unarmed runs, all pairs
+base_bad=0
+for ((i = 0; i < ${#LABELS[@]}; i++)); do for ((j = i + 1; j < ${#LABELS[@]}; j++)); do
+	compare "${LABELS[$i]}" "${LABELS[$j]}" || base_bad=$((base_bad+1))
+done; done
+if [ "$base_bad" -eq 0 ]; then case_ R2 ok; else case_ R2 FAIL; fi
+
+# ---- the arms: extra runs that MUST disagree ----------------------------------------------
+ARMED=()
+case "$ARM" in
+	poke)
+		# The sabotage arm. Without it, "the two runs agreed" is unfalsifiable: a
+		# comparison that cannot report a difference agrees with everything.
+		one_run poke FLYCAST_REPRO_POKE=1
+		if [ "$(wc -l < "$work/poke.seq")" -eq 0 ]; then
+			echo "reprotest: SKIP - the poke run produced no samples" >&2; exit $SKIP
+		fi
+		if diff -q "$work/run1.seq" "$work/poke.seq" >/dev/null; then
+			echo "BAD  the poked run MATCHED - the comparison cannot detect a difference"
+		else
+			echo "ok   the poked run differs - the comparison can fail"
+		fi
+		ARMED=(poke) ;;
+	moving)
+		# Two perturbations at DIFFERENT guest frames: the first divergence must MOVE.
+		one_run pokeA FLYCAST_REPRO_POKE_AT=$((START + 3))
+		one_run pokeB FLYCAST_REPRO_POKE_AT=$((START + 7))
+		for l in pokeA pokeB; do [ "$(wc -l < "$work/$l.seq")" -gt 0 ] || { echo "reprotest: SKIP - the $l run produced no samples" >&2; exit $SKIP; }; done
+		ARMED=(pokeA pokeB) ;;
+esac
+for l in "${ARMED[@]}"; do
+	if ! vacuity "$l"; then VACUOUS=$((VACUOUS+1)); echo "BAD  $l: VACUOUS"; fi
+done
+# (R3) every pair, armed runs included
+all_bad=$base_bad
+ALL=("${LABELS[@]}" "${ARMED[@]}")
+for ((i = 0; i < ${#ALL[@]}; i++)); do for ((j = i + 1; j < ${#ALL[@]}; j++)); do
+	a="${ALL[$i]}"; b="${ALL[$j]}"
+	case " ${LABELS[*]} " in *" $a "*) case " ${LABELS[*]} " in *" $b "*) continue ;; esac ;; esac	# unarmed pairs already compared
+	compare "$a" "$b" || all_bad=$((all_bad+1))
+done; done
+if [ "$all_bad" -eq 0 ]; then case_ R3 ok; else case_ R3 FAIL; fi
+
+# ---- the class --------------------------------------------------------------------------
+FIRST="-"
+if [ "$FRAMES_BAD" -gt 0 ]; then CLASS="harness-failed"
+elif [ "$DISAGREE" -eq 0 ]; then CLASS="reproducible"
+elif [[ " $KINDS " == *" input "* || " $KINDS " == *" both "* ]]; then CLASS="input-desync"; FIRST=$(echo $FIRSTS | tr ' ' '\n' | sort -n | head -1)
+else
+	uniqf=$(echo $FIRSTS | tr ' ' '\n' | sort -nu | tr '\n' ',' | sed 's/,$//')
+	if [ "$(echo "$uniqf" | tr ',' '\n' | wc -l)" -eq 1 ]; then CLASS="deterministic-divergence at frame $uniqf"; FIRST="$uniqf"
+	else CLASS="nondeterministic (first divergence moves: $uniqf)"; FIRST="$uniqf"; fi
 fi
+echo "REPRO CLASS: $CLASS"
+echo "REPROTEST RESULT: runs=${#ALL[@]} pairs=$PAIRS disagree=$DISAGREE class=${CLASS%% *} first=$FIRST vacuous=$VACUOUS mode=$([ "$COLD" -eq 1 ] && echo cold || echo from-state) seq=$SEQ"
 
-[ "$rc" -eq 0 ] && echo "reprotest: reproducible across processes"
-exit $rc
+# ---- the verdict, armed or not -------------------------------------------------------------
+if [ -z "$ARM" ]; then
+	[ "$FRAMES_BAD" -eq 0 ] || { echo "reprotest: the harness failed to run the same experiment twice (exit 3)"; exit 3; }
+	[ "$VACUOUS" -eq 0 ] || { echo "reprotest: VACUOUS - a run never moved, so agreement proves nothing (exit 5)"; exit 5; }
+	if [ "$DISAGREE" -eq 0 ]; then echo "reprotest: reproducible across processes"; exit 0; fi
+	echo "reprotest: NOT reproducible - $CLASS (exit 1)"; exit 1
+fi
+ARMS="$ROOT/scripts/lib/arms.sh"
+[ -x "$ARMS" ] || { echo "reprotest: no judge at $ARMS"; exit 2; }
+[ "$FRAMES_BAD" -eq 0 ] || { echo "reprotest --sabotage $ARM: the harness failed to run (exit 3)"; exit 3; }
+if [ "$ARM" = gate-can-pass ]; then
+	if [ "$CLASS" = reproducible ] && [ "$VACUOUS" -eq 0 ]; then
+		echo "PASS reprotest --sabotage gate-can-pass - nothing armed and the runs are reproducible: the gate CAN pass"; exit 0; fi
+	echo "FAIL reprotest --sabotage gate-can-pass - nothing armed, yet $CLASS (vacuous=$VACUOUS): the gate cannot pass, which is as useless as a gate that cannot fail (exit 4)"; exit 4
+fi
+case "$ARM" in
+	poke)   what="one perturbed word at the first sample"; want="deterministic-divergence at frame $START" ;;
+	moving) what="two runs perturbed at different frames"; want="nondeterministic" ;;
+esac
+set +e
+"$ARMS" judge "$ARM" "$what" R3 R2 "$FAILED" "$SEEN" "$BROKEN"; j=$?
+set -e
+case "$CLASS" in "$want"*) classok=1 ;; *) classok=0 ;; esac
+if [ "$classok" = 1 ]; then echo "  ok    and the classifier named it -- '$CLASS' (predicted '$want')"
+else echo "  FAIL  the classifier did NOT name it -- got '$CLASS', predicted '$want'"; fi
+case "$j" in
+	0) if [ "$classok" = 1 ]; then echo "PASS reprotest --sabotage $ARM - the arm fired as predicted (R3 reddened, R2 stayed green, class $want)"; exit 0; fi
+	   echo "FAIL reprotest --sabotage $ARM - the arm fired but the classifier misnamed it (exit 4)"; exit 4 ;;
+	2) echo "INCONCLUSIVE reprotest --sabotage $ARM - the target never ran (exit 2)"; exit 2 ;;
+	*) if grep -aq '^R3$' "$BROKEN"; then echo "FAIL reprotest --sabotage $ARM - it fired but reddened its control R2 (the unarmed runs disagree), or the tally lies (exit 1)"; exit 1; fi
+	   echo "FAIL reprotest --sabotage $ARM - the arm did NOT fire: R3 stayed green, the check is decorative (exit 4)"; exit 4 ;;
+esac
