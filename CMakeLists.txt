@@ -1318,6 +1318,7 @@ if(NOT LIBRETRO)
 	core/dojo/macros_panel.cpp
 	core/dojo/timeline_panel.cpp
 	core/dojo/sendequiv.cpp
+	core/dojo/oracle.cpp
 	core/dojo/notation_integ.cpp
 	core/dojo/surface_tour.cpp
 	core/dojo/surface_tour_hooks.cpp

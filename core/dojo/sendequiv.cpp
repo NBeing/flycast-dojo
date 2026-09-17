@@ -1,4 +1,5 @@
 #include "dojo.h"
+#include "oracle.h"
 #include "roll_host.h"
 #include "rend/gui.h"
 #include "oslib/oslib.h"
@@ -123,16 +124,12 @@ static struct State
 	u32 hash[3] = { 0, 0, 0 };
 } st;
 
+// `[MOVED 2026-09-17]` to roll::oracle::machineHash (core/dojo/oracle.{h,cpp}) so the
+// machine hash has ONE owner - the Surface Tour's gate compares the same number this
+// probe does. The name stays so the three arms below read as they always did.
 static u32 hashNow()
 {
-	Serializer sizer;
-	dc_serialize(sizer);
-	std::vector<u8> buf(sizer.size());
-	Serializer ser(buf.data(), buf.size());
-	dc_serialize(ser);
-	// Same-build A/B/N compare, so the exact trailer the lua hash adds is not
-	// needed - only that this is a consistent function of the machine.
-	return (u32)XXH32(buf.data(), ser.size(), 0);
+	return oracle::machineHash();
 }
 
 static u32 baseFrameOf(int slot)
