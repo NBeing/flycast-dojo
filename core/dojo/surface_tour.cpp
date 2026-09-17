@@ -312,15 +312,33 @@ static void buildSteps()
 	}
 	show("show: David's base state (1 frame)");
 
-	// 2-15. rebind every window's key through the real engine
+	/*
+		3-44. PER WINDOW: rebind its key, open it WITH that key, close it.
+
+		`[MEASURED 2026-09-17]` the user, watching: "whenever the rebind happens i
+		dont see it, make them meaningful, i.e. open the window." A rebind is
+		invisible - the engine arms, a key is pressed in-process, a mapping changes,
+		and the screen does nothing. So the two phases are interleaved into TRIPLETS,
+		cause beside effect: rebind X, then open X with the key just bound, then
+		close it. And the HOTKEYS panel goes FIRST and STAYS OPEN through the rest:
+		it is the live cheat sheet, so every later rebind is visibly a cell flipping
+		from "unbound" to its chord. Its own close is the last step of the phase.
+		Same 42 steps as before, reordered. Each rebind narrates "was -> now".
+	*/
+	static std::string g_was[NKEYS];
+	int hotkeysIdx = 0;
 	for (int i = 0; i < NKEYS; i++)
-	{
+		if (strcmp(KEYS[i].panel, "hotkeys") == 0) hotkeysIdx = i;
+
+	auto rebindStep = [&](int i) {
 		const PanelKey& k = KEYS[i];
 		Step s;
 		s.name = keep(std::string("rebind: ") + k.panel + " -> " + k.chord);
 		s.begin = [i] {
 			const std::shared_ptr<GamepadDevice> kbd = rebind::keyboard();
 			if (kbd == nullptr) { why("no keyboard"); return false; }
+			const std::string was = rebind::bindingName(kbd, KEYS[i].action);
+			g_was[i] = was.empty() ? "unbound" : was;
 			rebind::arm(KEYS[i].action, kbd);
 			if (!rebind::active()) { why("arm refused"); return false; }
 			return true;
@@ -336,46 +354,59 @@ static void buildSteps()
 				why("bound code %u, wanted %u (%s)", got, KEYS[i].code, rebind::bindingName(kbd, KEYS[i].action).c_str());
 				return false;
 			}
-			why("%s", rebind::bindingName(kbd, KEYS[i].action).c_str());
+			why("%s -> %s", g_was[i].c_str(), rebind::bindingName(kbd, KEYS[i].action).c_str());
 			return true;
 		};
 		add(s);
-	}
+	};
+	auto openStep = [&](int i) {
+		Step s;
+		s.name = keep(std::string("open: ") + KEYS[i].panel);
+		s.needsPrev = true;			// opening with a key that did not bind is not a claim
+		s.act = [i] {
+			// The sabotage: the piano roll's open presses a chord nothing is bound to.
+			const bool sab = st.sabotage && strcmp(KEYS[i].panel, "pianoroll") == 0;
+			return injectKey(sab ? sabotageCode(KEYS[i].code) : KEYS[i].code);
+		};
+		s.verify = [i] {
+			const panels::Panel *p = panels::find(KEYS[i].panel);
+			if (p == nullptr) { why("no such panel"); return false; }
+			if (!*p->open) { why("open=false captured=%s", gui_keyboard_captured() ? "yes" : "no"); return false; }
+			why("opened with %s", KEYS[i].chord);
+			return true;
+		};
+		add(s);
+	};
+	auto closeStep = [&](int i) {
+		Step s;
+		s.name = keep(std::string("close: ") + KEYS[i].panel);
+		s.needsPrev = true;
+		s.act = [i] { return injectKey(KEYS[i].code); };
+		s.verify = [i] {
+			const panels::Panel *p = panels::find(KEYS[i].panel);
+			if (p == nullptr) { why("no such panel"); return false; }
+			if (*p->open) { why("open=true captured=%s", gui_keyboard_captured() ? "yes" : "no"); return false; }
+			why("closed with %s", KEYS[i].chord);
+			return true;
+		};
+		add(s);
+	};
 
-	// 16-43. open then close every window WITH its new key
+	// the cheat sheet first, and it stays up
+	rebindStep(hotkeysIdx);
+	openStep(hotkeysIdx);
+	// every other window: rebind, open with it, close - with the sheet showing the flip
 	for (int i = 0; i < NKEYS; i++)
 	{
-		const PanelKey& k = KEYS[i];
-		{
-			Step s;
-			s.name = keep(std::string("open: ") + k.panel);
-			s.act = [i] {
-				// The sabotage: the first open presses a chord nothing is bound to.
-				const bool sab = st.sabotage && i == 0;
-				return injectKey(sab ? sabotageCode(KEYS[i].code) : KEYS[i].code);
-			};
-			s.verify = [i] {
-				const panels::Panel *p = panels::find(KEYS[i].panel);
-				if (p == nullptr) { why("no such panel"); return false; }
-				if (!*p->open) { why("open=false captured=%s", gui_keyboard_captured() ? "yes" : "no"); return false; }
-				return true;
-			};
-			add(s);
-		}
-		{
-			Step s;
-			s.name = keep(std::string("close: ") + k.panel);
-			s.needsPrev = true;
-			s.act = [i] { return injectKey(KEYS[i].code); };
-			s.verify = [i] {
-				const panels::Panel *p = panels::find(KEYS[i].panel);
-				if (p == nullptr) { why("no such panel"); return false; }
-				if (*p->open) { why("open=true captured=%s", gui_keyboard_captured() ? "yes" : "no"); return false; }
-				return true;
-			};
-			add(s);
-		}
+		if (i == hotkeysIdx)
+			continue;
+		rebindStep(i);
+		openStep(i);
+		closeStep(i);
 	}
+	// and the sheet last. Its close step's needsPrev looks at the previous step
+	// (the last panel's close), which is the right dependency: the phase ended clean.
+	closeStep(hotkeysIdx);
 
 	// 44. enter authoring - every feature step below runs in WRITE
 	{
