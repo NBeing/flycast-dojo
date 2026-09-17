@@ -1,4 +1,7 @@
 #include "fst.h"
+#include "surface_tour.h"
+#include "deps/filesystem.hpp"
+#include <chrono>
 #include "ui_text.h"
 #include "dojo.h"
 #include "mvc2.h"
@@ -565,6 +568,46 @@ static void writeResults()
 // (the sweep is deterministic - the same counterfactual from the same node lands
 // on the same outcome state) and its sabotage. Off by default; the frame gate
 // lets the replay attach the movie into session_inputs first.
+/*
+	ARM THE FIXED FOUR-PHASE SWEEP FROM SLOT 0 AND START IT - the probe's body, shared
+	with the Surface Tour hook so both drive the one generate()/runStart() the buttons
+	call. `who` prefixes the log lines ("FST PROBE" keeps the probe's exact traces).
+	Requires the host to see slot 0; false with no side effects until it does.
+*/
+static bool armFixedSweep(const char *who)
+{
+	config::SavestateSlot.set(0);
+	cfgSetVirtual("config", "Dreamcast.SavestateSlot", "0");
+	if (!slotExists(0))
+		return false;
+	gui_pause_for_checkout();		// generate() requires Paused
+	dojo.play_match = false;		// enter WRITE - the FST authors; READ refuses
+	const u32 bf = slotFrameOf(0);
+	st.sweep = Sweep();
+	st.sweep.selLo = bf + 5;
+	st.sweep.selHi = bf + 15;
+	st.sweep.P = st.sweep.selLo;	// P == selLo: the plain skip-phase test
+	st.sweep.k0 = 0;
+	st.sweep.k1 = 3;				// four skip phases -> four variants
+	st.sweep.fkOn = false;
+	normalize(st.sweep);
+	st.haveSel = true;				// generate() requires a captured selection
+	st.settle = 5;
+	NOTICE_LOG(NETWORK, "%s: armed selLo=%u selHi=%u P=%u k=%d..%d base=slot0@%u variants=%d",
+			who, st.sweep.selLo, st.sweep.selHi, st.sweep.P, st.sweep.k0, st.sweep.k1, bf, st.sweep.Ntot());
+	if (!generate())
+	{
+		NOTICE_LOG(NETWORK, "%s: generate REFUSED - %s", who, st.why.c_str());
+		return false;
+	}
+	if (!runStart())
+	{
+		NOTICE_LOG(NETWORK, "%s: runStart REFUSED - %s", who, st.why.c_str());
+		return false;
+	}
+	return true;
+}
+
 static void fstProbe()
 {
 	static bool probed = false;
@@ -579,29 +622,7 @@ static void fstProbe()
 	if (!slotExists(0))
 		return;			// retry next frame until the host sees the base slot
 	probed = true;
-
-	gui_pause_for_checkout();		// generate() requires Paused
-	dojo.play_match = false;		// enter WRITE - the FST authors; READ refuses
-	const u32 bf = slotFrameOf(0);
-	st.sweep = Sweep();
-	st.sweep.selLo = bf + 5;
-	st.sweep.selHi = bf + 15;
-	st.sweep.P = st.sweep.selLo;	// P == selLo: the plain skip-phase test
-	st.sweep.k0 = 0;
-	st.sweep.k1 = 3;				// four skip phases -> four variants
-	st.sweep.fkOn = false;
-	normalize(st.sweep);
-	st.haveSel = true;				// generate() requires a captured selection
-	st.settle = 5;
-	NOTICE_LOG(NETWORK, "FST PROBE: armed selLo=%u selHi=%u P=%u k=%d..%d base=slot0@%u variants=%d",
-			st.sweep.selLo, st.sweep.selHi, st.sweep.P, st.sweep.k0, st.sweep.k1, bf, st.sweep.Ntot());
-	if (!generate())
-	{
-		NOTICE_LOG(NETWORK, "FST PROBE: generate REFUSED - %s", st.why.c_str());
-		return;
-	}
-	if (!runStart())
-		NOTICE_LOG(NETWORK, "FST PROBE: runStart REFUSED - %s", st.why.c_str());
+	armFixedSweep("FST PROBE");
 }
 
 void tick()
@@ -881,6 +902,64 @@ void registerFrameSkipTestPanel()
 	NOTICE_LOG(RENDERER, "FST PANEL: registered=%s open=%s",
 			panels::find("frameskiptest") != nullptr ? "yes" : "NO",
 			fst::st.panelOpen ? "yes" : "no");
+}
+
+/*
+	SURFACE TOUR HOOKS - arm the fixed sweep through the probe's own body, then read
+	completion back off disk: the runner's tick() drives the sweep in between, and
+	writeResults() stamps results.json when it lands. Contract: surface_tour.h.
+*/
+static double g_fstArmedAt = 0;
+
+bool surfacetour::hooks::fstArmSweep()
+{
+	if (frameSkipTestRunning())
+	{
+		surfacetour::why("a sweep is already running");
+		return false;
+	}
+	g_fstArmedAt = os_GetSeconds();
+	if (!fst::armFixedSweep("TOUR FST"))
+	{
+		surfacetour::why("arm refused%s%s", fst::st.why.empty() ? " (slot 0 not visible?)" : ": ",
+				fst::st.why.c_str());
+		return false;
+	}
+	if (!frameSkipTestRunning())
+	{
+		surfacetour::why("armed but not running");
+		return false;
+	}
+	return true;
+}
+
+bool surfacetour::hooks::fstSweepDone()
+{
+	if (frameSkipTestRunning())
+	{
+		surfacetour::why("still running (variant %d)", fst::st.runN);
+		return false;
+	}
+	if (hostfs::savestateFolderOverride.empty())
+	{
+		surfacetour::why("no clip folder for results.json");
+		return false;
+	}
+	const std::string path = hostfs::savestateFolderOverride + "/results.json";
+	std::error_code ec;
+	if (!ghc::filesystem::exists(path, ec))
+	{
+		surfacetour::why("no %s", path.c_str());
+		return false;
+	}
+	const auto mt = std::chrono::duration_cast<std::chrono::seconds>(
+			ghc::filesystem::last_write_time(path, ec).time_since_epoch()).count();
+	if ((double)mt < g_fstArmedAt - 1.0)
+	{
+		surfacetour::why("results.json predates the arm");
+		return false;
+	}
+	return true;
 }
 
 }	// namespace roll

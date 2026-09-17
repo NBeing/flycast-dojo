@@ -1,4 +1,5 @@
 #include "ui_text.h"
+#include "surface_tour.h"
 #include "roll_library.h"
 #include "roll_select.h"
 #include "roll_pattern.h"
@@ -82,17 +83,20 @@ static s64 place(const Sequence& s, bool overdub)
 // selection through place() (the same call the button makes), report first-changed. The
 // harness seeds a known snippet and a selection, then asserts the movie changed at it.
 // ---------------------------------------------------------------------------------------
-static void probe()
+/*
+	THE PROBE'S BODY, shared with the Surface Tour hook so both drive the one place()
+	the button calls: seed a known snippet if the library is empty (one lane: on, GAP,
+	on - so replace and overdub would differ and a placement is visible), make a
+	mid-movie selection (the harness leaves the roll unselected headlessly; mid-match
+	is where a wrong answer looks wrong), place the first sequence. Returns the first
+	changed frame or -1; the out-params feed the caller's own log line.
+*/
+static s64 placeSeeded(bool& rowChanged, int& libCount, int& skipped)
 {
-	static bool done = false;
-	if (done || !cfgLoadBool("dojo", "SnippetProbe", false) || !movie::authored())
-		return;
-	done = true;
-	int skipped = 0;
+	rowChanged = false;
+	libCount = 0;
+	skipped = 0;
 	std::vector<Sequence> lib = libraryScan(&skipped);
-	// Self-seed a known snippet if the library is empty, so the test is self-contained
-	// (the fork's own RollLibProbe does the same). One lane: on, GAP, on - so replace
-	// and overdub would differ, and a placement is visible.
 	if (lib.empty())
 	{
 		std::error_code lec;
@@ -107,15 +111,9 @@ static void probe()
 		libraryWrite(libraryDir() + "/__snipprobe.txt", sq, werr);
 		lib = libraryScan(&skipped);
 	}
-	NOTICE_LOG(RENDERER, "SNIPPET PROBE: library has %d sequence(s) (%d skipped)", (int)lib.size(), skipped);
+	libCount = (int)lib.size();
 	if (lib.empty())
-	{
-		NOTICE_LOG(RENDERER, "SNIPPET PROBE RESULT: placed=NO reason=empty-library");
-		return;
-	}
-	// Select a mid-movie range to place onto (the harness leaves the roll unselected
-	// headlessly, so the probe makes its own target - mid-match, where a wrong answer
-	// looks wrong, not at the movie edge).
+		return -1;
 	const u32 mid = movie::end() > 40 ? movie::end() - 40 : 0;
 	const size_t len = std::max<size_t>(1, lib.front().length());
 	selection().clear();
@@ -125,8 +123,27 @@ static void probe()
 	const Row before = [&]{ auto it = dojo.session_inputs.find(mid); return it == dojo.session_inputs.end() ? Row() : it->second; }();
 	const s64 first = place(lib.front(), /*overdub*/ false);
 	const Row after = [&]{ auto it = dojo.session_inputs.find(mid); return it == dojo.session_inputs.end() ? Row() : it->second; }();
+	rowChanged = after != before;
+	return first;
+}
+
+static void probe()
+{
+	static bool done = false;
+	if (done || !cfgLoadBool("dojo", "SnippetProbe", false) || !movie::authored())
+		return;
+	done = true;
+	bool rowChanged = false;
+	int libCount = 0, skipped = 0;
+	const s64 first = placeSeeded(rowChanged, libCount, skipped);
+	NOTICE_LOG(RENDERER, "SNIPPET PROBE: library has %d sequence(s) (%d skipped)", libCount, skipped);
+	if (libCount == 0)
+	{
+		NOTICE_LOG(RENDERER, "SNIPPET PROBE RESULT: placed=NO reason=empty-library");
+		return;
+	}
 	NOTICE_LOG(RENDERER, "SNIPPET PROBE RESULT: placed=%s first=%lld rowChanged=%s libCount=%d",
-			first >= 0 ? "yes" : "NO", (long long)first, (after != before) ? "yes" : "NO", (int)lib.size());
+			first >= 0 ? "yes" : "NO", (long long)first, rowChanged ? "yes" : "NO", libCount);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -251,6 +268,30 @@ void registerSnippetsPanel()
 			/*persist*/ true, /*defW*/ 460.f, /*defH*/ 520.f });
 	NOTICE_LOG(RENDERER, "SNIPPETS PANEL: registered=%s open=%s",
 			panels::find("snippets") != nullptr ? "yes" : "NO", snippets::snippetsOpen ? "yes" : "no");
+}
+
+//! SURFACE TOUR HOOK - the probe's body as a scored step. Contract: surface_tour.h.
+bool surfacetour::hooks::snippetsPlace()
+{
+	if (!movie::authored())
+	{
+		surfacetour::why("no movie loaded");
+		return false;
+	}
+	bool rowChanged = false;
+	int libCount = 0, skipped = 0;
+	const s64 first = snippets::placeSeeded(rowChanged, libCount, skipped);
+	if (libCount == 0)
+	{
+		surfacetour::why("library empty even after seeding");
+		return false;
+	}
+	if (first < 0 || !rowChanged)
+	{
+		surfacetour::why("first=%lld rowChanged=%d libCount=%d", (long long)first, rowChanged, libCount);
+		return false;
+	}
+	return true;
 }
 
 }	// namespace roll

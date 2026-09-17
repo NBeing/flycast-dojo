@@ -1,4 +1,5 @@
 #include "roll_profile.h"
+#include "surface_tour.h"
 #include "ui_text.h"
 #include "roll_host.h"
 #include "roll_select.h"
@@ -1229,6 +1230,45 @@ void registerPanel()
 			panels::find("pianoroll") != nullptr ? "yes" : "NO",
 			panelOpen ? "yes" : "no",
 			cfgLoadBool("dojo", "Panel.pianoroll", false) ? "yes" : "no");
+}
+
+// ---------------------------------------------------------------------------------------
+// SURFACE TOUR HOOK - the RollEditProbe's verbs as a scored step: flip one bit at
+// movie::end()-4 through the funnel, read the row back changed, undo, read it back
+// restored. The probe above keeps its own log lines (scripts/rolltest.sh greps them);
+// this returns the truth and names the failing half. Contract: surface_tour.h.
+// ---------------------------------------------------------------------------------------
+bool surfacetour::hooks::rollEditFlipUndo()
+{
+	if (!movie::authored())
+	{
+		surfacetour::why("no movie loaded");
+		return false;
+	}
+	const u32 f = movie::end() > 4 ? movie::end() - 4 : 0;
+	auto rowOf = [&](u32 fr) -> Row {
+		auto it = dojo.session_inputs.find(fr);
+		return it == dojo.session_inputs.end() ? Row() : it->second;
+	};
+	const Row before = rowOf(f);
+	const size_t depth = dojo.undo_stack.size();
+	const Column& c = profile().cols[0];		// any plain-bit column
+	std::map<u32, Row> src; src[f] = before;
+	std::map<u32, Row> whole;
+	for (const auto& kv : dojo.session_inputs) whole[kv.first] = kv.second;
+	Edit e = mergeIntoMovie(whole, setColumn(src, { f }, 0, c, !rowHas(before, 0, c)));
+	const s64 first = dojo.ApplyEdit(e, "tour: roll flip");
+	const bool changed = rowOf(f) != before;
+	const bool grew    = dojo.undo_stack.size() > depth;
+	const bool undone  = dojo.ApplyUndo();
+	const bool restored = rowOf(f) == before;
+	if (!(changed && grew && undone && restored))
+	{
+		surfacetour::why("frame=%u first=%lld changed=%d grew=%d undone=%d restored=%d",
+				f, (long long)first, changed, grew, undone, restored);
+		return false;
+	}
+	return true;
 }
 
 }	// namespace roll

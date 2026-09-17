@@ -1,4 +1,6 @@
 #include "ui_text.h"
+#include "surface_tour.h"
+#include "rend/gui.h"
 #include "tas_auto.h"
 #include "tasmacro.h"
 #include "dojo.h"
@@ -386,6 +388,60 @@ void registerSenderPanel()
 	NOTICE_LOG(RENDERER, "INPUT SENDER: registered=%s open=%s",
 			panels::find("sender") != nullptr ? "yes" : "NO",
 			sender::senderOpen ? "yes" : "no");
+}
+
+/*
+	SURFACE TOUR HOOKS - the Send button's body as a scored step, then Stop. The
+	pattern is a four-frame jab (5LP, two holds, 5LP): long enough to be visibly
+	live, short enough that Stop still has something to stop. Contract: surface_tour.h.
+*/
+bool surfacetour::hooks::senderSend()
+{
+	// The contract's floor, set here rather than assumed: the button refuses in READ
+	// ("nothing to send into"), and the runner enters WRITE before the feature phase,
+	// but the unit drive has no runner in front of it - so pause and author.
+	if (gui_state != GuiState::Paused)
+		gui_pause_for_checkout();
+	dojo.play_match = false;
+	if (tas_auto::liveActive())
+	{
+		surfacetour::why("already sending");
+		return false;
+	}
+	std::vector<u16> p1;
+	std::string err;
+	if (!sender::patternToCanon("5LP _ _ 5LP", p1, err) || p1.empty())
+	{
+		surfacetour::why("pattern refused: %s", err.c_str());
+		return false;
+	}
+	const std::vector<u16> p2;
+	tas_auto::playLive(p1, p2, dojo.frame_number.load() + 1);
+	NOTICE_LOG(RENDERER, "INPUT SENDER: sent %u frame(s) at %u",
+			(unsigned)p1.size(), (unsigned)dojo.frame_number.load() + 1);
+	if (!tas_auto::liveActive())
+	{
+		surfacetour::why("playLive did not go live");
+		return false;
+	}
+	return true;
+}
+
+bool surfacetour::hooks::senderStop()
+{
+	if (!tas_auto::liveActive())
+	{
+		surfacetour::why("not sending");
+		return false;
+	}
+	tas_auto::stopLive();
+	NOTICE_LOG(RENDERER, "INPUT SENDER: send stopped by hand");
+	if (tas_auto::liveActive())
+	{
+		surfacetour::why("still live after stopLive");
+		return false;
+	}
+	return true;
 }
 
 }	// namespace roll

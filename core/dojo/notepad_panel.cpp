@@ -1,4 +1,5 @@
 #include "TextEditor.h"
+#include "surface_tour.h"
 #include "ui_text.h"
 #include "roll_notation.h"
 #include "roll_profile.h"
@@ -255,6 +256,24 @@ void registerNotepadPanel()
 			/*persist*/ true, /*defW*/ 480.f, /*defH*/ 420.f });
 	NOTICE_LOG(RENDERER, "NOTEPAD PANEL: registered=%s open=%s",
 			panels::find("notepad") != nullptr ? "yes" : "NO", notepad::notepadOpen ? "yes" : "no");
+}
+
+/*
+	SURFACE TOUR HOOK - type into the real editor and read the analysis back: one
+	good three-frame line, one line that cannot parse, so the verdict has both a
+	gutter and a squiggle to be right about. Contract: surface_tour.h.
+*/
+bool surfacetour::hooks::notepadAnalyze()
+{
+	TextEditor& ed = notepad::editor();
+	ed.SetText("5LP _ _\nBOGUS\n");
+	const notepad::Analysis a = notepad::analyze(ed.GetText());
+	if (a.errorLines != 1 || a.totalFrames != 3)
+	{
+		surfacetour::why("errorLines=%d totalFrames=%d (want 1 and 3)", a.errorLines, a.totalFrames);
+		return false;
+	}
+	return true;
 }
 
 }	// namespace roll

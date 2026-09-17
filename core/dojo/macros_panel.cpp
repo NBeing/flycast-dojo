@@ -1,4 +1,5 @@
 #include "ui_text.h"
+#include "surface_tour.h"
 #include "roll_library.h"
 #include "roll_select.h"
 #include "roll_pattern.h"
@@ -143,25 +144,25 @@ static s64 place(const MacroFile& mf, bool overdub)
 // by writing the live movie to the bound clip (Dojo::WriteMacroFile), scans the replays
 // root, places the first macro at a mid-movie selection through place(), reports the result.
 // ---------------------------------------------------------------------------------------
-static void probe()
+/*
+	THE PROBE'S BODY, shared with the Surface Tour hook so both drive the one place()
+	the button calls: self-seed by writing the live movie as this clip's macro.txt if
+	none is found, then place the first macro at a mid-movie selection (max 8 rows).
+	Returns the first changed frame or -1; the out-params feed the caller's log line.
+*/
+static s64 placeSeeded(bool& rowChanged, int& count)
 {
-	static bool done = false;
-	if (done || !cfgLoadBool("dojo", "MacrosProbe", false) || !movie::authored())
-		return;
-	done = true;
+	rowChanged = false;
+	count = 0;
 	std::vector<MacroFile> macs = scanMacros();
 	if (macs.empty())
 	{
-		// self-seed: write the current movie as this clip's macro.txt, then rescan.
 		dojo.WriteMacroFile();
 		macs = scanMacros();
 	}
-	NOTICE_LOG(RENDERER, "MACROS PROBE: found %d macro file(s) under %s", (int)macs.size(), replaysRoot().c_str());
+	count = (int)macs.size();
 	if (macs.empty())
-	{
-		NOTICE_LOG(RENDERER, "MACROS PROBE RESULT: placed=NO reason=no-macros");
-		return;
-	}
+		return -1;
 	const u32 mid = movie::end() > 40 ? movie::end() - 40 : 0;
 	const size_t len = std::max<size_t>(1, (size_t)macs.front().frames);
 	selection().clear();
@@ -171,8 +172,27 @@ static void probe()
 	const Row before = [&]{ auto it = dojo.session_inputs.find(mid); return it == dojo.session_inputs.end() ? Row() : it->second; }();
 	const s64 first = place(macs.front(), /*overdub*/ false);
 	const Row after = [&]{ auto it = dojo.session_inputs.find(mid); return it == dojo.session_inputs.end() ? Row() : it->second; }();
+	rowChanged = after != before;
+	return first;
+}
+
+static void probe()
+{
+	static bool done = false;
+	if (done || !cfgLoadBool("dojo", "MacrosProbe", false) || !movie::authored())
+		return;
+	done = true;
+	bool rowChanged = false;
+	int count = 0;
+	const s64 first = placeSeeded(rowChanged, count);
+	NOTICE_LOG(RENDERER, "MACROS PROBE: found %d macro file(s) under %s", count, replaysRoot().c_str());
+	if (count == 0)
+	{
+		NOTICE_LOG(RENDERER, "MACROS PROBE RESULT: placed=NO reason=no-macros");
+		return;
+	}
 	NOTICE_LOG(RENDERER, "MACROS PROBE RESULT: placed=%s first=%lld rowChanged=%s count=%d",
-			first >= 0 ? "yes" : "NO", (long long)first, (after != before) ? "yes" : "NO", (int)macs.size());
+			first >= 0 ? "yes" : "NO", (long long)first, rowChanged ? "yes" : "NO", count);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -250,6 +270,30 @@ void registerMacrosPanel()
 			/*persist*/ true, /*defW*/ 480.f, /*defH*/ 520.f });
 	NOTICE_LOG(RENDERER, "MACROS PANEL: registered=%s open=%s",
 			panels::find("macros") != nullptr ? "yes" : "NO", macros::macrosOpen ? "yes" : "no");
+}
+
+//! SURFACE TOUR HOOK - the probe's body as a scored step. Contract: surface_tour.h.
+bool surfacetour::hooks::macrosPlace()
+{
+	if (!movie::authored())
+	{
+		surfacetour::why("no movie loaded");
+		return false;
+	}
+	bool rowChanged = false;
+	int count = 0;
+	const s64 first = macros::placeSeeded(rowChanged, count);
+	if (count == 0)
+	{
+		surfacetour::why("no macro found even after seeding (WriteMacroFile refused?)");
+		return false;
+	}
+	if (first < 0 || !rowChanged)
+	{
+		surfacetour::why("first=%lld rowChanged=%d count=%d", (long long)first, rowChanged, count);
+		return false;
+	}
+	return true;
 }
 
 }	// namespace roll

@@ -1,4 +1,5 @@
 #include "ui_text.h"
+#include "surface_tour.h"
 #include "tas_clip.h"
 #include "dojo.h"
 #include "roll_host.h"
@@ -440,6 +441,71 @@ void registerLabPanel()
 			/*persist*/ true, /*defW*/ 520.f, /*defH*/ 400.f });
 	NOTICE_LOG(RENDERER, "TEST LAB: registered=%s open=%s",
 			panels::find("testlab") != nullptr ? "yes" : "NO", lab::labOpen ? "yes" : "no");
+}
+
+/*
+	SURFACE TOUR HOOKS - add a test from slot 0 through the real verb, read the
+	library back one longer, remember the new folder; then trash exactly that one and
+	read it back gone. Contract: surface_tour.h.
+*/
+static std::string g_tourLabDir;
+
+bool surfacetour::hooks::labAddTest()
+{
+	if (settings.content.fileName.empty())
+	{
+		surfacetour::why("no game loaded");
+		return false;
+	}
+	std::vector<tas_clip::LabTest> before, after;
+	const int nb = tas_clip::labTests(lab::gameBaseName(), before);
+	if (!lab::addTestFromSlot(0))
+	{
+		surfacetour::why("addTestFromSlot(0) refused (no state in slot 0?)");
+		return false;
+	}
+	const int na = tas_clip::labTests(lab::gameBaseName(), after);
+	if (na != nb + 1)
+	{
+		surfacetour::why("library count %d -> %d, expected +1", nb, na);
+		return false;
+	}
+	g_tourLabDir.clear();
+	for (const tas_clip::LabTest& t : after)
+	{
+		bool seen = false;
+		for (const tas_clip::LabTest& b : before)
+			if (b.dir == t.dir) { seen = true; break; }
+		if (!seen) { g_tourLabDir = t.dir; break; }
+	}
+	if (g_tourLabDir.empty())
+	{
+		surfacetour::why("could not identify the new test in the library");
+		return false;
+	}
+	return true;
+}
+
+bool surfacetour::hooks::labTrashTest()
+{
+	if (g_tourLabDir.empty())
+	{
+		surfacetour::why("no tour test to trash (add first)");
+		return false;
+	}
+	if (!tas_clip::labTrashTest(g_tourLabDir))
+	{
+		surfacetour::why("labTrashTest refused for %s", g_tourLabDir.c_str());
+		return false;
+	}
+	std::error_code ec;
+	if (ghc::filesystem::exists(g_tourLabDir, ec))
+	{
+		surfacetour::why("%s still exists after trash", g_tourLabDir.c_str());
+		return false;
+	}
+	g_tourLabDir.clear();
+	return true;
 }
 
 }	// namespace roll
