@@ -2325,6 +2325,18 @@ foreach(arm noload absolute)
 	set_tests_properties(flycast.boothandofftest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
 endforeach()
 
+# LAUNCH KEYS (ported 2026-09-17; PORT-DEFECT-CENSUS §3): dojo:InputTrace names every
+# non-neutral input (silent while neutral, throttled ~3/s); dojo:PurgeStale auto-purges
+# stale states after a rewind (BASE kept). RUN_SERIAL: both drive scripts/testrun.sh.
+add_test(NAME flycast.inputtracetest COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/inputtracetest.sh)
+set_tests_properties(flycast.inputtracetest PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RUN_SERIAL TRUE TIMEOUT 300)
+add_test(NAME flycast.inputtracetest_can_fail_silent COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/inputtracetest.sh --sabotage silent)
+set_tests_properties(flycast.inputtracetest_can_fail_silent PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RUN_SERIAL TRUE TIMEOUT 300)
+add_test(NAME flycast.purgestaletest COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/purgestaletest.sh)
+set_tests_properties(flycast.purgestaletest PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RUN_SERIAL TRUE TIMEOUT 300)
+add_test(NAME flycast.purgestaletest_can_fail_off COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/purgestaletest.sh --sabotage off)
+set_tests_properties(flycast.purgestaletest_can_fail_off PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RUN_SERIAL TRUE TIMEOUT 300)
+
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually
 # captured the frame (a well-formed blank PNG is the PBO-never-advanced bug). Needs
