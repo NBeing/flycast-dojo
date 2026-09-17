@@ -658,6 +658,114 @@ static void drawGamePanel()
 		p->draw();
 }
 
+/*
+	THE INPUT TRACER (David's tasInputTrace, gui.cpp:625; ported 2026-09-17, CENSUS §3).
+	dojo:InputTrace=yes (default no). For the "something is firing and I cannot see what"
+	class of bug - a drifting stick, a stuck D-pad on a second controller, an accumulated
+	mouse wheel. It is SILENT while every input sits neutral and only speaks when
+	something is not - so a quiet log is itself the answer, and a noisy one names the
+	culprit. A CHANGE prints at once; an unchanged state repeats only every 5 s, with how
+	long it has been stuck. scripts/inputtracetest.sh measures both halves.
+*/
+static std::string lastTraceLine;
+
+static void tasInputTrace()
+{
+	if (!cfgLoadBool("dojo", "InputTrace", false))
+		return;
+	ImGuiIO& io = ImGui::GetIO();
+
+	std::string offenders;
+	auto add = [&offenders](const std::string& s) {
+		if (!offenders.empty())
+			offenders += "  ";
+		offenders += s;
+	};
+	char b[128];
+
+	if (mouseWheel != 0)
+	{
+		snprintf(b, sizeof(b), "wheel=%.1f", mouseWheel);
+		add(b);
+	}
+	if (mouseButtons != 0)
+	{
+		snprintf(b, sizeof(b), "mouseBtns=0x%x", mouseButtons);
+		add(b);
+	}
+	for (int p = 0; p < 4; p++)
+	{
+		// kcode is active-LOW: 0xffff... means nothing pressed.
+		if (kcode[p] != 0xffffffff)
+		{
+			snprintf(b, sizeof(b), "P%d kcode=~0x%x", p + 1, (u32)~kcode[p]);
+			add(b);
+		}
+		// Anything past ~25% is either genuinely held or drifting - both worth naming.
+		if (std::abs(joyx[p]) > 8192 || std::abs(joyy[p]) > 8192)
+		{
+			snprintf(b, sizeof(b), "P%d Lstick=%d,%d", p + 1, joyx[p], joyy[p]);
+			add(b);
+		}
+		if (std::abs(joyrx[p]) > 8192 || std::abs(joyry[p]) > 8192)
+		{
+			snprintf(b, sizeof(b), "P%d Rstick=%d,%d", p + 1, joyrx[p], joyry[p]);
+			add(b);
+		}
+	}
+	// What ImGui itself thinks is held - this is what actually drives menu navigation, so it
+	// separates "the pad is drifting" from "ImGui is repeating on its own".
+	static const struct { ImGuiKey k; const char *n; } navKeys[] = {
+		{ ImGuiKey_GamepadDpadUp, "padUp" }, { ImGuiKey_GamepadDpadDown, "padDown" },
+		{ ImGuiKey_GamepadDpadLeft, "padLeft" }, { ImGuiKey_GamepadDpadRight, "padRight" },
+		{ ImGuiKey_GamepadLStickUp, "stickUp" }, { ImGuiKey_GamepadLStickDown, "stickDown" },
+		{ ImGuiKey_GamepadLStickLeft, "stickLeft" }, { ImGuiKey_GamepadLStickRight, "stickRight" },
+		{ ImGuiKey_GamepadFaceDown, "faceDown" }, { ImGuiKey_GamepadFaceRight, "faceRight" },
+		{ ImGuiKey_UpArrow, "up" }, { ImGuiKey_DownArrow, "down" },
+	};
+	std::string nav;
+	for (const auto& nk : navKeys)
+		if (ImGui::IsKeyDown(nk.k))
+		{
+			if (!nav.empty())
+				nav += "+";
+			nav += nk.n;
+		}
+	if (!nav.empty())
+		add("imgui[" + nav + "]");
+
+	if (offenders.empty())
+	{
+		// Neutral again: forget the last state so the NEXT event counts as a change and prints
+		// at once, instead of being throttled against something 5 seconds stale.
+		lastTraceLine.clear();
+		return;
+	}
+
+	static double lastLog = 0;
+	static double heldSince = 0;
+	const double now = os_GetSeconds();
+
+	// A CHANGE prints immediately - transitions are the interesting part, and the moment a stick
+	// crosses its threshold must never be swallowed. An UNCHANGED state prints only every 5 s,
+	// with how long it has been stuck.
+	const bool changed = (offenders != lastTraceLine);
+	if (changed)
+		heldSince = now;
+	else if (now - lastLog < 5.0)
+		return;
+	lastLog = now;
+	lastTraceLine = offenders;
+
+	const double held = now - heldSince;
+	if (!changed && held >= 1.0)
+		NOTICE_LOG(INPUT, "TAS INPUT: %s  [capMouse=%d capKb=%d]  (held %.0fs)", offenders.c_str(),
+				(int)io.WantCaptureMouse, (int)io.WantCaptureKeyboard, held);
+	else
+		NOTICE_LOG(INPUT, "TAS INPUT: %s  [capMouse=%d capKb=%d]", offenders.c_str(),
+				(int)io.WantCaptureMouse, (int)io.WantCaptureKeyboard);
+}
+
 static void gui_newFrame()
 {
 	// Forget last frame's reservation. Whichever stream is running re-publishes
@@ -727,6 +835,8 @@ static void gui_newFrame()
 	io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickUp, analog > 0.1f, analog);
 	analog = joyy[0] > 0 ? (float)joyy[0] / 32768.f : 0.f;
 	io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickDown, analog > 0.1f, analog);
+
+	tasInputTrace();	// dojo:InputTrace - names every non-neutral input; silent when all is neutral
 
 	ImGui::GetStyle().Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.06f, 0.06f, 0.06f, 0.94f);
 
