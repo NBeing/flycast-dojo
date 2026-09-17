@@ -34,6 +34,7 @@
 #include "dojo/roll_host.h"
 #include "dojo/hotkey_bind.h"
 #include "dojo/surface_tour.h"
+#include "dojo/combohunt.h"
 #include "oslib/oslib.h"
 #include "wsi/context.h"
 #include "cfg/option.h"
@@ -398,6 +399,7 @@ bool mainui_rend_frame()
 	roll::rebind::probeTick();	// dojo:RebindProbe - rebind-persists-a-restart, if armed
 	roll::notation::probeTick();	// dojo:NotationProbe - notation->packet->profile faithfulness, if armed
 	roll::surfacetour::tick();	// dojo:SurfaceTour - the self-driving surface tour, if armed
+	roll::combohunt::tick();	// dojo:ComboHunt - the combo-fixture hunt, if armed
 	roll::bexport::tick();	// the per-branch video export, if one is running
 	tas_ctl::tick();	// dojo:ControlServer - poll _ctl/cmd.json once per frame (no-op when off)
 

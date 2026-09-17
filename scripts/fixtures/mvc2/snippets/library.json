@@ -1,0 +1,281 @@
+{
+	"snippets": [
+		{
+			"added": "2026-08-26",
+			"file": "slot0_setup_DhalsimBug_A_P1.txt",
+			"frames": 1048,
+			"hash": "f64f01659e0f2027",
+			"name": "slot0_setup_DhalsimBug_A_P1",
+			"notes": "",
+			"players": "P1",
+			"tags": []
+		},
+		{
+			"added": "2026-08-26",
+			"file": "shuma_mag_setup.txt",
+			"frames": 252,
+			"hash": "f7545918c2f73b93",
+			"name": "shuma_mag_setup",
+			"notes": "",
+			"players": "P1",
+			"tags": [
+				"chaos",
+				"shumamag",
+				"2char"
+			]
+		},
+		{
+			"added": "2026-08-31",
+			"file": "fastVS.txt",
+			"frames": 633,
+			"hash": "4db6bf3690958f6b",
+			"name": "fastVS",
+			"notes": "OnEnter boot seed: power-on -> VS mode, handoff on stage select (the first real choice). Keep the OnEnter tag.",
+			"players": "P1",
+			"tags": [
+				"OnEnter"
+			]
+		},
+		{
+			"added": "2026-09-02",
+			"file": "HyperGrav mash.txt",
+			"frames": 2,
+			"hash": "b118b8520a4548e7",
+			"mashP1": "L+LP+HP/LK+HK",
+			"mashP2": "",
+			"name": "HyperGrav mash",
+			"notes": "",
+			"players": "P1",
+			"tags": [
+				"mash"
+			]
+		},
+		{
+			"added": "2026-09-02",
+			"file": "throw mash.txt",
+			"frames": 2,
+			"hash": "324d57ee009055a3",
+			"mashP1": "R+HP/R+HK/",
+			"mashP2": "",
+			"name": "throw mash",
+			"notes": "",
+			"players": "P1",
+			"tags": [
+				"mash"
+			]
+		},
+		{
+			"added": "2026-09-02",
+			"file": "down-tap hail.txt",
+			"frames": 2,
+			"hash": "f12f5a8fda0e4bd3",
+			"mashP1": "D/D+LP+HP/",
+			"mashP2": "",
+			"name": "down-tap hail",
+			"notes": "",
+			"players": "P1",
+			"tags": [
+				"mash"
+			]
+		},
+		{
+			"added": "2026-09-02",
+			"file": "both players demo.txt",
+			"frames": 1,
+			"hash": "9a9ef300c576120b",
+			"mashP1": "LP/",
+			"mashP2": "HK/",
+			"name": "both players demo",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": [
+				"mash"
+			]
+		},
+		{
+			"added": "2026-09-02",
+			"file": "mashtest.txt",
+			"frames": 2,
+			"hash": "b056b8d76d44acd7",
+			"mashP1": "L+LK/HP",
+			"mashP2": "",
+			"name": "mashtest",
+			"notes": "something here",
+			"players": "P1",
+			"tags": [
+				"mash",
+				"test"
+			]
+		},
+		{
+			"added": "2026-09-12",
+			"file": "fastVS_mcp.txt",
+			"frames": 633,
+			"hash": "4db6bf3690958f6b",
+			"name": "fastVS_mcp",
+			"notes": "",
+			"players": "P1",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_rng7_boot.txt",
+			"frames": 1574,
+			"hash": "177893509e426673",
+			"name": "demo_rng7_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_s320_boot.txt",
+			"frames": 1664,
+			"hash": "187117fef9c884e3",
+			"name": "demo_s320_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_rng3_boot.txt",
+			"frames": 1589,
+			"hash": "9e0adbd9875fe80d",
+			"name": "demo_rng3_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_rng11_boot.txt",
+			"frames": 1576,
+			"hash": "e4b7d161ce57d29b",
+			"name": "demo_rng11_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_st90_boot.txt",
+			"frames": 1344,
+			"hash": "c9cac866f6c4dc20",
+			"name": "demo_st90_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_st40_boot.txt",
+			"frames": 1294,
+			"hash": "93fb495017c1ac70",
+			"name": "demo_st40_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_agg7_boot.txt",
+			"frames": 1220,
+			"hash": "3e7fc8890a83e4f0",
+			"name": "demo_agg7_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_agg3_boot.txt",
+			"frames": 1231,
+			"hash": "565e6b57e203d1fd",
+			"name": "demo_agg3_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_s50_3_boot.txt",
+			"frames": 1317,
+			"hash": "cd5299a2fe950c0d",
+			"name": "demo_s50_3_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_s50_11_boot.txt",
+			"frames": 1306,
+			"hash": "c85e806fb2109dfb",
+			"name": "demo_s50_11_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_fast_boot.txt",
+			"frames": 1294,
+			"hash": "98ce709d9bd07ede",
+			"name": "demo_fast_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "demo_presets_boot.txt",
+			"frames": 1291,
+			"hash": "009c69c5a0bce6b2",
+			"name": "demo_presets_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "watts_vs_msp_boot.txt",
+			"frames": 1316,
+			"hash": "655de809c394dd93",
+			"name": "watts_vs_msp_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "measure_boot.txt",
+			"frames": 2026,
+			"hash": "4e55bfc87ae7dca3",
+			"name": "measure_boot",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-12",
+			"file": "setup_Matrix_TeamWatts.txt",
+			"frames": 1604,
+			"hash": "df05aefc3ae4a38e",
+			"name": "setup_Matrix_TeamWatts",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		},
+		{
+			"added": "2026-09-13",
+			"file": "auto_setup.txt",
+			"frames": 1567,
+			"hash": "76bb803e952ee811",
+			"name": "auto_setup",
+			"notes": "",
+			"players": "P1+P2",
+			"tags": []
+		}
+	]
+}
