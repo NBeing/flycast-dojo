@@ -2299,6 +2299,20 @@ set_tests_properties(flycast.combohunttest PROPERTIES SKIP_RETURN_CODE 77 LABELS
 add_test(NAME flycast.combohunttest_can_fail_window COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/combohunttest.sh --sabotage window)
 set_tests_properties(flycast.combohunttest_can_fail_window PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
 
+# HARNESS #2 (item 4, 2026-09-17; docs/TEST-PLAN.md §5.4): reprotest --sweep = six
+# processes, ALL pairs compared frame by frame (machine hash + input digest + combo
+# bytes), `first divergence ... at frame F (machine|input|both)` per disagreeing
+# pair, and a classifier (reproducible / deterministic-divergence / nondeterministic
+# / input-desync). A green sweep certifies REPRODUCIBILITY, never correctness. The
+# can_fail twins prove the classifier names what each arm restores.
+add_test(NAME flycast.reprotest_sweep COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reprotest.sh --sweep)
+set_tests_properties(flycast.reprotest_sweep PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" TIMEOUT 1200)
+foreach(arm poke moving gate-can-pass)
+	add_test(NAME flycast.reprotest_can_fail_${arm}
+		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/reprotest.sh --sabotage ${arm})
+	set_tests_properties(flycast.reprotest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" TIMEOUT 900)
+endforeach()
+
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually
 # captured the frame (a well-formed blank PNG is the PBO-never-advanced bug). Needs
