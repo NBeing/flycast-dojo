@@ -360,6 +360,46 @@ static void loadProbe()
 			before, afterLoad, afterLoad != before ? "LOADED" : "NO CHANGE");
 }
 
+/*
+	AUTO-PURGE STALE STATES (David's gui_purge_stale_tick, gui.cpp:5140; ported
+	2026-09-17, PORT-DEFECT-CENSUS §3). dojo:PurgeStale=yes (default no): the moment
+	the rewind log grows - a rewind, or an edit, both of which invalidate every state
+	ABOVE their frame - delete the slots the roll host now judges stale. Slot 0 (BASE)
+	is exempt. Keyed on rewind_log.size(), so it runs once per guard event, never per
+	frame. hostfs::deleteSavestate is the one owner of the sidecar set. Measured by
+	scripts/purgestaletest.sh.
+*/
+static void purgeStaleTick()
+{
+	static size_t handled = 0;
+	const size_t n = dojo.rewind_log.size();
+	if (n == handled)
+		return;
+	handled = n;
+	if (!cfgLoadBool("dojo", "PurgeStale", false))
+		return;
+	roll::Host *h = roll::host();
+	if (h == nullptr || hostfs::savestateFolderOverride.empty())
+		return;
+	int purged = 0;
+	for (int i = 1; i < h->slotCount(); i++)	// slot 0 = BASE, exempt
+	{
+		if (!h->slotStale(i))
+			continue;
+		if (hostfs::deleteSavestate(i))
+			purged++;
+	}
+	if (purged > 0)
+	{
+		dojo.savestate_epoch++;
+		char m[96];
+		snprintf(m, sizeof(m), "Purged %d stale state%s (BASE kept)", purged, purged == 1 ? "" : "s");
+		gui_display_notification(m, 3000);
+		NOTICE_LOG(NETWORK, "TAS: auto-purged %d stale state%s after guard event #%d (BASE kept)", purged, purged == 1 ? "" : "s", (int)n);
+	}
+}
+
+
 // Sidecar autosave while PAUSED (lifted from David's gui.cpp:4197-4220, 2026-09-17; docs/PORT-
 // DEFECT-CENSUS.md §2 - measuredFrames/seenFrames were defined for this and never read). Every
 // 2 s of pause: the waveform (audio.env) and the skip map (skip.map) when they changed, and the
@@ -447,6 +487,7 @@ bool mainui_rend_frame()
 	}
 
 	sidecarAutosaveTick();	// paused: audio.env / skip.map / the .flyr tail, every 2 s (crash insurance)
+	purgeStaleTick();	// dojo:PurgeStale - delete the states a rewind/edit just orphaned (BASE kept); off by default
 	roll::fst::tick();	// the Frame Skip Test sweep, if one is running
 	roll::sendequiv::tick();	// dojo:SendEquivProbe - record vs send equivalence, if armed
 	roll::rebind::probeTick();	// dojo:RebindProbe - rebind-persists-a-restart, if armed
