@@ -715,6 +715,70 @@ assert is exactly the hazard `CLAUDE.md` records as having moved the user's
 Firefox once. **`[OPEN]`** - the self-test to write is the pair: the real display
 must be refused, a private one must not be.
 
+## 5. `[LANDED 2026-09-17]` The Surface Tour - the journey of journeys
+
+Every harness above proves one feature's *infrastructure*. None walked the
+surface the way a person does. The tour does, and it is **one run that is both an
+automated test and a human-verified one**: `scripts/surfacetourtest.sh` scores it
+headless; `scripts/surfacetourtest.sh --watch <clip.flyr>` plays the same run on
+your real screen with an on-screen banner saying what is being tested, one step
+per second, so you can watch it and agree.
+
+**What it does, in order** (66 steps at the default; `dojo:TourSlow=yes` adds the
+FST sweep and a branch export): load the game and David's savestate (slot 0,
+BASE); **rebind every window's hotkey through the real rebind engine** - fourteen
+of them, `rebind::arm`, the engine's own 0.2 s arming gate, `rebind::tick`; **open
+and close every window with those hotkeys**, interleaved so only one is up at a
+time; then the features one by one - a roll edit and its undo, a States label
+round-trip, save/load/delete of a scratch slot, the F2 cycle through the *live*
+binding, the READ / READ-WRITE / WRITE driver, an Input Sender send and stop, a
+Notepad analyze, a Snippet and a Macro placed through the edit funnel, a branch
+created, checked out and left, a Test Lab test added and trashed, a capture
+started and stopped. Then it puts everything back: every panel's open flag and
+every binding are snapshotted first and restored last, so a run on a real config
+ends exactly as it began - and it only ever runs against a *copied* clip in a
+throwaway sandbox anyway, with `dojo:SavestateFolder` (new) pointing the states
+at the copy.
+
+**How it presses a key without a keyboard.** In-process, always: the tour calls
+the keyboard device's own `gamepad_btn_input(code, pressed)` - the entry SDL
+uses - so a rebind takes the real detect path and a hotkey the real dispatch,
+headless and on a real display alike, and nothing is ever synthesised on `:0`.
+That is the standing rule, and it is also why the same binary run is watchable:
+there is no xdotool to keep off your desktop.
+
+**The claims, and who backs them.** The tour scores itself
+(`SURFACE TOUR: step n/N "<name>" -> PASS|FAIL|SKIP (<why>)` and a `RESULT` line),
+but the harness does not take its word: it also counts the **engine's** own
+traces - `PANEL TOGGLE: … -> open` (14), `HOTKEY REBIND: action … -> ` (14),
+`gui_loadState: slot` (≥ 2) - so a tour that PASSed without the engine saying so
+would fail. Every feature step is a hook that drives the real verb and *reads
+back* the truth (a file, a frame, a mapping, a mode); each hook can be driven
+alone with `dojo:TourHook=<name>[;<name>…]` and answers `TOUR HOOK: <name> ->
+PASS|FAIL (<why>)`.
+
+**Its arm.** `SurfaceTour=sabotage` injects the wrong chord on the very first
+open step. Measured: `open: pianoroll -> FAIL (open=false captured=no)`, its
+close SKIPs, every one of the 14 rebinds still PASSes, `opens=13`, `failed=1
+skipped=1` - it reddens at the claim, not the setup. The twin exits 0 only on
+exactly that shape.
+
+**Measured on landing:** normal `passed=66 failed=0 skipped=0`, traces
+`opens=14 rebinds=14 loads=4`, ~3 min at the human's 1 s bpm; `hotkeytest`
+(real keys through the new 14-case dispatch) and `selftest` (the new
+`SURFACE TOUR SELFTEST`, 12 claims on the pure step machine) still green;
+`hotkeyaudit` 65 actions consistent. Two defects the tour found on its first
+runs, both fixed: a harness that staged the clip outside `replays/<game>/`
+made "macros: place" fail while the seeded macro sat right there (the Macros
+browser scans that root - `macrostest.sh` already knew); and a PASS after a
+polled verify printed the previous poll's reason.
+
+**Built as three parallel tracks** behind one frozen header
+(`core/dojo/surface_tour.h`): the runner, banner and the eleven new panel
+hotkeys (`docs/HOTKEYS.md`); the 26 feature hooks, each compiled where its verb
+lives; the harness, the `SavestateFolder` seam and these docs. No two tracks
+touched a file in common; the header changed once, at the scaffold.
+
 ## Two disciplines that are not optional
 
 **Every check must be able to fail, and be seen to fail once.** At tiers 0–1

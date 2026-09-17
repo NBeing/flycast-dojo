@@ -128,10 +128,37 @@ int savestateCycleCount()
 	return n > MAX_SAVESTATE_SLOTS ? MAX_SAVESTATE_SLOTS : n;
 }
 
-// The folder savestates are read/written in right now: a movie clip's own directory while a
-// recording or replay is active, otherwise the shared data path.
+/*
+	dojo:SavestateFolder - an EXPLICIT override, above the clip's own folder.
+
+	`[2026-09-17]` user decision: any session's savestates can be pointed at a folder of
+	your choosing, independent of which clip is open - keeping an experiment's states out
+	of a clip, or (the Surface Tour's use) keeping a tour's writes in a throwaway sandbox.
+	Precedence: this key > the clip's savestateFolderOverride > the shared data path.
+	The .frame/.png/.label sidecars ride on getSavestatePath, so they follow for free,
+	and scanSavestateInfo reads savestateDir(), so the States wall shows the same folder
+	it writes to. Logged once per distinct value - a redirected save that says nothing
+	is a state you cannot find.
+*/
+static std::string savestateFolderKey()
+{
+	static std::string logged;
+	std::string p = cfgLoadStr("dojo", "SavestateFolder", "");
+	if (!p.empty() && p != logged)
+	{
+		logged = p;
+		NOTICE_LOG(SAVESTATE, "SAVESTATE FOLDER: override -> %s", p.c_str());
+	}
+	return p;
+}
+
+// The folder savestates are read/written in right now: dojo:SavestateFolder if set, else a
+// movie clip's own directory while a recording or replay is active, else the shared data path.
 static std::string savestateDir()
 {
+	const std::string key = savestateFolderKey();
+	if (!key.empty())
+		return key;
 	if (!savestateFolderOverride.empty())
 		return savestateFolderOverride;
 	if (settings.content.fileName.empty())
@@ -288,6 +315,12 @@ std::string getSavestatePath(int index, bool writable)
 	state_file = state_file + index_str + ".state";
 	if (index == -1)
 		state_file += ".net";
+	// dojo:SavestateFolder first (an explicit override), then the clip's own folder.
+	{
+		const std::string key = savestateFolderKey();
+		if (!key.empty())
+			return key + "/" + state_file;
+	}
 	// TAS: keep a clip's savestates next to its .flyr while a movie folder is active.
 	if (!savestateFolderOverride.empty())
 		return savestateFolderOverride + "/" + state_file;

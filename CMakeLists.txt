@@ -2245,6 +2245,25 @@ add_test(NAME flycast.notationtest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/notationtest.sh --self-test)
 set_tests_properties(flycast.notationtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 
+# THE SURFACE TOUR (journey of journeys). A self-driving walk of the whole TAS
+# surface: load David's savestate, rebind every window's hotkey through the real
+# rebind engine, open and close every window WITH those hotkeys, exercise each
+# feature. In-process input only (gamepad_btn_input, the entry SDL uses). PASS =
+# failed=0, passed >= the floor, and the engine's own PANEL TOGGLE / HOTKEY REBIND
+# / gui_loadState traces back the tour's claims. ~2-3 min at the human's 1 s bpm.
+add_test(NAME flycast.surfacetourtest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh)
+set_tests_properties(flycast.surfacetourtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+
+# ITS ARM. SurfaceTour=sabotage injects the WRONG chord on the very first open step,
+# so `PANEL TOGGLE: pianoroll -> open` never appears. The twin exits 0 iff that step
+# FAILED by name while every one of the 14 rebinds still PASSED - the tour reddens
+# at the claim, not the setup. A wrong chord that still "opened" a window is a tour
+# that proves nothing.
+add_test(NAME flycast.surfacetourtest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh --self-test)
+set_tests_properties(flycast.surfacetourtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually
 # captured the frame (a well-formed blank PNG is the PBO-never-advanced bug). Needs

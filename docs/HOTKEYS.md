@@ -247,6 +247,10 @@ View-menu entry, and six rows sort themselves.
 
 ### Still held back
 
+`[SUPERSEDED 2026-09-17]` the panel half of this list has since landed - see
+"A hotkey for every panel" below. The reasoning here stays true for the rest
+(the AVI toggle, the read-only toggle): the rule is unchanged, only the facts.
+
 The remaining twelve are held back because their **features** are not in this
 tree: an input visualizer, a frame-skip test, an AVI toggle behind permanently
 false guards. A bindable key that silently does nothing is the exact defect the
@@ -282,6 +286,68 @@ persisted drag-to-reorder — beside flycast's existing Controller Mapping windo
 and his bindings still do not survive a restart. Flycast's own mapping UI is
 driven by the `Mapping[]` tables; a row there gets rebinding *and* persistence
 for free. The 640 lines are work the host already does.
+
+## A hotkey for every panel, and the Surface Tour keys `[2026-09-17]`
+
+The Surface Tour (`docs/TEST-PLAN.md`, `scripts/surfacetourtest.sh`) opens and
+closes every window **with its hotkey**, which is only a test if every window has
+one. Fifteen panels are registered; three had an action. The other eleven now do:
+
+| action | toggles |
+|---|---|
+| `EMU_BTN_PANEL_INPUTVIZ` | `inputviz` |
+| `EMU_BTN_PANEL_SENDER` | `sender` |
+| `EMU_BTN_PANEL_CAPTURES` | `captures` |
+| `EMU_BTN_PANEL_TIMELINE` | `timeline` |
+| `EMU_BTN_PANEL_FST` | `frameskiptest` |
+| `EMU_BTN_PANEL_UITEXT` | `uitext` |
+| `EMU_BTN_PANEL_NOTEPAD` | `notepad` |
+| `EMU_BTN_PANEL_TESTLAB` | `testlab` |
+| `EMU_BTN_PANEL_BRANCHES` | `branches` |
+| `EMU_BTN_PANEL_SNIPPETS` | `snippets` |
+| `EMU_BTN_PANEL_MACROS` | `macros` |
+
+(`game` is deliberately not on the list: its open flag is an always-true bool
+gated by `dojo:GamePanel`, and toggling it hides the picture.)
+
+**Appended, never reordered** - the ids are on disk in every mapping file. **One
+dispatch block, not eleven cases**: `hotkeys::panelFor(DreamcastKey)` is a
+14-row `{ "panel", id }` table (the three old actions plus these), and the switch
+lists all fourteen `case` labels once, falling into
+`panels::toggle(hotkeys::panelFor(key))`. The table is ordered `{ "panel", id }`
+on purpose: `scripts/hotkeyaudit.py` reads every `{ EMU_BTN_X, "` in
+`hotkeys.cpp` as a registry row, and the other order read as fourteen half-wired
+actions. The audit now counts 65 actions, all consistent.
+
+**They ship unbound** (user decision, 2026-09-17), for the reason "No default
+keys" gives above: every free-looking F-key is already somebody's. Bind the ones
+you want in the Hotkeys panel; the tour binds what it needs and puts your
+bindings back when it is done.
+
+**The keys the tour uses**, raw SDL scancodes with the chord bits high
+(`KEY_MOD_CTRL = 0x20000`, `KEY_MOD_ALT = 0x40000`), chosen to miss Ctrl+F2
+(slot prev), F11 (SDL's fullscreen intercept) and Alt+F4 (a window manager's
+close):
+
+| panel | chord | | panel | chord |
+|---|---|---|---|---|
+| pianoroll | Ctrl+F1 | | uitext | Ctrl+F10 |
+| states | Ctrl+F3 | | notepad | Ctrl+F12 |
+| hotkeys | Ctrl+F4 | | testlab | Alt+F1 |
+| inputviz | Ctrl+F5 | | branches | Alt+F3 |
+| sender | Ctrl+F6 | | snippets | Alt+F5 |
+| captures | Ctrl+F7 | | macros | Alt+F6 |
+| timeline | Ctrl+F8 | | | |
+| frameskiptest | Ctrl+F9 | | | |
+
+The tour "presses" a key by calling the keyboard device's own
+`gamepad_btn_input(code, pressed)` - the entry SDL uses - so a rebind takes the
+real detect path (`rebind::arm`, the 0.2 s arming gate, `rebind::tick`) and a
+hotkey the real dispatch, headless and on a real screen alike, with nothing
+synthesised on an X display. Because that call bypasses `chordCode()`, the tour
+sends the identical full code on press **and** release (rule 2 above, done by
+hand). The rebind is verified by the number, `get_button_code(0, action) == code`,
+and narrated by the name, `bindingName()`.
 
 ## Pressing a key and proving the action ran
 

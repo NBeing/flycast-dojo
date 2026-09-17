@@ -385,7 +385,21 @@ static void buildSteps()
 	// Trash follows add directly so needsPrev names the step it depends on.
 	hook("test lab: trash the tour test",    Kind::Click,  hooks::labTrashTest, true);
 	hook("captures: start",                  Kind::Record, hooks::capturesStart, false, /*optional*/ true);
-	hook("captures: stop",                   Kind::Click,  hooks::capturesStop, true, true);
+	{
+		// POLLED, like the FST and the export. requestStop() is one-shot inside the hook
+		// and the .avi only gets its bytes on a later present, so a single verify at the
+		// dwell reads an empty file (`[MEASURED 2026-09-17]` this step SKIPped). The act
+		// issues the stop; the verify re-reads the file until it has size, or maxWaitMs.
+		Step s;
+		s.name = "captures: stop";
+		s.kind = Kind::Click;
+		s.needsPrev = true;
+		s.optional = true;
+		s.maxWaitMs = 10000;
+		s.act = [] { why(""); hooks::capturesStop(); return true; };
+		s.verify = [] { return hooks::capturesStop(); };
+		add(s);
+	}
 	hook("savestate: delete slot 99",        Kind::Click,  hooks::deleteScratchSlot);
 
 	if (st.slow)
@@ -582,6 +596,12 @@ void tick()
 	case Phase::Verify:
 	{
 		const Rec& r = st.steps[st.cur];
+		// A polled verify's reason is THIS poll's, not the last failed one's: a hook only
+		// sets why() on its false paths, so without this a PASS on the third poll printed
+		// the first poll's "bytes=0" (`[MEASURED 2026-09-17]`). Act-only steps keep the
+		// reason their act set, which is the verdict's.
+		if (r.step.verify)
+			why("");
 		const bool ok = r.step.verify ? r.step.verify() : st.actOk;
 		if (!ok && r.step.maxWaitMs > 0 && (now - st.tVerify) * 1000.0 < r.step.maxWaitMs)
 			return;		// keep polling
