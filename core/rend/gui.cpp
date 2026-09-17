@@ -914,6 +914,13 @@ void gui_start_game(const std::string& path)
 
 	if (cfgLoadBool("dojo", "Replay", false))
 		dojo.replay.Init();
+	else
+		// OnEnter boot seed: no-op unless dojo:OnEnterFile is staged (launch menu / CLI). The
+		// seed, the pad-out window (dojo.cpp MapleRecordAction) and the step-stop (gui_display_osd)
+		// were all ported; this call was not, so a staged seed booted clean and never logged
+		// `TAS ONENTER: seeded` (fixtures-check F4 measured it, 2026-09-17). After Reset(), which
+		// clears session_inputs, and only for a non-replay boot - a replay drives its own inputs.
+		dojo.SeedOnEnter();
 
 	scanner.stop();
 	NOTICE_LOG(COMMON, "gui_start_game: loading %s", path.c_str());
@@ -4732,9 +4739,36 @@ void gui_display_osd()
 				gui_state = GuiState::Paused;
 		}
 
-		if (dojo.stepping && dojo.frame_number == dojo.target_step_frame)
+		// OnEnter seed window (lifted from David's gui.cpp:4592, 2026-09-17): arm the boot
+		// fast-forward HERE, once the game is really running - SeedOnEnter cannot
+		// (Emulator::loadGame unconditionally clears fastForwardMode after it runs). Re-arms
+		// every pass until the handoff.
+		if (dojo.onenter_ff && dojo.stepping && dojo.frame_number < dojo.target_step_frame
+				&& !settings.input.fastForwardMode)
+		{
+			settings.input.fastForwardMode = true;
+			char oeT[96];
+			snprintf(oeT, sizeof(oeT), "OnEnter: boot seed playing - hands off until the pause @ %u", dojo.target_step_frame);
+			gui_display_notification(oeT, 3500);
+		}
+		// >= not ==: the emu thread can overshoot the target between OSD checks (a fast-forwarded
+		// seed does), and == would then never stop - David's fix, same line.
+		if (dojo.stepping && dojo.frame_number >= dojo.target_step_frame)
 		{
 			dojo.target_step_frame++;
+			if (dojo.onenter_ff)
+			{	// this stop IS the OnEnter handoff pause. Drop the boot fast-forward and restore the
+				// mode the boot chose - Record MOVIE is definitionally WRITE; the seed only BORROWED
+				// READ-WRITE so its cells would play (David's audit: without this the whole session
+				// silently stayed READ-WRITE and dropped idle frames). Record MACRO stays READ-WRITE.
+				settings.input.fastForwardMode = false;
+				dojo.onenter_ff = false;
+				if (!cfgLoadBool("dojo", "MacroMode", false))
+					dojo.macro_armed = false;
+				gui_display_notification("OnEnter handoff - your inputs now", 3000);
+				NOTICE_LOG(NETWORK, "TAS ONENTER: handoff at frame %u (%s)", dojo.frame_number.load(),
+						dojo.macro_armed ? "READ-WRITE" : "WRITE");
+			}
 			emu.stop();
 			gui_setState(GuiState::Paused);
 		}
