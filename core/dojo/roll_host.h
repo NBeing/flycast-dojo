@@ -104,6 +104,18 @@ struct Host
 	virtual bool slotView(int slot, SlotView& out) const { (void)slot; (void)out; return false; }
 
 	/*
+		An opaque handle to this slot's thumbnail image, or empty if it has none.
+
+		A PATH IS STILL THE HOST'S BUSINESS - the tool never builds this, it only
+		hands it back to an image loader, exactly as it passes a SnapshotView::id
+		back without reading it. A host that stores states as files returns the
+		image file; one that keeps them elsewhere returns whatever its loader
+		understands, or empty. Default: no thumbnail, which a wall draws as a
+		blank cell rather than a broken one.
+	*/
+	virtual std::string slotThumbnail(int slot) const { (void)slot; return ""; }
+
+	/*
 		Name a slot, or clear its name with an empty string.
 
 		THE FIRST WRITE IN THIS INTERFACE, and the default REFUSES rather than

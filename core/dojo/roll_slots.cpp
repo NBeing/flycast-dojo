@@ -182,6 +182,19 @@ public:
 		return true;
 	}
 
+	std::string slotThumbnail(int slot) const override
+	{
+		ensureFresh();
+		if (slot < 0 || slot >= (int)info_.size() || !info_[slot].exists)
+			return "";
+		// tas_thumb writes the image beside the state file as <statePath>.png on
+		// every save. Same READ derivation slotFrame's .frame sidecar uses, so it
+		// names the clip folder when one is open (the case the States wall is for).
+		const std::string png = hostfs::getSavestatePath(slot, false) + ".png";
+		std::error_code ec;
+		return ghc::filesystem::exists(png, ec) ? png : "";
+	}
+
 	bool setSlotLabel(int slot, const std::string& label) override
 	{
 		ensureFresh();

@@ -6,11 +6,16 @@
 #include "tas_colors.h"
 #include "rend/panel.h"
 #include "rend/gui.h"
+#include "rend/gui_util.h"
+#include "rend/imgui_driver.h"
 #include "imgui.h"
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
 #include "oslib/oslib.h"
+#include "deps/filesystem.hpp"
 #include <ctime>
+#include <chrono>
+#include <map>
 #include <string>
 
 /*
@@ -47,6 +52,51 @@ namespace roll
 {
 
 static bool statesOpen = false;
+
+/*
+	A slot's thumbnail as an ImGui image, or nothing when the slot has none.
+
+	`[PORTED 2026-09-16]` branch_panel's drawThumb, the pattern its own comment
+	pointed here to: cached on the imguiDriver texture cache keyed by the host's
+	opaque handle, reloaded only when the file behind it changes. The handle comes
+	from host()->slotThumbnail(); this panel never builds a path, so a host that
+	keeps states elsewhere simply returns a key its own loader understands.
+*/
+static void drawSlotThumb(const std::string& handle, float maxW, float maxH)
+{
+	if (imguiDriver == nullptr || handle.empty())
+		return;
+	std::error_code ec;
+	if (!ghc::filesystem::exists(handle, ec))
+		return;
+	const int64_t mtime = (int64_t)std::chrono::duration_cast<std::chrono::seconds>(
+			ghc::filesystem::last_write_time(handle, ec).time_since_epoch()).count();
+	const uintmax_t fsize = (uintmax_t)ghc::filesystem::file_size(handle, ec);
+	struct Meta { int64_t mtime; uintmax_t size; int w; int h; };
+	static std::map<std::string, Meta> meta;
+	ImTextureID id = imguiDriver->getTexture(handle);
+	auto it = meta.find(handle);
+	if (!(id != ImTextureID() && it != meta.end() && it->second.mtime == mtime && it->second.size == fsize))
+	{
+		int w = 0, h = 0;
+		u8 *data = loadImage(handle, w, h);
+		if (data == nullptr)
+			return;
+		id = imguiDriver->updateTexture(handle, data, w, h);
+		free(data);
+		if (id == ImTextureID())
+			return;
+		meta[handle] = Meta{ mtime, fsize, w, h };
+		it = meta.find(handle);
+	}
+	const int w = it->second.w, h = it->second.h;
+	if (w <= 0 || h <= 0)
+		return;
+	float sc = std::min(maxW / (float)w, maxH / (float)h);
+	if (sc > 1.f)
+		sc = 1.f;
+	ImGui::Image(id, ImVec2(w * sc, h * sc));
+}
 
 //! Only slots that hold something, unless the user asks for the empties. A
 //! hundred cells of which one is occupied is a worse view than one row.
@@ -193,7 +243,7 @@ static void draw()
 					(int)availY, (int)wallSize.y, (int)reserve);
 		}
 	}
-	if (!ImGui::BeginTable("##states", 7,
+	if (!ImGui::BeginTable("##states", 8,
 			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY
 			| ImGuiTableFlags_SizingFixedFit, wallSize))
 		return;
@@ -203,6 +253,7 @@ static void draw()
 	tasTableSetupColumn("state");
 	tasTableSetupColumn("size");
 	tasTableSetupColumn("saved");
+	tasTableSetupColumn("preview");
 	tasTableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch);
 	tasTableSetupColumn("");
 	ImGui::TableHeadersRow();
@@ -256,6 +307,21 @@ static void draw()
 
 		ImGui::TableNextColumn();
 		tasTextUnformatted(v.exists ? whenText(v.mtime).c_str() : "-");
+
+		// PREVIEW - the state's own frame, written beside it on save. An occupied
+		// slot with no thumbnail (GL/Vulkan gave no readback, or an older save)
+		// draws a dash, not a broken cell, so "no image" reads as a fact.
+		ImGui::TableNextColumn();
+		if (v.exists)
+		{
+			const std::string thumb = h->slotThumbnail(i);
+			if (!thumb.empty())
+				drawSlotThumb(thumb, 128.f, 72.f);
+			else
+				tasTextDisabled("-");
+		}
+		else
+			tasTextDisabled("-");
 
 		ImGui::TableNextColumn();
 		if (!v.exists)
@@ -376,6 +442,43 @@ static void draw()
 					slot, wrote ? "yes" : "NO", readBack ? "yes" : "NO",
 					restored ? "yes" : "NO", back ? "yes" : "NO", was.c_str(),
 					(wrote && readBack && restored && back) ? "PASS" : "FAIL");
+		}
+	}
+
+	/*
+		THUMB PROBE, `dojo:StatesThumbProbe=yes`. Proves the DISPLAY WIRING: the
+		panel gets a usable thumbnail handle for an occupied slot through the host
+		(never a path it built itself). POLLS rather than one-shots, because its
+		vehicle (thumbtest's FST sweep) writes the images progressively - so it
+		waits for the first occupied slot whose slotThumbnail() is non-empty, then
+		verifies that handle points at an image that exists. The DRAWING itself is
+		drawSlotThumb, byte-identical to branch_panel's proven drawThumb.
+	*/
+	{
+		static bool thumbProbed = false;
+		if (!thumbProbed && cfgLoadBool("dojo", "StatesThumbProbe", false))
+		{
+			int slot = -1;
+			std::string thumb;
+			for (int i = 0; i < n; i++)
+			{
+				SlotView vt;
+				if (h->slotView(i, vt) && vt.exists)
+				{
+					const std::string t = h->slotThumbnail(i);
+					if (!t.empty()) { slot = i; thumb = t; break; }
+				}
+			}
+			if (slot >= 0)		// else: no thumbnail written yet - poll next draw
+			{
+				thumbProbed = true;
+				std::error_code ec;
+				const bool exists = ghc::filesystem::exists(thumb, ec);
+				const bool isPng  = thumb.size() > 4 && thumb.compare(thumb.size() - 4, 4, ".png") == 0;
+				NOTICE_LOG(RENDERER, "STATES THUMBPROBE: slot=%d exists=%s png=%s => %s (%s)",
+						slot, exists ? "yes" : "NO", isPng ? "yes" : "NO",
+						(exists && isPng) ? "PASS" : "FAIL", thumb.c_str());
+			}
 		}
 	}
 

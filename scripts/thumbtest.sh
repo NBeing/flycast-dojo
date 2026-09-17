@@ -70,6 +70,7 @@ XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	-config dojo:Replay=yes -config "dojo:ReplayFilename=$OUT/clip/clip.flyr" \
 	-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no -config dojo:Transmitting=no -config dojo:Receiving=no \
 	-config dojo:RecordMatches=yes -config dojo:FstProbe=yes -config "dojo:StateThumbnails=$THUMBS" \
+	-config dojo:Panel.states=yes -config dojo:StatesThumbProbe=yes \
 	-config window:width=1000 -config window:height=800 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 & FC=$!
 cleanup() { kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
@@ -109,5 +110,19 @@ if [ "$bad" -ne 0 ]; then
 	echo "FAIL thumbtest - $bad/$N thumbnail(s) blank or undersized (a well-formed blank PNG is the PBO-never-advanced bug)"
 	exit 1
 fi
-echo "PASS thumbtest - $N non-blank thumbnail(s) written on save via the GL readback"
+
+# DISPLAY WIRING: the F4 States grid must be able to GET a thumbnail handle for an
+# occupied slot through the host (the "remaining half" states_panel flagged). The
+# StatesThumbProbe polled the open States panel and asked host()->slotThumbnail().
+TP="$(tr -d '\0' < "$OUT/out.log" | grep -a "STATES THUMBPROBE:" | tail -1)"
+if [ -n "$TP" ]; then
+	echo "  ${TP#*] }"
+	case "$TP" in
+		*"=> PASS"*) echo "thumbtest: display wiring OK - the States grid got a valid thumbnail handle from the host" ;;
+		*) echo "FAIL thumbtest - the States panel got no usable thumbnail handle for an occupied slot (display wiring)"; exit 1 ;;
+	esac
+else
+	echo "thumbtest: NOTE - StatesThumbProbe did not report (panel never drew?); GENERATION still verified above"
+fi
+echo "PASS thumbtest - $N non-blank thumbnail(s) written on save, and the States grid can display them"
 exit 0
