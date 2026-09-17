@@ -1319,6 +1319,8 @@ if(NOT LIBRETRO)
 	core/dojo/timeline_panel.cpp
 	core/dojo/sendequiv.cpp
 	core/dojo/notation_integ.cpp
+	core/dojo/surface_tour.cpp
+	core/dojo/surface_tour_hooks.cpp
 	core/dojo/notepad_panel.cpp
 	core/deps/ImGuiColorTextEdit/TextEditor.cpp
 	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp

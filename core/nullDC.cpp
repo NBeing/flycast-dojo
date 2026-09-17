@@ -22,6 +22,7 @@
 #include "dojo/roll_meta.h"
 #include "dojo/roll_marks.h"
 #include "dojo/roll_notation.h"
+#include "dojo/surface_tour.h"
 #include "dojo/roll_library.h"
 #include "input/hold_repeat.h"
 #include "dojo/movie.h"
@@ -113,6 +114,7 @@ int flycast_init(int argc, char* argv[])
 	roll::notepad::selfTest();
 	roll::timeline::selfTest();
 	roll::sendequiv::selfTest();
+	roll::surfacetour::selfTest();
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();
@@ -147,6 +149,7 @@ int flycast_init(int argc, char* argv[])
 	roll::registerSnippetsPanel();
 	roll::registerMacrosPanel();
 	roll::registerTimelinePanel();
+	roll::surfacetour::registerSurfaceTourPanel();
 	os_CreateWindow();
 	os_SetupInput();
 
