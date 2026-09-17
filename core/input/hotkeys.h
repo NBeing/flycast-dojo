@@ -74,4 +74,15 @@ struct Action
 const Action *all();
 int count();
 
+/*
+	WHICH PANEL A WINDOW-TOGGLE ACTION OPENS, or nullptr for any other action.
+
+	`[2026-09-17]` the fourteen window toggles are one family with one body -
+	`panels::toggle(id)` - so dispatch lists their fourteen `case` labels (the
+	literal scripts/hotkeyaudit.py greps) over ONE call, and the id -> panel
+	pairing lives here as data next to the registry rows it belongs with, not
+	as fourteen hand-copied string literals in the switch.
+*/
+const char *panelFor(DreamcastKey id);
+
 }	// namespace hotkeys

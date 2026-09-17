@@ -129,6 +129,27 @@ enum DreamcastKey
 	EMU_BTN_GEN_ARCHIVE,			// archive the clip into the next gen_NN folder -- TAS
 	EMU_BTN_HOTKEY_HELP,			// toggle the on-screen hotkey cheat sheet -- TAS
 
+	/*
+		ONE TOGGLE PER STUDIO WINDOW `[2026-09-17]`. Until now only three panels had
+		a hotkey; the other eleven could only be opened by hand. The Surface Tour
+		(core/dojo/surface_tour.h) rebinds every window's key through the real
+		rebind engine and then opens each with it, which needs every window to
+		HAVE one. Same rules as the three above: registry row in hotkeys.cpp, a
+		case in gamepad_device.cpp (table-driven, hotkeys::panelFor), unbound by
+		default. APPEND ONLY - these values are what emu.cfg persists.
+	*/
+	EMU_BTN_PANEL_INPUTVIZ,			// toggle the Input Viz panel -- TAS
+	EMU_BTN_PANEL_SENDER,			// toggle the Input Sender panel -- TAS
+	EMU_BTN_PANEL_CAPTURES,			// toggle the Captures panel -- TAS
+	EMU_BTN_PANEL_TIMELINE,			// toggle the Timeline HUD -- TAS
+	EMU_BTN_PANEL_FST,				// toggle the Frame Skip Test panel -- TAS
+	EMU_BTN_PANEL_UITEXT,			// toggle the UI Text editor -- TAS
+	EMU_BTN_PANEL_NOTEPAD,			// toggle the Notepad -- TAS
+	EMU_BTN_PANEL_TESTLAB,			// toggle the Test Lab -- TAS
+	EMU_BTN_PANEL_BRANCHES,			// toggle the Branches panel -- TAS
+	EMU_BTN_PANEL_SNIPPETS,			// toggle the Snippets browser -- TAS
+	EMU_BTN_PANEL_MACROS,			// toggle the Macros browser -- TAS
+
 	// Real axes
 	DC_AXIS_TRIGGERS	= 0x1000000,
 	DC_AXIS_LT,

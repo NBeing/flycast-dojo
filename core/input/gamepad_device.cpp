@@ -320,17 +320,29 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 			had FOUR mechanisms for that one fact. A panel that failed to
 			register logs loudly instead of doing nothing quietly.
 		*/
+		// ONE FAMILY, ONE BODY `[2026-09-17]`: every window toggle. The fourteen
+		// labels are listed (scripts/hotkeyaudit.py greps `case EMU_BTN_X:` per id)
+		// and the id -> panel pairing is data beside the registry, hotkeys::panelFor.
 		case EMU_BTN_PIANO_ROLL:
-			if (pressed && gui_hotkey_allowed())
-				panels::toggle("pianoroll");
-			break;
 		case EMU_BTN_SLOT_PICKER:
-			if (pressed && gui_hotkey_allowed())
-				panels::toggle("states");
-			break;
 		case EMU_BTN_HOTKEY_HELP:
+		case EMU_BTN_PANEL_INPUTVIZ:
+		case EMU_BTN_PANEL_SENDER:
+		case EMU_BTN_PANEL_CAPTURES:
+		case EMU_BTN_PANEL_TIMELINE:
+		case EMU_BTN_PANEL_FST:
+		case EMU_BTN_PANEL_UITEXT:
+		case EMU_BTN_PANEL_NOTEPAD:
+		case EMU_BTN_PANEL_TESTLAB:
+		case EMU_BTN_PANEL_BRANCHES:
+		case EMU_BTN_PANEL_SNIPPETS:
+		case EMU_BTN_PANEL_MACROS:
 			if (pressed && gui_hotkey_allowed())
-				panels::toggle("hotkeys");
+			{
+				const char *panel = hotkeys::panelFor(key);
+				if (panel != nullptr)
+					panels::toggle(panel);
+			}
 			break;
 		/*
 			SLOT CYCLING WRAPS, and it goes through hostfs::clampSavestateSlot
