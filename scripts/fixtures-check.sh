@@ -261,7 +261,12 @@ case "$ARM" in
 		py corrupt "$FIX/$(py get "$RECIPE" base boot_seed)" "$BOOT_OVERRIDE"
 		echo "SABOTAGE armed: hash - one neutral frame of a temp copy of the boot seed is now a P1 LP press" ;;
 	recipe)
-		py setpin "$RECIPE" "$OUT/RECIPE_fake.toml" base.machine_hash "\"0123456789abcdef\""
+		# BOTH halves of the lie, on purpose: a fake pin AND no measured_on. `[MEASURED 2026-09-17]`
+		# faking only the pin was green by accident while result.measured_on happened to be
+		# empty - once the hunt filled it, F2's "pinned AND says when" claim held and the arm
+		# was decorative (ctest flycast.fixturescheck_can_fail_recipe caught it, exit 4).
+		py setpin "$RECIPE" "$OUT/RECIPE_fake0.toml" base.machine_hash "\"0123456789abcdef\"" \
+			&& py setpin "$OUT/RECIPE_fake0.toml" "$OUT/RECIPE_fake.toml" result.measured_on "\"\""
 		RECIPE="$OUT/RECIPE_fake.toml"
 		echo "SABOTAGE armed: recipe - base.machine_hash pinned to a fake value with result.measured_on empty" ;;
 	charselect)

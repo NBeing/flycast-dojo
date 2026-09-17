@@ -2273,6 +2273,32 @@ foreach(arm open flip save branch gate-can-pass)
 	set_tests_properties(flycast.surfacetourtest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 endforeach()
 
+# THE COMBO FIXTURE (item 3, 2026-09-17; docs/TEST-PLAN.md §5.3). fixtures-check.sh:
+# the RECIPE on disk (fastVS/candidate parity by seqHashMacro, SPREADSHEET md5, the
+# VMU pin, no `unmeasured` field) plus ONE claim on the machine - the charselect
+# expected sequence (fastVS seed -> Venom -> Down -> ID_2 == 13 Hulk) through
+# ctlserver. combohunttest.sh: the hunt lands the pinned combo (peak 19, after
+# 64FF89AB, phase 0) on the tour clip's slot 0. Every arm reddens for real
+# (`--list-sabotage`); `vmu` restores the empty-VMU boot that hid F4 for a day.
+add_test(NAME flycast.fixturescheck COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/fixtures-check.sh)
+set_tests_properties(flycast.fixturescheck PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
+add_test(NAME flycast.fixturescheck_roms COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/fixtures-check.sh --verify-roms)
+set_tests_properties(flycast.fixturescheck_roms PROPERTIES SKIP_RETURN_CODE 77)
+foreach(arm hash recipe)
+	add_test(NAME flycast.fixturescheck_can_fail_${arm}
+		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/fixtures-check.sh --sabotage ${arm} --no-emu)
+	set_tests_properties(flycast.fixturescheck_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77)
+endforeach()
+foreach(arm charselect vmu)
+	add_test(NAME flycast.fixturescheck_can_fail_${arm}
+		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/fixtures-check.sh --sabotage ${arm})
+	set_tests_properties(flycast.fixturescheck_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
+endforeach()
+add_test(NAME flycast.combohunttest COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/combohunttest.sh)
+set_tests_properties(flycast.combohunttest PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
+add_test(NAME flycast.combohunttest_can_fail_window COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/combohunttest.sh --sabotage window)
+set_tests_properties(flycast.combohunttest_can_fail_window PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
+
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually
 # captured the frame (a well-formed blank PNG is the PBO-never-advanced bug). Needs
