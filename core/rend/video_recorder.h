@@ -67,6 +67,13 @@ bool start(int width, int height, PixelFormat format, bool flipVertically);
 void stop();
 
 bool isRecording();
+// ONE VIDEO FRAME PER EMULATED FRAME (ported from David's avi_wants_frame, 2026-09-17).
+// The renderer presents - and would capture - the SAME guest frame again and again
+// while paused or frame-stepping (the pcsx2-rr duplicate-frame bug). Ask this before
+// each readback: false = a paused duplicate, skip it. dojo:CapturePausedFrames=yes
+// (default no) keeps every present. The count of skipped presents rides in the
+// `[rec] stopped` line.
+bool wantsFrame();
 int width();
 int height();
 // Bytes in one frame at the recording size and format.

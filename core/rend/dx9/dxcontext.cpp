@@ -200,6 +200,8 @@ void DXContext::DoSwapCapture()
 
 	if (!videorec::isRecording() || !pDevice)
 		return;
+	if (!videorec::wantsFrame())
+		return;		// a paused duplicate present (dojo:CapturePausedFrames)
 
 	ComPtr<IDirect3DSurface9> backBuffer;
 	if (FAILED(pDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer.get())))

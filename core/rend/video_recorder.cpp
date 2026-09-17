@@ -20,6 +20,7 @@
 #include "cfg/cfg.h"
 #include "stdclass.h"
 #include "rend/gui.h"
+#include "dojo/dojo.h"
 
 #include <cstdio>
 #include <ctime>
@@ -73,6 +74,8 @@ static std::atomic<bool> recording{false};
 static std::atomic<bool> writerRunning{false};
 static std::atomic<u64> written{0};
 static std::atomic<u64> dropped{0};
+static u32 lastCapturedGuestFrame = ~0u;	// wantsFrame(): the guest frame of the last readback
+static std::atomic<u64> pausedDuplicates{0};	// presents skipped as paused duplicates (dojo:CapturePausedFrames=no)
 
 static int recWidth;
 static int recHeight;
@@ -290,8 +293,27 @@ bool stopPending()
 	return pendingStop;
 }
 
+bool wantsFrame()
+{
+	const u32 fn = dojo.frame_number.load();
+	if (cfgLoadBool("dojo", "CapturePausedFrames", false))
+	{
+		lastCapturedGuestFrame = fn;
+		return true;
+	}
+	if (fn == lastCapturedGuestFrame)
+	{
+		pausedDuplicates++;
+		return false;		// the same emulated frame as the last readback: a paused/held duplicate
+	}
+	lastCapturedGuestFrame = fn;
+	return true;
+}
+
 bool start(int width, int height, PixelFormat format, bool flipVertically)
 {
+	lastCapturedGuestFrame = ~0u;
+	pausedDuplicates = 0;
 	std::string path;
 	{
 		std::lock_guard<std::mutex> lock(requestMutex);
@@ -440,8 +462,9 @@ void stop()
 
 	muxOutput(audioFrames);
 
-	INFO_LOG(COMMON, "[rec] stopped: %llu frames written, %llu dropped, %llu audio frames -> %s",
+	NOTICE_LOG(COMMON, "[rec] stopped: %llu frames written, %llu dropped, %llu paused duplicates skipped (dojo:CapturePausedFrames=%s), %llu audio frames -> %s",
 			(unsigned long long)written.load(), (unsigned long long)dropped.load(),
+			(unsigned long long)pausedDuplicates.load(), cfgLoadBool("dojo", "CapturePausedFrames", false) ? "yes" : "no",
 			(unsigned long long)audioFrames, recPath.c_str());
 
 	char msg[256];

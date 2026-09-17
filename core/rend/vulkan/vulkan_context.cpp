@@ -1149,6 +1149,8 @@ void VulkanContext::DoSwapCapture()
 
 	if (!videorec::isRecording())
 		return;
+	if (!videorec::wantsFrame())
+		return;		// a paused duplicate present (dojo:CapturePausedFrames)
 
 	// A resize invalidates the staging image and the encoder's frame size.
 	if ((u32)videorec::width() != width || (u32)videorec::height() != height)

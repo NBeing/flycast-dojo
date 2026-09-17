@@ -551,6 +551,8 @@ void do_swap_capture()
 	}
 	if (!videorec::isRecording())
 		return;
+	if (!videorec::wantsFrame())
+		return;		// a paused duplicate present (dojo:CapturePausedFrames)
 
 	const int w = videorec::width();
 	const int h = videorec::height();

@@ -303,6 +303,8 @@ void DX11Context::DoSwapCapture()
 
 	if (!videorec::isRecording() || !swapchain)
 		return;
+	if (!videorec::wantsFrame())
+		return;		// a paused duplicate present (dojo:CapturePausedFrames)
 
 	ComPtr<ID3D11Texture2D> backBuffer;
 	if (FAILED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&backBuffer.get())))
