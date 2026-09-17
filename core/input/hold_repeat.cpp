@@ -2,6 +2,7 @@
 #include "cfg/cfg.h"
 #include "log/LogManager.h"
 #include <cmath>
+#include <algorithm>
 
 namespace hotkeys
 {
@@ -60,7 +61,22 @@ int HoldRepeat::tick(double now)
 	*/
 	if (now < due)
 		return 0;
-	const int total = 1 + (int)std::floor((now - due) / period + 1e-6);
+	// THE RAMP, STILL COUNTED IN CLOSED FORM. With a linear rate r(t) from r0 up to
+	// rate_ over rampS_, the repeats due by t are the integral: r0*t + (rate_-r0)*t^2/(2T)
+	// inside the ramp, then rate_*(t-T) more after it - one expression against the
+	// press time, so the no-drift property above survives the ramp.
+	const double t = now - due;
+	const double r0 = std::min(15.0, rate_);
+	double dueCount;
+	if (rampS_ > 0.0 && rate_ > r0)
+	{
+		const double T = rampS_;
+		dueCount = t < T ? r0 * t + (rate_ - r0) * t * t / (2.0 * T)
+		                 : r0 * T + (rate_ - r0) * T / 2.0 + rate_ * (t - T);
+	}
+	else
+		dueCount = t / period;
+	const int total = 1 + (int)std::floor(dueCount + 1e-6);
 	const int n = total - fired_;
 	fired_ = total;
 	return n > 0 ? n : 0;
@@ -80,7 +96,8 @@ void HoldRepeat::release()
 HoldRepeat& stepHold()
 {
 	static HoldRepeat h(cfgLoadInt("dojo", "HoldStepDelay", 300) / 1000.0,
-			(double)cfgLoadInt("dojo", "HoldStepRate", 8));
+			(double)cfgLoadInt("dojo", "HoldStepRate", 8),
+			cfgLoadInt("dojo", "HoldStepRampMs", 1000) / 1000.0);	// David's ramp; inert at the default rate of 8 (<= 15)
 	return h;
 }
 
@@ -219,6 +236,18 @@ void holdRepeatSelfTest()
 			fired += h.tick(100.5 + i * 0.01);	// one second, sampled every 10 ms
 		claim("a held key repeats at about the rate asked for",
 				fired >= 8 && fired <= 12);
+	}
+	{	// THE RAMP (dojo:HoldStepRampMs): a 60/s hold with a 1 s ramp starts near 15/s
+		// and is at 60/s after the ramp. Both halves, or a ramp that never ends and a
+		// ramp that never starts would each pass one of them.
+		HoldRepeat h(0.5, 60.0, 1.0), flat(0.5, 60.0, 0.0);
+		h.press(100.0); flat.press(100.0);
+		int rampFirstHalf = 0, flatFirstHalf = 0, rampLater = 0;
+		for (int i = 0; i <= 50; i++) { rampFirstHalf += h.tick(100.5 + i * 0.01); flatFirstHalf += flat.tick(100.5 + i * 0.01); }
+		h.tick(102.5);	// consume everything due through 2.0 s into the hold
+		for (int i = 1; i <= 100; i++) rampLater += h.tick(102.5 + i * 0.01);	// one second, fully ramped
+		claim("a ramped hold starts slower than a flat one (first 0.5 s)", rampFirstHalf < flatFirstHalf && rampFirstHalf >= 5 && rampFirstHalf <= 20);
+		claim("...and repeats at the full rate once the ramp is over", rampLater >= 57 && rampLater <= 63);
 	}
 	{	// RELEASE STOPS IT. The ordinary case.
 		HoldRepeat h = fresh();

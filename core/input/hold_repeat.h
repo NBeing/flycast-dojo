@@ -40,7 +40,12 @@ class HoldRepeat
 public:
 	//! `delay` seconds held before repeating begins; `rate` repeats per second
 	//! after that. A tap shorter than `delay` fires exactly once.
-	HoldRepeat(double delay, double rate) : delay_(delay), rate_(rate) {}
+	//! rampS > 0: the repeat rate eases from min(15, rate) up to `rate` over rampS
+	//! seconds after maturity (David's HoldStepRampMs; ported 2026-09-17). A 60 fps
+	//! scrub kicking in at full speed the instant the hold matures feels like losing
+	//! control; the ramp is the fix. 0 = the rate applies at once. Inert when
+	//! rate <= 15 - there is nothing to ramp from.
+	HoldRepeat(double delay, double rate, double rampS = 0.0) : delay_(delay), rate_(rate), rampS_(rampS) {}
 
 	//! A key went down. Returns how many times to act NOW: 1 for a fresh
 	//! press, 0 for a repeat of a press already held (key auto-repeat from the
@@ -60,6 +65,7 @@ public:
 private:
 	double delay_;
 	double rate_;
+	double rampS_ = 0;
 	bool   held_ = false;
 	double pressedAt_ = 0;
 	//! Repeats already reported for this hold. Counted, so `tick` can answer
