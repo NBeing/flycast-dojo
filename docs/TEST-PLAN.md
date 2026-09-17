@@ -1251,3 +1251,53 @@ measure, not to assume.
 process a different movie row mid-replay needs `movie.setButtons` on a movie
 that is not editable in READ mode, or a second clip; neither is an honest
 one-line arm. Until one exists, that branch is reasoned, not measured.
+
+### 5.5 `[LANDED 2026-09-17]` The boot handoff - what a boot ARMS is CONSUMED
+
+**What existed.** David's boot handoff (`rend/gui.cpp:4679-4743` in his tree) sits at the
+step-stop and consumes what the pre-boot code armed: `replay_bootload` (Play a Movie ->
+State 0 at the boot pause), `macro_fullload` + `macro_pending` (Play Macro Full/Stage ->
+State 0 then the macro injected RELATIVE to it), `boot_ready_arm` (the READY banner, the
+States window, `TAS READY`), `PlayTestLocked`, and `dojo:OnEnterHandoff` in `SeedOnEnter`.
+dojo7 had ported every producer and NO consumer (docs/PORT-DEFECT-CENSUS.md #1-#5, §2,
+§3): Play a Movie froze at power-on and never sought State 0 (a human pressed F3; every
+harness passed `AutoSeekState`, so no test saw it), the Macros panel's "Load full" armed
+rows `Reset()` dropped at the next boot, the banner never fired.
+
+**What landed.** The handoff, at our `onenter_ff` stop in `gui_display_osd` (one stop, not
+two); pre-boot staging in `gui_start_game` (`PlayMacroClip`/`PlayMacroFile`/`PlayMacroStage`,
+one-shot, `else SeedOnEnter()`); `if (MacroMode) macro_armed = true` at boot (David's
+macro-parity audit); `OnEnterHandoff`; `PlayTestLocked` (its consumers `macro_locked` /
+`base_prelock` / `locked_slots` exist here). ONE OWNER of the replay seek: with
+`dojo:AutoSeekState=N` set the handoff DEFERS (`TAS REPLAY BOOT: State 0 seek deferred to
+AutoSeekState=N`) - the surface tour's slot-0 mover stays exactly as measured (72/72,
+gate_ok=72 after the port). The Macros panel's "Load full" now STAGES the pair and restarts
+the game (`deferred::post(gui_start_game)`) instead of arming a flag in-session; its label
+says so. `ctlserver` gained a `movie` verb (has/p1/p2/begin/end at a frame - the roll read
+back, independent of the trace that claimed the inject). NOT ported: `TestLabBoot` - its
+consumer is David's pre-boot lab-scratch launcher, and ours' Test Lab is in-session; no
+consumer here, so no key.
+
+**Traces.** `TAS REPLAY BOOT: State 0 loaded at the boot pause -> frame F` / `... no State 0
+in the clip - frozen on the boot frame` / `... seek deferred to AutoSeekState=N`;
+`TAS MACRO FULL: injected N macro frames at State 0's frame F (relative)`; `TAS PLAY TEST:
+landed READ / locked at frame F`; `TAS READY: READY - <clip> (<mode>) at frame F of E  |
+live = ...`; `TAS ONENTER: handoff at frame N (WRITE|READ-WRITE)`.
+
+**The harness** - `scripts/boothandofftest.sh` (ctest `flycast.boothandofftest` + twins):
+
+| claim | measured 2026-09-17 |
+|---|---|
+| B1 replay boot, no AutoSeekState | `frame=9928 paused=True (want 9928, True); TAS REPLAY BOOT: State 0 loaded at the boot pause -> frame 9928` |
+| B2 PlayMacroClip+File staged | `frame=9928 paused=True injected_at=9928 (want 9928); movie[9928]: has=True p1=16 (want True, 16)` |
+| B3 OnEnterHandoff=300 on the 633-frame fastVS seed | `handoff=300 frame=300 paused=True` |
+| arm `noload` | B1 `frame=0`, B2 `injected_at=0 ... has=False`, B3 green -> BEHAVED AS PREDICTED (exit 0) |
+| arm `absolute` | B2 `injected_at=0 ... has=False`, B1 green -> BEHAVED (exit 0) |
+
+The arms live in the RUNNER: `surface_tour.cpp`'s `sabotaged()` now also honours a tour-free
+key `dojo:TourArm=<cls>[+<cls>]` (same grammar, parsed lazily - the boot handoff can fire
+before the first tick), so the switch stays in the test-only TU and the handoff only asks
+(§5.2 rule 2). Two harness lessons paid for on the way: ctlserver BASELINES on the first
+`cmd.json` it sees (prime with a seq-0 query, as fixtures-check does), and a `$(send ...)`
+runs in a subshell, so the sequence number is the caller's to bump - both are now comments
+in the script.

@@ -26,11 +26,11 @@ Paths: ours = `core/...`; David = `/home/nbee/dev/davids_fly/0915/flycast-rr/cor
 
 | # | member(s) | set in ours | David's consumer | class |
 |---|---|---|---|---|
-| 1 | `replay_bootload` | `dojo/replay.cpp:161` (Replay::Init); cleared `dojo/dojo.cpp:3060` | `rend/gui.cpp:4704-4715` boot-handoff: State-0 `gui_loadState()` while paused, else log "no State 0" | (a) Play a Movie → boot freezes at power-on (the `stepping=true` half works) but never seeks State 0 |
-| 2 | `macro_fullload` | `dojo/dojo.cpp:1981` (LoadMacroFull), `:2007` (LoadClipState0Boot); cleared `:3061` | `rend/gui.cpp:4679-4691`: slot 0 → `gui_loadState()` → `InjectPendingMacroAt(frame_number)` | (a) Macros panel **"Load full (from State 0)"** (`dojo/macros_panel.cpp:253`) → `LoadMacroFull` → flag never consumed |
-| 3 | `macro_pending` | filled `dojo/dojo.cpp:1953-1961`; only reader is `InjectPendingMacroAt` (`:2018-2028`), which has no caller | same block, `gui.cpp:4691` | (a) transitively dead — macro rows sit in the stash until `Reset()` (`:3062`) drops them |
-| 4 | `boot_ready_arm` | `dojo/dojo.cpp:1922, 1978, 2004`, `dojo/replay.cpp:162`; cleared `:3070` | `rend/gui.cpp:4717-4743`: composes the READY banner, `gui_show_slot_picker()`, logs `TAS READY` | (a) the boot-ready banner + auto-open States never fires |
-| 5 | `clip_ready_pending`, `clip_ready_text` | only `Reset()` `dojo/dojo.cpp:3071-3072` (never set) | set `gui.cpp:4739-4740`; drawn `gui.cpp:6242-6246`; cleared `gui.cpp:6617, 6647, 6671` | (a) part of #4 |
+| 1 | `replay_bootload` | `dojo/replay.cpp:161` (Replay::Init); cleared `dojo/dojo.cpp:3060` | `rend/gui.cpp:4704-4715` boot-handoff: State-0 `gui_loadState()` while paused, else log "no State 0" | (a) Play a Movie → boot freezes at power-on (the `stepping=true` half works) but never seeks State 0 **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
+| 2 | `macro_fullload` | `dojo/dojo.cpp:1981` (LoadMacroFull), `:2007` (LoadClipState0Boot); cleared `:3061` | `rend/gui.cpp:4679-4691`: slot 0 → `gui_loadState()` → `InjectPendingMacroAt(frame_number)` | (a) Macros panel **"Load full (from State 0)"** (`dojo/macros_panel.cpp:253`) → `LoadMacroFull` → flag never consumed **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
+| 3 | `macro_pending` | filled `dojo/dojo.cpp:1953-1961`; only reader is `InjectPendingMacroAt` (`:2018-2028`), which has no caller | same block, `gui.cpp:4691` | (a) transitively dead — macro rows sit in the stash until `Reset()` (`:3062`) drops them **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
+| 4 | `boot_ready_arm` | `dojo/dojo.cpp:1922, 1978, 2004`, `dojo/replay.cpp:162`; cleared `:3070` | `rend/gui.cpp:4717-4743`: composes the READY banner, `gui_show_slot_picker()`, logs `TAS READY` | (a) the boot-ready banner + auto-open States never fires **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
+| 5 | `clip_ready_pending`, `clip_ready_text` | only `Reset()` `dojo/dojo.cpp:3071-3072` (never set) | set `gui.cpp:4739-4740`; drawn `gui.cpp:6242-6246`; cleared `gui.cpp:6617, 6647, 6671` | (a) part of #4 **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
 | 6 | `live_from_gen`, `live_from_local` | `dojo/dojo.cpp:897-898` (BeginClipStats reads clip.json `restoredFrom`); cleared `:868-869, 3065-3066` | `gui.cpp:4732-4733` (banner), `dojo_gui.cpp:10165`, `12256` (delete-gen guard), `25434-25447` + `26004-26038` (States: "live = gen NN", "restored …") | (a) a session on restored files never says so on screen (`live_from_edited` IS consumed → clip.json, `dojo.cpp:1031-1033`) |
 | 7 | `loaded_macro_path` | `dojo/dojo.cpp:1982`; cleared `:951, 2008, 3063`, `dojo/branch_panel.cpp:416` | 30 reads: save-back `dojo_gui.cpp:3516-3562`, "Edit loaded macro" `6479-6489`, `7610-7640`, `26408-26420`, browser highlight `10297-10378`, banner `gui.cpp:4731` | (a) Load full sets it; no Save-to-loaded-macro / Edit-loaded-macro exists |
 | 8 | `loaded_macro_rr` | `dojo/dojo.cpp:952, 1983, 2009`; reset `:3064` | **same gap in David's tree** (9 refs, all writes) | (c) |
@@ -64,8 +64,8 @@ swallows a Space keyup on ours' SDL path is untested; the guard is nevertheless 
 
 | function | ours definition | David's caller | class |
 |---|---|---|---|
-| `Dojo::InjectPendingMacroAt` | `dojo/dojo.cpp:2018` | `rend/gui.cpp:4691` | (a) part of #2 |
-| `Dojo::LoadClipState0Boot` | `dojo/dojo.cpp:1994` | `rend/gui.cpp:1069` (Play Macro STAGE boot; needs `PlayMacroClip/File/Stage`) | (a)/(b) no pre-boot Play-Macro staging in ours |
+| `Dojo::InjectPendingMacroAt` | `dojo/dojo.cpp:2018` | `rend/gui.cpp:4691` | (a) part of #2 **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
+| `Dojo::LoadClipState0Boot` | `dojo/dojo.cpp:1994` | `rend/gui.cpp:1069` (Play Macro STAGE boot; needs `PlayMacroClip/File/Stage`) | (a)/(b) no pre-boot Play-Macro staging in ours **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
 | `Dojo::ApplyRedo` | `dojo/dojo.cpp:1761` | `dojo_gui.cpp:14002, 14013` (Ctrl+Shift+Z / Redo), `15912, 15943` | (a) undo IS wired (`dojo/roll_panel.cpp:206, 270, 362, 422, 1274`, `dojo/roll_slots.cpp:717`); redo unreachable |
 | `Dojo::ResetPause` | declared `dojo/dojo.h:403`, **defined nowhere in either tree** | none | (c) |
 | `tas_wave::writeStateSnapshot` | `dojo/tas_wave.cpp:248` | `rend/gui.cpp:4908` inside `gui_saveState` (`<state>.wave` sidecar) | (a) ours' `gui_saveState` (`rend/gui.cpp:4972-4995`) writes only the thumbnail |
@@ -79,10 +79,10 @@ absent) and `keys` (David's `tas_golden::keys`, a module ours does not have).
 
 | key | David reader | ours | verdict |
 |---|---|---|---|
-| `PlayMacroClip`, `PlayMacroFile`, `PlayMacroStage` | `rend/gui.cpp:1062-1064` | none | (b)/(a) pre-boot Play-Macro staging; prerequisite for `LoadClipState0Boot` and a boot-time `LoadMacroFull` |
-| `TestLabBoot` | `rend/gui.cpp:1080` | none | (b) Test Lab scratch boot |
-| `PlayTestLocked` | `rend/gui.cpp:4693` | none | (b) Play-Test lands READ/locked |
-| `OnEnterHandoff` | `dojo/dojo.cpp:1834` (early handoff N frames into the seed) | none | (b) harness flag |
+| `PlayMacroClip`, `PlayMacroFile`, `PlayMacroStage` | `rend/gui.cpp:1062-1064` | none | (b)/(a) pre-boot Play-Macro staging; prerequisite for `LoadClipState0Boot` and a boot-time `LoadMacroFull` **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
+| `TestLabBoot` | `rend/gui.cpp:1080` | none | (b) Test Lab scratch boot **NOT PORTED: no consumer here (ours' Test Lab is in-session; David's key drives his pre-boot lab-scratch launcher)** |
+| `PlayTestLocked` | `rend/gui.cpp:4693` | none | (b) Play-Test lands READ/locked **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
+| `OnEnterHandoff` | `dojo/dojo.cpp:1834` (early handoff N frames into the seed) | none | (b) harness flag **LANDED 2026-09-17 (boot handoff port; TEST-PLAN §5.5)** |
 | `SendMerge` | `rend/gui.cpp:1039` | none | (b) see 1b |
 | `PurgeStale` | `rend/gui.cpp:5147` | none | (b) auto-purge stale states after a rewind |
 | `BaseHoldMs` | `rend/mainui.cpp:186` | none | (a) see #17 |
