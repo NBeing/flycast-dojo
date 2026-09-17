@@ -785,6 +785,134 @@ hotkeys (`docs/HOTKEYS.md`); the 26 feature hooks, each compiled where its verb
 lives; the harness, the `SavestateFolder` seam and these docs. No two tracks
 touched a file in common; the header changed once, at the scaffold.
 
+### 5.1 `[2026-09-17]` The oracle, the gate, and what a green tour does NOT mean
+
+Before the next layer was written, a "do we already have this wheel" pass read
+this tree, David's two trees, `~/dev/anita/nbneo-rr` and `~/dev/emuapi`, and
+nbneo0909 (the session that built nbneo-rr's harnesses) answered six questions
+about it. The result is that most of the layer is lifted or ported, and the
+genuinely new pieces are two.
+
+**The oracle - ONE header.** `core/dojo/oracle.h` declares `machineHash()`,
+`movieHash()` and `machineStopped()`. It replaced six private fingerprints that
+no C++ step could call: `sendequiv.cpp`'s `hashNow` (static; now MOVED here,
+body verbatim, sendequiv calls it), `lua.cpp:1428`'s `hashState` (static,
+Lua-only), the netplay MD5 in `nullDC.cpp`, `verifyLoadedStateIdempotent`'s
+byte compare, `fsttest.sh`'s sha256-of-a-state-file, and `oracle_probe.lua`'s
+FNV over guest RAM. `core/determinism.h:76-88` is the tree's own scar from
+adding a duplicate. The rule the header keeps (emuapi `MODEL.md`): **a hash is
+its DOMAIN, not its function** - `machineHash` is the bytes `dc_serialize`
+writes and nothing else (not the movie, not the frame number, not lua's
+trailer; same-build compares only, never keyed on, never persisted, read only
+while stopped); `movieHash` is `Dojo::MoviePrefixHash` over every row,
+inheriting its deliberate basis (`dojo.cpp:637-650`). The game-state oracle is
+NOT wrapped: `mvc2.h`'s `peekCombo` / `comboPeak` / `mapValidated` /
+`readRamSafe` already have one owner.
+
+**The gate - ported, not designed.** Every step now carries a facts ledger
+either side of its act (machine hash, movie hash, the panels' open mask, the
+bindings, slot, mode, frame) and is judged by a port of nbneo-rr's
+`flow_gates()` (`shell/gui/capture.cpp:30273-30404`, ~90 journey steps of
+debugging behind it):
+
+- **CHANGED is the TUPLE, not the hash alone** - a UI step legitimately leaves
+  the machine alone and a mover legitimately leaves the windows alone, so the
+  gate reads the pair (machine, movie) each step was declared to care about.
+- **A mover that changed nothing is VACUOUS** (verdict overridden to FAIL: "a
+  step whose verb did not fire"); **a UI step that moved the machine or the
+  movie is a LEAK** (a chord, a panel or a mode flip reached the guest). Both
+  directions are asserted - the false half catches the quiet leak.
+- **Mover distinctness with declared convergence as an ASSERTION**, not an
+  exemption: movers land on pairwise-distinct hashes except where a step
+  declares it must converge (load slot 0 with the setup hash; a branch
+  checkout with slot 0, because the branch's slot 0 is a copy) - and then it
+  must actually converge.
+- **A mover floor** - too few measured movers means the distinctness gate
+  "compares nothing and passes by saying nothing".
+- **nbneo0909's two-assertion rule:** a per-mover non-vacuity floor that CAN
+  FIRE under the mode being tested (their own floor once could not, and "a
+  guard that can't fire is worse than none"), and a distinctness assert
+  across arms - two neutral arms then fail both.
+- **Assert the guard fired FIRST** (`tools/bind-guard.cpp`'s inversion): a
+  violation counter reading 0 is exactly what a guard that never ran reports,
+  so the harness checks every settled step got a gate verdict before it
+  believes any of them.
+
+Expectation classes (the exact per-step table lives in `surface_tour.cpp`):
+**mover** (loads, the 1-frame shows, captures, checkouts), **ui** (rebinds,
+opens/closes, mode flips, labels, slot cycling, notepad, lab), **netzero**
+(flip + undo: the movie ends where it began), **idempotent** (load slot 0 ==
+the setup hash), **identity** (load slot 99 == the hash taken when it was
+saved), **any** (a branch checkout's movie is a copy - asserted neither way,
+and said so). Trace grammar, lifted from nbneo-rr's
+`tests/transport-target-check.py`: per step `SURFACE TOUR: gate n/N "<name>"
+machine=.. movie=.. expect=<class> -> ok|VACUOUS|LEAK|unmeasured`, a summary
+block of `  ok  G1  <claim, measured count inlined>` / `  FAIL G3  <measured>
+<why>:` with one indented offender per line, and an APPEND-ONLY RESULT line
+(`... gate_ok= vacuous= leak= unmeasured=`). Exit codes, also lifted: 0 pass ·
+1 a claim failed · 2 usage · 4 a sabotage failed to fire (the gate is
+decorative) · **5 VACUOUS, its own code** - "0 failed" is also what a tour
+that never ran looks like · 77 skip. `scripts/surfacetourtest.sh` prints its
+eight gates in the same grammar and, against a binary whose RESULT carries no
+gate fields, exits 5 rather than taking the tour's word.
+
+**`[MEASURED 2026-09-17]` The WRITE clobber.** In WRITE, a frame-step
+overwrites the row it advances INTO with neutral - the rule was already
+written (`docs/tas-fork/CANON_readwrite_model.md:98`: "the stomp lands on the
+frame you advance INTO"), named (`session::mode()`, `core/dojo/session.cpp:54`),
+enforced (`core/dojo/dojo.cpp:582`) and ceremonially applied by `sendequiv`
+(`sendequiv.cpp:160-186`) and the FST (`fst.cpp:417-458`). Nothing TESTED it.
+The tour's four `show:` steps ran in WRITE after `driver: WRITE` and each
+silently neutralised one movie row; the harness was green. The feature phase
+now runs READ-WRITE (`gui_set_driver(1)` + `macro_armed`), the driver cycle
+ends in READ-WRITE, and the show steps' expectation - machine moves, movie
+does NOT - is what makes the rule a test: revert the fix and the gate reddens
+those four steps as leaks.
+
+**A CORRECT PICTURE OF THE WRONG THING.** Adopted verbatim from nbneo-rr
+(`CLAUDE.md:169-172`) as the named failure mode: "not a crash and not a blank
+- it is right, steady, and about something else, which is why review does not
+catch it and a screenshot does not either." Two boundaries follow, both from
+nbneo0909's ack of this style:
+
+1. **A green tour certifies the SURFACE, never emulation correctness.** The
+   verb did what the button does; the mapping, mode, file and frame read back
+   true. A presented frame proves a frame was presented, not that it is the
+   right frame. Game-level claims (state-hash A/B against a neutral arm from
+   one base state, the MvC2 RAM oracle) are a DISTINCT claim class with their
+   own grammar and arms, and a green tour is never to be quoted as "the
+   emulation is right".
+2. **Determinism is intermittent - sweep a window, not a point.** One green
+   A/B is not evidence. `[MEASURED]` in nbneo-rr (`capture-scenes-check.py:150-158`):
+   six runs of every scene found 12 varying; two runs of those same 12 found
+   8. Harness #2 sweeps N >= 6 and reports how many pairs disagreed and the
+   first divergence frame.
+
+**Wheels we did not reinvent** (file refs are where the wheel lives):
+`machineHash` from `sendequiv.cpp:126` · `Dojo::MoviePrefixHash`
+(`dojo.cpp:651`, declared `dojo.h:221`) · the combo oracle `mvc2.h:60-71` ·
+the gate from nbneo-rr `flow_gates()` and `FlowStepFacts` (`capture.cpp:444,
+30273`) · the gate grammar and exit table from `tests/transport-target-check.py:104-107,
+1778-1810` · the sabotage judge for the next item from emuapi `arms.lua:119-160`
+/ `serve_arms.py:270-330` (three rules + INCONCLUSIVE, one shared copy) · for the
+fixture item, David's 426 converted combo macros (`0915/flycast-rr/mvc2_data/*/
+Combo_*_SS/*_macro.txt`), his `mcp/brute.py` (restore -> apply -> run ->
+`score_peak` + `dropped_at`) and his `tas_test` per-frame combo/RAM series
+(`0915/.../core/dojo/testrun.{h,cpp}`), plus nbneo-rr's fixture manifest
+(`fixtures/vsavj/RECIPE.toml`, result pinned by TWO hashes because the picture
+can be identical while the state is not) · for harness #2, `scripts/reprotest.sh
+--runs N` + `scripts/tests/repro/hash_sequence.lua` (per-frame, guest-frame-keyed,
+N runs, poke sabotage, empty-run SKIP), `replay_determinism.lua` (already names
+the known 1-byte `cycle_counter` divergence), and `trace-offset-sweep.py`'s
+first-divergence report shape.
+
+**Genuinely new:** the oracle header; the gate port; later, a flycast
+`buffers`-equivalent (self-describing named RAM blocks with extents, so a
+divergence harness carries no addresses) and the combo-connects oracle with
+its fixture. Nothing exists today that lands a combo: no clip, state, macro or
+manifest on this machine records the combo byte >= 1, and David's own notes
+say his PASS "verifies the infrastructure, not that hits connect".
+
 ## Two disciplines that are not optional
 
 **Every check must be able to fail, and be seen to fail once.** At tiers 0–1
