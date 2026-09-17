@@ -300,4 +300,14 @@ namespace timeline { void selfTest(); }
 */
 namespace sendequiv { void selfTest(); void tick(); }
 
+/*
+	Notation integration - the translation framework (profile=language,
+	Cell=interlingua, parsePattern=decoder) delivers the input it names. A
+	read-only probe (dojo:NotationProbe=yes|scramble) that, for every profile
+	label, runs parsePattern -> InjectInput -> the profile's own pressed(), so
+	scripts/notationtest.sh can assert every label reads back as exactly its
+	hardware bit. Closes the canon<->hardware seam notationSelfTest cannot reach.
+*/
+namespace notation { void probeTick(); }
+
 }	// namespace roll

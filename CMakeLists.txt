@@ -1318,6 +1318,7 @@ if(NOT LIBRETRO)
 	core/dojo/macros_panel.cpp
 	core/dojo/timeline_panel.cpp
 	core/dojo/sendequiv.cpp
+	core/dojo/notation_integ.cpp
 	core/dojo/notepad_panel.cpp
 	core/deps/ImGuiColorTextEdit/TextEditor.cpp
 	core/deps/ImGuiColorTextEdit/LanguageDefinitions.cpp
@@ -2227,6 +2228,20 @@ set_tests_properties(flycast.rebindtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3
 add_test(NAME flycast.rebindtest_can_fail
 	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/rebindtest.sh --self-test)
 set_tests_properties(flycast.rebindtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+# NOTATION TRANSLATION is faithful (journey). For every profile label,
+# parsePattern -> InjectInput (real packet encoder) -> the profile's pressed()
+# reads back exactly that column - decoder, encoder and profile agree.
+add_test(NAME flycast.notationtest
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/notationtest.sh)
+set_tests_properties(flycast.notationtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+# ITS ARM. NotationProbe=scramble corrupts the canon between decode and encode;
+# a faithful build must then read back the WRONG button. If a scrambled canon
+# still read clean, the faithfulness check is blind and proves nothing.
+add_test(NAME flycast.notationtest_can_fail
+	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/notationtest.sh --self-test)
+set_tests_properties(flycast.notationtest_can_fail PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually

@@ -395,6 +395,7 @@ bool mainui_rend_frame()
 	roll::fst::tick();	// the Frame Skip Test sweep, if one is running
 	roll::sendequiv::tick();	// dojo:SendEquivProbe - record vs send equivalence, if armed
 	roll::rebind::probeTick();	// dojo:RebindProbe - rebind-persists-a-restart, if armed
+	roll::notation::probeTick();	// dojo:NotationProbe - notation->packet->profile faithfulness, if armed
 	roll::bexport::tick();	// the per-branch video export, if one is running
 	tas_ctl::tick();	// dojo:ControlServer - poll _ctl/cmd.json once per frame (no-op when off)
 
