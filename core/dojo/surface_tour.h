@@ -79,6 +79,7 @@ bool driverReadWrite();
 bool driverWrite();                               // surface_tour_hooks.cpp (gui_set_driver + session::mode())
 bool senderSend();
 bool senderStop();                                // sender_panel.cpp (patternToCanon -> tas_auto::playLive)
+bool senderSendFrameskip();                       // sender_panel.cpp (v4): a held send released by the maple poll on a skip frame - the hook STEPS 8
 bool notepadAnalyze();                            // notepad_panel.cpp (editor().SetText + analyze)
 bool snippetsPlace();                             // snippets_panel.cpp (the probe body, seeded)
 bool macrosPlace();                               // macros_panel.cpp   (the probe body, seeded)

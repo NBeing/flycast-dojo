@@ -2082,6 +2082,7 @@ void Dojo::MapleApplyAction(MapleInputState inputState[4])
 			const u32 fsOff = (u32)cfgLoadInt("dojo", "FrameskipOffset", 1);	// skip+N alignment
 			tas_auto::playLive(dojo.frameskip_send_p1, dojo.frameskip_send_p2, (u64)fnow + fsOff);
 			dojo.frameskip_send_pending = false;
+			NOTICE_LOG(NETWORK, "TAS SEND: frameskip release at frame %u (%s, injected at skip+%u)", fnow, skipFrame ? "skip frame" : "DEADLINE - no skip seen", fsOff);
 			if (!skipFrame)	// fallback fired (sent outside a match); success is silent (the SEND button shows "Sending")
 				gui_display_notification("No frameskip seen - sending anyway", 1500);
 		}

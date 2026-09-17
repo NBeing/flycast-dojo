@@ -664,6 +664,7 @@ static const Entry kHooks[] = {
 	{ "driverWrite",          driverWrite },
 	{ "senderSend",           senderSend },
 	{ "senderStop",           senderStop },
+	{ "senderSendFrameskip",  senderSendFrameskip },
 	{ "notepadAnalyze",       notepadAnalyze },
 	{ "snippetsPlace",        snippetsPlace },
 	{ "macrosPlace",          macrosPlace },

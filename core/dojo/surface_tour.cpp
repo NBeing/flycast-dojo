@@ -237,6 +237,8 @@ static Expect expectOf(const char *name)
 	// did; the movie is a copy too but is re-attached from disk - not asserted.
 	if (startsWith(name, "branch: checkout"))            return { MExp::Moved,     VExp::Any,       true,  "mover/converge" };
 	if (startsWith(name, "branch: back to main"))        return { MExp::Moved,     VExp::Any,       true,  "mover/converge" };
+	// the held send STEPS 8 frames and bakes the released cells into the roll: machine AND movie move.
+	if (startsWith(name, "sender: send held for frameskip")) return { MExp::Moved, VExp::Moved,  false, "mover" };
 	if (startsWith(name, "captures:"))                   return { MExp::Moved,     VExp::Unchanged, false, "mover" };
 	if (startsWith(name, "FST:"))                        return { MExp::Moved,     VExp::Unchanged, false, "mover" };
 	if (startsWith(name, "branch export:"))              return { MExp::Moved,     VExp::Any,       false, "mover" };
@@ -782,6 +784,22 @@ static void buildSteps()
 	}
 	hook("sender: send \"5LP _ _ 5LP\"",     Kind::Record, hooks::senderSend);
 	hook("sender: stop",                     Kind::Click,  hooks::senderStop, true);
+	{	// item 6 (2026-09-17): a held send, released by the maple poll - the one sender step that STEPS
+		Step s;
+		s.name = "sender: send held for frameskip";
+		s.kind = Kind::Record;
+		s.needsPrev = true;
+		s.maxWaitMs = 4000;
+		static u32 fsFrom = 0;
+		s.act = [] { why(""); fsFrom = dojo.frame_number.load(); return hooks::senderSendFrameskip(); };
+		s.verify = [] {
+			if (gui_state != GuiState::Paused) { why("not paused yet"); return false; }
+			if (dojo.frameskip_send_pending) { why("still pending at frame %u (from %u)", dojo.frame_number.load(), fsFrom); return false; }
+			if (dojo.frame_number.load() <= fsFrom) { why("frame did not advance (%u)", fsFrom); return false; }
+			why("released; frame %u -> %u", fsFrom, dojo.frame_number.load()); return true;
+		};
+		add(s);
+	}
 	hook("notepad: analyze",                 Kind::Click,  hooks::notepadAnalyze);
 	hook("snippets: place",                  Kind::Click,  hooks::snippetsPlace);
 	hook("macros: place",                    Kind::Click,  hooks::macrosPlace);

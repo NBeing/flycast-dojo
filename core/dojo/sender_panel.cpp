@@ -53,6 +53,8 @@ namespace roll
 {
 namespace sender
 {
+void applyMergeCfg();
+void armFrameskipSend(const std::vector<u16>& p1, const std::vector<u16>& p2);
 
 /*
 	Turn a typed pattern into the per-frame canon words `tas_auto::playLive`
@@ -163,6 +165,15 @@ void selfTest()
 				&& p.left == tas_macro::CANON_LEFT && p.right == tas_macro::CANON_RIGHT);
 	}
 
+	{	// MERGE seed (item 5): the cfg key drives the atomic MapleRecordAction reads
+		const std::string was = cfgLoadStr("dojo", "SendMerge", "");
+		const bool wasOn = dojo.send_merge.load();
+		cfgSetVirtual("dojo", "SendMerge", "yes"); applyMergeCfg();
+		claim("dojo:SendMerge=yes seeds MERGE on", dojo.send_merge.load());
+		cfgSetVirtual("dojo", "SendMerge", "no"); applyMergeCfg();
+		claim("dojo:SendMerge=no seeds MERGE off", !dojo.send_merge.load());
+		cfgSetVirtual("dojo", "SendMerge", was); dojo.send_merge = wasOn;
+	}
 	NOTICE_LOG(RENDERER, "SENDER SELFTEST: %d passed, %d failed", pass, fail);
 }
 
@@ -306,6 +317,62 @@ static void drawHoldGrid()
 		tasTextDisabled("nothing armed");
 }
 
+// MERGE sends (docs/PORT-DEFECT-CENSUS.md 1b, ported 2026-09-17 from David's dojo_gui.cpp:2255-2270):
+// dojo.send_merge is the atomic MapleRecordAction reads; the boot seeds it from dojo:SendMerge
+// (gui_start_game) and this is the other writer. Pure so the selftest can drive it.
+void applyMergeCfg()
+{
+	dojo.send_merge = cfgLoadBool("dojo", "SendMerge", false);
+}
+static void setMerge(bool on)
+{
+	dojo.send_merge = on;
+	cfgSetVirtual("dojo", "SendMerge", on ? "yes" : "no");
+	cfgSaveBool("dojo", "SendMerge", on);
+	NOTICE_LOG(RENDERER, "INPUT SENDER: MERGE sends %s", on ? "on" : "off");
+}
+// Wait-for-Frameskip (docs/PORT-DEFECT-CENSUS.md 1b, ported from David's dojo_gui.cpp:2984-3030): arm a
+// held Send that MapleApplyAction releases on the next MvC2 skip/reset frame (at skip+N), or at a 60-frame
+// deadline if none is seen so a send can never hang. The frame-perfect alignment knob.
+void armFrameskipSend(const std::vector<u16>& p1, const std::vector<u16>& p2)
+{
+	dojo.frameskip_send_p1 = p1;
+	dojo.frameskip_send_p2 = p2;
+	dojo.frameskip_send_deadline = dojo.frame_number.load() + 60;
+	dojo.frameskip_send_pending = true;
+	gui_display_notification("Send held for the next frameskip", 1500);
+	NOTICE_LOG(RENDERER, "INPUT SENDER: held %u frame(s) for the next frameskip (deadline %u, skip+%d)",
+			(unsigned)p1.size(), dojo.frameskip_send_deadline, cfgLoadInt("dojo", "FrameskipOffset", 1));
+}
+static void drawFrameskipRow()
+{
+	bool wfs = cfgLoadBool("dojo", "WaitForFrameskip", false);
+	if (ImGui::Checkbox("Wait for Frameskip", &wfs))
+	{
+		cfgSetVirtual("dojo", "WaitForFrameskip", wfs ? "yes" : "no");
+		cfgSaveBool("dojo", "WaitForFrameskip", wfs);
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("MvC2: hold Send until the next frame-skip (the reset frame), then inject LIVE at skip+N - frame-aligned");
+	ImGui::SameLine();
+	ImGui::BeginDisabled(!wfs);
+	tasTextDisabled("skip+");
+	ImGui::SameLine(0, 2.f);
+	int fsOff = cfgLoadInt("dojo", "FrameskipOffset", 1);
+	ImGui::SetNextItemWidth(80.f);
+	if (ImGui::InputInt("##fsoff", &fsOff, 1, 1))
+	{
+		if (fsOff < 0) fsOff = 0;
+		if (fsOff > 20) fsOff = 20;
+		cfgSetVirtual("dojo", "FrameskipOffset", std::to_string(fsOff));
+		cfgSaveInt("dojo", "FrameskipOffset", fsOff);
+	}
+	ImGui::EndDisabled();
+	ImGui::SameLine(0, 14.f);
+	bool merge = dojo.send_merge.load();
+	if (ImGui::Checkbox("MERGE sends", &merge)) setMerge(merge);
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("OR a send into the cells it lands on instead of replacing them (dojo:SendMerge)");
+}
+
 static void drawSend()
 {
 	ImGui::Separator();
@@ -333,12 +400,18 @@ static void drawSend()
 			// what a one-box pattern can say. Two-player chords are the Piano
 			// Roll's job, where there are two lanes to put them in.
 			const std::vector<u16> p2;
-			tas_auto::playLive(p1, p2, dojo.frame_number.load() + 1);
-			NOTICE_LOG(RENDERER, "INPUT SENDER: sent %u frame(s) at %u",
-					(unsigned)p1.size(), (unsigned)dojo.frame_number.load() + 1);
+			if (cfgLoadBool("dojo", "WaitForFrameskip", false))
+				armFrameskipSend(p1, p2);
+			else
+			{
+				tas_auto::playLive(p1, p2, dojo.frame_number.load() + 1);
+				NOTICE_LOG(RENDERER, "INPUT SENDER: sent %u frame(s) at %u",
+						(unsigned)p1.size(), (unsigned)dojo.frame_number.load() + 1);
+			}
 		}
 	}
 	ImGui::EndDisabled();
+	drawFrameskipRow();
 
 	if (dojo.play_match)
 		// SAID, not shown as a dead button. Sending authors input, which is
@@ -424,6 +497,22 @@ bool surfacetour::hooks::senderSend()
 		surfacetour::why("playLive did not go live");
 		return false;
 	}
+	return true;
+}
+
+// Item 6's measurement: arm a held Send, then STEP so the maple poll can release it on a skip frame
+// (or the deadline); the runner's polled verify reads the release. MvC2 skips every 4th frame, so 8
+// frames always cover one skip when a match is loaded; outside a match the 60-frame deadline fires.
+bool surfacetour::hooks::senderSendFrameskip()
+{
+	dojo.play_match = false;
+	if (dojo.frameskip_send_pending) { surfacetour::why("a held send is already pending"); return false; }
+	std::vector<u16> p1;
+	std::string err;
+	if (!sender::patternToCanon("5LP _ 5LP", p1, err) || p1.empty()) { surfacetour::why("pattern refused: %s", err.c_str()); return false; }
+	sender::armFrameskipSend(p1, std::vector<u16>());
+	if (!dojo.frameskip_send_pending) { surfacetour::why("arm did not take"); return false; }
+	gui_step_frames(8);
 	return true;
 }
 

@@ -942,6 +942,10 @@ void gui_start_game(const std::string& path)
 			cfgSetVirtual("dojo", "OnEnterFile", "");	// a Full load ignores the boot seed (we skip SeedOnEnter) - consume it
 		else
 			dojo.SeedOnEnter();
+	// MERGE sends: seeded from dojo:SendMerge every boot (David's gui.cpp:1039; docs/PORT-DEFECT-
+	// CENSUS.md 1b - the atomic was read by MapleRecordAction and written by nothing, so MERGE was
+	// permanently off and the launch key inert). The Sender's checkbox is the other writer.
+	dojo.send_merge = cfgLoadBool("dojo", "SendMerge", false);
 	}
 
 	scanner.stop();
