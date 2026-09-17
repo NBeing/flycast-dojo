@@ -197,6 +197,14 @@ static void draw()
 		// is fine. These predate re-record sequencing and cannot be judged.
 		tasTextDisabled("  %d unjudged", unjudged);
 	}
+	// RESTORED FROM (docs/PORT-DEFECT-CENSUS.md #6, ported 2026-09-17 from David's dojo_gui.cpp:25434):
+	// a session running on files restored from a generation says so, here, where the states are.
+	if (!dojo.live_from_gen.empty() || !dojo.live_from_local.empty())
+	{
+		ImGui::SameLine();
+		if (!dojo.live_from_gen.empty()) tasTextColored(TAS_DIM, "  live = %s (restored)", dojo.live_from_gen.c_str());
+		else                             tasTextColored(TAS_DIM, "  restored from %s", dojo.live_from_local.c_str());
+	}
 	ImGui::SameLine();
 	tasCheckbox("show empty", &showEmpty);
 
