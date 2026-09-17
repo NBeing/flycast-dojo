@@ -5,6 +5,7 @@
 #include "rend/gui.h"          // gui_saveState / gui_loadState / gui_step_frames / gui_state / GuiState
 #include "oslib/oslib.h"       // hostfs::savestateFolderOverride / clampSavestateSlot / currentSavestateSlot
 #include "dojo/dojo.h"         // dojo.frame_number / play_match / macro_armed
+#include "dojo/movie.h"        // movie::has / begin / end (the `movie` verb)
 #include "dojo/mvc2.h"         // tas_mvc2::readRam
 #include "dojo/tas_clip.h"     // tas_clip::setLocked / bump - the Test Lab "Overwrite + lock" persist path
 #include "log/Log.h"           // NOTICE_LOG
@@ -554,6 +555,22 @@ void tick()
 			dojo.InjectInput(frame, p1, p2, (u32)hold);
 			json extra = json::object();
 			extra["frame"] = frame; extra["hold"] = hold; extra["p1"] = p1; extra["p2"] = p2;
+			writeResp(respDir, seq, true, extra, "");
+		}
+		else if (verb == "movie")
+		{
+			// args: frame (default = the current frame). Reads the ROLL back - has/p1/p2 canon at that frame plus
+			// begin/end - so a harness can see what `input`, a macro inject or a seed actually wrote, independent
+			// of the trace that claimed it. Pure read; safe while paused (the harness pauses before asking).
+			const u32 frame = (args.contains("frame") && args["frame"].is_number_integer())
+							? (u32)intArg(args, "frame", 0) : dojo.frame_number.load();
+			json extra = json::object();
+			extra["at"] = frame;
+			extra["has"] = movie::has(frame);
+			extra["p1"] = dojo.CanonAt(frame, 0);
+			extra["p2"] = dojo.CanonAt(frame, 1);
+			extra["begin"] = movie::authored() ? movie::begin() : 0;
+			extra["end"] = movie::authored() ? movie::end() : 0;
 			writeResp(respDir, seq, true, extra, "");
 		}
 		else if (verb == "write_macro")

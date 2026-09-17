@@ -99,9 +99,29 @@ static std::vector<std::string> parseSabotage(const std::string& mode)
 
 static std::vector<std::string> g_sabotage;		//!< the armed classes, parsed once in init()
 
+// A second, TOUR-FREE arm key with the same grammar: dojo:TourArm=<cls>[+<cls>]. A harness that
+// tests a feature outside the tour (boothandofftest's `noload` / `absolute`) needs the switch to
+// live HERE - the runner, a test-only TU - never in the feature (TEST-PLAN §5.2 rule 2); the
+// feature asks sabotaged() exactly as the tour's hooks do. Parsed once, lazily, because the boot
+// handoff can fire before the first tick() ran init(). `[PORTED 2026-09-17]`
+static std::vector<std::string> g_armKey;
+static bool g_armKeyParsed = false;
 bool sabotaged(const char *cls)
 {
+	if (!g_armKeyParsed)
+	{
+		g_armKeyParsed = true;
+		const std::string k = cfgLoadStr("dojo", "TourArm", "");
+		if (!k.empty() && k != "no")
+		{
+			g_armKey = parseSabotage("sabotage:" + k);
+			NOTICE_LOG(RENDERER, "SURFACE TOUR: arm key TourArm=%s (%d class(es), no tour)", k.c_str(), (int)g_armKey.size());
+		}
+	}
 	for (const std::string& c : g_sabotage)
+		if (c == cls)
+			return true;
+	for (const std::string& c : g_armKey)
 		if (c == cls)
 			return true;
 	return false;

@@ -28,6 +28,7 @@
 #include "rend/game_viewport.h"
 #include "rend/panel.h"
 #include "dojo/movie.h"
+#include "dojo/surface_tour.h"
 #include "hw/pvr/Renderer_if.h"	// Renderer::GetFrameTexture (the game panel)
 #include "rend/transform_matrix.h"	// getDCFramebufferAspectRatio
 #include "network/net_handshake.h"
@@ -916,12 +917,30 @@ void gui_start_game(const std::string& path)
 	if (cfgLoadBool("dojo", "Replay", false))
 		dojo.replay.Init();
 	else
-		// OnEnter boot seed: no-op unless dojo:OnEnterFile is staged (launch menu / CLI). The
-		// seed, the pad-out window (dojo.cpp MapleRecordAction) and the step-stop (gui_display_osd)
-		// were all ported; this call was not, so a staged seed booted clean and never logged
-		// `TAS ONENTER: seeded` (fixtures-check F4 measured it, 2026-09-17). After Reset(), which
-		// clears session_inputs, and only for a non-replay boot - a replay drives its own inputs.
-		dojo.SeedOnEnter();
+	{
+		// Play Macro FULL / STAGE boot (David gui.cpp:1057-1072, `[PORTED 2026-09-17]` CENSUS §3): the
+		// Macros panel (or a CLI) staged a clip whose State 0 is the macro's ANCHOR in dojo:PlayMacroClip
+		// + the macro .txt in dojo:PlayMacroFile. Load the macro into the roll + arm the deferred State-0
+		// load so the boot pauses AT the anchor (EXACT frame sync); PlayMacroStage = open AT State 0 with
+		// an empty roll. One-shot: consume all three so a leaked flag can't Full-load a later boot. No clip
+		// staged -> the OnEnter seed. The seed, the pad-out window and the step-stop were all ported before
+		// this call was (fixtures-check F4 measured a staged seed booting clean, 2026-09-17). After
+		// Reset(), which clears session_inputs, and only for a non-replay boot - a replay drives its own.
+		if (cfgLoadBool("dojo", "MacroMode", false))
+			dojo.macro_armed = true;	// EVERY macro session lives in READ-WRITE (David's macro-parity audit:
+										// Record Macro without a seed booted WRITE; Reset() clears the arm)
+		const std::string pmClip = cfgLoadStr("dojo", "PlayMacroClip", "");
+		const std::string pmFile = cfgLoadStr("dojo", "PlayMacroFile", "");
+		const bool pmStage = cfgLoadBool("dojo", "PlayMacroStage", false);
+		cfgSetVirtual("dojo", "PlayMacroClip", "");
+		cfgSetVirtual("dojo", "PlayMacroFile", "");
+		cfgSetVirtual("dojo", "PlayMacroStage", "no");
+		if (cfgLoadBool("dojo", "PlayMacro", false) && !pmClip.empty()
+				&& (pmStage ? dojo.LoadClipState0Boot(pmClip) : dojo.LoadMacroFull(pmClip, pmFile)))
+			cfgSetVirtual("dojo", "OnEnterFile", "");	// a Full load ignores the boot seed (we skip SeedOnEnter) - consume it
+		else
+			dojo.SeedOnEnter();
+	}
 
 	scanner.stop();
 	NOTICE_LOG(COMMON, "gui_start_game: loading %s", path.c_str());
@@ -4772,6 +4791,92 @@ void gui_display_osd()
 			}
 			emu.stop();
 			gui_setState(GuiState::Paused);
+			// BOOT HANDOFF (David gui.cpp:4679-4743, `[PORTED 2026-09-17]` docs/PORT-DEFECT-CENSUS.md
+			// #1-#5): the flags below were SET by Replay::Init / LoadMacroFull / LoadClipState0Boot /
+			// SeedOnEnter and consumed by nothing - Play a Movie froze at power-on and never sought State
+			// 0, the Macros panel's "Load full" armed rows Reset() later dropped, the READY banner never
+			// fired. This stop is the boot pause, the machine is stopped, so a load here lands exactly.
+			// The `noload` / `absolute` arms are the runner's (surface_tour.cpp, dojo:TourArm) - the
+			// switch lives in the test-only TU, this code only asks (TEST-PLAN §5.2 rule 2).
+			if (dojo.macro_fullload)
+			{	// Play Macro FULL / STAGE: load State 0 (the macro's ANCHOR) NOW, while stopped, so NO macro cell
+				// runs before it; LoadStateFrame seeks frame_number to the state's .frame. Then lay the pending
+				// macro down STARTING there - a macro is RELATIVE (its own 0-based numbering), so it plays from
+				// wherever State 0 landed, not absolute frame 0 (David's oversight fix). Stays PAUSED.
+				dojo.macro_fullload = false;
+				config::SavestateSlot.set(0);	// slot 0 -> <clip>/<game>.state via savestateFolderOverride
+				if (roll::surfacetour::sabotaged("noload"))
+					NOTICE_LOG(NETWORK, "TAS MACRO FULL: SABOTAGE noload - State 0 NOT loaded at the boot pause");
+				else
+					gui_loadState();
+				dojo.InjectPendingMacroAt(roll::surfacetour::sabotaged("absolute") ? 0u : dojo.frame_number.load());
+			}
+			if (dojo.replay_bootload)
+			{	// Replay boot (David: "try seeking replays to state0 first then freeze"): paused at power-on. If
+				// the clip has a State 0, seek there NOW (stays paused; the read-only movie resumes from that
+				// frame), else stay frozen on the boot frame. ONE OWNER of the seek: a harness that passes
+				// dojo:AutoSeekState=N drives its own seek from mainui.cpp once playback runs - defer to it,
+				// or the state would load twice (the surface tour measures its slot-0 load as a MOVER from
+				// the auto-played frame; that stays exactly as it was).
+				dojo.replay_bootload = false;
+				const int autoSlot = cfgLoadInt("dojo", "AutoSeekState", -1);
+				if (autoSlot >= 0)
+					NOTICE_LOG(NETWORK, "TAS REPLAY BOOT: State 0 seek deferred to AutoSeekState=%d (mainui.cpp owns it)", autoSlot);
+				else if (file_exists(hostfs::getSavestatePath(0, false)))
+				{
+					config::SavestateSlot.set(0);
+					if (roll::surfacetour::sabotaged("noload"))
+						NOTICE_LOG(NETWORK, "TAS REPLAY BOOT: SABOTAGE noload - State 0 NOT loaded at the boot pause");
+					else
+					{
+						gui_loadState();
+						NOTICE_LOG(NETWORK, "TAS REPLAY BOOT: State 0 loaded at the boot pause -> frame %u", dojo.frame_number.load());
+					}
+				}
+				else
+					NOTICE_LOG(NETWORK, "TAS REPLAY BOOT: no State 0 in the clip - frozen on the boot frame");
+			}
+			if (cfgLoadBool("dojo", "PlayTestLocked", false))
+			{	// Play Test (David): a loaded test lands READ-ONLY / LOCKED - view it, Unlock in the Test Lab to
+				// edit, Overwrite to save. Fixture-protected: base_prelock guards [0, BASE). One-shot, consumed here.
+				cfgSetVirtual("dojo", "PlayTestLocked", "no");
+				dojo.play_match = true;
+				dojo.macro_locked = true;
+				dojo.divergence_open = false;
+				dojo.base_prelock = true;
+				dojo.locked_slots.clear();
+				NOTICE_LOG(NETWORK, "TAS PLAY TEST: landed READ / locked at frame %u", dojo.frame_number.load());
+			}
+			if (dojo.boot_ready_arm)
+			{	// BOOT READY (David): the clip is loaded and the game is frozen on its frame. Say what got loaded,
+				// where the playhead sits and what live is; open the States panel when a clip is bound. The text
+				// stays in clip_ready_text until the first step / resume (a banner host may draw it).
+				dojo.boot_ready_arm = false;
+				const std::string clipName = hostfs::savestateFolderOverride.empty() ? std::string()
+						: ghc::filesystem::path(hostfs::savestateFolderOverride).filename().string();
+				const bool haveState0 = !clipName.empty() && file_exists(hostfs::getSavestatePath(0, false));
+				const u32 fnow = dojo.frame_number.load(), fend = dojo.MovieEnd();
+				char fr[64];
+				if (fend > 0)
+					snprintf(fr, sizeof(fr), "frame %u of %u", fnow, fend);
+				else
+					snprintf(fr, sizeof(fr), "frame %u, empty roll", fnow);
+				const char *mode = dojo.play_match ? "replay" : !cfgLoadBool("dojo", "MacroMode", false) ? "recording"
+						: dojo.loaded_macro_path.empty() ? "macro staged" : "macro in the roll";
+				const std::string live = dojo.live_from_gen.empty() ? std::string("the original recording")
+						: dojo.live_from_gen + " (restored " + dojo.live_from_local + (dojo.live_from_edited ? ", edited since)" : ")");
+				char rb[400];
+				if (clipName.empty())
+					snprintf(rb, sizeof(rb), "READY - %s, %s  |  no clip folder, no State 0", mode, fr);
+				else
+					snprintf(rb, sizeof(rb), "READY - %s (%s) at %s  |  live = %s%s", clipName.c_str(), mode, fr, live.c_str(), haveState0 ? "" : "  |  no State 0");
+				dojo.clip_ready_text = rb;
+				dojo.clip_ready_pending = true;
+				gui_display_notification(rb, 6000);
+				if (!clipName.empty())
+					panels::open("states");	// a clip is bound: show its states; a bare Stage has none to show
+				NOTICE_LOG(NETWORK, "TAS READY: %s", rb);
+			}
 		}
 
 		dojo.UpdateScore();
@@ -5250,6 +5355,7 @@ void gui_open_step()
 void gui_step_frames(int n)
 {
 	const LockGuard lock(guiMutex);
+	dojo.clip_ready_pending = false;	// the boot-ready banner ends on any step
 	if (n < 1)
 		n = 1;
 	if (gui_state == GuiState::Paused && dojo.buffering && dojo.frame_number == dojo.session_inputs.size())
@@ -5306,6 +5412,7 @@ void gui_resume_play()
 void gui_open_pause()
 {
 	const LockGuard lock(guiMutex);
+	dojo.clip_ready_pending = false;	// the boot-ready banner lives until the first step / resume
 	if (dojo.stepping)
 		dojo.stepping = false;
 	if (session::steppable())

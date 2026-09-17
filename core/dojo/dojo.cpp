@@ -1915,6 +1915,13 @@ void Dojo::SeedOnEnter()
 	// is really running, keyed on onenter_ff, and the handoff stop drops it again.
 	stepping = true;
 	target_step_frame = (u32)m.frames.size();
+	// Optional EARLY handoff (David): hand off (pause) partway through the seed so the REMAINDER plays
+	// live - e.g. a snippet = fastVS boot + a team-select tail, OnEnterHandoff = the fastVS length: boot
+	// FFs to char-select, pauses, then the tail (session_inputs past the handoff) plays under the user
+	// or a capture. 0/unset = hand off at the seed's end. `[PORTED 2026-09-17]` CENSUS §3.
+	const int oeHand = cfgLoadInt("dojo", "OnEnterHandoff", 0);
+	if (oeHand > 0 && (u32)oeHand < target_step_frame)
+		target_step_frame = (u32)oeHand;
 	onenter_ff = true;
 	boot_ready_arm = true;	// the handoff pause announces the staged macro
 	NOTICE_LOG(NETWORK, "TAS ONENTER: seeded %u frames from '%s' - READ-WRITE, handoff pause @ %u",
@@ -2009,6 +2016,19 @@ bool Dojo::LoadClipState0Boot(const std::string& clipDir)
 // frame. Called from the boot handoff (gui.cpp) right after gui_loadState set frame_number to State 0's .frame.
 // A macro carries its own 0-based line numbering (no inherent tie to the game frame), so line i drives session
 // frame (startFrame + i) - the combo plays from wherever State 0 landed, exact-aligned to its anchor.
+// One player's canon u16 at a movie frame, 0 when the row is absent or short. Exported so the control
+// server's `movie` verb can read the roll back (boothandofftest B2: "a non-neutral cell at State 0's
+// frame") without a second copy of the packet->canon rule; canonFromPacket stays file-local.
+u16 Dojo::CanonAt(u32 frame, int player) const
+{
+	if (player < 0 || player >= MAX_PLAYERS)
+		return 0;
+	auto it = session_inputs.find(frame);
+	if (it == session_inputs.end() || it->second.size() < sizeof(FrameInputs) * MAX_PLAYERS)
+		return 0;
+	return canonFromPacket(*(const FrameInputs *)(it->second.data() + player * sizeof(FrameInputs)));
+}
+
 void Dojo::InjectPendingMacroAt(u32 startFrame)
 {
 	if (macro_pending.empty())

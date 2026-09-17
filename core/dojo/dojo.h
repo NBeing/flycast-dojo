@@ -332,7 +332,8 @@ public:
 	// gui.cpp OSD handoff. Returns false if the macro file won't load (caller falls back to a seed boot).
 	bool LoadMacroFull(const std::string& clipDir, const std::string& macroFile);
 	bool LoadClipState0Boot(const std::string& clipDir);	// Play Macro STAGE with a State 0: the same deferred State-0 boot, EMPTY roll (the macro sits in the stage buffer)
-	void InjectPendingMacroAt(u32 startFrame);		// lay macro_pending into the roll at startFrame.. (relative)
+	void InjectPendingMacroAt(u32 startFrame);
+	u16 CanonAt(u32 frame, int player) const;	// one player's canon at a frame; 0 if absent (ctlserver `movie`)		// lay macro_pending into the roll at startFrame.. (relative)
 	std::vector<std::vector<u8>> macro_pending;		// Play Macro Full: macro rows awaiting injection at State 0's
 													// frame (a macro is relative; the boot handoff places it there)
 	bool onenter_ff = false;	// fast-forwarding through the seeded boot; cleared at the handoff pause (gui.cpp)

@@ -10,6 +10,8 @@
 #include "rend/panel.h"
 #include "rend/gui.h"
 #include "oslib/oslib.h"
+#include "deferred.h"
+#include "emulator.h"
 #include "stdclass.h"
 #include "cfg/cfg.h"
 #include "cfg/option.h"
@@ -245,13 +247,30 @@ static void draw()
 	if (sel.empty())
 		tasTip("Select target rows in the Piano Roll first.");
 
-	// Full load: re-home the session on this macro's clip and play from State 0. Takes
-	// effect on the next boot handoff (its engine comment). Only with a State 0 to anchor.
+	// Full load: re-home the session on this macro's clip and play from State 0. The boot
+	// handoff consumes it (gui.cpp) - so this STAGES the pair and RESTARTS the game, the way
+	// David's pre-boot browser does; `[MEASURED 2026-09-17]` calling LoadMacroFull in-session
+	// armed rows that Reset() dropped at the next gui_start_game, and the flag it set was
+	// consumed by nothing (docs/PORT-DEFECT-CENSUS.md #2). Only with a State 0 to anchor.
 	ImGui::BeginDisabled(!mf.hasState0);
-	if (tasButton("Load full (from State 0)"))
+	if (tasButton("Load full (from State 0) - restarts the game"))
 	{
-		if (dojo.LoadMacroFull(mf.clipDir, mf.path))
-			gui_display_notification("Macro armed - it plays from State 0 on the next boot", 4000);
+		const std::string path = settings.content.path;	// captured NOW: unloadGame clears it
+		if (path.empty())
+			gui_display_notification("No game loaded - nothing to restart", 3000);
+		else
+		{
+			cfgSetVirtual("dojo", "MacroMode", "yes");
+			cfgSetVirtual("dojo", "PlayMacro", "yes");
+			cfgSetVirtual("dojo", "RecordMatches", "no");	// a macro session has no .flyr
+			cfgSetVirtual("dojo", "PlayMacroClip", mf.clipDir);
+			cfgSetVirtual("dojo", "PlayMacroFile", mf.path);
+			cfgSetVirtual("dojo", "PlayMacroStage", "no");
+			NOTICE_LOG(RENDERER, "MACROS PANEL: Load full staged (clip '%s', macro '%s') - restarting %s",
+					mf.clipDir.c_str(), mf.path.c_str(), path.c_str());
+			gui_display_notification("Load full staged - restarting; the macro plays from State 0", 4000);
+			deferred::post([path]() { gui_start_game(path); });
+		}
 	}
 	ImGui::EndDisabled();
 	if (!mf.hasState0)
