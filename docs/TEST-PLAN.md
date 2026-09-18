@@ -1256,6 +1256,78 @@ variable` - the harness's per-arm label table did not know the eight, and under 
 module. The full 170-step tour is `TOUR_MODULES=all` by hand (~25 min) - and `--watch`
 on the user's display is how it was first seen.
 
+## 7. `[LANDED 2026-09-18]` The CSS tour - David's character-select utility on DC, and the base it authors
+
+§6 asked every feature what the fighter did - on a base that was a HARNESS ARTIFACT
+(`404543fcf`: the tour's slot 0 was written by `scripts/testrun.sh`, Sonson vs Marrow,
+and the "combo" was David's Dhalsim97 input stream driving Sonson). The user: "we don't
+have the right save state for this combo" - and there is none anywhere: David ships no
+DC savestates, his `.p2m` movies are PS2 power-on input grids, and his menu timing does
+not transfer (his whole macro booted from power-on lands in Training on the wrong cast
+at his "beforecombo" frame). Then: "does David not have a char select utility?" He does.
+
+### 7.1 The utility, and what transfers
+
+`0915/flycast-rr/mcp/charselect.py` (verified by David on DC 2026-09-12): the select
+globe as a vertical torus of rows [8,8,8,6,6,6,6,8] anchored at RubyHeart, vertical
+moves straight in cols 0-5 and FOLDING col6->4 / col7->5 into a 6-wide row, horizontal
+wrapping per row width; `plan(target)` = vertical in the start column then horizontal
+in the target row; `build_picks(player, picks)` = for each of 3 picks, navigate from
+HOME (the cursor resets after every lock), SELECT with the palette button, DOWN x assist
+index, CONFIRM, wait out the ~60 f lockout - on a TIMING table {navgap 1, preselect 8,
+postsel 24, astgap 12, preconf 12, postconf 72}; `merge_players` zips P1 and P2 into
+one CE letter stream. **Measured on this build from power-on, first try:** fastVS_mcp +
+those streams -> `ID_2 P1 37/23/52, P2 0/39/2` (Dhalsim/Cable/Sentinel vs Ryu/Ken/Guile),
+Start at SPEED SELECT -> in-match, health 144/144, Dhalsim on point. So the utility
+transfers whole - it is his MENU timing (the PS2 boot's Start-mashing) that does not.
+
+The port is `core/dojo/css.{h,cpp}` (pure; CSS SELFTEST pins byte parity with the stream
+his Python generated, `scripts/fixtures/mvc2/css/dhalsim_team_picks.txt`, 378 frames,
+seqHashMacro `3b736c94ef884bbd`). The team is OURS, not his (`css/PICKS.toml` says why:
+his files never name his team, and inferring it from his P2-lane cursor letters is
+unreliable because his walk starts from a different menu state).
+
+### 7.2 The tour (`core/dojo/css_tour.cpp`, module `css`; `scripts/csstour.sh`)
+
+Boots with NO clip: `RecordMatches=yes MacroMode=yes OnEnterFile=css/seed_globe.txt
+OnEnterHandoff=742` (fastVS_mcp + 45 neutral; the pause lands ON the globe). Two traps
+designed around: the runner's `Setup` would have killed the seed's run-to-handoff
+(`gui_pause_for_checkout` clears `dojo.stepping`), so `ready()` waits for the handoff;
+and a Record-MOVIE handoff drops READ-WRITE to WRITE, after which the neutral pad
+clobbers every remaining row - MacroMode keeps READ-WRITE. Every press goes through
+`tas_auto::playLive` (the sender's path); every claim is a byte the game reports
+(`ID_2` / `Assist_Value` / `PaletteID_2` per slot through `tas_mvc2::readRamSafe`):
+
+| step | the claim, read back |
+|---|---|
+| on the globe | `ID_2 P1_A==19 RubyHeart, P2_A==23 Cable` - David's START |
+| walk to Dhalsim, press by press | `plan("Dhalsim")` = D,L,L,L; after each press the cursor reads the graph's prediction: Hayato 18, Anakaris 4, Jin 55, Dhalsim 37 (his `verify_grid` claim, on DC) |
+| pick + confirm | `PaletteID_2==0 (LP)`, `Assist_Value==0 (alpha)`; after confirm slot B is the live cursor, reset to home (19) |
+| the team | all six `ID_2` == the RECIPE's pins |
+| speed select -> fight | Start; `Is_Point` on Dhalsim, health 144/144, skip rate 4 |
+| save the base | slot 0 written at the first playable frame: `CSS BASE: slot 0 @ frame F hash=H folder=<clip>` |
+| finding | David's Dhalsim97 rows 4212-5699 on THIS base, through `intent`: the peak, whatever it is - optional, reported, never a pass condition |
+
+Harness gates C1-C5 (`csstour.sh` header); arms `css-walk` (plan fed the wrong start),
+`css-timing` (navgap 0 - a repeated direction never re-presses), `css-team` (P2's stream
+skipped), judged by `arms.sh` from the runner's own declaration. A tour that reports but
+ran no `css:` steps is SKIP 77, never a pass.
+
+### 7.3 The base as a RECIPE
+
+`RECIPE.toml [dhalsim_base]`: kind authored, the seed and the picks pinned by
+seqHashMacro (F1), the six `ID_2` pins validated by NAME against SPREADSHEET's `ID_2
+Note2` (F2), `machine_hash` / `machine_frame` "unmeasured" until
+`fixtures-check.sh --make-dhalsim-base` runs `csstour.sh --keep-base css/base/` and pins
+them (refused over a pin without `FIXTURES_REGENERATE=iknow`). The `.state` is NOT
+committed - V49-locked, ~10 MB, `css/base/` is gitignored; the inputs regenerate it,
+which is better than a savestate (it survives any serializer version).
+
+### 7.4 Measured
+
+(the run this section lands with - see the commit message; the harness prints every
+`css:` step line and the `CSS BASE:` line)
+
 ## Two disciplines that are not optional
 
 **Every check must be able to fail, and be seen to fail once.** At tiers 0–1
