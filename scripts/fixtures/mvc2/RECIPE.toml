@@ -142,9 +142,9 @@ name_p2_b   = "Ken"
 name_p2_c   = "Guile"
 # the machine the tour saves as slot 0 (oracle::machineHash, 8 hex) and its frame -
 # filled by `fixtures-check --make-dhalsim-base` from the tour's `CSS BASE:` line.
-machine_hash  = "unmeasured"
-machine_frame = "unmeasured"
-measured_on   = ""
+machine_hash = "5FC481A7"
+machine_frame = 2059
+measured_on = "fixtures-check --make-dhalsim-base (2026-09-18): scripts/csstour.sh on this build, slot 0 @ 2059"
 
 [charselect]
 # The first expected SEQUENCE: one byte, no combo, emulator-verified by David
