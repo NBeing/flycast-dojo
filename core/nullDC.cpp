@@ -26,6 +26,7 @@
 #include "dojo/oracle.h"
 #include "dojo/combohunt.h"
 #include "dojo/intent.h"
+#include "dojo/css.h"
 #include "dojo/roll_library.h"
 #include "input/hold_repeat.h"
 #include "dojo/movie.h"
@@ -121,6 +122,7 @@ int flycast_init(int argc, char* argv[])
 	roll::oracle::selfTest();
 	roll::combohunt::selfTest();
 	roll::intent::selfTest();
+	roll::css::selfTest();
 	roll::librarySelfTest();
 	hotkeys::holdRepeatSelfTest();
 	movie::movieSelfTest();

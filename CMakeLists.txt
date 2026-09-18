@@ -1324,6 +1324,8 @@ if(NOT LIBRETRO)
 	core/dojo/intent_roll.cpp
 	core/dojo/intent_clip.cpp
 	core/dojo/intent_send.cpp
+	core/dojo/css.cpp
+	core/dojo/css_tour.cpp
 	core/dojo/notation_integ.cpp
 	core/dojo/surface_tour.cpp
 	core/dojo/surface_tour_hooks.cpp
