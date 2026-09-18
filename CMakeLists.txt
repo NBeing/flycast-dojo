@@ -1320,6 +1320,10 @@ if(NOT LIBRETRO)
 	core/dojo/sendequiv.cpp
 	core/dojo/oracle.cpp
 	core/dojo/combohunt.cpp
+	core/dojo/intent.cpp
+	core/dojo/intent_roll.cpp
+	core/dojo/intent_clip.cpp
+	core/dojo/intent_send.cpp
 	core/dojo/notation_integ.cpp
 	core/dojo/surface_tour.cpp
 	core/dojo/surface_tour_hooks.cpp

@@ -130,6 +130,33 @@ void probeTick();
 bool sabotaged(const char *cls);
 
 /*
+	v3 (2026-09-17, additive): INTENT MODULES register their own steps, arms and
+	gate expectations from their own translation unit, so three modules can be built
+	at once without three hands in the runner's tables. The runner appends module
+	steps (modules sorted by name) right after "roll: redo the flip + undo" - READ-WRITE
+	authoring is on, the roll is pristine - and every module ends on BASE (intent::end)
+	so the steps after it see what they expect. An arm here is judged exactly like a
+	runner arm; an expectation here is consulted before the runner's prefix table.
+*/
+struct ArmSpec { const char *cls; const char *mustBreak; const char *mustNotBreak; };
+struct ExpectDecl
+{
+	const char *prefix;		//!< step-name prefix
+	u8 machine;				//!< 0 unchanged, 1 moved, 2 any
+	u8 movie;				//!< 0 unchanged, 1 moved, 2 any
+	bool converge;			//!< a mover that must land where another mover landed
+	const char *label;
+};
+struct Module
+{
+	const char *name;
+	void (*addSteps)(std::vector<Step>& out);
+	const ArmSpec *arms;   int narms;
+	const ExpectDecl *expects; int nexpects;
+};
+void registerModule(const Module *m);	//!< from a static initializer in the module TU; safe before main
+
+/*
 	v3 `[2026-09-17]` - THE BASE GUARD. Additive; v1 and v2 stand.
 
 	Two hooks drive the F1 key itself through the keyboard device (the tour's

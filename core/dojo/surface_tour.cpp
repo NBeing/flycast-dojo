@@ -140,7 +140,7 @@ bool sabotaged(const char *cls)
 	clobber does not manifest on this fixture - see the enter-authoring step - so
 	the arm is inconclusive-by-design here and must not fake a redden).
 */
-struct ArmDecl { const char *cls; const char *mustBreak; const char *mustNotBreak; };
+using ArmDecl = ArmSpec;
 static const ArmDecl ARMS[] = {
 	{ "open",          "open: pianoroll",                     "rebind: pianoroll -> Ctrl+F1" },
 	{ "rebind",        "rebind: macros -> Alt+F6",            "rebind: snippets -> Alt+F5" },
@@ -155,11 +155,29 @@ static const ArmDecl ARMS[] = {
 };
 static const int NARMS = (int)(sizeof(ARMS) / sizeof(ARMS[0]));
 
+// v3: the module registry. A function-local static so a module TU's static
+// initializer can register before this TU's own statics exist.
+static std::vector<const Module *>& modules()
+{
+	static std::vector<const Module *> v;
+	return v;
+}
+void registerModule(const Module *m)
+{
+	std::vector<const Module *>& v = modules();
+	v.push_back(m);
+	std::sort(v.begin(), v.end(), [](const Module *a, const Module *b) { return strcmp(a->name, b->name) < 0; });
+}
+
 static const ArmDecl *armDeclOf(const char *cls)
 {
 	for (int i = 0; i < NARMS; i++)
 		if (strcmp(ARMS[i].cls, cls) == 0)
 			return &ARMS[i];
+	for (const Module *m : modules())
+		for (int i = 0; i < m->narms; i++)
+			if (strcmp(m->arms[i].cls, cls) == 0)
+				return &m->arms[i];
 	return nullptr;
 }
 
@@ -212,6 +230,16 @@ static bool startsWith(const char *s, const char *p) { return strncmp(s, p, strl
 
 static Expect expectOf(const char *name)
 {
+	// v3: a module's own declarations first - the module knows what its steps do.
+	for (const Module *m : modules())
+		for (int i = 0; i < m->nexpects; i++)
+			if (startsWith(name, m->expects[i].prefix))
+			{
+				const ExpectDecl& d = m->expects[i];
+				return { d.machine == 0 ? MExp::Unchanged : d.machine == 1 ? MExp::Moved : MExp::Any,
+						 d.movie == 0 ? VExp::Unchanged : d.movie == 1 ? VExp::Moved : VExp::Any,
+						 d.converge, d.label };
+			}
 	// Loads and the 1-frame shows revisit the same two machine states over and over
 	// (slot 0, and slot 0 + one frame); nbneo-rr's must_converge is the honest way to
 	// say so - each must pair with another mover on an identical hash, or it is the
@@ -798,6 +826,13 @@ static void buildSteps()
 	};
 	hook("roll: flip a cell + undo",         Kind::Click,  hooks::rollEditFlipUndo);
 	hook("roll: redo the flip + undo",       Kind::Click,  hooks::rollEditRedoUndo, true);
+	// v3: the intent modules, in name order, each on its own TU (surface_tour.h).
+	for (const Module *m : modules())
+	{
+		std::vector<Step> ms;
+		m->addSteps(ms);
+		for (Step& s : ms) add(std::move(s));
+	}
 	hook("states: label round-trip",         Kind::Click,  hooks::statesLabelRoundTrip);
 	// THE BASE GUARD (surface_tour.h v3): a tap on slot 0 must be BLOCKED, a hold must
 	// write. Both through the F1 key itself. The hold is POLLED (the captures-stop
@@ -1180,6 +1215,7 @@ static void init()
 	{
 		std::string known;
 		for (int i = 0; i < NARMS; i++) known += (known.empty() ? "" : "+") + std::string(ARMS[i].cls);
+		for (const Module *m : modules()) for (int i = 0; i < m->narms; i++) known += "+" + std::string(m->arms[i].cls);
 		NOTICE_LOG(RENDERER, "SURFACE TOUR: arms known: %s", known.c_str());
 	}
 	if (!g_sabotage.empty())
