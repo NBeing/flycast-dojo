@@ -247,3 +247,34 @@ DC. Translating cursor rows is strictly worse than translating them to names fir
 **Do first, cheaply:** re-run the converter with `origin=16` and `--mark-states` (when the states are reachable)
 so that rows == PS2 frames, the 502 stale rows disappear, the 26 stale "combo start" estimates and the 6 broken
 clips are repaired, and the "122 truncated" list shrinks to 2 real ones.
+
+## 6. `[MEASURED 2026-09-18]` The re-anchor experiment - the go/no-go, run
+
+§5 asked for it; here it is, on the authored Dhalsim base (`[dhalsim_base]` 5FC481A7 @
+2059, Dhalsim/Cable/Sentinel vs Ryu/Ken/Guile, `dist=377 skip=3/4`), with the origin-16
+`Combo_Dhalsim97` (window 4714-6201 = his `beforecombo`..`end` markers), through the hunt
+(`dojo:ComboHunt=all`, the new `dojo:ComboHuntDelays=a-b` offset axis x the 4 phases).
+
+| run | rows placed at base+1+phase+d | candidates | peak |
+|---|---|---|---|
+| A: the window | 4714-6201 (1487 rows) | 43 (d 0..10 x 4 phases) | **1 or 2**, every one; hashes collapse on phase+d (the hunt's "phase and delay are the same thing") |
+| B: his setup + the window | 3674-6201 (his `_default` fight-start marker onward: the tag, A1 taps, QCF+KK / QCB+KK meter build, the walk right, then the combo) | 6 (d 0..1 x 4 phases) | **1**, every one |
+
+The user, mid-run: *"we can tell we have a dhalsim player but we also don't know the
+conditions of the combo right? his is just inputs."* That is the finding, exactly. Timing
+is not the variable (A: no offset or phase gets past 2). His own actions before the combo
+are not the variable either (B: replaying them lands FEWER hits than the bare window,
+because the tag and the walk put Dhalsim somewhere his combo rows do not expect on THIS
+opponent). What the file does not carry is what the inputs were REACTING to: the
+opponent's state (a PS2 Training dummy with some behaviour set - ours is a live Ryu with
+no inputs, standing), the distance at 4714 (ours 377 at fight start; his unknown), the
+stage geometry (his Boat2; ours stage 0), meter, damage scaling, RNG.
+
+**Verdict: the archive's combos do not transfer as input streams onto a matched-cast base;
+97 -> 2 is not a timing problem.** The next thing that could move the number is not a
+sweep but a CONDITION: (1) Training mode with the dummy set the way he had it (his rows
+1076..1762 pick P2's team as a HUMAN would - so the base should probably be a Training
+session, not VS; the `_default` state was hand-saved 600+ rows after the last confirm,
+which is the Training intro length); (2) the distance at his window start, readable on our
+side and settable by a walk. Both are authoring choices for the CSS tour's base, not
+sweeps. The 442 other movies inherit this verdict until one is shown to transfer.

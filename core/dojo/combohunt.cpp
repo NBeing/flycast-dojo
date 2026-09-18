@@ -234,7 +234,30 @@ void buildCandidates()
 		Candidate c;
 		std::string why;
 		if (loadMacroCandidate(c, why))
-			push(c);
+		{
+			// dojo:ComboHuntDelays=a-b - an OFFSET axis for the macro (docs/PS2-SIDE.md §5: a
+			// PS2 window re-anchored on a DC base needs a +-15 sweep x the 4 phases, because the
+			// fight-start alignment between his base and ours is unknown to the frame). Default
+			// 0-0 = the phase sweep alone, as before.
+			int d0 = 0, d1 = 0;
+			const std::string ds = cfgLoadStr("dojo", "ComboHuntDelays", "");
+			if (!ds.empty())
+			{
+				d0 = atoi(ds.c_str());
+				const size_t dash = ds.find('-', 1);
+				d1 = dash == std::string::npos ? d0 : atoi(ds.c_str() + dash + 1);
+				if (d1 < d0) d1 = d0;
+			}
+			for (int d = d0; d <= d1; d++)
+			{
+				Candidate v = c;
+				v.d = d;
+				push(v);	// push() keeps c.d? no - it zeroes d; set after
+				for (int k = 0; k < 4; k++) st.cands[st.cands.size() - 4 + k].d = d;
+			}
+			if (d1 > d0)
+				NOTICE_LOG(NETWORK, "COMBO HUNT: macro delays %d..%d x 4 phases = %d candidates", d0, d1, (d1 - d0 + 1) * 4);
+		}
 		else
 			NOTICE_LOG(NETWORK, "COMBO HUNT: macro candidate skipped - %s", why.c_str());
 	}
