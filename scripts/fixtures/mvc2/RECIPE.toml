@@ -107,8 +107,10 @@ globe_hash    = "442574011190bd6b"
 # boot seeds reach the globe, not a fight; the combo needs a fight. The hash is
 # oracle::machineHash AFTER the load on this build (XXH32, 8 hex) - never the V48
 # file's digest, which cannot round-trip under V49.
-machine_hash  = "27FA5D20"     # oracle::machineHash at the base the hunt used
-machine_frame = 9928           # the guest frame the base sits on
+# `[2026-09-18]` UNMEASURED AGAIN: 27FA5D20 @ 9928 was the HARNESS base (Sonson vs Marrow,
+# a testrun.sh artifact - 404543fcf). The base that stands is [dhalsim_base] (5FC481A7).
+machine_hash  = "unmeasured"
+machine_frame = "unmeasured"
 machine_slot  = 0
 
 [dhalsim_base]
@@ -166,17 +168,20 @@ settle      = 45              # neutral frames after the globe seed before the f
 # CANDIDATE until observed connecting on THIS build - PS2-converted inputs never
 # become a fixture by provenance alone.
 name        = "Combo_Dhalsim97_OK"
-file        = "candidates/Combo_Dhalsim97_pcsx2_macro.txt"   # the copy in this tree; the hunt names it <stem>[a-b]
+file        = "candidates/Combo_Dhalsim97_pcsx2_macro.txt"   # the ORIGIN-16 reconversion (tools/reconvert_p2m.py, 2026-09-18); rows byte-identical to David's, frame numbers = PS2 frames
 source      = "davids_fly/0915/flycast-rr/mvc2_data/Dhalsim Revisited Replays/03_Boat2_Combo_Dhalsim97_OK_SS/Combo_Dhalsim97_pcsx2_macro.txt"
-frames      = 6707             # the file's own header: FrameMax=6707 (physical 46722, rerecords 1646)
-hash        = "2cbafba30a4c25fc"   # seqHashMacro over the .txt, like the seeds (F1's rule)
-md5         = "bf15f85827e063a3f5c7570a60db383c"
-window      = "4212-5699"      # the file's CLIP LIKELY BEGINS/ENDS HERE markers - trust the markers, not the burst heuristic
+frames      = 6707             # FrameMax=6707 (physical 47224 from offset 16, rerecords 1646); the old copy's 6707 began 502 rows late and ran 502 into the stale tail
+hash        = "dc46d3a24ab110f4"   # seqHashMacro; was 2cbafba30a4c25fc for the 502-late copy - RE-PINNED because the FILE changed (docs/PS2-SIDE.md), not to make a gate green
+md5         = "4f13ed9a7fee9e5e820da4f8d1d6a3d6"
+window      = "4714-6201"      # the file's CLIP LIKELY BEGINS/ENDS HERE markers (PS2 frames; the same rows the 502-late copy called 4212-5699) - trust the markers, not the burst heuristic
+measured_on = "2026-09-18 tools/reconvert_p2m.py (origin 16; F1 parity dc46d3a24ab110f4, rows == the old copy shifted +502)"
 
 [phase]
 # 0..3: which of the four frameskip phases the base sits on when the candidate
 # connects. The hunt sweeps all four and records the winning one here.
-value       = 0
+# `[2026-09-18]` UNMEASURED AGAIN with [result]: the four-phase insensitivity was measured on
+# the harness base; on [dhalsim_base] the sweep (delays 0..30 x 4 phases) re-pins it.
+value       = "unmeasured"
 skip_rate   = 4
 # `[MEASURED 2026-09-17]` PHASE-INSENSITIVE ON THIS BASE: the hunt's `all` sweep gave
 # peak=19 on all four phases, with four DISTINCT end hashes. The phase is pinned
@@ -191,9 +196,16 @@ skip_rate   = 4
 #   COMBO HUNT RESULT: found=yes candidate=Combo_Dhalsim97_pcsx2[4212-5699] phase=0 d=0
 #                      peak=19 base=27FA5D20 after=64FF89AB
 # scripts/combohunttest.sh holds every field of a fresh run against these.
-found       = "yes"          # yes | no
-candidate   = "Combo_Dhalsim97_pcsx2[4212-5699]"
-delay       = 0
-combo_peak  = 19
-after_hash  = "64FF89AB"
-measured_on = "2026-09-17 dojo7 combohunt 1b3d9b901 (Track A); re-measured by Track B the same day"
+#  UNMEASURED AGAIN, on purpose. The 2026-09-17 line (found=yes peak=19
+# after=64FF89AB) was measured on the HARNESS base (Sonson vs Marrow, 404543fcf) -
+# David's Dhalsim inputs driving Sonson: a correct picture of the wrong thing. The
+# candidate file is now the origin-16 reconversion (window 4714-6201, same rows).
+# These fields are re-pinned only by the hunt on [dhalsim_base] (docs/PS2-SIDE.md §5:
+# setup+window, delays 0..30 x 4 phases); the first measurement there was peak 1
+# (csstour finding, window only, d=0).
+found       = "unmeasured"
+candidate   = "unmeasured"
+delay       = "unmeasured"
+combo_peak  = "unmeasured"
+after_hash  = "unmeasured"
+measured_on = ""

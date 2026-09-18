@@ -182,11 +182,16 @@ elif cmd=='honest':                 # honest <recipe> <sheet> -> lines: "ok|FAIL
           'result.found':lambda v:v in ('yes','no'),'result.candidate':lambda v:isinstance(v,str) and v!='',
           'result.delay':lambda v:isinstance(v,int) and v>=0,'result.combo_peak':lambda v:isinstance(v,int) and v>=0,
           'result.after_hash':hexre}
+    # `[2026-09-18]` a pin's "when" is its OWN section's measured_on: candidate.* are FILE facts
+    # (F1 proves them without an emulator, dated by the reconversion), result.* / base.* / phase.*
+    # are the hunt's. Before this, unmeasuring the harness-base result also reddened the file
+    # facts - a checker that could not tell provenance from outcome.
     for k,shape in pins.items():
         s,key=k.split('.'); v=d[s].get(key)
         if v=='unmeasured': un.append(k); continue
         ok(shape(v),'%s is well-shaped (%r)'%(k,v))
-        ok(measured_on!='','%s is pinned AND result.measured_on says when (%r)'%(k,measured_on))
+        when=d[s].get('measured_on', measured_on) if s=='candidate' else measured_on
+        ok(when!='','%s is pinned AND %s.measured_on says when (%r)'%(k,'candidate' if s=='candidate' else 'result',when))
     v=d['vocabulary']
     ok(v['combo_p1_a']==addr(sh,v['combo_field'],'P1_A'),'vocabulary.combo_p1_a == SPREADSHEET %s P1_A (%s)'%(v['combo_field'],v['combo_p1_a']))
     ok(v['combo_p2_a']==addr(sh,v['combo_field'],'P2_A'),'vocabulary.combo_p2_a == SPREADSHEET %s P2_A (%s)'%(v['combo_field'],v['combo_p2_a']))
