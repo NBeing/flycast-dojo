@@ -1231,6 +1231,43 @@ Honest limits: the test lab here is BASE-only (no roll→macro writer, no lab ru
 ceremony ("back up live first?") is a pre-boot UI in David's tree, not asserted; the
 evaluator is v1 = the on-point character only; "the states REVALIDATE" is not measured.
 
+### 6.2b `[LANDED 2026-09-18, later]` The rebase - the modules stand on the Dhalsim base with OUR combo
+
+Everything in 6.2 was measured on the HARNESS base (a testrun.sh artifact, Sonson vs
+Marrow) with David's Dhalsim97 inputs driving Sonson - "a correct picture of the wrong
+thing" (`404543fcf`). The user: "we don't have the right save state for this combo";
+then, of every clip on the machine, "none of those are from me". So the fixture was
+REBUILT, in this order (the user's call, "c -> b -> a"):
+
+- **(c) the converter's frame 0 is PS2 frame 502** (`docs/PS2-SIDE.md`; `tools/reconvert_p2m.py`,
+  `f8607a9d8`): David's 444 movies reconverted with the true origin; rows byte-identical,
+  numbers now PS2 frames, six analog-stick movies recovered. The RECIPE's candidate is the
+  origin-16 file (window 4714-6201 - the same rows the old copy called 4212-5699).
+- **(b) the re-anchor experiment** (`PS2-SIDE.md` §6, `491316114`): on the authored Dhalsim base
+  his window lands 1-2 hits at every offset (d 0..10) and phase; with his setup rows replayed,
+  1. Timing is not the variable; his pre-combo actions are not the variable; the .p2m is
+  inputs without the conditions they reacted to (the Training dummy's state, distance, stage).
+  **97 -> 2 is the archive's verdict**; his combos are a vocabulary to re-author, not fixtures.
+- **(a) our own combo** (`9d5228224`, RECIPE `[combo]`): `combos/dhalsim_3hit.txt` - walk right
+  200, LP > LK > HP > HK at 8-frame gaps, **3 hits on all four phases** (after F47533EF /
+  B79A6986 / 816C0F49 / 89B07C85; gaps 7-9 all land 3), 12 hunt runs, DC-native, on a base we
+  control. The first fixture in this tree that is both TRUE (Dhalsim on point) and STRONG.
+
+The rebase itself was one config (`dojo:IntentPeak`, `a43d8e55b` - the literal 19 left three
+TUs and a dozen step names) plus three fixture defects the run exposed (`7605a531e`): the
+base clip's movie ENDED at slot 0's frame (a Replay boot seeking it hit ReplayEnd, never
+Paused - 68/108, every hotkey `open=false`; the CSS tour now records a 600-frame run-out
+after the save, hash unchanged); the harnesses derived the game name from the clip's
+parent FOLDER (`replays/css/`), so the Macros browser never saw the macro `macros: place`
+seeded (`game_of()` reads the .flyr stem the engine names); and the sender's run now
+CONVERGES with the placed combo's (no P2 rows in ours; the sender is P1-only) - declared,
+a stronger claim than before.
+
+**Measured on the new default** (`surfacetourtest.sh`, `FLYCAST_TEST_CLIP` = the Dhalsim base,
+`dhalsim_3hit`, peak 3): roll **108/108**, clip **122/122**, send **94/94**, `gates_red=0` each;
+the 77-step surface on the old harness base still 77/77. RECIPE: 54 honesty claims,
+`unmeasured=0`, every number from a run on the Dhalsim base.
+
 ### 6.3 Arms - eight restored defects, one per module claim
 
 | arm | restores | must redden | control |

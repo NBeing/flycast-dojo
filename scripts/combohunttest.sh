@@ -17,12 +17,12 @@
 #          77 SKIP (no ROM / Xvfb / python3 / build / base clip / candidate; a stale binary;
 #          or no RESULT line within $HUNT_WAIT_S, default 400 s - the hunt never spoke).
 #   ARMS:  --sabotage window   (--self-test == the same; --list-sabotage lists it). `window`
-#          runs the SAME macro over a pre-combo window (dojo:ComboHuntWindow=84-1500: the
+#          runs the SAME macro over a pre-combo window (dojo:ComboHuntWindow=0-204: the
 #          file's first input is at 84, the marker-bracketed combo begins at 4212), so the
 #          hunt must report found=no - H1 must redden, and H5 (the base hash, untouched by
 #          the arm) must stay green. Judged by scripts/lib/arms.sh (applied / broke its
 #          target / left its control green AND the control ran). `[MEASURED 2026-09-17]`
-#          window 84-1500 gives peak=0 on all four phases, found=no. Inverted exits: 0 fired
+#          window 0-204 gives peak=0 on all four phases, found=no. Inverted exits: 0 fired
 #          · 4 did not · 2 INCONCLUSIVE · 1 broke its control.
 #
 # THE FAILURE THIS WOULD HAVE CAUGHT. A hunt that reports found=yes with a DIFFERENT peak
@@ -55,7 +55,7 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 		--sabotage) shift; [ $# -gt 0 ] || usage; ARM="$1" ;;
 		--self-test) ARM=window ;;
-		--list-sabotage) echo "window      H1 found=yes         - the same macro over the pre-combo window 84-1500; H1 must redden (found=no), H5 must stay green"; exit 0 ;;
+		--list-sabotage) echo "window      H1 found=yes         - the same macro over the walk-in alone (rows 0-204, no buttons); H1 must redden (found=no), H5 must stay green"; exit 0 ;;
 		*) usage ;;
 	esac
 	shift
@@ -72,7 +72,10 @@ if [ -n "$(find "$ROOT/core" -newer "$EXE" -name '*.cpp' -o -newer "$EXE" -name 
 fi
 
 get() { python3 -c "import tomllib,sys; d=tomllib.load(open(sys.argv[1],'rb')); print(d[sys.argv[2]][sys.argv[3]])" "$RECIPE" "$1" "$2"; }
-MACRO="$FIX/$(get candidate file)"
+# `[2026-09-18]` the fixture this test holds is [combo] - OUR combo on the Dhalsim base
+# (the RECIPE's [result] repeats its numbers). [candidate] is David's file, the open FINDING
+# (docs/PS2-SIDE.md §6), not the fixture; the CSS tour's finding step runs it.
+MACRO="$FIX/$(get combo file)"
 [ -f "$MACRO" ] || { echo "combohunttest: SKIP - candidate absent ($MACRO)"; exit $SKIP; }
 W_FOUND=yes; W_CAND="$(get result candidate)"; W_PEAK="$(get result combo_peak)"; W_AFTER="$(get result after_hash)"
 W_BASE="$(get base machine_hash)"; W_PHASE="$(get phase value)"; W_FRAME="$(get base machine_frame)"
@@ -82,6 +85,9 @@ done
 
 # the base: the tour's clip (David's V48 slot-0 state), like surfacetourtest / ctltest.
 CLIP="${FLYCAST_TEST_CLIP:-}"
+# the default base is the authored Dhalsim base (RECIPE [dhalsim_base]; --make-dhalsim-base)
+DHBASE="$(ls -1 "$ROOT"/scripts/fixtures/mvc2/css/base/*.flyr 2>/dev/null | head -1)"
+if [ -z "$CLIP" ] && [ -n "$DHBASE" ] && [ -f "$ROOT/scripts/fixtures/mvc2/css/base/NoBGM_VMU.state" ]; then CLIP="$DHBASE"; fi
 if [ -z "$CLIP" ]; then
 	for f in $(ls -1t "${XDG_DATA_HOME:-$HOME/.local/share}"/flycast-dojo/replays/*/*/*.flyr 2>/dev/null); do
 		ls "$(dirname "$f")"/*.state >/dev/null 2>&1 && { CLIP="$f"; break; }
@@ -106,8 +112,10 @@ echo "combohunttest: candidate $(basename "$MACRO")"
 
 WINDOW=""
 if [ "$ARM" = window ]; then
-	WINDOW="-config dojo:ComboHuntWindow=84-1500"
-	echo "SABOTAGE armed: window - the macro's PRE-COMBO window 84-1500 replaces the marker window"
+	# `[2026-09-18]` the fixture is now the 276-row dhalsim_3hit: the walk-in WITHOUT the four
+	# buttons (rows 0-204) is the restored defect - it cannot connect (measured: walk+nothing = 0).
+	WINDOW="-config dojo:ComboHuntWindow=0-204"
+	echo "SABOTAGE armed: window - the walk-in alone (rows 0-204, no buttons) replaces the combo window"
 	echo "SABOTAGE arm window: the run below is EXPECTED to be red"
 fi
 
@@ -165,7 +173,7 @@ echo "COMBOHUNTTEST RESULT: passed=$PASSED failed=$FAILED"
 
 if [ -n "$ARM" ]; then
 	[ -x "$ARMS" ] || { echo "combohunttest: no judge at $ARMS"; exit 2; }
-	"$ARMS" judge window "the pre-combo window 84-1500" H1 H5 "$FAILED" "$SEEN" "$BROKEN"; j=$?
+	"$ARMS" judge window "the walk-in alone (rows 0-204, no buttons)" H1 H5 "$FAILED" "$SEEN" "$BROKEN"; j=$?
 	case "$j" in
 		0) echo "PASS combohunttest --sabotage window - the arm fired as predicted (H1 reddened: $RESULT)"; exit 0 ;;
 		2) echo "INCONCLUSIVE combohunttest --sabotage window (exit 2)"; exit 2 ;;

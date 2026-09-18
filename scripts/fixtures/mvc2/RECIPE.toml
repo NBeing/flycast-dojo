@@ -109,8 +109,10 @@ globe_hash    = "442574011190bd6b"
 # file's digest, which cannot round-trip under V49.
 # `[2026-09-18]` UNMEASURED AGAIN: 27FA5D20 @ 9928 was the HARNESS base (Sonson vs Marrow,
 # a testrun.sh artifact - 404543fcf). The base that stands is [dhalsim_base] (5FC481A7).
-machine_hash  = "unmeasured"
-machine_frame = "unmeasured"
+# `[2026-09-18, later]` the base that stands: [dhalsim_base], authored by the CSS tour
+# (scripts/csstour.sh / fixtures-check.sh --make-dhalsim-base), byte-deterministic.
+machine_hash  = "5FC481A7"
+machine_frame = 2059
 machine_slot  = 0
 
 [dhalsim_base]
@@ -199,7 +201,10 @@ measured_on = "2026-09-18 tools/reconvert_p2m.py (origin 16; F1 parity dc46d3a24
 # connects. The hunt sweeps all four and records the winning one here.
 # `[2026-09-18]` UNMEASURED AGAIN with [result]: the four-phase insensitivity was measured on
 # the harness base; on [dhalsim_base] the sweep (delays 0..30 x 4 phases) re-pins it.
-value       = "unmeasured"
+# `[2026-09-18, later]` re-measured on [dhalsim_base] with [combo]: 3 hits on ALL FOUR phases
+# (after F47533EF / B79A6986 / 816C0F49 / 89B07C85) - phase-insensitive again, so 0 is pinned
+# as the RULE's representative (a straddling combo connects on one phase; this one on all).
+value       = 0
 skip_rate   = 4
 # `[MEASURED 2026-09-17]` PHASE-INSENSITIVE ON THIS BASE: the hunt's `all` sweep gave
 # peak=19 on all four phases, with four DISTINCT end hashes. The phase is pinned
@@ -221,9 +226,15 @@ skip_rate   = 4
 # These fields are re-pinned only by the hunt on [dhalsim_base] (docs/PS2-SIDE.md §5:
 # setup+window, delays 0..30 x 4 phases); the first measurement there was peak 1
 # (csstour finding, window only, d=0).
-found       = "unmeasured"
-candidate   = "unmeasured"
-delay       = "unmeasured"
-combo_peak  = "unmeasured"
-after_hash  = "unmeasured"
-measured_on = ""
+# `[2026-09-18, later]` MEASURED on [dhalsim_base]. The hunt's found=yes is OUR OWN combo -
+# [combo] dhalsim_3hit (walk 200, LP>LK>HP>HK at 8-frame gaps): the same numbers as [combo],
+# repeated here so combohunttest.sh's pins stay in the section it reads. David's Dhalsim97
+# window on this base is the OPEN FINDING, not the result: peak 2 at best over d 0..10 x 4
+# phases, peak 1 with his setup rows replayed (docs/PS2-SIDE.md §6) - his .p2m is inputs
+# without the conditions they reacted to.
+found       = "yes"
+candidate   = "dhalsim_3hit.txt[0-276]"
+delay       = 0
+combo_peak  = 3
+after_hash  = "F47533EF"
+measured_on = "2026-09-18 combohunt (mode=all) on [dhalsim_base] 5FC481A7 - the [combo] author's run; David's window: peak 2 (finding)"
