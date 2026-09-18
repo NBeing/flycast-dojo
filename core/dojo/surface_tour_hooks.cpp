@@ -132,7 +132,7 @@ static u64 fileFnv(const std::string& p)
 static const char *const kSlotExts[] = { "", ".frame", ".png", ".label" };
 
 //! Copy slot 0's files aside (<file>.tourbak) so the hold step can restore them:
-//! the tour's later steps (branch create, test lab add) build on David's base.
+//! the tour's later steps (branch create, test lab add) build on the harness base.
 static void backupSlot0()
 {
 	const std::string base = hostfs::getSavestatePath(0, false);

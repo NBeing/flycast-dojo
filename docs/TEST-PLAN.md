@@ -956,7 +956,7 @@ of either tree greps for the same thing).
 |---|---|---|---|---|---|
 | `open` | runner | wrong chord on the piano roll's open | `open: pianoroll` | `rebind: pianoroll -> Ctrl+F1` | vacuous=0 leak=0 (a FAIL, not a vacuity) |
 | `rebind` | runner | press inside the engine's 0.2 s deaf window | `rebind: macros -> Alt+F6` | `rebind: snippets -> Alt+F5` | vacuous=0 leak=0 |
-| `show` | runner | skip the 1-frame step, fake frame+1 | `show: David's base state (1 frame)` | `load slot 0 (David's base)` | **vacuous >= 1** `[MEASURED, Track A]` - a mover that moved nothing; G3 IS the second catch |
+| `show` | runner | skip the 1-frame step, fake frame+1 | `show: the harness base state (1 frame)` | `load slot 0 (the harness base)` | **vacuous >= 1** `[MEASURED, Track A]` - a mover that moved nothing; G3 IS the second catch |
 | `write-clobber` | runner | run the feature phase in WRITE | `show: slot 99 (1 frame)` | `savestate: load slot 99` | inconclusive-by-design on a fixture the phase does not clobber -> exit 2 |
 | `gate-can-pass` | runner | NOTHING - the inverse arm | (none) | `open: pianoroll` | the WHOLE gate green: failed=0, vacuous=0 leak=0, gate_ok >= floor, no `FAIL G` in the runner's block; else exit 4 |
 | `flip` | roll_panel.cpp hook | the UNDO is skipped while reporting success | `roll: flip a cell + undo` | `states: label round-trip` | **leak >= 1** `[MEASURED]` - see below |
@@ -1024,7 +1024,7 @@ at the movie. It is the one arm whose signature is a leak rather than a FAIL.
 - `branch`: `step 61/70 "branch: create from slot 0" -> FAIL (branches 0 -> 0,
   create returned '')`, checkout/show/back/show SKIP via needsPrev; `failed=1
   gate_ok=66 vacuous=0 leak=0`. Side effect worth knowing: with the branch
-  checkout and return skipped, `load slot 0 (David's base)` loses its convergence
+  checkout and return skipped, `load slot 0 (the harness base)` loses its convergence
   partner and the runner's own G5b goes red (`gates_red=1`) - a true reading of
   a tour that skipped four steps, and not what the arm is judged on.
 - unarmed: still `passed=70 failed=0 gate_ok=70 vacuous=0 leak=0`, all eight

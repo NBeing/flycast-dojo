@@ -144,7 +144,7 @@ using ArmDecl = ArmSpec;
 static const ArmDecl ARMS[] = {
 	{ "open",          "open: pianoroll",                     "rebind: pianoroll -> Ctrl+F1" },
 	{ "rebind",        "rebind: macros -> Alt+F6",            "rebind: snippets -> Alt+F5" },
-	{ "show",          "show: David's base state (1 frame)",  "load slot 0 (David's base)" },
+	{ "show",          "show: the harness base state (1 frame)",  "load slot 0 (the harness base)" },
 	{ "write-clobber", "",                                    "savestate: load slot 99" },
 	{ "gate-can-pass", "",                                    "open: pianoroll" },
 	{ "flip",          "roll: flip a cell + undo",            "states: label round-trip" },
@@ -561,11 +561,11 @@ static void buildSteps()
 		s.kind = Kind::Record;
 		s.needsPrev = true;			// showing a load that did not happen is not a claim
 		s.maxWaitMs = 3000;			// the frame runs on the emu thread; poll the return to Paused
-		// THE `show` ARM: skip the step for David's base show ONLY, and do not fake
+		// THE `show` ARM: skip the step for the harness base show ONLY, and do not fake
 		// anything - the step's own verify then reads frame == g_showFrom (FAIL) and
 		// the gate reads a declared mover that moved nothing (VACUOUS). Both clauses
 		// see it honestly; a faked frame+1 would test only the verify.
-		const bool sab = sabotaged("show") && strcmp(name, "show: David's base state (1 frame)") == 0;
+		const bool sab = sabotaged("show") && strcmp(name, "show: the harness base state (1 frame)") == 0;
 		s.act = [sab] {
 			if (gui_state != GuiState::Paused) { why("not paused before the step"); return false; }
 			g_showFrom = dojo.frame_number.load();
@@ -583,10 +583,10 @@ static void buildSteps()
 		add(s);
 	};
 
-	// 1. load David's base state
+	// 1. load the harness base state
 	{
 		Step s;
-		s.name = "load slot 0 (David's base)";
+		s.name = "load slot 0 (the harness base)";
 		s.kind = Kind::Record;
 		s.act = [] { setSlot(0); gui_loadState(); return true; };
 		s.verify = [] {
@@ -601,7 +601,7 @@ static void buildSteps()
 		};
 		add(s);
 	}
-	show("show: David's base state (1 frame)");
+	show("show: the harness base state (1 frame)");
 
 	/*
 		3-44. PER WINDOW: rebind its key, open it WITH that key, close it.
@@ -1443,7 +1443,7 @@ void selfTest()
 		claim("...never rescues a FAIL and never touches a SKIP", applyGate(0, 0) == 0 && applyGate(2, 1) == 2 && applyGate(2, 2) == 2);
 		claim("an ok gate leaves a PASS alone", applyGate(1, 0) == 1 && applyGate(1, 3) == 1);
 		claim("loads, shows and checkouts declare convergence; slot 99's show and the captures do not",
-				expectOf("load slot 0 (David's base)").converge && expectOf("show: David's base state (1 frame)").converge
+				expectOf("load slot 0 (the harness base)").converge && expectOf("show: the harness base state (1 frame)").converge
 				&& expectOf("branch: checkout").converge && !expectOf("show: slot 99 (1 frame)").converge && !expectOf("captures: start").converge);
 		claim("a sender step is a UI step today (nothing reaches the machine without a step)",
 				expectOf("sender: send \"5LP _ _ 5LP\"").machine == MExp::Unchanged);

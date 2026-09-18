@@ -263,7 +263,7 @@ if [ "$SELF" -eq 1 ]; then
 		case "$ARM" in
 			open)          MB="open: pianoroll";                     MNB="rebind: pianoroll -> Ctrl+F1" ;;
 			rebind)        MB="rebind: macros -> Alt+F6";            MNB="rebind: snippets -> Alt+F5" ;;
-			show)          MB="show: David's base state (1 frame)";  MNB="load slot 0 (David's base)" ;;
+			show)          MB="show: the harness base state (1 frame)";  MNB="load slot 0 (the harness base)" ;;
 			write-clobber) MB="show: slot 99 (1 frame)";             MNB="savestate: load slot 99" ;;
 			gate-can-pass) MB="";                                    MNB="open: pianoroll" ;;
 			flip)          MB="roll: flip a cell + undo";            MNB="states: label round-trip" ;;

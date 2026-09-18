@@ -19,6 +19,21 @@
 # records `measured_on` beside them; fixtures-check.sh lists them on every run so an
 # unmeasured fixture can never read as a pinned one.
 
+#
+# WHAT THE BASE IS, AND IS NOT. `[MEASURED 2026-09-18]` the user, watching the v4 tour:
+# "we don't have the right save state for this combo" - and then, of every clip on
+# this machine: "none of those are from me". The tour's BASE (slot 0 of the newest clip
+# under replays/, 2026-09-08T02_38_29Z @ frame 9928, Sonson vs Marrow) was written by
+# scripts/testrun.sh on 2026-09-07 - a HARNESS ARTIFACT, not David's and not the user's.
+# David ships NO Dreamcast savestates (his .p2m movies are PS2 power-on input grids; the
+# 4D228733.* states his markers name never left his machine; nothing under davids_fly,
+# newest_checkout (empty) or fbneo-rr holds one - searched by name, extension and magic).
+# So the "combo" this RECIPE pins is David's Combo_Dhalsim97 INPUT STREAM driving SONSON:
+# the byte moves (peak 19 - a real, arm-proven measurement of the studio's plumbing) but
+# it is NOT Dhalsim's combo. Booting his whole macro from power-on lands in Training on
+# the wrong cast (his PS2 menu timing does not transfer). A base with Dhalsim on point
+# must be AUTHORED on DC or RECORDED by a human; until then every claim below is "the
+# stream lands 19 on the harness base", never "David's combo connects".
 schema = 1
 
 [rom]
