@@ -2366,6 +2366,21 @@ set_tests_properties(flycast.purgestaletest PROPERTIES SKIP_RETURN_CODE 77 LABEL
 add_test(NAME flycast.purgestaletest_can_fail_off COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/purgestaletest.sh --sabotage off)
 set_tests_properties(flycast.purgestaletest_can_fail_off PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RUN_SERIAL TRUE TIMEOUT 300)
 
+# THE CSS TOUR (2026-09-18; docs/TEST-PLAN.md §7, docs/tour-css.md): David's character-
+# select utility (mcp/charselect.py, ported to core/dojo/css.cpp with byte parity) exercised
+# on DC from POWER-ON - no clip: fastVS seed -> the globe -> a walk whose every press the game
+# confirms (ID_2) -> a pick (palette, assist) -> both teams -> Start -> in-match with Dhalsim
+# on point (Is_Point, health, skip rate) -> the machine SAVED as the Dhalsim base (RECIPE
+# [dhalsim_base], hash-pinned, byte-deterministic across boots). Then a FINDING, never a
+# gate: David's Dhalsim97 rows on that base (peak 1 measured; his setup not replayed).
+add_test(NAME flycast.csstour COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/csstour.sh)
+set_tests_properties(flycast.csstour PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
+foreach(arm css-walk css-timing css-team)
+	add_test(NAME flycast.csstour_can_fail_${arm} COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/csstour.sh --sabotage ${arm})
+	set_tests_properties(flycast.csstour_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 600)
+endforeach()
+add_test(NAME flycast.csstour_selftest COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/csstour.sh --self-test)
+
 # SAVESTATE THUMBNAILS (ported thumbnail.{cpp,h} + a GL GetLastFrameRGB readback).
 # Saving states must write a NON-BLANK <state>.png - proves the GL readback actually
 # captured the frame (a well-formed blank PNG is the PBO-never-advanced bug). Needs
