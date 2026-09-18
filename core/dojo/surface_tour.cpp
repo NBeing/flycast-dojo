@@ -17,6 +17,7 @@
 #include "log/LogManager.h"
 #include "imgui.h"
 #include <algorithm>
+#include <functional>
 #include <cfloat>
 #include <cstdarg>
 #include <cstdio>
@@ -536,11 +537,42 @@ static void setSlot(int n)
 	cfgSetVirtual("config", "Dreamcast.SavestateSlot", std::to_string(n));
 }
 
+static bool cssTour();	// defined with ready() below
+
+static void addModules(std::function<void(Step)> add)
+{
+	// v3: the intent modules, in name order, each on its own TU (surface_tour.h).
+	// dojo:TourModules=all|none|<name>[+<name>] picks which run - a builder verifying
+	// ONE module in the foreground (the full v4 tour outgrew the 10-minute budget,
+	// 2026-09-18); the harness FLOOR is a minimum, so a filtered tour still judges.
+	const std::string only = cfgLoadStr("dojo", "TourModules", "all");
+	for (const Module *m : modules())
+	{
+		if (only == "none") break;
+		if (only != "all" && ("+" + only + "+").find("+" + std::string(m->name) + "+") == std::string::npos)
+		{
+			NOTICE_LOG(RENDERER, "SURFACE TOUR: module %s skipped (dojo:TourModules=%s)", m->name, only.c_str());
+			continue;
+		}
+		std::vector<Step> ms;
+		m->addSteps(ms);
+		for (Step& s : ms) add(std::move(s));
+	}
+}
+
 static void buildSteps()
 {
 	st.steps.clear();
 	g_names.clear();
 	auto add = [&](Step s) { Rec r; r.step = std::move(s); st.steps.push_back(std::move(r)); };
+	if (cssTour())
+	{
+		// A seeded boot has no clip and no slot 0: none of the clip-bound preamble (load slot
+		// 0, the shows, the 14 rebind triplets, the feature hooks) can run. The css module
+		// (css_tour.cpp) is the whole tour; the banner and the gate judge it like any other.
+		addModules(add);
+		return;
+	}
 
 	/*
 		SHOW IT - step the game ONE frame after every load.
@@ -826,23 +858,7 @@ static void buildSteps()
 	};
 	hook("roll: flip a cell + undo",         Kind::Click,  hooks::rollEditFlipUndo);
 	hook("roll: redo the flip + undo",       Kind::Click,  hooks::rollEditRedoUndo, true);
-	// v3: the intent modules, in name order, each on its own TU (surface_tour.h).
-	// dojo:TourModules=all|none|<name>[+<name>] picks which run - a builder verifying
-	// ONE module in the foreground (the full v4 tour outgrew the 10-minute budget,
-	// 2026-09-18); the harness FLOOR is a minimum, so a filtered tour still judges.
-	const std::string only = cfgLoadStr("dojo", "TourModules", "all");
-	for (const Module *m : modules())
-	{
-		if (only == "none") break;
-		if (only != "all" && ("+" + only + "+").find("+" + std::string(m->name) + "+") == std::string::npos)
-		{
-			NOTICE_LOG(RENDERER, "SURFACE TOUR: module %s skipped (dojo:TourModules=%s)", m->name, only.c_str());
-			continue;
-		}
-		std::vector<Step> ms;
-		m->addSteps(ms);
-		for (Step& s : ms) add(std::move(s));
-	}
+	addModules(add);
 	hook("states: label round-trip",         Kind::Click,  hooks::statesLabelRoundTrip);
 	// THE BASE GUARD (surface_tour.h v3): a tap on slot 0 must be BLOCKED, a hold must
 	// write. Both through the F1 key itself. The hold is POLLED (the captures-stop
@@ -956,12 +972,32 @@ static void buildSteps()
 
 // ---- the machine -----------------------------------------------------------------
 
+//! dojo:CssTour=yes - a SEEDED boot (an OnEnter seed, no clip, no slot 0): the css module
+//! authors the base itself. Read once; the harness sets it beside TourModules=css.
+static bool cssTour()
+{
+	static int v = -1;
+	if (v < 0) v = cfgLoadBool("dojo", "CssTour", false) ? 1 : 0;
+	return v == 1;
+}
+
 static bool ready()
 {
 	if (dojo.frame_number.load() < 120) { why("frame %u < 120", dojo.frame_number.load()); return false; }
+	if (rebind::keyboard() == nullptr) { why("no keyboard device"); return false; }
+	if (cssTour())
+	{
+		// TRAP #1 (docs/TEST-PLAN.md §7): Setup's gui_pause_for_checkout() clears dojo.stepping,
+		// which is what carries the seed to its handoff - fire before it and the seed dies
+		// mid-boot. So a seeded tour is ready only once the handoff has PAUSED the machine.
+		if (dojo.onenter_ff) { why("the OnEnter seed is still playing (handoff pending)"); return false; }
+		if (gui_state != GuiState::Paused) { why("not paused at the handoff yet"); return false; }
+		if (hostfs::savestateFolderOverride.empty()) { why("no clip folder bound (RecordMatches?)"); return false; }
+		st.haveSlot0frame = false;
+		return true;
+	}
 	SlotView v;
 	if (host() == nullptr || !host()->slotView(0, v) || !v.exists) { why("no slot 0"); return false; }
-	if (rebind::keyboard() == nullptr) { why("no keyboard device"); return false; }
 	if (hostfs::savestateFolderOverride.empty()) { why("no clip folder bound"); return false; }
 	st.haveSlot0frame = v.haveFrame;
 	st.slot0frame = v.frame;
