@@ -46,6 +46,13 @@
 #          card, press Start on the create-save prompt, accept the card only if F4 passes on
 #          it, then copy it into the tree and rewrite the [vmu] pins. REFUSED over an existing
 #          card unless FIXTURES_REGENERATE=iknow (a pin is a pin). Exit 0/1/2/77.
+#   BASE:  --make-dhalsim-base - the AUTHORED base (RECIPE [dhalsim_base]): runs
+#          scripts/csstour.sh --keep-base scripts/fixtures/mvc2/css/base/ (David's
+#          character-select utility from power-on, Dhalsim on point, slot 0 saved) and
+#          pins machine_hash / machine_frame from the tour's `CSS BASE:` line. The .state
+#          itself is NOT committed (V49-locked, ~10 MB; css/base/ is gitignored) - the
+#          RECIPE pins the hash and the inputs regenerate it. REFUSED over an existing pin
+#          unless FIXTURES_REGENERATE=iknow. Exit 0/1/2/77.
 #   REGEN: --regenerate - REFUSED unless FIXTURES_REGENERATE=iknow. Recomputes only the
 #          no-emulator pins (snippet frames/hashes, spreadsheet md5), prints every
 #          before/after, and never touches a result field: those are the hunt's.
@@ -70,13 +77,14 @@ SPREADSHEET_MD5_CONST="23c1827fc4fe3b04313ee8c944565b20"	# the copy's md5 the da
 ARMS="$ROOT/scripts/lib/arms.sh"
 KNOWN_ARMS="hash recipe charselect vmu"
 
-usage() { echo "usage: $0 [--verify-roms | --regenerate | --make-vmu | --list-sabotage | --sabotage <class> | --self-test | --no-emu]   (exit 2: usage)"; exit 2; }
+usage() { echo "usage: $0 [--verify-roms | --regenerate | --make-vmu | --make-dhalsim-base | --list-sabotage | --sabotage <class> | --self-test | --no-emu]   (exit 2: usage)"; exit 2; }
 MODE=check; ARM=""; NOEMU=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--verify-roms) MODE=roms ;;
 		--regenerate) MODE=regen ;;
 		--make-vmu) MODE=makevmu ;;
+		--make-dhalsim-base) MODE=makebase ;;
 		--list-sabotage) MODE=list ;;
 		--sabotage) shift; [ $# -gt 0 ] || usage; ARM="$1" ;;
 		--self-test) ARM=hash ;;
@@ -163,7 +171,7 @@ elif cmd=='honest':                 # honest <recipe> <sheet> -> lines: "ok|FAIL
         print(('ok   ' if c else 'FAIL ')+what)
         if not c: bad.append(what)
     ok(d.get('schema')==1,'schema == 1')
-    for s in ('rom','vocabulary','base','charselect','candidate','phase','result'):
+    for s in ('rom','vocabulary','base','charselect','candidate','phase','result','dhalsim_base'):
         ok(s in d,'section [%s] present'%s)
     # machine hashes are oracle::machineHash (XXH32, 8 upper hex, the hunt's %08X); the seeds' are seqHashMacro (16 lower hex)
     hexre=lambda v: isinstance(v,str) and len(v) in (8,16) and all(c in '0123456789abcdefABCDEF' for c in v)
@@ -186,6 +194,19 @@ elif cmd=='honest':                 # honest <recipe> <sheet> -> lines: "ok|FAIL
     c=d['charselect']; note2=sh['ID_2']['Note2'].replace('\r','').split('\n'); names={int(l.split(':')[0]):l.split(':')[1].strip() for l in note2 if ':' in l}
     for k in ('start','via','expect'):
         ok(names.get(c[k+'_id'])==c[k],'charselect.%s_id %d is %s in SPREADSHEET ID_2 Note2 (says %r)'%(k,c[k+'_id'],c[k],names.get(c[k+'_id'])))
+    # [dhalsim_base] (2026-09-18): the AUTHORED base - its own measured_on, since the hunt's
+    # result.measured_on says nothing about it; the six ID_2 pins must NAME the character
+    # SPREADSHEET says they are (the same rule as charselect.*_id).
+    b=d['dhalsim_base']; bm=b.get('measured_on','')
+    ok(b.get('kind')=='authored','dhalsim_base.kind == authored')
+    ok(b.get('team_owner','').startswith('ours'),'dhalsim_base.team_owner says the team is OURS (%r)'%b.get('team_owner'))
+    for slot in ('p1_a','p1_b','p1_c','p2_a','p2_b','p2_c'):
+        ok(names.get(b['id2_'+slot])==b['name_'+slot],'dhalsim_base.id2_%s %d is %s in SPREADSHEET ID_2 Note2 (says %r)'%(slot,b['id2_'+slot],b['name_'+slot],names.get(b['id2_'+slot])))
+    for k,shape in {'machine_hash':hexre,'machine_frame':lambda v:isinstance(v,int) and v>0}.items():
+        v=b.get(k)
+        if v=='unmeasured': un.append('dhalsim_base.'+k); continue
+        ok(shape(v),'dhalsim_base.%s is well-shaped (%r)'%(k,v))
+        ok(bm!='','dhalsim_base.%s is pinned AND dhalsim_base.measured_on says when (%r)'%(k,bm))
     print('UNMEASURED '+' '.join(un))
     sys.exit(1 if bad else 0)
 elif cmd=='corrupt':                # corrupt <in> <out> - flip the first neutral frame to a P1 LP press
@@ -289,7 +310,7 @@ echo "fixtures-check: RECIPE $RECIPE"
 f1ok=1; f1txt=""
 # the two seeds AND the candidate (a CANDIDATE by provenance - PS2-converted - pinned by the
 # same rule so the file the hunt ran cannot drift under the RECIPE's result).
-for pair in "base:boot_seed:boot_frames:boot_hash" "base:globe_seed:globe_frames:globe_hash" "candidate:file:frames:hash"; do
+for pair in "base:boot_seed:boot_frames:boot_hash" "base:globe_seed:globe_frames:globe_hash" "candidate:file:frames:hash" "dhalsim_base:seed:seed_frames:seed_hash" "dhalsim_base:picks:picks_frames:picks_hash"; do
 	IFS=: read -r sect fkey nkey hkey <<<"$pair"
 	rel="$(py get "$RECIPE" "$sect" "$fkey")"; f="$FIX/$rel"
 	[ "$fkey" = boot_seed ] && [ -n "$BOOT_OVERRIDE" ] && f="$BOOT_OVERRIDE"
@@ -489,6 +510,32 @@ make_vmu() {
 	return 0
 }
 if [ "$MODE" = makevmu ]; then make_vmu; exit $?; fi
+
+# ---- --make-dhalsim-base (emulator, via scripts/csstour.sh) --------------------------------
+make_dhalsim_base() {
+	local dest="$FIX/css/base" pinned
+	pinned=$(py get "$RECIPE" dhalsim_base machine_hash)
+	echo "fixtures-check --make-dhalsim-base: David's CSS utility from power-on -> Dhalsim on point -> slot 0 saved (scripts/csstour.sh), then the hash pinned"
+	if [ "$pinned" != "unmeasured" ] && [ "${FIXTURES_REGENERATE:-}" != "iknow" ]; then
+		echo "REFUSED - dhalsim_base.machine_hash is already pinned ($pinned). NEVER REGENERATE TO MAKE A RED GATE GREEN; set FIXTURES_REGENERATE=iknow to remake it and SAY WHY in the commit (exit 2)"; return 2; fi
+	[ -x "$ROOT/scripts/csstour.sh" ] || { echo "fixtures-check --make-dhalsim-base: SKIP - no scripts/csstour.sh"; return $SKIP; }
+	mkdir -p "$dest"
+	"$ROOT/scripts/csstour.sh" --keep-base "$dest" > "$OUT/csstour.log" 2>&1; local rc=$?
+	grep -aE '^  (ok|FAIL|SKIP) C|^CSSTOUR RESULT|CSS BASE:|^(PASS|FAIL|SKIP) ' "$OUT/csstour.log" | sed 's/^/  /'
+	if [ "$rc" -eq 77 ]; then echo "fixtures-check --make-dhalsim-base: SKIP - the CSS tour could not run (exit 77)"; return $SKIP; fi
+	if [ "$rc" -ne 0 ]; then echo "FAIL fixtures-check --make-dhalsim-base - the CSS tour did not pass (exit $rc); nothing pinned"; return 1; fi
+	local line hash frame
+	line=$(grep -a 'CSS BASE: slot 0 @ frame' "$OUT/csstour.log" | tail -1)
+	frame=$(printf '%s' "$line" | sed -n 's/.*@ frame \([0-9]*\).*/\1/p'); hash=$(printf '%s' "$line" | sed -n 's/.*hash=\([0-9A-Fa-f]*\).*/\1/p')
+	if [ -z "$frame" ] || [ -z "$hash" ]; then echo "FAIL fixtures-check --make-dhalsim-base - no 'CSS BASE: slot 0 @ frame F hash=H' line in the tour's log; nothing pinned"; return 1; fi
+	ls "$dest"/*.state >/dev/null 2>&1 || { echo "FAIL fixtures-check --make-dhalsim-base - the tour passed but no .state landed in $dest"; return 1; }
+	py setpin "$RECIPE" "$OUT/r1.toml" dhalsim_base.machine_hash "\"$hash\"" \
+		&& py setpin "$OUT/r1.toml" "$OUT/r2.toml" dhalsim_base.machine_frame "$frame" \
+		&& py setpin "$OUT/r2.toml" "$RECIPE" dhalsim_base.measured_on "\"fixtures-check --make-dhalsim-base ($(date +%F)): scripts/csstour.sh on this build, slot 0 @ $frame\""
+	echo "fixtures-check --make-dhalsim-base: base in $dest (NOT committed - .gitignore'd; the RECIPE pins it): machine_hash $pinned -> $hash @ frame $frame - review the diff and SAY WHY in the commit"
+	return 0
+}
+if [ "$MODE" = makebase ]; then make_dhalsim_base; exit $?; fi
 f4
 
 echo "FIXTURES RESULT: passed=$PASSED failed=$FAILED skipped=$SKIPPED unmeasured=$UNMEASURED"

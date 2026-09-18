@@ -34,6 +34,17 @@
 # the wrong cast (his PS2 menu timing does not transfer). A base with Dhalsim on point
 # must be AUTHORED on DC or RECORDED by a human; until then every claim below is "the
 # stream lands 19 on the harness base", never "David's combo connects".
+#
+# `[2026-09-18]` AUTHORED IT IS: David's own character-select utility (0915/flycast-rr/
+# mcp/charselect.py - the globe as a torus, plan(), build_picks(), his timing table,
+# verified by him on DC 2026-09-12) works on this build from power-on, first try:
+# fastVS_mcp + the picks below -> ID_2 37/23/52 vs 0/39/2, Start at SPEED SELECT ->
+# in-match, Dhalsim on point. [dhalsim_base] below is that recipe - inputs only, no
+# savestate to ship (a state is V49-locked; the inputs survive any version). The team
+# is OURS, not his (see css/PICKS.toml). The machine hash it lands on is measured by
+# `scripts/csstour.sh` and pinned by `fixtures-check --make-dhalsim-base`; until then
+# it says "unmeasured". Whether his Dhalsim97 rows connect on it is the CSS tour's
+# FINDING step - reported, never a pass condition.
 schema = 1
 
 [rom]
@@ -99,6 +110,41 @@ globe_hash    = "442574011190bd6b"
 machine_hash  = "27FA5D20"     # oracle::machineHash at the base the hunt used
 machine_frame = 9928           # the guest frame the base sits on
 machine_slot  = 0
+
+[dhalsim_base]
+# The AUTHORED base: power-on -> the globe (the seed) -> both teams picked (the picks,
+# David's utility) -> Start at SPEED SELECT -> the first playable frame, saved as slot 0
+# by the CSS tour (core/dojo/css_tour.cpp) and copied out by scripts/csstour.sh
+# --keep-base. Pinned by inputs (two seqHashMacro) AND by the machine it lands on.
+kind        = "authored"
+seed        = "css/seed_globe.txt"
+seed_frames = 742
+seed_hash   = "8a5fd2a82ca86543"
+picks       = "css/dhalsim_team_picks.txt"
+picks_frames = 378
+picks_hash  = "3b736c94ef884bbd"
+handoff     = 742                  # dojo:OnEnterHandoff: the pause lands ON the globe
+team_p1     = ["Dhalsim-LP-A", "Cable-LP-A", "Sentinel-LP-A"]
+team_p2     = ["Ryu-LP-A", "Ken-LP-A", "Guile-LP-A"]
+team_owner  = "ours (not David's)"
+# ID_2 per slot once both teams lock - names validated against SPREADSHEET ID_2 Note2.
+id2_p1_a    = 37   # Dhalsim
+id2_p1_b    = 23   # Cable
+id2_p1_c    = 52   # Sentinel
+id2_p2_a    = 0    # Ryu
+id2_p2_b    = 39   # Ken
+id2_p2_c    = 2    # Guile
+name_p1_a   = "Dhalsim"
+name_p1_b   = "Cable"
+name_p1_c   = "Sentinel"
+name_p2_a   = "Ryu"
+name_p2_b   = "Ken"
+name_p2_c   = "Guile"
+# the machine the tour saves as slot 0 (oracle::machineHash, 8 hex) and its frame -
+# filled by `fixtures-check --make-dhalsim-base` from the tour's `CSS BASE:` line.
+machine_hash  = "unmeasured"
+machine_frame = "unmeasured"
+measured_on   = ""
 
 [charselect]
 # The first expected SEQUENCE: one byte, no combo, emulator-verified by David
