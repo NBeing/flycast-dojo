@@ -1162,6 +1162,100 @@ loop the hunt runs is emuapi's; `combohunttest.sh` is Track A's smoke runner
 dressed in this tree's conventions. The two things genuinely missing were a call
 site and a memory card.
 
+## 6. `[LANDED 2026-09-18]` Tour v4 - the intent modules: each feature asked what the FIGHTER did
+
+The user, having watched the 77-step tour on his own display: *"nothing opened starting
+on your roll tests... we don't have any real "meat" to these tests. each feature should
+be tested with its INTENT."* Section 5's tour proved every window opens by its hotkey
+and every verb changes the six-member tuple. Nothing asked the game whether the fighter
+cared. Section 6 does, for eleven features, on ONE rule:
+
+**Four beats per feature.** OPEN the window by the hotkey the tour rebound (the human
+sees it). ACT through the feature's OWN verb - the panel's button body, never a hook
+that bypasses it. INTENT - run the game and read what the fighter did: the combo byte
+(`Combo_Meter_HitsToOpponent`, resolved by name, §5.3), the machine hash, a derived
+state. CLOSE. The fixture is §5.3's: the tour clip's slot 0 as BASE and David's
+`Combo_Dhalsim97` window as THE COMBO, which lands **peak 19** there (RECIPE.toml).
+
+### 6.1 The rails (`784f6e171`, `35422af2c`)
+
+- `core/dojo/intent.{h,cpp}` - the combo hunt's ceremony (§5.3) lifted out as named
+  steps: `begin` (pause, WRITE-authoring, snapshot the roll, reload BASE) → `settled`
+  (polled; base facts read once) → `placeCombo(phase,d)` / `clearCombo` (baked from the
+  SNAPSHOT through `ApplyEditResize`) → `runToStop` (fast-forward to t0+len+60) → `peak`
+  (while stopped) → `end` (the snapshot restored through the funnel, BASE reloaded).
+  ONE implementation for three modules - arms.lua's lesson about three drifting copies.
+- `surface_tour.h` v3 (additive): a `Module{steps, arms, expectations}` registered from
+  its own TU. The runner appends module steps after `roll: redo the flip + undo`,
+  consults module expectations before its prefix table, judges module arms like its
+  own, lists them in `arms known`. `dojo:TourModules=all|none|<a>+<b>` /
+  `TOUR_MODULES` picks which run.
+- Three TUs, one per builder: `intent_clip.cpp` (branches, generations, test lab,
+  captures), `intent_roll.cpp` (roll edit, undo/redo, macros/snippets, ruler),
+  `intent_send.cpp` (sender/notepad, FST, state machine). Name order = run order.
+- Harness: G9 reads the runner's own `gates_red` (`[MEASURED 2026-09-18]` a green
+  108/108 carried `gates_red=1` and the harness said PASS - the runner's seven gates
+  were never read); `TOUR_WAIT_S` 300 → 1500 (a 300 s budget killed the roll module at
+  step 77 twice, and "the tour never reported" was the harness giving up).
+
+### 6.2 What each feature makes the game do - measured
+
+Every line below is a `SURFACE TOUR: step` line from the runs of 2026-09-18 (roll
+108/108 gate_ok=108 gates_red=0; send 94/94; clip 122 with one expectation fixed).
+
+| module | David's intent (his words) | measured |
+|---|---|---|
+| roll edit | "flip-twice restores the exact bytes" | place → `peak=19`; Blank the window through the roll → `peak=0`; panel Undo → `peak=19` |
+| undo/redo | "an undo/redo is itself an edit" | Redo → `peak=0`; Undo → `peak=19` (`64FF89AB` every time with the hit, `A4E4A31C` without - the identity IS the hash) |
+| macros | "State 0 = Macro Frame 0 (REQUIRED binding)" | the window placed at BASE+1 through the Macros panel → `peak=19` |
+| ruler | "rows `x` (skip frame)" | `60 skip frames in 240 seen of 9929..10169 (rate 4 -> 60 expected)` |
+| snippets | (drives menus) | placed through the panel, undone - a movie-mover; no in-match intent, said so |
+| branches | "root .flyr byte-identical after a branch+checkout round-trip" | main `peak 19` → branch created/checked out → clear on the branch → `peak 0` → back to main → `root ef6fceef4a6fb4b2 unchanged, branch 0872beef968541d2` → main `peak 19` again |
+| generations | "generations are immutable" | Shift+F8 → `tourclip_gen_01`; damage → `peak 0`; restore → `peak 19, hash 64FF89AB == the pre-damage hash` |
+| test lab | "BASE is the permanent fixture" | `TEST_01` added from slot 0, bound (`test BASE at frame 9928, hash 27FA5D20`), the combo on its roll → `peak 19`; trashed |
+| captures | "every emulated frame exactly once" | `1540 frames written for 1540 emulated (85 paused duplicates skipped)` |
+| notepad | "text becomes inputs" | 60 rows rendered, `analyzed (60 frames, 0 errors), parsed back equal`; `tas_va2::SelfTest()` passed every spec vector |
+| sender | "build a queue... then send it" | `1487 tokens through patternToCanon, live at 9929` → `the SENDER landed it: peak 19, after=7FA36D18` |
+| FST | "which of the four phases connects" | `phases 0..3 peaked 19/19/19/19 - phase-insensitive on this base` |
+| state machine | `Being_Hit = Knockdown_State==32 && Hitstop2>0` | `P2 entered Being_Hit on 32 of 1548 polls (first @10857, first hit @10857), P1 never before the hit` |
+
+Findings, stated as findings: David's "connects 1 in 4" is Magneto on his base, not
+this combo - four phases, four 19s, and a `macro-anchor` arm (the window 30 rows late)
+was DECORATIVE for the same reason (dropped; `intent_roll.cpp` header). The sender's
+`after=7FA36D18` differs from the placed combo's `64FF89AB` although both peak 19: the
+sender is P1-only and skips the source's 20 P2-input rows - same hits, different
+machine. Two hashes, one byte: "the picture can be identical while the state is not".
+
+Honest limits: the test lab here is BASE-only (no roll→macro writer, no lab runner), so
+`results.jsonl` / `peakP1` is unmeasured and the step says so; the generation restore
+ceremony ("back up live first?") is a pre-boot UI in David's tree, not asserted; the
+evaluator is v1 = the on-point character only; "the states REVALIDATE" is not measured.
+
+### 6.3 Arms - eight restored defects, one per module claim
+
+| arm | restores | must redden | control |
+|---|---|---|---|
+| `roll-clear` | the clear edits `session_inputs` directly (no funnel, empty undo history) | undo the clear | the combo lands |
+| `macro-window` | the file's first rows placed instead of its CLIP window | the macro lands | the combo lands |
+| `branch-leak` | the checkout skipped - the clear lands on main | main still lands after the branch | create a branch |
+| `gen-noop` | the restore copies nothing | the combo is back after restore | Shift+F8 archives |
+| `capture-dup` | `CapturePausedFrames=yes` - the pcsx2-rr duplicate bug | frames written == emulated | start the recorder |
+| `send-noop` | the send skipped after the parse | the sent combo lands | notepad round-trip |
+| `fst-phase` | the sweep at BASE+200 where nothing is placed | FST four phases | the sent combo lands |
+| `state-field` | `Knockdown_State==31` | Being_Hit sampled | FST four phases |
+
+Rule 6 (§5.2) held once more on the way: the first arm run died on `WHAT: unbound
+variable` - the harness's per-arm label table did not know the eight, and under `set
+-u` the judge never ran. Verdicts are in the run log this section landed with.
+
+### 6.4 ctest
+
+`flycast.surfacetourtest` = the 77-step surface (`TOUR_MODULES=none`, ~2-3 min);
+`flycast.surfacetourtest_intent_{clip,roll,send}` one module each (`slow`, ~5-8 min);
+`flycast.surfacetourtest_can_fail_<arm>` for the eight arms above, each with only its
+module. The full 170-step tour is `TOUR_MODULES=all` by hand (~25 min) - and `--watch`
+on the user's display is how it was first seen.
+
 ## Two disciplines that are not optional
 
 **Every check must be able to fail, and be seen to fail once.** At tiers 0–1

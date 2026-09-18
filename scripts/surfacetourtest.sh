@@ -65,7 +65,7 @@ SELF=0; WATCH=0; WATCHCLIP=""; ARM=""
 # The classes this harness knows how to judge - MIRRORS surface_tour.h v2 and is checked
 # against the runner's own `SURFACE TOUR: arms known:` line on every armed run, so the
 # two lists cannot drift silently.
-KNOWN_ARMS="open+rebind+show+write-clobber+gate-can-pass+flip+label+save+branch+base"
+KNOWN_ARMS="open+rebind+show+write-clobber+gate-can-pass+flip+label+save+branch+base+roll-clear+macro-window+branch-leak+gen-noop+capture-dup+send-noop+fst-phase+state-field"
 usage() { echo "usage: $0 [--self-test | --sabotage <class> | --list-sabotage | --watch <clip.flyr>]   (exit 2: usage)"; exit 2; }
 case "${1:-}" in
 	"")               ;;
@@ -165,7 +165,11 @@ XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 cleanup() { kill "$FC" 2>/dev/null; [ -n "$XPID" ] && kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; [ -n "$XPID" ] && kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
 
 RESULT=""
-for _ in $(seq 1 "${TOUR_WAIT_S:-300}"); do
+# TOUR_WAIT_S: the v1 tour finished in ~2 min; the v4 intent modules add game runs of
+# ~32 s each under Xvfb (`[MEASURED 2026-09-18]` a 300 s budget killed the roll module at
+# step 77 twice - "the tour never reported" was the HARNESS giving up, not the game).
+# The loop exits on the RESULT line, so a short tour is not slowed by a long budget.
+for _ in $(seq 1 "${TOUR_WAIT_S:-1500}"); do
 	kill -0 "$FC" 2>/dev/null || break
 	RESULT="$(tr -d '\0' < "$OUT/out.log" | grep -a "SURFACE TOUR RESULT:\|SURFACE TOUR: aborted" | tail -1)"
 	[ -n "$RESULT" ] && break
@@ -200,6 +204,7 @@ field() { echo "$RESULT" | sed -n "s/.*$1=\([0-9]*\).*/\1/p"; }
 passed=$(field passed); failed=$(field failed); skipped=$(field skipped); total=$(field total)
 # The gate fields are APPEND-ONLY on the RESULT line; absent = the runner has no gate.
 gate_ok=$(field gate_ok); vacuous=$(field vacuous); leak=$(field leak); unmeasured=$(field unmeasured)
+gates_red=$(field gates_red)
 LOG="$(tr -d '\0' < "$OUT/out.log")"
 opens=$(printf '%s\n' "$LOG"   | grep -ac "PANEL TOGGLE: .* -> open")
 rebinds=$(printf '%s\n' "$LOG" | grep -ac "HOTKEY REBIND: action .* -> ")
@@ -279,6 +284,15 @@ if [ "$SELF" -eq 1 ]; then
 		save)          WHAT="the scratch save lands in slot 98 while claiming slot 99" ;;
 		branch)        WHAT="tas_branch::create skipped, the create reported as done" ;;
 		base)          WHAT="the BASE guard skipped - F1 SAVES ON PRESS, the tap step writes slot 0 through gui_saveState()" ;;
+		# tour v4 intent modules (intent_roll / intent_clip / intent_send.cpp ARMS[])
+		roll-clear)    WHAT="the roll clear edits session_inputs DIRECTLY (bypasses the funnel; the undo history is empty)" ;;
+		macro-window)  WHAT="the macro's first rows placed instead of its CLIP window (the wrong combo)" ;;
+		branch-leak)   WHAT="the clear lands on MAIN instead of the branch (the checkout skipped)" ;;
+		gen-noop)      WHAT="the generation restore copies nothing back" ;;
+		capture-dup)   WHAT="the paused-frame dedup bypassed (every paused present written)" ;;
+		send-noop)     WHAT="the sender bakes nothing (the send skipped)" ;;
+		fst-phase)     WHAT="the sweep fed the wrong window (P at base+200)" ;;
+		state-field)   WHAT="Being_Hit evaluated with the wrong threshold (Knockdown_State==31)" ;;
 	esac
 	# SEEN = every step that RAN (PASS or FAIL); a SKIPped control did not run, and a
 	# control that did not run cannot be "left green" (arms.lua rule 3).
@@ -345,6 +359,18 @@ if [ "$SELF" -eq 1 ]; then
 					"vacuous=$vacuous - the gate filed the skipped UNDO under 'moved nothing'" < <(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* -> VACUOUS" | sed "$STRIP")
 				G 5 "$([ "$leak" -ge 1 ] && echo 1 || echo 0)" fail "the skipped UNDO showed up as a movie leak (leak=$leak >= 1)" \
 					"leak=$leak - the movie hash did not move: the flipped row was undone after all, or the oracle is not looking at the movie" < <(printf '%s\n' "$LOG" | grep -a 'SURFACE TOUR: gate .* "roll: flip' | sed "$STRIP") ;;
+			roll-clear|macro-window|branch-leak|gen-noop|capture-dup|send-noop|fst-phase|state-field)
+				# THE INTENT ARMS (§6.3): the target reddens by the fighter NOT doing the thing, and
+				# the steps chained on it (needsPrev) SKIP - after which the module's "reload BASE"
+				# movers find BASE already loaded and are honestly filed VACUOUS. `[MEASURED
+				# 2026-09-18]` roll-clear: 4 such reloads. So the global vacuous=0 is the wrong
+				# question here; the right one is that the TARGET itself was a FAIL, never a vacuity
+				# (a target filed VACUOUS would mean the arm made the verb a no-op instead of a
+				# wrong outcome - a different defect than the one restored).
+				G 4 "$(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* \"$MB\" .* -> VACUOUS" > /dev/null && echo 0 || echo 1)" fail \
+					"the target was judged a FAIL, not a vacuity (its gate line is not VACUOUS; $vacuous downstream vacuities are the skipped chain)" \
+					"the target '$MB' was filed VACUOUS - the arm made the verb a no-op, not a wrong outcome" < <(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* \"$MB\"" | sed "$STRIP")
+				G 5 "$([ "$leak" -eq 0 ] && echo 1 || echo 0)" fail "no UI step leaked (leak=0)" "leak=$leak - a UI step moved the machine or the movie" < <(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* -> LEAK" | sed "$STRIP") ;;
 			*)
 				G 4 "$([ "$vacuous" -eq 0 ] && echo 1 || echo 0)" fail "the sabotaged step was judged a FAIL, not a vacuity (vacuous=0)" \
 					"vacuous=$vacuous - the gate filed a sabotaged step under 'moved nothing' instead of FAIL" < <(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* -> VACUOUS" | sed "$STRIP")
@@ -372,7 +398,12 @@ if [ "$gatePresent" = 1 ]; then
 		"the gate measured only $gate_ok step(s), floor is $FLOOR (unmeasured=$unmeasured) - it compares too little to mean anything" </dev/null
 	judged=$(( ${gate_ok:-0} + ${vacuous:-0} + ${leak:-0} + ${unmeasured:-0} ))
 	G 7 "$([ "$judged" -eq "${total:-0}" ] && echo 1 || echo 0)" vac "every settled step got a gate verdict ($judged of $total)" \
-		"$judged gate verdict(s) for $total settled step(s) - the guard did not fire on every step; a counter reading 0 is what a guard that never ran reports" </dev/null
+		"$judged gate verdict(s) for $total settled step(s) - the guard did not fire on every step; a counter reading 0 is what a guard that never ran reports" </dev/null	# G9 `[MEASURED 2026-09-18]` the runner's own seven gates (its G1..G7 lines) were never
+	# read here: a green 108/108 carried gates_red=1 (G5: six run steps declared plain
+	# movers all landing on one hash) and this harness said PASS. The RESULT line's
+	# gates_red is the runner's verdict on itself; a PASS must include it.
+	G 9 "$([ "${gates_red:-0}" -eq 0 ] && echo 1 || echo 0)" fail "the runner's own gates are green (gates_red=${gates_red:--})" \
+		"gates_red=${gates_red:--} - the runner reddened one of its own gates (G1..G7 above) and the tour was still counted:" < <(printf '%s\n' "$LOG" | grep -a '  FAIL G[0-9]' | sed "$STRIP")
 fi
 G 6 "$([ "${passed:-0}" -ge "$FLOOR" ] && echo 1 || echo 0)" vac "passed=$passed >= floor $FLOOR" \
 	"passed=$passed, floor is $FLOOR (skipped=$skipped) - the tour is not covering the surface" </dev/null

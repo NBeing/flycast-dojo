@@ -42,7 +42,7 @@ so `slotStale` has nothing to flip; left for the clip module or a later pass.
 | arm | restores | must redden | must stay green |
 |---|---|---|---|
 | `roll-clear` | the clear writes `session_inputs` directly — no funnel, no undo history | `roll intent: undo the clear (panel Undo)` (the row stays blank) | `roll intent: the combo lands (peak 19)` |
-| `macro-anchor` | the window placed at BASE+31, the binding David requires broken | `macro intent: the macro lands the hit (peak 19)` | `roll intent: the combo lands (peak 19)` |
+| `macro-window` | the file's FIRST rows placed instead of its CLIP window - the wrong combo (the code's arm; an earlier draft called it `macro-anchor`, BASE+31) | `macro intent: the macro lands the hit (peak 19)` | `roll intent: the combo lands (peak 19)` |
 
 ## Measured
 

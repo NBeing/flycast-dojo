@@ -738,10 +738,17 @@ const ExpectDecl EXPECTS[] = {
 	{ "capture intent: open",                 0, 0, false, "ui" },
 	{ "capture intent: begin",                2, 2, false, "any" },
 	{ "capture intent: start",                1, 0, false, "mover" },		// steps 8 frames so the encoder opens
-	{ "capture intent: record",               1, 0, true,  "mover/converge" },
+	// `[MEASURED 2026-09-18]` G5b: the recording run is the module's only run that starts
+	// from the recorder's own start offset (9936) with fast-forward OFF - its end machine
+	// 76A1511D is unique by construction. A plain mover, not a convergence.
+	{ "capture intent: record",               1, 0, false, "mover" },
 	{ "capture intent: stop",                 1, 0, false, "mover" },		// the stop's own present steps the machine
 	{ "capture intent: close",                0, 0, false, "ui" },
-	{ "clip intent: end",                     1, 1, true,  "mover/converge" },
+	// `[MEASURED 2026-09-18]` movie=Moved here read VACUOUS on a green run: the capture
+	// segment before this end never edits the roll (it records the placed combo, the
+	// restore then finds the original already in place), so the movie honestly does
+	// not move. The machine DOES (the capture run -> BASE), and converges on load slot 0.
+	{ "clip intent: end",                     1, 2, true,  "mover/converge" },
 };
 
 const Module MOD = { "clip", addSteps, ARMS, (int)(sizeof(ARMS) / sizeof(ARMS[0])), EXPECTS, (int)(sizeof(EXPECTS) / sizeof(EXPECTS[0])) };

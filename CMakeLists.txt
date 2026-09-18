@@ -2257,9 +2257,21 @@ set_tests_properties(flycast.notationtest_can_fail PROPERTIES SKIP_RETURN_CODE 7
 # feature. In-process input only (gamepad_btn_input, the entry SDL uses). PASS =
 # failed=0, passed >= the floor, and the engine's own PANEL TOGGLE / HOTKEY REBIND
 # / gui_loadState traces back the tour's claims. ~2-3 min at the human's 1 s bpm.
+#
+# TOUR v4 (2026-09-18, docs/TEST-PLAN.md §6): three INTENT modules ride on the same
+# tour - each feature opened by its hotkey, acted through its own verb, and the GAME
+# asked what the fighter did (the combo byte, the machine hash). The full v4 tour is
+# 170 steps / ~25 min, past the surface entry's budget, so it is split: the default
+# entry runs the 77-step surface (TOUR_MODULES=none, ~2-3 min) and three `slow`
+# entries run one module each (~5-8 min). The runner's own gates_red is read (G9).
 add_test(NAME flycast.surfacetourtest
-	COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh)
+	COMMAND ${CMAKE_COMMAND} -E env TOUR_MODULES=none ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh)
 set_tests_properties(flycast.surfacetourtest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+foreach(mod clip roll send)
+	add_test(NAME flycast.surfacetourtest_intent_${mod}
+		COMMAND ${CMAKE_COMMAND} -E env TOUR_MODULES=${mod} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh)
+	set_tests_properties(flycast.surfacetourtest_intent_${mod} PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 1500)
+endforeach()
 
 # ITS ARMS. `--sabotage <class>` restores ONE measured defect (surface_tour.h v2 lists
 # the classes; `scripts/surfacetourtest.sh --list-sabotage` prints them) and the twin
@@ -2273,8 +2285,19 @@ set_tests_properties(flycast.surfacetourtest PROPERTIES SKIP_RETURN_CODE 77 TIME
 # inconclusive-by-design on a fixture where the phase does not clobber.
 foreach(arm open flip save branch gate-can-pass base)
 	add_test(NAME flycast.surfacetourtest_can_fail_${arm}
-		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh --sabotage ${arm})
+		COMMAND ${CMAKE_COMMAND} -E env TOUR_MODULES=none ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh --sabotage ${arm})
 	set_tests_properties(flycast.surfacetourtest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+endforeach()
+# The intent modules' arms (each intent_*.cpp ARMS[]; the restored defect per class is
+# the harness's WHAT table): run with only the owning module so a twin stays ~5-8 min.
+foreach(pair "roll:roll-clear" "roll:macro-window" "clip:branch-leak" "clip:gen-noop" "clip:capture-dup"
+			 "send:send-noop" "send:fst-phase" "send:state-field")
+	string(REPLACE ":" ";" parts "${pair}")
+	list(GET parts 0 mod)
+	list(GET parts 1 arm)
+	add_test(NAME flycast.surfacetourtest_can_fail_${arm}
+		COMMAND ${CMAKE_COMMAND} -E env TOUR_MODULES=${mod} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/surfacetourtest.sh --sabotage ${arm})
+	set_tests_properties(flycast.surfacetourtest_can_fail_${arm} PROPERTIES SKIP_RETURN_CODE 77 LABELS "slow" RESOURCE_LOCK "xvfb-fixtures" TIMEOUT 1500)
 endforeach()
 
 # THE COMBO FIXTURE (item 3, 2026-09-17; docs/TEST-PLAN.md §5.3). fixtures-check.sh:

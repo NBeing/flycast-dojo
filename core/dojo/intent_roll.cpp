@@ -355,12 +355,16 @@ const ArmSpec ARMS[] = {
 // not asserted on runs; every reload/end lands on BASE = the hash `load slot 0` landed on.
 const ExpectDecl EXPECTS[] = {
 	// the RUNS first: their names share prefixes with the click steps below ("undo", "redo")
-	{ "roll intent: the combo lands",       1, 2, false, "mover" },
-	{ "roll intent: the hit is gone",       1, 2, false, "mover" },
-	{ "roll intent: undo restores the hit", 1, 2, false, "mover" },
-	{ "roll intent: redo removes the hit",  1, 2, false, "mover" },
-	{ "roll intent: the hit is back",       1, 2, false, "mover" },
-	{ "macro intent: the macro lands",      1, 2, false, "mover" },
+	// CONVERGE, by design: the same window from the same BASE lands the same machine
+	// (64FF89AB with the hit, A4E4A31C without) - that IDENTITY is the undo/redo claim,
+	// so each run must pair with another run on its hash. `[MEASURED 2026-09-18]` as
+	// plain movers, G5 read every pair as "one moved nothing" on a green run.
+	{ "roll intent: the combo lands",       1, 2, true,  "mover/converge" },
+	{ "roll intent: the hit is gone",       1, 2, true,  "mover/converge" },
+	{ "roll intent: undo restores the hit", 1, 2, true,  "mover/converge" },
+	{ "roll intent: redo removes the hit",  1, 2, true,  "mover/converge" },
+	{ "roll intent: the hit is back",       1, 2, true,  "mover/converge" },
+	{ "macro intent: the macro lands",      1, 2, true,  "mover/converge" },
 	{ "snippet intent: open",          0, 0, false, "ui" },
 	{ "snippet intent: place",         0, 1, false, "movie-mover" },
 	{ "snippet intent: undo",          0, 1, false, "movie-mover" },
