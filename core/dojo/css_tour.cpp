@@ -36,6 +36,7 @@
 */
 #include "surface_tour.h"
 #include "css.h"
+#include "movie.h"
 #include "intent.h"
 #include "mvc2.h"
 #include "oracle.h"
@@ -73,6 +74,7 @@ struct Team { std::vector<css::Pick> p1, p2; };
 
 struct State
 {
+	u32 runOutTarget = 0;
 	Team team;
 	std::vector<std::string> walkPath;		// the graph's predicted character after each P1 press
 	std::vector<u16> pending;				// the walk's presses, one per step
@@ -405,6 +407,39 @@ void addSteps(std::vector<Step>& out)
 		add(s);
 	}
 
+	// 6b. THE RUN-OUT. `[MEASURED 2026-09-18]` the base copied out of this session ended its
+	//     movie AT the base frame (2059 = slot 0's frame), so a Replay boot of the fixture
+	//     auto-seeking slot 0 landed on the movie's end -> ReplayEnd, never Paused, and every
+	//     tour step after it read `still running at frame 2059`. A base clip's movie must run
+	//     PAST its slot 0 (the harness base ran 1600 frames past). Step 600 neutral frames here
+	//     - the state stays at 2059; the movie grows through the normal record path - then the
+	//     steps below reload the base as before.
+	{
+		Step s;
+		s.name = "css: run-out (the movie must run past the base)";
+		s.kind = Kind::Record;
+		s.needsPrev = true;
+		s.maxWaitMs = 60000;
+		s.act = [] {
+			why("");
+			if (gui_state != GuiState::Paused) { why("not paused"); return false; }
+			st.runOutTarget = dojo.frame_number.load() + 600;
+			gui_step_frames(600);
+			settings.input.fastForwardMode = true;
+			return true;
+		};
+		s.verify = [] {
+			if (gui_state != GuiState::Paused || dojo.frame_number.load() < st.runOutTarget) return false;
+			settings.input.fastForwardMode = false;
+			if (!oracle::machineStopped()) return false;
+			const u32 end = movie::end();
+			if (end < st.baseFrame + 600) { why("movie end %u < base+600 (%u)", end, st.baseFrame + 600); return false; }
+			why("movie end %u (base %u + %u); a Replay boot of this clip can now seek slot 0 and pause", end, st.baseFrame, end - st.baseFrame);
+			return true;
+		};
+		add(s);
+	}
+
 	// 7. THE FINDING: David's Dhalsim97 rows on a Dhalsim base. Optional - a peak of 0 is a
 	//    finding about PS2->DC transfer, never a defect in the studio.
 	{
@@ -499,6 +534,7 @@ const ExpectDecl EXPECTS[] = {
 	{ "css: confirm",       1, 1, false, "mover" },
 	{ "css: Start",         1, 1, false, "mover" },
 	{ "css: save",          2, 0, false, "any" },		// a file write; the slot is set and restored
+	{ "css: run-out",       1, 1, false, "mover" },		// 600 recorded neutral frames: machine AND movie move
 	{ "css: end",           1, 2, true,  "mover/converge" },	// lands on the save's hash
 };
 

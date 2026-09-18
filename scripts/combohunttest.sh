@@ -88,7 +88,13 @@ if [ -z "$CLIP" ]; then
 	done
 fi
 [ -n "$CLIP" ] && [ -f "$CLIP" ] || { echo "combohunttest: SKIP - no base clip with a slot-0 state"; exit $SKIP; }
-SRCDIR="$(dirname "$CLIP")"; GAME="$(basename "$(dirname "$SRCDIR")")"
+# THE GAME NAME COMES FROM THE MOVIE'S FILENAME, not the clip's parent folder. `[MEASURED
+# 2026-09-18]` a fixture clip under scripts/fixtures/mvc2/css/base/ staged as replays/css/
+# tourclip: the engine (Replay::get_game_name) folders macros under replays/<ROM game>/, so
+# the Macros browser never saw the macro WriteMacroFile wrote and `macros: place` reddened.
+# The .flyr stem is `<game>__<timestamp>__...`, written by that same engine function.
+game_of() { local st; st="$(basename "$1" .flyr)"; case "$st" in *__*) echo "${st%%__*}" ;; *) basename "$(dirname "$(dirname "$1")")" ;; esac; }
+SRCDIR="$(dirname "$CLIP")"; GAME="$(game_of "$CLIP")"
 
 OUT="${COMBOHUNTTEST_OUT:-$(mktemp -d)}"; [ -n "${COMBOHUNTTEST_OUT:-}" ] || trap 'chmod -R u+w "$OUT" 2>/dev/null; rm -rf "$OUT"' EXIT
 CLIPDIR="$OUT/data/flycast-dojo/replays/$GAME/huntclip"

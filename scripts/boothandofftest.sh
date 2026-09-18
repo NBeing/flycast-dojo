@@ -92,7 +92,13 @@ pick_clip() {
 [ -n "$CLIP" ] || CLIP="$(pick_clip)" || { echo "boothandofftest: SKIP - no base clip with a stamped savestate"; exit $SKIP; }
 [ -f "$CLIP" ] || { echo "boothandofftest: SKIP - clip not found ($CLIP)"; exit $SKIP; }
 SRCDIR="$(dirname "$CLIP")"
-GAME="$(basename "$(dirname "$SRCDIR")")"
+# THE GAME NAME COMES FROM THE MOVIE'S FILENAME, not the clip's parent folder. `[MEASURED
+# 2026-09-18]` a fixture clip under scripts/fixtures/mvc2/css/base/ staged as replays/css/
+# tourclip: the engine (Replay::get_game_name) folders macros under replays/<ROM game>/, so
+# the Macros browser never saw the macro WriteMacroFile wrote and `macros: place` reddened.
+# The .flyr stem is `<game>__<timestamp>__...`, written by that same engine function.
+game_of() { local st; st="$(basename "$1" .flyr)"; case "$st" in *__*) echo "${st%%__*}" ;; *) basename "$(dirname "$(dirname "$1")")" ;; esac; }
+SRCDIR="$(dirname "$CLIP")"; GAME="$(game_of "$CLIP")"
 CLIPDIR="$OUT/data/flycast-dojo/replays/$GAME/bootclip"	# under the sandbox's own replays/<game>/ root
 mkdir -p "$OUT/cfg/flycast-dojo" "$CLIPDIR"
 cp "$CLIP" "$CLIPDIR/clip.flyr"

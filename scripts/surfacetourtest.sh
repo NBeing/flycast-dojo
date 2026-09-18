@@ -110,7 +110,14 @@ pick_clip() {
 	done
 	return 1
 }
-[ -n "$CLIP" ] || CLIP="$(pick_clip)" || { echo "surfacetourtest: SKIP - no base clip with a stamped savestate"; exit $SKIP; }
+# THE DEFAULT BASE IS THE AUTHORED DHALSIM BASE (RECIPE [dhalsim_base], scripts/fixtures/mvc2/css/base/,
+# made by `fixtures-check.sh --make-dhalsim-base`, hash-pinned), with OUR OWN combo (RECIPE [combo],
+# dhalsim_3hit: 3 hits on all four phases). `[2026-09-18]` until today the tour picked the newest
+# clip under replays/ - a testrun.sh artifact it called "David's base" - and David's Dhalsim inputs
+# driving Sonson. The pick_clip fallback stays for a tree without the fixture (then SKIP 77 is honest).
+DHBASE="$(ls -1 "$ROOT"/scripts/fixtures/mvc2/css/base/*.flyr 2>/dev/null | head -1)"
+if [ -z "$CLIP" ] && [ -n "$DHBASE" ] && [ -f "$ROOT/scripts/fixtures/mvc2/css/base/NoBGM_VMU.state" ]; then CLIP="$DHBASE"; fi
+[ -n "$CLIP" ] || CLIP="$(pick_clip)" || { echo "surfacetourtest: SKIP - no base clip with a stamped savestate (run fixtures-check.sh --make-dhalsim-base)"; exit $SKIP; }
 [ -f "$CLIP" ] || { echo "surfacetourtest: SKIP - clip not found ($CLIP)"; exit $SKIP; }
 SRCDIR="$(dirname "$CLIP")"
 echo "surfacetourtest: base clip $CLIP"
@@ -124,7 +131,13 @@ echo "surfacetourtest: base clip $CLIP"
 # FAIL with "no macro found even after seeding" while the seed file sits right there.
 # GAME is the source clip's grandparent dir - what get_game_name() produced when it
 # was recorded - so the copy lands exactly where the scanner looks.
-GAME="$(basename "$(dirname "$SRCDIR")")"
+# THE GAME NAME COMES FROM THE MOVIE'S FILENAME, not the clip's parent folder. `[MEASURED
+# 2026-09-18]` a fixture clip under scripts/fixtures/mvc2/css/base/ staged as replays/css/
+# tourclip: the engine (Replay::get_game_name) folders macros under replays/<ROM game>/, so
+# the Macros browser never saw the macro WriteMacroFile wrote and `macros: place` reddened.
+# The .flyr stem is `<game>__<timestamp>__...`, written by that same engine function.
+game_of() { local st; st="$(basename "$1" .flyr)"; case "$st" in *__*) echo "${st%%__*}" ;; *) basename "$(dirname "$(dirname "$1")")" ;; esac; }
+SRCDIR="$(dirname "$CLIP")"; GAME="$(game_of "$CLIP")"
 CLIPDIR="$OUT/data/flycast-dojo/replays/$GAME/tourclip"
 mkdir -p "$OUT/cfg/flycast-dojo" "$CLIPDIR"
 cp "$CLIP" "$CLIPDIR/clip.flyr"
@@ -158,8 +171,8 @@ XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	-config "dojo:SurfaceTour=$MODE" \
 	-config "dojo:TourBpmMs=${TOUR_BPM_MS:-1000}" -config "dojo:TourRecordMs=${TOUR_RECORD_MS:-2000}" \
 	-config "dojo:TourSlow=${TOUR_SLOW:-no}" -config "dojo:SavestateFolder=$CLIPDIR" \
-	-config "dojo:IntentMacro=${INTENT_MACRO:-$ROOT/scripts/fixtures/mvc2/candidates/Combo_Dhalsim97_pcsx2_macro.txt}" \
-	-config "dojo:IntentPeak=${INTENT_PEAK:-19}" \
+	-config "dojo:IntentMacro=${INTENT_MACRO:-$ROOT/scripts/fixtures/mvc2/combos/dhalsim_3hit.txt}" \
+	-config "dojo:IntentPeak=${INTENT_PEAK:-3}" \
 	-config "dojo:TourModules=${TOUR_MODULES:-all}" \
 	-config window:width=1280 -config window:height=900 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 & FC=$!

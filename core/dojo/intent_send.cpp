@@ -251,7 +251,7 @@ void addSteps(std::vector<Step>& out)
 			if (!intent::settled()) { why("running"); return false; }
 			const u16 pk = intent::peak(0);
 			if (pk != intent::pinnedPeak()) { why("peak %u (want %u - RECIPE.toml result.combo_peak); after=%08X", (unsigned)pk, (unsigned)intent::pinnedPeak(), intent::machineHash()); return false; }
-			why("the SENDER landed it: peak %u, after=%08X (frame %u; the RECIPE's placed-combo after is 64FF89AB)", (unsigned)pk, intent::machineHash(), dojo.frame_number.load());
+			why("the SENDER landed it: peak %u, after=%08X (frame %u)", (unsigned)pk, intent::machineHash(), dojo.frame_number.load());
 			return true;
 		};
 		add(s);
@@ -401,13 +401,19 @@ const ExpectDecl EXPECTS[] = {
 	// the live send DRIVES the guest and bakes what it drove; the claim is the peak and the
 	// machine, the movie is the sender's business (measured: the machine lands on the
 	// RECIPE's after=64FF89AB either way)
-	{ "send intent: the sent combo lands",        1, 2, false, "mover" },
+	// `[MEASURED 2026-09-18]` on the Dhalsim base with our own combo (no P2 rows) the SENDER's
+	// path and the placed combo (the Being_Hit run) end on the SAME machine (F47533EF): the
+	// sender is P1-only, and with nothing for P2 the two routes are byte-identical. On the
+	// harness base they differed only because David's window carried 20 P2 rows the sender
+	// skipped. So the two runs CONVERGE - a stronger claim than "both landed": the sender's
+	// route into the roll and the funnel's produce the identical machine.
+	{ "send intent: the sent combo lands",        1, 2, true,  "mover/converge" },
 	{ "send intent: restore the roll",            1, 2, true,  "mover/converge" },
 	// identity, like `savestate: load slot 99`: the FST's own restore reloaded BASE already
 	{ "send intent: on BASE for the sample",      2, 0, true,  "identity" },
 	{ "send intent: place the combo",             0, 1, false, "movie-mover" },
 	{ "send intent: FST sweeps",                  1, 0, false, "mover" },
-	{ "send intent: Being_Hit",                   1, 0, false, "mover" },
+	{ "send intent: Being_Hit",                   1, 0, true,  "mover/converge" },
 	{ "send intent: end on BASE",                 1, 1, true,  "mover/converge" },
 };
 

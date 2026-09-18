@@ -194,7 +194,21 @@ print('%s/%s/%s %s/%s/%s'%tuple(v))")"
 	elif [ "$CANNED" -eq 1 ]; then claim C4 ok "base: CSS BASE line present (canned log; no disk check) - frame $bframe hash $bhash"
 	elif ls "$bdir"/*.state >/dev/null 2>&1; then
 		mkdir -p "$OUT/dhalsim_base"; cp -r "$bdir"/. "$OUT/dhalsim_base/"
-		if [ -n "$KEEP" ]; then mkdir -p "$KEEP"; cp -r "$bdir"/. "$KEEP/"; fi
+		# THE FIXTURE IS A MOVIE CLIP. `[MEASURED 2026-09-18]` the session that authored it ran
+		# MacroMode=yes (the handoff keeps READ-WRITE that way), so its clip.json said
+		# mode=macro/replayDummy and its movie ENDED at the base frame; a Replay boot of the
+		# copy auto-seeking slot 0 hit ReplayEnd, never Paused, and every tour step after read
+		# "still running". The tour's run-out step grows the movie past the base; the copy's
+		# clip.json is rewritten to what the folder IS: a movie clip (its .flyr is real).
+		python3 - "$OUT/dhalsim_base/clip.json" <<'PYEOF'
+import json,sys
+p=sys.argv[1]; j=json.load(open(p))
+j['mode']='movie'
+for k in ('replayDummy','macroFile','macroBase','macroHasState0','macroPairState'): j.pop(k,None)
+j.setdefault('notes',''); j['notes']=(j['notes']+' ' if j['notes'] else '')+'[csstour] the authored Dhalsim base: a MOVIE clip (mode rewritten from macro by scripts/csstour.sh; the .flyr holds the seed + the run-out).'
+json.dump(j,open(p,'w'),indent=1)
+PYEOF
+		if [ -n "$KEEP" ]; then mkdir -p "$KEEP"; cp -r "$OUT/dhalsim_base"/. "$KEEP/"; fi
 		claim C4 ok "base: slot 0 saved @ frame $bframe hash $bhash ($(ls "$bdir"/*.state | head -1 | xargs basename), $(stat -c %s "$(ls "$bdir"/*.state | head -1)") bytes)$([ -n "$KEEP" ] && echo " -> kept in $KEEP")"
 	else claim C4 FAIL "base: the CSS BASE line names $bdir but no .state is there"; fi
 	# C5: the finding - reported, never red
