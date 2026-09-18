@@ -56,6 +56,10 @@ u32  stopFrame();					//!< t0 + comboLen + 60 run-out
 
 bool runToStop();					//!< step to stopFrame() under fast-forward; poll settled()
 u16  peak(int player);				//!< Combo_Meter_HitsToOpponent PEAK since the last runToStop (0 = P1)
+//! The peak THE FIXTURE lands (dojo:IntentPeak, staged by the harness from RECIPE.toml's [combo]/[result]
+//! combo_peak). `[2026-09-18]` three TUs carried a literal 19 - the harness base's number - and the number
+//! sat in a dozen step NAMES the arm tables match on; a fixture change should be one config, not a rewrite.
+u16  pinnedPeak();
 bool reloadBase();					//!< gui_loadState(0) around the user's slot; poll settled()
 bool end();							//!< restore the snapshot roll through the funnel + reloadBase(); poll settled()
 const char *lastWhy();

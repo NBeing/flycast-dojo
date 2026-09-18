@@ -17,7 +17,7 @@
 	THE FIXTURE: BASE = the tour clip's slot 0 (in-match), THE COMBO = David's
 	Combo_Dhalsim97 window (dojo:IntentMacro, staged by surfacetourtest.sh), which
 	lands peak 19 on this base (scripts/fixtures/mvc2/RECIPE.toml result.combo_peak;
-	measured on all four phases, 2026-09-17). WANT_PEAK below IS that pin.
+	measured on all four phases, 2026-09-17). intent::pinnedPeak() below IS that pin.
 
 	David's intent, quoted (docs/PORT-DEFECT-CENSUS.md context / his tree):
 	  roll edit  "swap-twice and flip-twice are IDENTITIES, doing the op again restores
@@ -37,7 +37,7 @@
 	  macro-window  the panel places the WRONG window of the file - its first 1487 rows
 	                instead of the CLIP markers' 4212..5699 (RECIPE: "trust the markers,
 	                not the burst heuristic"): "macro intent: the macro lands the hit
-	                (peak 19)" must redden; the roll module's own place step stays green.
+	                (the fixture's peak)" must redden; the roll module's own place step stays green.
 	                `[MEASURED 2026-09-18]` a `macro-anchor` arm (the window 30 rows late)
 	                was DECORATIVE: peak 19 regardless - this combo tolerates the delay on
 	                this base, as the hunt's phase sweep already showed. Dropped, recorded.
@@ -77,7 +77,6 @@ const u32 KEY_PIANOROLL = CTRL | 58;	// Ctrl+F1
 const u32 KEY_SNIPPETS  = ALT  | 62;	// Alt+F5
 const u32 KEY_MACROS    = ALT  | 63;	// Alt+F6
 
-const u16 WANT_PEAK = 19;	// RECIPE.toml result.combo_peak - David's Dhalsim97 window on this base
 
 struct ModState
 {
@@ -252,7 +251,7 @@ void addSteps(std::vector<Step>& out)
 			why("%s: %u rows at %u.. (first input at row %u)", intent::comboName(), ms.len, ms.t0, ms.probeRow);
 			return true;
 		}, true));
-	out.push_back(runStep("roll intent: the combo lands (peak 19)", WANT_PEAK));
+	out.push_back(runStep("roll intent: the combo lands (the fixture's peak)", intent::pinnedPeak()));
 	out.push_back(reloadStep("roll intent: reload BASE (after the hit)"));
 	out.push_back(click("roll intent: clear the combo through the roll (Blank)",
 		[] {
@@ -279,7 +278,7 @@ void addSteps(std::vector<Step>& out)
 			why("row %u has its input back, redo depth %zu", ms.probeRow, dojo.redo_stack.size());
 			return true;
 		}, true));
-	out.push_back(runStep("roll intent: undo restores the hit (peak 19)", WANT_PEAK));
+	out.push_back(runStep("roll intent: undo restores the hit (the fixture's peak)", intent::pinnedPeak()));
 	out.push_back(reloadStep("roll intent: reload BASE (after the undo)"));
 	out.push_back(click("roll intent: redo the clear (panel Redo)",
 		[] { return rollpanel::redo(); },
@@ -297,7 +296,7 @@ void addSteps(std::vector<Step>& out)
 			why("row %u has its input back", ms.probeRow);
 			return true;
 		}, true));
-	out.push_back(runStep("roll intent: the hit is back (peak 19)", WANT_PEAK));
+	out.push_back(runStep("roll intent: the hit is back (the fixture's peak)", intent::pinnedPeak()));
 	out.push_back(reloadStep("roll intent: reload BASE (after the second undo)"));
 	out.push_back(closeStep("roll intent: close the piano roll", "pianoroll", KEY_PIANOROLL));
 	out.push_back(endStep("roll intent: end on BASE (roll restored)"));
@@ -326,7 +325,7 @@ void addSteps(std::vector<Step>& out)
 			why("window %u..%u placed at %u (first input at row %u)", ms.macroLo, ms.macroHi, ms.macroAt, at);
 			return true;
 		}, true));
-	out.push_back(runStep("macro intent: the macro lands the hit (peak 19)", WANT_PEAK));
+	out.push_back(runStep("macro intent: the macro lands the hit (the fixture's peak)", intent::pinnedPeak()));
 	// ---- 10. the ruler: the skip map over the run ------------------------------------
 	out.push_back(click("ruler intent: x every 4th frame (skip map over the combo)",
 		[] { return true; },
@@ -346,8 +345,8 @@ void addSteps(std::vector<Step>& out)
 }
 
 const ArmSpec ARMS[] = {
-	{ "roll-clear",   "roll intent: undo the clear (panel Undo)",        "roll intent: the combo lands (peak 19)" },
-	{ "macro-window", "macro intent: the macro lands the hit (peak 19)", "roll intent: the combo lands (peak 19)" },
+	{ "roll-clear",   "roll intent: undo the clear (panel Undo)",        "roll intent: the combo lands (the fixture's peak)" },
+	{ "macro-window", "macro intent: the macro lands the hit (the fixture's peak)", "roll intent: the combo lands (the fixture's peak)" },
 };
 
 // What each step does to the machine and the movie (machine/movie: 0 unchanged, 1 moved, 2 any).

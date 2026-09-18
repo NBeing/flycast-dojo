@@ -64,7 +64,6 @@ const u32 KEY_TESTLAB  = ALT  | 58;		// Alt+F1
 const u32 KEY_CAPTURES = CTRL | 64;		// Ctrl+F7
 const u32 KEY_GEN_ARCHIVE = SHIFT | 65;	// Shift+F8: btn_gen_archive's default (keyboard_device.h)
 
-const u16 EXPECT_PEAK = 19;				// scripts/fixtures/mvc2/RECIPE.toml [result] combo_peak, measured 2026-09-17
 
 struct State
 {
@@ -267,7 +266,7 @@ void addSteps(std::vector<Step>& out)
 	}
 	add(openStep("branch intent: open branches (Alt+F3)", KEY_BRANCHES, "branches"));
 	add(placeStep("branch intent: place the combo on main"));
-	add(runStep("branch intent: run main - the combo lands (peak 19)", EXPECT_PEAK, &st.afterHash));
+	add(runStep("branch intent: run main - the combo lands (the fixture's peak)", intent::pinnedPeak(), &st.afterHash));
 	add(reloadStep("branch intent: reload BASE"));
 	{
 		Step s;
@@ -365,7 +364,7 @@ void addSteps(std::vector<Step>& out)
 		// needsPrev OFF on purpose (arm rule 6, TEST-PLAN §5.2): under `branch-leak` the .flyr
 		// identity step above reddens first (main WAS edited - correctly), and this target must
 		// still RUN to be judged; "back to main" put the machine on BASE either way.
-		Step s = runStep("branch intent: run main again - the combo still lands (peak 19)", EXPECT_PEAK);
+		Step s = runStep("branch intent: run main again - the combo still lands (the fixture's peak)", intent::pinnedPeak());
 		s.needsPrev = false;
 		add(s);
 	}
@@ -464,13 +463,13 @@ void addSteps(std::vector<Step>& out)
 		add(s);
 	}
 	{
-		Step s = runStep("gen intent: run main - the combo is back (peak 19, same hash)", EXPECT_PEAK);
+		Step s = runStep("gen intent: run main - the combo is back (the fixture's peak, same hash)", intent::pinnedPeak());
 		Step inner = s;
 		s.verify = [inner] {
 			if (!inner.verify()) return false;
 			const u32 h = intent::machineHash();
 			if (h != st.afterHash) { why("hash %08X != %08X after the first run", h, st.afterHash); return false; }
-			why("peak 19, hash %08X == the pre-damage hash", h);
+			why("peak %u, hash %08X == the pre-damage hash", (unsigned)intent::pinnedPeak(), h);
 			return true;
 		};
 		add(s);
@@ -530,7 +529,7 @@ void addSteps(std::vector<Step>& out)
 		add(s);
 	}
 	add(placeStep("lab intent: place the combo on the test's roll"));
-	add(runStep("lab intent: run the test - the combo lands on its BASE (peak 19)", EXPECT_PEAK));
+	add(runStep("lab intent: run the test - the combo lands on its BASE (the fixture's peak)", intent::pinnedPeak()));
 	// results.jsonl / peakP1: UNMEASURED - this tree's lab is BASE-only by design (lab_panel.cpp:
 	// "A test created here is BASE-only; record its sequence afterwards"): no roll->macro
 	// writer, no lab runner. Not a step - a step that only SKIPs is decorative (G7).
@@ -695,8 +694,8 @@ void addSteps(std::vector<Step>& out)
 }
 
 const ArmSpec ARMS[] = {
-	{ "branch-leak", "branch intent: run main again - the combo still lands (peak 19)", "branch intent: create a branch from slot 0" },
-	{ "gen-noop",    "gen intent: run main - the combo is back (peak 19, same hash)",     "gen intent: Shift+F8 archives a generation" },
+	{ "branch-leak", "branch intent: run main again - the combo still lands (the fixture's peak)", "branch intent: create a branch from slot 0" },
+	{ "gen-noop",    "gen intent: run main - the combo is back (the fixture's peak, same hash)",     "gen intent: Shift+F8 archives a generation" },
 	{ "capture-dup", "capture intent: stop - frames written == frames emulated, 0 paused duplicates", "capture intent: start the recorder" },
 };
 

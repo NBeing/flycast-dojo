@@ -124,7 +124,6 @@ std::string renderRows(const std::vector<u16>& rows, size_t n, const char *sep)
 	return out;
 }
 
-const u16 kPinnedPeak = 19;		// scripts/fixtures/mvc2/RECIPE.toml result.combo_peak - the hunt's measurement
 
 int g_stateIdx = -1;
 u32 g_hashBeforeRun = 0;
@@ -243,7 +242,7 @@ void addSteps(std::vector<Step>& out)
 	}
 	{
 		Step s;
-		s.name = "send intent: the sent combo lands (peak 19)";
+		s.name = "send intent: the sent combo lands (the fixture's peak)";
 		s.kind = Kind::Record;
 		s.needsPrev = true;
 		s.maxWaitMs = 60000;
@@ -251,7 +250,7 @@ void addSteps(std::vector<Step>& out)
 		s.verify = [] {
 			if (!intent::settled()) { why("running"); return false; }
 			const u16 pk = intent::peak(0);
-			if (pk != kPinnedPeak) { why("peak %u (want %u - RECIPE.toml result.combo_peak); after=%08X", (unsigned)pk, (unsigned)kPinnedPeak, intent::machineHash()); return false; }
+			if (pk != intent::pinnedPeak()) { why("peak %u (want %u - RECIPE.toml result.combo_peak); after=%08X", (unsigned)pk, (unsigned)intent::pinnedPeak(), intent::machineHash()); return false; }
 			why("the SENDER landed it: peak %u, after=%08X (frame %u; the RECIPE's placed-combo after is 64FF89AB)", (unsigned)pk, intent::machineHash(), dojo.frame_number.load());
 			return true;
 		};
@@ -310,10 +309,10 @@ void addSteps(std::vector<Step>& out)
 			if (!intent::settled()) { why("not settled"); return false; }
 			u16 pk[4] = { 0, 0, 0, 0 }, p2;
 			int ran = 0, hit = 0;
-			for (int n = 0; n < 4; n++) if (fst::resultOf(n, pk[n], p2)) { ran++; if (pk[n] == kPinnedPeak) hit++; }
+			for (int n = 0; n < 4; n++) if (fst::resultOf(n, pk[n], p2)) { ran++; if (pk[n] == intent::pinnedPeak()) hit++; }
 			if (ran != 4 || hit != 4)
 			{
-				why("phases 0..3 peaked %u/%u/%u/%u (want %u on all four - the RECIPE's measured phase-insensitivity; %d ran)", pk[0], pk[1], pk[2], pk[3], (unsigned)kPinnedPeak, ran);
+				why("phases 0..3 peaked %u/%u/%u/%u (want %u on all four - the RECIPE's measured phase-insensitivity; %d ran)", pk[0], pk[1], pk[2], pk[3], (unsigned)intent::pinnedPeak(), ran);
 				return false;
 			}
 			why("phases 0..3 peaked %u/%u/%u/%u - phase-insensitive on this base (David's 1-in-4 is not this combo)", pk[0], pk[1], pk[2], pk[3]);
@@ -386,8 +385,8 @@ void addSteps(std::vector<Step>& out)
 }
 
 const ArmSpec ARMS[] = {
-	{ "send-noop",   "send intent: the sent combo lands (peak 19)",        "send intent: notepad round-trips the combo's first 60 rows" },
-	{ "fst-phase",   "send intent: FST sweeps the four phases",            "send intent: the sent combo lands (peak 19)" },
+	{ "send-noop",   "send intent: the sent combo lands (the fixture's peak)",        "send intent: notepad round-trips the combo's first 60 rows" },
+	{ "fst-phase",   "send intent: FST sweeps the four phases",            "send intent: the sent combo lands (the fixture's peak)" },
 	{ "state-field", "send intent: Being_Hit sampled during the combo",    "send intent: FST sweeps the four phases" },
 };
 

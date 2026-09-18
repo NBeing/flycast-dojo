@@ -285,6 +285,7 @@ bool runToStop()
 }
 
 u16 peak(int player) { return tas_mvc2::comboPeak(player); }
+u16 pinnedPeak() { return (u16)cfgLoadInt("dojo", "IntentPeak", 19); }
 
 bool reloadBase()
 {

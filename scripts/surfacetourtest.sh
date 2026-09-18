@@ -158,7 +158,8 @@ XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	-config "dojo:SurfaceTour=$MODE" \
 	-config "dojo:TourBpmMs=${TOUR_BPM_MS:-1000}" -config "dojo:TourRecordMs=${TOUR_RECORD_MS:-2000}" \
 	-config "dojo:TourSlow=${TOUR_SLOW:-no}" -config "dojo:SavestateFolder=$CLIPDIR" \
-	-config "dojo:IntentMacro=$ROOT/scripts/fixtures/mvc2/candidates/Combo_Dhalsim97_pcsx2_macro.txt" \
+	-config "dojo:IntentMacro=${INTENT_MACRO:-$ROOT/scripts/fixtures/mvc2/candidates/Combo_Dhalsim97_pcsx2_macro.txt}" \
+	-config "dojo:IntentPeak=${INTENT_PEAK:-19}" \
 	-config "dojo:TourModules=${TOUR_MODULES:-all}" \
 	-config window:width=1280 -config window:height=900 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 & FC=$!
