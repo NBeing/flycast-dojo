@@ -827,8 +827,18 @@ static void buildSteps()
 	hook("roll: flip a cell + undo",         Kind::Click,  hooks::rollEditFlipUndo);
 	hook("roll: redo the flip + undo",       Kind::Click,  hooks::rollEditRedoUndo, true);
 	// v3: the intent modules, in name order, each on its own TU (surface_tour.h).
+	// dojo:TourModules=all|none|<name>[+<name>] picks which run - a builder verifying
+	// ONE module in the foreground (the full v4 tour outgrew the 10-minute budget,
+	// 2026-09-18); the harness FLOOR is a minimum, so a filtered tour still judges.
+	const std::string only = cfgLoadStr("dojo", "TourModules", "all");
 	for (const Module *m : modules())
 	{
+		if (only == "none") break;
+		if (only != "all" && ("+" + only + "+").find("+" + std::string(m->name) + "+") == std::string::npos)
+		{
+			NOTICE_LOG(RENDERER, "SURFACE TOUR: module %s skipped (dojo:TourModules=%s)", m->name, only.c_str());
+			continue;
+		}
 		std::vector<Step> ms;
 		m->addSteps(ms);
 		for (Step& s : ms) add(std::move(s));
