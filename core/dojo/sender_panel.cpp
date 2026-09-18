@@ -174,6 +174,21 @@ void selfTest()
 		claim("dojo:SendMerge=no seeds MERGE off", !dojo.send_merge.load());
 		cfgSetVirtual("dojo", "SendMerge", was); dojo.send_merge = wasOn;
 	}
+	{	// `[MEASURED 2026-09-18]` a live send is as long as its LONGEST lane (tas_auto.cpp): it
+		// used to end at P1's length, cutting a longer P2 stream (the CSS tour's team pick lost
+		// P2's third character) and never going live for a P2-only send.
+		const bool wasLive = tas_auto::liveActive();
+		tas_auto::playLive({ 0, 0 }, { 0, 0, 0, 0, 0, 0 }, 1000);
+		claim("a send with a longer P2 lane stays live past P1's end", tas_auto::liveRemaining(1002) == 4);
+		tas_auto::liveTick(1001);
+		claim("...and liveTick does not end it at P1's last frame", tas_auto::liveActive());
+		tas_auto::liveTick(1005);
+		claim("...but ends it at the longest lane's last frame", !tas_auto::liveActive());
+		tas_auto::playLive({}, { 0, 0, 0 }, 2000);
+		claim("a P2-only send goes live", tas_auto::liveActive());
+		tas_auto::stopLive();
+		claim("stopLive leaves nothing live", !tas_auto::liveActive() && !wasLive);
+	}
 	NOTICE_LOG(RENDERER, "SENDER SELFTEST: %d passed, %d failed", pass, fail);
 }
 

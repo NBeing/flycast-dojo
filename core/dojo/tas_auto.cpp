@@ -81,8 +81,13 @@ namespace tas_auto
 		g_seqP1 = p1;
 		g_seqP2 = p2;
 		g_seqStart = startFrame;
-		g_seqActive = !p1.empty();
+		// `[MEASURED 2026-09-18]` the send's length was P1's: a P2-only send never went live and a
+		// P2 stream longer than P1's was CUT at P1's end (the CSS tour's team pick - P2's third
+		// character was never chosen; css_tour.cpp padded around it). A send is as long as its
+		// LONGEST lane; liveCanon already reads past a shorter lane as neutral.
+		g_seqActive = !p1.empty() || !p2.empty();
 	}
+	static size_t liveLen() { return g_seqP1.size() > g_seqP2.size() ? g_seqP1.size() : g_seqP2.size(); }
 	void stopLive()
 	{
 		g_seqActive = false;
@@ -103,14 +108,14 @@ namespace tas_auto
 	{
 		// clear once the LAST frame has been applied, so SENDING ends even if the guest stops
 		// advancing exactly on the sequence's final frame (the button was sticking on "Stop").
-		if (g_seqActive && !g_seqP1.empty() && frame + 1 >= g_seqStart + g_seqP1.size())
+		if (g_seqActive && liveLen() > 0 && frame + 1 >= g_seqStart + liveLen())
 			g_seqActive = false;
 	}
 	u64 liveRemaining(u64 frame)
 	{
 		if (!g_seqActive)
 			return 0;
-		const u64 endF = g_seqStart + g_seqP1.size();
+		const u64 endF = g_seqStart + liveLen();
 		return frame < endF ? endF - frame : 0;
 	}
 
