@@ -1323,10 +1323,43 @@ them (refused over a pin without `FIXTURES_REGENERATE=iknow`). The `.state` is N
 committed - V49-locked, ~10 MB, `css/base/` is gitignored; the inputs regenerate it,
 which is better than a savestate (it survives any serializer version).
 
-### 7.4 Measured
+### 7.4 Measured (2026-09-18, `scripts/csstour.sh`, binary at `15bb42385`)
 
-(the run this section lands with - see the commit message; the harness prints every
-`css:` step line and the `CSS BASE:` line)
+```
+TAS ONENTER: seeded 742 frames ... - READ-WRITE, handoff pause @ 742
+TAS ONENTER: handoff at frame 742 (READ-WRITE)
+step  1/13 "css: on the globe (the seed's handoff)"        -> PASS (ID_2 P1_A=19 (RubyHeart) P2_A=23 (Cable) at frame 742)
+step  2/13 "css: plan the walk to Dhalsim"                 -> PASS (DLLL: predicted Hayato>Anakaris>Jin>Dhalsim)
+step  3/13 "css: walk press 1"                              -> PASS (ID_2 P1_A=18 (Hayato), the graph predicted Hayato)
+step  4/13 "css: walk press 2"                              -> PASS (ID_2 P1_A=4 (Anakaris))
+step  5/13 "css: walk press 3"                              -> PASS (ID_2 P1_A=55 (Jin))
+step  6/13 "css: walk to Dhalsim (press 4)"                 -> PASS (ID_2 P1_A=37 (Dhalsim))
+step  7/13 "css: pick Dhalsim (LP selects, alpha assist)"   -> PASS (ID_2=37 PaletteID_2=0 (LP) Assist_Value=0 (alpha))
+step  8/13 "css: confirm Dhalsim (slot B goes live)"        -> PASS (P1_A=37 locked, P1_B=19 the live cursor, reset to home)
+step  9/13 "css: pick the rest of P1 + all of P2"           -> PASS (P1_A=37/37 P1_B=23/23 P1_C=52/52 P2_A=0/0 P2_B=39/39 P2_C=2/2)
+step 10/13 "css: Start at SPEED SELECT -> the fight"        -> PASS (Is_Point(P1 A)=1 Health_Big P1=144 P2=144 skip rate=4 at frame 2059)
+CSS BASE: slot 0 @ frame 2059 hash=5FC481A7 team=Dhalsim/Cable/Sentinel vs Ryu/Ken/Guile folder=<sandbox clip>
+step 11/13 "css: save the Dhalsim base (slot 0)"            -> PASS
+step 12/13 "css finding: David's Dhalsim97 rows on the Dhalsim base" -> PASS (peak 1 (P2 0) after=0C6F1D1A - his rows CONNECT on DC)
+step 13/13 "css: end on the Dhalsim base"                   -> PASS (BASE @2059 hash=5FC481A7)
+SURFACE TOUR RESULT: passed=13 failed=0 skipped=0 total=13 gate_ok=13 vacuous=0 leak=0 gates_red=0
+C1 C2 C3 C4 ok; CSSTOUR RESULT: passed=4 failed=0   PASS
+```
+
+Arms: `css-walk` -> press 1 reads Cable (23) not Hayato, the globe step green;
+`css-timing` -> the team reads `P1_C=11 P2_A=20 P2_B=8 P2_C=20` (a repeated direction
+never re-pressed), the walk green; `css-team` -> P2's slots stay 23/23/23 (Cable, the
+home cursor), the confirm step green - all three `SABOTAGE BEHAVED AS PREDICTED`.
+
+The base, measured twice (`--keep-base`, then `--make-dhalsim-base`): frame 2059, hash
+`5FC481A7` both boots - byte-deterministic; pinned in `[dhalsim_base]`.
+
+**THE FINDING.** David's `Combo_Dhalsim97` rows 4212-5699, placed at the base+1 through
+`intent`, land **peak 1** on DC with Dhalsim on point (P2 0). His rows connect - one hit,
+not his 97: his combo presumed his stage, his setup frames before the marker and his
+team; ours is a neutral first playable frame vs Ryu. A single connecting hit from a
+PS2-authored stream on a DC-authored base is the first honest bridge between his archive
+and this tree; the 96 missing hits are the next experiment, not a failure.
 
 ## Two disciplines that are not optional
 
