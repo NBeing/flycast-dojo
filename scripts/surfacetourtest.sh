@@ -177,6 +177,10 @@ XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	-config window:width=1280 -config window:height=900 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 & FC=$!
 cleanup() { kill "$FC" 2>/dev/null; [ -n "$XPID" ] && kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; [ -n "$XPID" ] && kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
+# A KILLED HARNESS TAKES ITS OWN EMULATOR WITH IT. `[MEASURED 2026-09-18]` `timeout`/ctest TIMEOUT/
+# Ctrl-C ended the harness and left flycast + Xvfb orphaned (reparented to 1, still running,
+# killed by hand by PID). The trap is PID-scoped: only $FC and $XPID, never a name.
+trap 'cleanup; exit 143' TERM INT
 
 RESULT=""
 # TOUR_WAIT_S: the v1 tour finished in ~2 min; the v4 intent modules add game runs of

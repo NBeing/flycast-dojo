@@ -149,6 +149,10 @@ boot() {
 	return 0
 }
 teardown() { kill "$FC" 2>/dev/null; kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
+# A KILLED HARNESS TAKES ITS OWN EMULATOR WITH IT. `[MEASURED 2026-09-18]` `timeout`/ctest TIMEOUT/
+# Ctrl-C ended the harness and left flycast + Xvfb orphaned (reparented to 1, still running,
+# killed by hand by PID). The trap is PID-scoped: only $FC and $XPID, never a name.
+trap 'teardown; exit 143' TERM INT
 logged() { tr -d '\0' < "$LOG" | grep -a -- "$1" > /dev/null; }
 logline() { tr -d '\0' < "$LOG" | grep -a -- "$1" | tail -1; }
 send() {	# send <seq> <verb> <args-json> -> resp json (ctltest's client). The SEQ is the CALLER's to bump:
