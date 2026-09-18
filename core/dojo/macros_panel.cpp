@@ -141,6 +141,40 @@ static s64 place(const MacroFile& mf, bool overdub)
 	return first;
 }
 
+//! INTENT MODULE ENTRY (intent_roll.cpp, Surface Tour v4, 2026-09-18): place() for a FILE and
+//! a WINDOW of its rows at an explicit frame - the same libraryRead -> patternReplacing ->
+//! applyPattern -> ApplyEdit("macro: replace") the button uses, so "State 0 = macro frame 0"
+//! (David's REQUIRED binding) is testable: the window's row 0 lands on `at`.
+s64 placeFileWindowAt(const std::string& path, u32 lo, u32 hi, u32 at, std::string& why)
+{
+	if (!movie::authored()) { why = "no movie"; return -1; }
+	Sequence s;
+	std::string err;
+	if (!libraryRead(path, s, err) || s.empty()) { why = "libraryRead: " + err; return -1; }
+	const u32 n = (u32)s.length();
+	if (hi == 0 || hi > n) hi = n;
+	if (lo >= hi) { why = "empty window"; return -1; }
+	Sequence w = s;
+	for (auto& lane : w.lanes)
+	{
+		const u32 a = std::min<u32>(lo, (u32)lane.size()), b = std::min<u32>(hi, (u32)lane.size());
+		lane = std::vector<Cell>(lane.begin() + a, lane.begin() + b);
+	}
+	if (w.empty()) { why = "the window has no cells"; return -1; }
+	Selection& sel = selection();
+	sel.clear();
+	sel.press(at, Mods{});
+	if (w.length() > 1)
+		sel.press(at + (u32)w.length() - 1, Mods{true, false, false});
+	const Pattern pat = patternReplacing(w);
+	Edit e = applyPattern(wholeMovie(), sel.lo(), sel.hi(), pat, 0);
+	const s64 first = dojo.ApplyEdit(e, "macro: replace");
+	NOTICE_LOG(RENDERER, "MACRO: placed '%s' rows %u..%u (%zu frames, replace) at %u..%u -> first changed %lld",
+			path.c_str(), lo, hi, w.length(), sel.lo(), sel.hi(), (long long)first);
+	if (first < 0) why = "the funnel changed nothing";
+	return first;
+}
+
 // ---------------------------------------------------------------------------------------
 // INTEGRATION PROBE, dojo:MacrosProbe=yes - the twin of SnippetProbe. Self-seeds a macro
 // by writing the live movie to the bound clip (Dojo::WriteMacroFile), scans the replays

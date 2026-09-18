@@ -50,6 +50,48 @@ namespace roll
 {
 static bool panelOpen = false;
 
+// ---------------------------------------------------------------------------------------
+// THE PANEL'S EDIT PATHS WITH A NAME (intent_roll.cpp, Surface Tour v4, 2026-09-18). The
+// intent module must clear rows and undo/redo THROUGH THE ROLL - the same Edit, the same
+// funnel verb, the same toast the Blank / Undo / Redo buttons produce - not through a hook
+// that bypasses the panel. These are those buttons' bodies, callable. Nothing here writes
+// session_inputs itself.
+// ---------------------------------------------------------------------------------------
+namespace rollpanel {
+
+void undoToast(bool did, bool redo)
+{
+	char m[96];
+	if (!did) snprintf(m, sizeof(m), "Nothing to %s", redo ? "redo" : "undo");
+	else      snprintf(m, sizeof(m), "%s - frames restored", redo ? "Redid the edit" : "Undid the edit");
+	gui_display_notification(m, 1500);
+	NOTICE_LOG(RENDERER, "ROLL %s: %s (undo depth %zu, redo depth %zu)", redo ? "REDO" : "UNDO", m,
+			dojo.undo_stack.size(), dojo.redo_stack.size());
+}
+
+bool undo() { const bool did = dojo.ApplyUndo(); undoToast(did, false); return did; }
+bool redo() { const bool did = dojo.ApplyRedo(); undoToast(did, true);  return did; }
+
+//! The Blank button: select lo..hi, blank the selection through Dojo::ApplyEdit ("roll: blank").
+//! The button's own gate (PAUSED, no live peer) is applied, not bypassed. Returns the first
+//! changed frame or -1.
+s64 blankRange(u32 lo, u32 hi)
+{
+	if (gui_state != GuiState::Paused || session::netplay())
+		return -1;
+	Selection& sel = selection();
+	sel.clear();
+	sel.press(lo, Mods{});
+	if (hi > lo)
+		sel.press(hi, Mods{true, false, false});
+	std::map<u32, Row> all;
+	for (const auto& kv : dojo.session_inputs) all[kv.first] = kv.second;
+	Edit e = mergeIntoMovie(all, blankRows(sel.rows()));
+	return dojo.ApplyEdit(e, "roll: blank");
+}
+
+}	// namespace rollpanel
+
 // How many frames either side of the playhead to draw. Small on purpose: a
 // window that scrolls to a selection is edit-tool work, and there are no edit
 // tools yet.
@@ -466,14 +508,7 @@ static void draw()
 			// (docs/PORT-DEFECT-CENSUS.md §2: ApplyRedo uncalled - and ApplyUndo was only ever
 			// called by probes). Buttons here; Ctrl+Z / Ctrl+Shift+Z while the roll has focus,
 			// TASEditor muscle memory. An undo/redo is itself an edit and logs like one.
-			auto undoToast = [](bool did, bool redo) {
-				char m[96];
-				if (!did) snprintf(m, sizeof(m), "Nothing to %s", redo ? "redo" : "undo");
-				else      snprintf(m, sizeof(m), "%s - frames restored", redo ? "Redid the edit" : "Undid the edit");
-				gui_display_notification(m, 1500);
-				NOTICE_LOG(RENDERER, "ROLL %s: %s (undo depth %zu, redo depth %zu)", redo ? "REDO" : "UNDO", m,
-						dojo.undo_stack.size(), dojo.redo_stack.size());
-			};
+			auto undoToast = [](bool did, bool redo) { rollpanel::undoToast(did, redo); };
 			ImGui::BeginDisabled(dojo.undo_stack.empty());
 			if (tasButton("Undo")) undoToast(dojo.ApplyUndo(), false);
 			ImGui::EndDisabled();

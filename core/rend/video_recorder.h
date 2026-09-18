@@ -102,6 +102,9 @@ constexpr int AudioChannels = 2;
 void submitAudio(const void *interleavedStereoS16, int frameCount);
 
 u64 framesWritten();
+// Presents skipped as paused duplicates since start() (dojo:CapturePausedFrames=no); the
+// number the `[rec] stopped` line prints, readable by a harness step in-process.
+u64 pausedDuplicatesSkipped();
 u64 framesDropped();
 // Human-readable one-liner for the UI.
 std::string status();

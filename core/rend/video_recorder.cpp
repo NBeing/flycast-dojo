@@ -534,6 +534,7 @@ void submitAudio(const void *interleavedStereoS16, int frameCount)
 }
 
 u64 framesWritten() { return written; }
+u64 pausedDuplicatesSkipped() { return pausedDuplicates.load(); }
 u64 framesDropped() { return dropped; }
 const std::string& outputPath() { return recPath; }
 

@@ -112,6 +112,7 @@ bool peekCombo(u16& p1, u16& p2)
 	return true;
 }
 
+static void statesSamplePoll(u16 comboP1Meter);
 void comboPoll()
 {
 	const u32 *c = comboAddrs();
@@ -123,6 +124,7 @@ void comboPoll()
 		comboPeak1.store(a, std::memory_order_relaxed);
 	if (b > comboPeak2.load(std::memory_order_relaxed))
 		comboPeak2.store(b, std::memory_order_relaxed);
+	statesSamplePoll(a);	// the state-machine sampler (mvc2.h), armed by a tour step; no-op otherwise
 	// dojo:ComboProbe - log the counter on every CHANGE, so a real (resetting)
 	// combo is visible and the corrected address/width can be confirmed by
 	// measurement, not just against dev's tree. Edge-triggered, off by default.
@@ -591,9 +593,13 @@ u32 charBase(int player, int slot)
 
 bool isPoint(int player, int slot)
 {
+	// `[MEASURED 2026-09-18]` the SPREADSHEET's own enum for Is_Point is "0: Point | 1: Assist-1 |
+	// 2: Assist-2" (David: "a character is the point when its Is_Point byte reads 0"). This
+	// read `v != 0` - INVERTED - so pointSlot() picked an assist, the hunt's base line named the
+	// wrong character, and the state machine sampled Being_Hit on a fighter nobody was hitting.
 	const u32 a = addrOf("Is_Point", player, slot);
 	u32 v = 0;
-	return a != 0 && readRamSafe(a, 1, v) && v != 0;
+	return a != 0 && readRamSafe(a, 1, v) && v == 0;
 }
 
 int fieldCount()
@@ -612,6 +618,228 @@ const std::string& dictionaryPath()
 	notes describe, a width read as u16 (the neighbour-field leak fixed 2026-09-15),
 	an unknown name resolving to SOMETHING, the sheet quietly swapped for another.
 */
+
+// ---- THE STATE MACHINE EVALUATOR (see mvc2.h) -------------------------------------------
+namespace {
+enum class Cmp { Eq, Ne, Gt, Ge, Lt, Le };
+struct SCond { u32 offset = 0; int width = 1; Cmp op = Cmp::Eq; int threshold = 0; std::string field; };
+struct SDef { std::string name, description; std::vector<SCond> conds; };
+std::vector<SDef> g_states;
+std::vector<StateInfo> g_stateInfo;
+bool g_statesLoaded = false;
+
+bool parseCmp(const std::string& s, Cmp& op)
+{
+	if (s == "==") op = Cmp::Eq; else if (s == "!=") op = Cmp::Ne; else if (s == ">") op = Cmp::Gt;
+	else if (s == ">=") op = Cmp::Ge; else if (s == "<") op = Cmp::Lt; else if (s == "<=") op = Cmp::Le;
+	else return false;
+	return true;
+}
+bool cmpVal(Cmp op, int v, int t)
+{
+	switch (op)
+	{
+	case Cmp::Eq: return v == t; case Cmp::Ne: return v != t; case Cmp::Gt: return v > t;
+	case Cmp::Ge: return v >= t; case Cmp::Lt: return v < t;  case Cmp::Le: return v <= t;
+	}
+	return false;
+}
+std::string locateStates(std::string& tried)
+{
+	std::vector<std::string> cands;
+	const std::string cfgPath = cfgLoadStr("dojo", "Mvc2States", "");
+	if (!cfgPath.empty())
+		cands.push_back(cfgPath);
+	cands.push_back(get_readonly_data_path("mvc2_data/states_general.json"));
+	{
+		std::string here = __FILE__;
+		const size_t sl = here.find_last_of("/\\");
+		if (sl != std::string::npos)
+			cands.push_back(here.substr(0, sl) + "/mvc2_data/states_general.json");
+	}
+	for (const std::string& c : cands)
+	{
+		if (file_exists(c))
+			return c;
+		tried += (tried.empty() ? "" : ", ") + c;
+	}
+	return "";
+}
+u32 readField(u32 base, const SCond& c)
+{
+	switch (c.width)
+	{
+	case 2:  return ReadMem16_nommu(base + c.offset);
+	case 4:  return ReadMem32_nommu(base + c.offset);
+	default: return ReadMem8_nommu(base + c.offset);
+	}
+}
+// the sampler
+std::mutex g_sampleMutex;
+bool g_sampleArmed = false;
+int g_sampleIdx = -1, g_sampleOverride = -1;
+StateSample g_sample;
+}	// namespace
+
+void loadStates()
+{
+	g_statesLoaded = true;
+	g_states.clear();
+	g_stateInfo.clear();
+	std::string tried;
+	const std::string path = locateStates(tried);
+	if (path.empty())
+	{
+		NOTICE_LOG(COMMON, "MVC2 states: states_general.json not found (tried %s)", tried.c_str());
+		return;
+	}
+	std::ifstream in(path);
+	int skipped = 0;
+	try
+	{
+		const nlohmann::json j = nlohmann::json::parse(in);
+		const nlohmann::json& states = j.contains("states") ? j["states"] : j;
+		for (auto it = states.begin(); it != states.end(); ++it)
+		{
+			const std::string name = it.key();
+			if (!name.empty() && name[0] == '_') continue;
+			const auto& def = it.value();
+			if (!def.is_object() || !def.contains("conditions") || !def["conditions"].is_array()) continue;
+			SDef sd;
+			sd.name = name;
+			sd.description = def.value("description", std::string());
+			bool ok = true;
+			for (const auto& c : def["conditions"])
+			{
+				SCond sc;
+				sc.field = c.value("field", std::string());
+				Field f;
+				if (!field(sc.field.c_str(), f) || !f.perSlot)
+				{
+					NOTICE_LOG(COMMON, "MVC2 states: '%s' skipped - unknown field '%s'", name.c_str(), sc.field.c_str());
+					ok = false; break;
+				}
+				sc.offset = f.offset;
+				sc.width = f.width;
+				if (!parseCmp(c.value("op", std::string()), sc.op))
+				{
+					NOTICE_LOG(COMMON, "MVC2 states: '%s' skipped - bad op '%s'", name.c_str(), c.value("op", std::string()).c_str());
+					ok = false; break;
+				}
+				sc.threshold = c.value("threshold", 0);
+				sd.conds.push_back(sc);
+			}
+			if (!ok || sd.conds.empty()) { skipped++; continue; }
+			g_states.push_back(std::move(sd));
+		}
+	}
+	catch (const std::exception& e)
+	{
+		NOTICE_LOG(COMMON, "MVC2 states: %s parse failed: %s", path.c_str(), e.what());
+		return;
+	}
+	for (const auto& s : g_states)
+		g_stateInfo.push_back({ s.name, s.description });
+	NOTICE_LOG(COMMON, "MVC2 states: loaded %d states (%d skipped) from %s", (int)g_states.size(), skipped, path.c_str());
+}
+
+const std::vector<StateInfo>& stateList()
+{
+	if (!g_statesLoaded) loadStates();
+	return g_stateInfo;
+}
+
+int stateIndex(const char *name)
+{
+	const std::vector<StateInfo>& l = stateList();
+	for (size_t i = 0; i < l.size(); i++)
+		if (l[i].name == name)
+			return (int)i;
+	return -1;
+}
+
+int pointSlot(int player)
+{
+	for (int s = 0; s < 3; s++)
+		if (isPoint(player, s))
+			return s;
+	return 0;
+}
+
+bool evalState(int stateIdx, int player, int thresholdOverride)
+{
+	if (!g_statesLoaded) loadStates();
+	if (stateIdx < 0 || stateIdx >= (int)g_states.size() || settings.content.path.empty())
+		return false;
+	const u32 base = charBase(player, pointSlot(player));
+	if (base == 0)
+		return false;
+	const SDef& d = g_states[stateIdx];
+	for (size_t i = 0; i < d.conds.size(); i++)
+	{
+		const SCond& c = d.conds[i];
+		const int t = (i == 0 && thresholdOverride >= 0) ? thresholdOverride : c.threshold;
+		if (!cmpVal(c.op, (int)readField(base, c), t))
+			return false;
+	}
+	return true;
+}
+
+void evalPointStates(int player, std::vector<u8>& out)
+{
+	if (!g_statesLoaded) loadStates();
+	out.assign(g_states.size(), 0);
+	for (size_t i = 0; i < g_states.size(); i++)
+		out[i] = evalState((int)i, player) ? 1 : 0;
+}
+
+void statesSampleArm(int stateIdx, int thresholdOverride)
+{
+	const std::lock_guard<std::mutex> lock(g_sampleMutex);
+	g_sample = StateSample();
+	g_sampleIdx = stateIdx;
+	g_sampleOverride = thresholdOverride;
+	g_sampleArmed = stateIdx >= 0;
+}
+
+StateSample statesSampleTake()
+{
+	const std::lock_guard<std::mutex> lock(g_sampleMutex);
+	g_sampleArmed = false;
+	return g_sample;
+}
+
+// called from comboPoll on the emulator loop
+static void statesSamplePoll(u16 comboP1Meter)
+{
+	if (!g_sampleArmed)
+		return;
+	const std::lock_guard<std::mutex> lock(g_sampleMutex);
+	if (!g_sampleArmed)
+		return;
+	const u32 fr = dojo.frame_number.load();
+	const bool a1 = evalState(g_sampleIdx, 0, g_sampleOverride);
+	const bool a2 = evalState(g_sampleIdx, 1, g_sampleOverride);
+	g_sample.polls++;
+	g_sample.pointP1 = pointSlot(0);
+	g_sample.pointP2 = pointSlot(1);
+	if (g_sampleIdx >= 0 && g_sampleIdx < (int)g_states.size())
+	{	// per-condition, P2's point character: which clause of the AND is the one that never held
+		const u32 base = charBase(1, g_sample.pointP2);
+		const SDef& d = g_states[g_sampleIdx];
+		for (size_t i = 0; i < d.conds.size() && i < 4; i++)
+		{
+			const int t = (i == 0 && g_sampleOverride >= 0) ? g_sampleOverride : d.conds[i].threshold;
+			if (base != 0 && cmpVal(d.conds[i].op, (int)readField(base, d.conds[i]), t))
+				g_sample.condP2[i]++;
+		}
+	}
+	if (comboP1Meter > 0 && g_sample.firstHitFrame == 0)
+		g_sample.firstHitFrame = fr;
+	if (a1) { g_sample.activeP1++; if (g_sample.firstHitFrame == 0) g_sample.activeP1BeforeFirstHit++; }
+	if (a2) { g_sample.activeP2++; if (g_sample.firstActiveP2Frame == 0) g_sample.firstActiveP2Frame = fr; }
+}
+
 void selfTest()
 {
 	if (!cfgLoadBool("dojo", "PanelSelfTest", false))

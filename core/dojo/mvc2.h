@@ -117,4 +117,37 @@ namespace tas_mvc2
 	int fieldCount();										// 0 = the dictionary did not load
 	const std::string& dictionaryPath();					// where it loaded from ("" = nowhere)
 	void selfTest();										// SPREADSHEET SELFTEST - dojo:PanelSelfTest
+
+	// ---- THE STATE MACHINE EVALUATOR (ported from David's tas_mvc2, 2026-09-18) --------------
+	//
+	// A state is an ALL-conditions-AND predicate over per-character fields, defined as DATA in
+	// mvc2_data/states_general.json (24 states; e.g. Being_Hit = Knockdown_State==32 &&
+	// Hitstop2>0), each field resolved BY NAME through the dictionary above. A state naming an
+	// unknown field is logged and SKIPPED at load - never silently always-false. Located like
+	// SPREADSHEET.json: dojo:Mvc2States, the data dirs, then the source tree beside this file.
+	struct StateInfo { std::string name, description; };
+	void loadStates();											// lazy on first use; logs "MVC2 states: loaded N (M skipped)"
+	const std::vector<StateInfo>& stateList();
+	int  stateIndex(const char *name);							// -1 = no such state
+	int  pointSlot(int player);									// the slot whose Is_Point reads 0; A when none does
+	// Evaluate every loaded state for `player`'s POINT character NOW: out[i] (1/0) matches stateList()[i].
+	void evalPointStates(int player, std::vector<u8>& out);
+	// One state for one player now; `thresholdOverride` >= 0 replaces the FIRST condition's
+	// threshold (a sabotage arm's instrument - never used by a feature).
+	bool evalState(int stateIdx, int player, int thresholdOverride = -1);
+
+	// THE SAMPLER: evaluate ONE state for both players on every maple poll (inside comboPoll,
+	// the emulator loop) between arm and take - how a tour step asks "did P2 enter Being_Hit
+	// during the combo, and did P1 before the first hit?" without a per-frame callback.
+	struct StateSample
+	{
+		int polls = 0;
+		int activeP1 = 0, activeP2 = 0;					// polls with the state active
+		int activeP1BeforeFirstHit = 0;					// P1 active while P2's combo meter was still 0
+		int condP2[4] = { 0, 0, 0, 0 };					// polls on which condition i (up to 4) held for P2 alone - names the miss
+		int pointP1 = -1, pointP2 = -1;					// the slots evaluated
+		u32 firstActiveP2Frame = 0, firstHitFrame = 0;	// 0 = never
+	};
+	void statesSampleArm(int stateIdx, int thresholdOverride = -1);
+	StateSample statesSampleTake();								// disarms
 }

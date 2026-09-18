@@ -1,0 +1,189 @@
+{
+  "_comment": "MvC2 State Machine - GENERAL states (character-agnostic). Ported from mvc2gen2 State_Defines_General.js (2026-09-13). Each state is active when ALL conditions hold for the character being evaluated (v1: the on-point character). 'field' is a PlayerMemory field name resolved to an offset via SPREADSHEET.json; 'op' is one of == != > >= < <= ; 'threshold' is compared against the field's current value. NOTE: state names must never reuse a field name (SJ_Counter the STATE was renamed to SJ_State so it can't collide with the SJ_Counter FIELD).",
+  "states": {
+    "Being_Hit": {
+      "description": "Character is being hit and in hitstop",
+      "conditions": [
+        { "field": "Knockdown_State", "op": "==", "threshold": 32 },
+        { "field": "Hitstop2", "op": ">", "threshold": 0 }
+      ]
+    },
+    "Flying_Screen_Air": {
+      "description": "In flying screen state while airborne",
+      "conditions": [
+        { "field": "FlyingScreen", "op": "==", "threshold": 1 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 32 },
+        { "field": "Airborne", "op": "==", "threshold": 2 }
+      ]
+    },
+    "Flying_Screen_OTG": {
+      "description": "In flying screen state while OTG (on the ground)",
+      "conditions": [
+        { "field": "FlyingScreen", "op": "==", "threshold": 1 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 32 },
+        { "field": "Airborne", "op": "==", "threshold": 3 }
+      ]
+    },
+    "FS_Install_1": {
+      "description": "Flying Screen Install level 1",
+      "conditions": [
+        { "field": "FSI_Points", "op": ">=", "threshold": 8 },
+        { "field": "FSI_Points", "op": "<=", "threshold": 9 }
+      ]
+    },
+    "FS_Install_2": {
+      "description": "Flying Screen Install level 2",
+      "conditions": [
+        { "field": "FSI_Points", "op": ">", "threshold": 9 }
+      ]
+    },
+    "NJ_Air": {
+      "description": "In normal jump air state",
+      "conditions": [
+        { "field": "Airborne", "op": "==", "threshold": 2 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 3 },
+        { "field": "SJ_Counter", "op": "==", "threshold": 0 }
+      ]
+    },
+    "NJ_Rising": {
+      "description": "In normal jump rising state",
+      "conditions": [
+        { "field": "Airborne", "op": "==", "threshold": 0 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 2 },
+        { "field": "SJ_Counter", "op": "==", "threshold": 0 }
+      ]
+    },
+    "OTG_Extra_Stun": {
+      "description": "Extra stun state while OTG",
+      "conditions": [
+        { "field": "Knockdown_State", "op": "==", "threshold": 23 },
+        { "field": "Airborne", "op": "==", "threshold": 3 }
+      ]
+    },
+    "OTG_Forced_Stun": {
+      "description": "Forced stun state while OTG",
+      "conditions": [
+        { "field": "Knockdown_State", "op": "==", "threshold": 32 },
+        { "field": "Airborne", "op": "==", "threshold": 3 }
+      ]
+    },
+    "OTG_Hit": {
+      "description": "Being hit while OTG",
+      "conditions": [
+        { "field": "Action_Flags", "op": "==", "threshold": 0 },
+        { "field": "Airborne", "op": "==", "threshold": 3 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 32 }
+      ]
+    },
+    "OTG_Roll_Invincible": {
+      "description": "Invincible during OTG roll",
+      "conditions": [
+        { "field": "Action_Flags", "op": "==", "threshold": 2 },
+        { "field": "Airborne", "op": "==", "threshold": 1 },
+        { "field": "Attack_Immune", "op": "==", "threshold": 1 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 17 }
+      ]
+    },
+    "OTG_Roll_Stunned": {
+      "description": "Stunned during OTG roll",
+      "conditions": [
+        { "field": "Action_Flags", "op": "==", "threshold": 1 },
+        { "field": "Airborne", "op": "==", "threshold": 3 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 32 }
+      ]
+    },
+    "ProxBlock_Air": {
+      "description": "Blocking in air",
+      "conditions": [
+        { "field": "Is_Prox_Block", "op": "==", "threshold": 6 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 19 }
+      ]
+    },
+    "ProxBlock_Ground": {
+      "description": "Blocking on ground",
+      "conditions": [
+        { "field": "Is_Prox_Block", "op": "==", "threshold": 5 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 18 }
+      ]
+    },
+    "Pushblock_Air": {
+      "description": "Pushblocking in air",
+      "conditions": [
+        { "field": "Block_Meter", "op": ">", "threshold": 0 },
+        { "field": "Animation_Timer_Main", "op": "<", "threshold": 28 },
+        { "field": "Is_Prox_Block", "op": "==", "threshold": 6 },
+        { "field": "Action_Flags", "op": "==", "threshold": 2 }
+      ]
+    },
+    "Pushblock_Ground": {
+      "description": "Pushblocking on ground",
+      "conditions": [
+        { "field": "Block_Meter", "op": ">", "threshold": 0 },
+        { "field": "Animation_Timer_Main", "op": "<", "threshold": 28 },
+        { "field": "Is_Prox_Block", "op": "==", "threshold": 5 },
+        { "field": "Action_Flags", "op": "==", "threshold": 3 }
+      ]
+    },
+    "Rising_Invincibility": {
+      "description": "Has rising invincibility",
+      "conditions": [
+        { "field": "Airborne", "op": "==", "threshold": 0 },
+        { "field": "Attack_Immune", "op": "==", "threshold": 1 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 17 }
+      ]
+    },
+    "SJ_Air": {
+      "description": "In super jump air state",
+      "conditions": [
+        { "field": "Airborne", "op": "==", "threshold": 2 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 14 },
+        { "field": "SJ_Counter", "op": "==", "threshold": 1 }
+      ]
+    },
+    "SJ_State": {
+      "description": "Super jump counter is active (renamed from the JS state 'SJ_Counter' to avoid colliding with the SJ_Counter field)",
+      "conditions": [
+        { "field": "SJ_Counter", "op": "==", "threshold": 2 }
+      ]
+    },
+    "Stun": {
+      "description": "Character is stunned",
+      "conditions": [
+        { "field": "Knockdown_State", "op": "==", "threshold": 32 },
+        { "field": "Is_Prox_Block", "op": "==", "threshold": 13 }
+      ]
+    },
+    "Tech_Hit": {
+      "description": "Teching a hit",
+      "conditions": [
+        { "field": "Knockdown_State", "op": "==", "threshold": 27 }
+      ]
+    },
+    "Thrown_Air": {
+      "description": "Being thrown in air",
+      "conditions": [
+        { "field": "Airborne", "op": "==", "threshold": 2 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 31 },
+        { "field": "Is_Prox_Block", "op": "==", "threshold": 16 }
+      ]
+    },
+    "Thrown_Ground": {
+      "description": "Being thrown on ground",
+      "conditions": [
+        { "field": "Airborne", "op": "==", "threshold": 0 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 31 },
+        { "field": "Is_Prox_Block", "op": "==", "threshold": 16 }
+      ]
+    },
+    "Undizzy": {
+      "description": "In undizzy state",
+      "conditions": [
+        { "field": "Attack_Immune", "op": "==", "threshold": 2 },
+        { "field": "Knockdown_State", "op": "==", "threshold": 32 },
+        { "field": "Is_Prox_Block", "op": "==", "threshold": 13 },
+        { "field": "Dizzy", "op": "==", "threshold": 80 },
+        { "field": "Dizzy_Reset_Timer", "op": "==", "threshold": 60 }
+      ]
+    }
+  }
+}

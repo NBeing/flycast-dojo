@@ -50,6 +50,8 @@
 namespace roll {
 namespace notepad {
 
+bool setAndAnalyze(const std::string& text, int& totalFrames, int& errorLines, std::string& back);
+
 //! One line's contribution: where it starts in frames, how many it adds, and
 //! whether it parsed. `error` empty == the line is clean.
 struct LineInfo
@@ -263,6 +265,22 @@ void registerNotepadPanel()
 	good three-frame line, one line that cannot parse, so the verdict has both a
 	gutter and a squiggle to be right about. Contract: surface_tour.h.
 */
+/*
+	INTENT MODULE ENTRY (intent_send.cpp, 2026-09-18): put `text` into the real editor,
+	analyze it the way the panel does, hand the editor's own text back. The round-trip
+	law the module asserts (parse(render(rows)) == rows) is checked by the caller.
+*/
+bool notepad::setAndAnalyze(const std::string& text, int& totalFrames, int& errorLines, std::string& back)
+{
+	TextEditor& ed = notepad::editor();
+	ed.SetText(text);
+	back = ed.GetText();
+	const notepad::Analysis a = notepad::analyze(back);
+	totalFrames = a.totalFrames;
+	errorLines = a.errorLines;
+	return true;
+}
+
 bool surfacetour::hooks::notepadAnalyze()
 {
 	TextEditor& ed = notepad::editor();

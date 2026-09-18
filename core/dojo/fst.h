@@ -126,6 +126,13 @@ void normalize(Sweep& s);
 */
 bool bakeEdit(const Movie& original, const Sweep& s, int n, Movie& out);
 
+// Arm and start a k0..k1 sweep at P = selLo over [selLo, selHi] from slot 0 - armFixedSweep's
+// body with the rows chosen by the caller (the Surface Tour's intent module sweeps the
+// placed combo window). Same ceremony, same generate()/runStart(); false with st.why set.
+bool armSweepOver(const char *who, u32 selLo, u32 selHi, int k0, int k1, int settle, std::string& why);
+// Variant n's peaks after a sweep; false when n did not run.
+bool resultOf(int n, u16& peak1, u16& peak2);
+
 /*
 	DRIVE THE SWEEP. Called once per frame from mainui, outside the ImGui frame
 	and outside the emulation loop - the same point gui_loadState() and
@@ -154,5 +161,6 @@ void registerFrameSkipTestPanel();
 //! True while the automated sweep is driving. `gui.cpp` gates the base-save
 //! re-link on this, so it is declared where both can see it.
 bool frameSkipTestRunning();
+
 
 }	// namespace roll

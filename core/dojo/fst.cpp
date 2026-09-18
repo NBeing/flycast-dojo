@@ -608,6 +608,42 @@ static bool armFixedSweep(const char *who)
 	return true;
 }
 
+bool armSweepOver(const char *who, u32 selLo, u32 selHi, int k0, int k1, int settle, std::string& why)
+{
+	config::SavestateSlot.set(0);
+	cfgSetVirtual("config", "Dreamcast.SavestateSlot", "0");
+	if (!slotExists(0)) { why = "slot 0 not visible"; return false; }
+	if (st.running) { why = "a sweep is already running"; return false; }
+	gui_pause_for_checkout();
+	dojo.play_match = false;
+	st.sweep = Sweep();
+	st.sweep.selLo = selLo;
+	st.sweep.selHi = selHi;
+	st.sweep.P = selLo;
+	st.sweep.k0 = k0;
+	st.sweep.k1 = k1;
+	st.sweep.fkOn = false;
+	normalize(st.sweep);
+	st.haveSel = true;
+	st.settle = settle;
+	st.fastForward = true;		// the panel's own "fast-forward the run" - a 1500-row window takes ~8 s instead of ~45 s (measured 2026-09-18)
+	NOTICE_LOG(NETWORK, "%s: armed selLo=%u selHi=%u P=%u k=%d..%d base=slot0@%u variants=%d settle=%d",
+			who, st.sweep.selLo, st.sweep.selHi, st.sweep.P, st.sweep.k0, st.sweep.k1, slotFrameOf(0), st.sweep.Ntot(), settle);
+	if (!generate()) { why = st.why; return false; }
+	if (!runStart()) { why = st.why; return false; }
+	return true;
+}
+
+bool resultOf(int n, u16& peak1, u16& peak2)
+{
+	const auto it = st.result.find(n);
+	if (it == st.result.end() || !it->second.ran)
+		return false;
+	peak1 = it->second.peak1;
+	peak2 = it->second.peak2;
+	return true;
+}
+
 static void fstProbe()
 {
 	static bool probed = false;
