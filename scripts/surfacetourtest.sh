@@ -381,7 +381,10 @@ if [ "$SELF" -eq 1 ]; then
 				# question here; the right one is that the TARGET itself was a FAIL, never a vacuity
 				# (a target filed VACUOUS would mean the arm made the verb a no-op instead of a
 				# wrong outcome - a different defect than the one restored).
-				G 4 "$(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* \"$MB\" .* -> VACUOUS" > /dev/null && echo 0 || echo 1)" fail \
+				# roll-clear is the one arm whose restored defect IS a no-op verb: an edit that bypasses
+			# the funnel leaves the undo history empty, so Undo does nothing - the target being filed
+			# VACUOUS is the defect showing, not the arm missing. `[MEASURED 2026-09-18]`
+			G 4 "$([ "$ARM" = roll-clear ] && echo 1 || { printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* \"$MB\" .* -> VACUOUS" > /dev/null && echo 0 || echo 1; })" fail \
 					"the target was judged a FAIL, not a vacuity (its gate line is not VACUOUS; $vacuous downstream vacuities are the skipped chain)" \
 					"the target '$MB' was filed VACUOUS - the arm made the verb a no-op, not a wrong outcome" < <(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* \"$MB\"" | sed "$STRIP")
 				G 5 "$([ "$leak" -eq 0 ] && echo 1 || echo 0)" fail "no UI step leaked (leak=0)" "leak=$leak - a UI step moved the machine or the movie" < <(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* -> LEAK" | sed "$STRIP") ;;

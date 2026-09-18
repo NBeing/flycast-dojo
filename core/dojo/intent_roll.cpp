@@ -311,7 +311,12 @@ void addSteps(std::vector<Step>& out)
 			if (!macroWindow(path, ms.macroLo, ms.macroHi)) { why("cannot read %s", path.c_str()); return false; }
 			// THE RESTORED DEFECT (macro-window): the file's first rows instead of its CLIP
 			// markers - the wrong combo placed, so the fighter must NOT land 19.
-			if (sabotaged("macro-window")) { const u32 n = ms.macroHi - ms.macroLo; ms.macroLo = 0; ms.macroHi = n; }
+			// THE RESTORED DEFECT (macro-window): a WRONG window of the file. `[MEASURED 2026-09-18]`
+			// "the first N rows instead of the markers" was decorative on a file with no markers (the
+			// whole file IS the window, n=0 placed the whole file); the walk-in without its buttons
+			// (rows 0..204 of dhalsim_3hit; on David's file, 204 rows of menu Start-mashing) is wrong
+			// on every fixture and cannot connect.
+			if (sabotaged("macro-window")) { ms.macroLo = 0; ms.macroHi = 204; }
 			ms.macroAt = intent::baseFrame() + 1;
 			std::string w;
 			const s64 first = macros::placeFileWindowAt(path, ms.macroLo, ms.macroHi, ms.macroAt, w);

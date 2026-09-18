@@ -295,13 +295,19 @@ void addSteps(std::vector<Step>& out)
 		s.act = [] {
 			why("");
 			u32 lo = intent::t0(), hi = intent::t0() + intent::comboLen() - 1;
+			int k0 = 0, k1 = 3;
 			if (sabotaged("fst-phase"))
-			{	// SABOTAGE: the arm - the sweep is fed rows 200 frames past the base, where nothing is placed
-				lo = intent::baseFrame() + 200; hi = lo + 10;
-				NOTICE_LOG(RENDERER, "SURFACE TOUR: SABOTAGE fst-phase - the sweep runs at %u..%u instead of the combo window", lo, hi);
+			{	// THE RESTORED DEFECT: the sweep's phase pin lands INSIDE the button burst with too many
+				// blanks. `[MEASURED 2026-09-18]` "rows 200 past the base where nothing is placed" was
+				// decorative on dhalsim_3hit (base+200 is inside its 204-row walk-in, which absorbs
+				// blanks); on David's file it only worked because base+200 was P2-idle. The burst is the
+				// window's last ~70 rows; 4..7 inserted blanks there stretch an 8-frame gap past the
+				// measured 7..9 tolerance and the chain drops (gap 10 -> 2 hits, the author's table).
+				lo = hi - 60; k0 = 4; k1 = 7;
+				NOTICE_LOG(RENDERER, "SURFACE TOUR: SABOTAGE fst-phase - the phase pin at %u..%u with k=%d..%d (inside the burst) instead of the window with k=0..3", lo, hi, k0, k1);
 			}
 			std::string w;
-			if (!fst::armSweepOver("TOUR INTENT FST", lo, hi, 0, 3, 60, w)) { why("arm refused: %s", w.c_str()); return false; }
+			if (!fst::armSweepOver("TOUR INTENT FST", lo, hi, k0, k1, 60, w)) { why("arm refused: %s", w.c_str()); return false; }
 			return true;
 		};
 		s.verify = [] {
