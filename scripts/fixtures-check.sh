@@ -171,7 +171,7 @@ elif cmd=='honest':                 # honest <recipe> <sheet> -> lines: "ok|FAIL
         print(('ok   ' if c else 'FAIL ')+what)
         if not c: bad.append(what)
     ok(d.get('schema')==1,'schema == 1')
-    for s in ('rom','vocabulary','base','charselect','candidate','phase','result','dhalsim_base'):
+    for s in ('rom','vocabulary','base','charselect','candidate','phase','result','dhalsim_base','combo'):
         ok(s in d,'section [%s] present'%s)
     # machine hashes are oracle::machineHash (XXH32, 8 upper hex, the hunt's %08X); the seeds' are seqHashMacro (16 lower hex)
     hexre=lambda v: isinstance(v,str) and len(v) in (8,16) and all(c in '0123456789abcdefABCDEF' for c in v)
@@ -181,7 +181,8 @@ elif cmd=='honest':                 # honest <recipe> <sheet> -> lines: "ok|FAIL
           'phase.value':lambda v:isinstance(v,int) and 0<=v<=3,
           'result.found':lambda v:v in ('yes','no'),'result.candidate':lambda v:isinstance(v,str) and v!='',
           'result.delay':lambda v:isinstance(v,int) and v>=0,'result.combo_peak':lambda v:isinstance(v,int) and v>=0,
-          'result.after_hash':hexre}
+          'result.after_hash':hexre,
+          'combo.combo_peak':lambda v:isinstance(v,int) and v>=1,'combo.after_hash':hexre,'combo.frames':lambda v:isinstance(v,int) and v>0}
     # `[2026-09-18]` a pin's "when" is its OWN section's measured_on: candidate.* are FILE facts
     # (F1 proves them without an emulator, dated by the reconversion), result.* / base.* / phase.*
     # are the hunt's. Before this, unmeasuring the harness-base result also reddened the file
@@ -190,8 +191,9 @@ elif cmd=='honest':                 # honest <recipe> <sheet> -> lines: "ok|FAIL
         s,key=k.split('.'); v=d[s].get(key)
         if v=='unmeasured': un.append(k); continue
         ok(shape(v),'%s is well-shaped (%r)'%(k,v))
-        when=d[s].get('measured_on', measured_on) if s=='candidate' else measured_on
-        ok(when!='','%s is pinned AND %s.measured_on says when (%r)'%(k,'candidate' if s=='candidate' else 'result',when))
+        own=s in ('candidate','combo')
+        when=d[s].get('measured_on', measured_on) if own else measured_on
+        ok(when!='','%s is pinned AND %s.measured_on says when (%r)'%(k,s if own else 'result',when))
     v=d['vocabulary']
     ok(v['combo_p1_a']==addr(sh,v['combo_field'],'P1_A'),'vocabulary.combo_p1_a == SPREADSHEET %s P1_A (%s)'%(v['combo_field'],v['combo_p1_a']))
     ok(v['combo_p2_a']==addr(sh,v['combo_field'],'P2_A'),'vocabulary.combo_p2_a == SPREADSHEET %s P2_A (%s)'%(v['combo_field'],v['combo_p2_a']))
@@ -315,7 +317,7 @@ echo "fixtures-check: RECIPE $RECIPE"
 f1ok=1; f1txt=""
 # the two seeds AND the candidate (a CANDIDATE by provenance - PS2-converted - pinned by the
 # same rule so the file the hunt ran cannot drift under the RECIPE's result).
-for pair in "base:boot_seed:boot_frames:boot_hash" "base:globe_seed:globe_frames:globe_hash" "candidate:file:frames:hash" "dhalsim_base:seed:seed_frames:seed_hash" "dhalsim_base:picks:picks_frames:picks_hash"; do
+for pair in "base:boot_seed:boot_frames:boot_hash" "base:globe_seed:globe_frames:globe_hash" "candidate:file:frames:hash" "dhalsim_base:seed:seed_frames:seed_hash" "dhalsim_base:picks:picks_frames:picks_hash" "combo:file:frames:hash"; do
 	IFS=: read -r sect fkey nkey hkey <<<"$pair"
 	rel="$(py get "$RECIPE" "$sect" "$fkey")"; f="$FIX/$rel"
 	[ "$fkey" = boot_seed ] && [ -n "$BOOT_OVERRIDE" ] && f="$BOOT_OVERRIDE"

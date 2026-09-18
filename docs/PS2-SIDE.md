@@ -278,3 +278,25 @@ session, not VS; the `_default` state was hand-saved 600+ rows after the last co
 which is the Training intro length); (2) the distance at his window start, readable on our
 side and settable by a walk. Both are authoring choices for the CSS tour's base, not
 sweeps. The 442 other movies inherit this verdict until one is shown to transfer.
+
+## 7. `[MEASURED 2026-09-18]` Our own combo on the Dhalsim base - the fixture the modules stand on
+
+§6's verdict left the studio's intent modules on a base that is true (Dhalsim on point) with an
+oracle that is thin (David's rows: 2 hits). The user chose to author a DC-native combo instead.
+Twelve hunt runs on `[dhalsim_base]` (5FC481A7 @ 2059, P2 a live Ryu, no inputs, distance 377):
+
+| rung | candidate | peak |
+|---|---|---|
+| no walk | LP / HP / LK / HK alone, 7 timings each | 0 - nothing reaches at 377 |
+| walk-in | walk right 120 + s.HP | 0 |
+| walk-in | walk right 200 / 220 / 240 + s.HP | 1 |
+| chain | walk 200, then LP > LK > HP > HK (2-frame presses), gap 4 / 6 / 10 between press starts | 2 |
+| chain | the same, gap **7 / 8 / 9** | **3** |
+| all phases | gap 8, phases 0..3 | **3 / 3 / 3 / 3** (after F47533EF B79A6986 816C0F49 89B07C85) |
+
+The gap window matches David's atlas for Dhalsim (`PL25.json`: LP s4/a2/r4, LK s4/a2/r6, FP s6/a6):
+a link ~8 frames after the previous press lands inside the chain window; 6 is inside recovery,
+10 is past it. `scripts/fixtures/mvc2/combos/dhalsim_3hit.txt` (276 rows, seqHashMacro
+aa67a6dcf4f9b903) is pinned in RECIPE `[combo]` with its peak and its four after-hashes;
+F1 checks the file, F2 the pins. A launcher / air chain would land more; three, phase-insensitive
+and 276 rows long, is the right size for a fixture the tour places forty times a day.

@@ -163,6 +163,24 @@ expect      = "Hulk"
 expect_id   = 13
 settle      = 45              # neutral frames after the globe seed before the first press (David's setup_match)
 
+[combo]
+# OUR OWN COMBO ON THE DHALSIM BASE - DC-native, authored 2026-09-18, the fixture the intent
+# modules stand on (the user chose this over rebasing onto David's 2-hit result: a base that
+# is TRUE and an oracle that is STRONG). Recipe: walk right 200 frames, then the magic-series
+# ground chain LP > LK > HP > HK, 2-frame presses, 8 frames between press starts. Measured by
+# the hunt (mode=all, d=0): peak 3 on all four phases (after F47533EF / B79A6986 / 816C0F49 /
+# 89B07C85); margin gaps 7 and 9 also 3, gaps 4/6/10 drop to 2. Twelve emulator runs.
+file        = "combos/dhalsim_3hit.txt"
+frames      = 276
+hash        = "aa67a6dcf4f9b903"   # seqHashMacro (F1's rule)
+md5         = "016c040aa014f4b874380bdcde224c17"
+window      = "0-276"
+base        = "dhalsim_base"       # [dhalsim_base].machine_hash 5FC481A7 @ 2059
+combo_peak  = 3
+after_hash  = "F47533EF"           # phase 0, d 0; the other phases: B79A6986 816C0F49 89B07C85
+phase_insensitive = true
+measured_on = "2026-09-18 combohunt (mode=all) on [dhalsim_base] 5FC481A7; gaps 7/8/9 -> 3, 4/6/10 -> 2"
+
 [candidate]
 # The hunt's first candidate: David's human-graded, marker-bracketed window. A
 # CANDIDATE until observed connecting on THIS build - PS2-converted inputs never
