@@ -1,0 +1,7 @@
+# The 444-movie reconversion (tools/reconvert_p2m.py, one command, ~32 MB) is NOT committed;
+# only the 24 human-graded (_OK) Dhalsim Revisited clips are, as fixtures.
+*
+!.gitignore
+!README.md
+!Dhalsim Revisited Replays/
+!Dhalsim Revisited Replays/**
