@@ -266,4 +266,15 @@ movie_after   = "F4B1F6CE"
 phase_peaks   = [42, 13, 2, 71]                    # the macro window, phases 0..3 (t0 = 15326 + phase)
 best_phase    = 3
 best_after    = "DB2262C9"
-measured_on   = "2026-09-20 combohunt (ComboHuntSlot=1, ComboHuntMovieRun=3000, ComboHuntRunS) on dojo7"
+# CORRELATED WITH HIS VIDEO (the user: "did you correlate the one with the video?"). The video's
+# piano roll gives movie frames per second; the counter in the video vs our per-frame combo series:
+#   frame 15750  video 2 HIT   ours 2       |  ~15951  18 HIT (Proton Cannon)  ours 18
+#   ~16358 LK+HK = TEAM HYPER, 40 HIT       |  ours 40 at 16370
+#   16419..16509 video 50 -> 67 -> 85 -> 94 |  ours 65..70 at 16441..16461, then DROP to 0 at 16544
+# = hit-for-hit through 40 and INTO the Team Hyper; the divergence is inside the hyper: his three
+# supers stack to 94, ours registers 70 and the string ends. Not timing (four phases measured), not
+# the fixture: a hyper-hit registration difference on this build - an EMULATOR finding, open.
+video         = "davidsoracle/flycast_Yx50OqmbyX.mp4 (untracked, 27 MB): 1391 frames, ends on 94 HIT then MONSTER"
+video_peak    = 94
+diverges_at   = 16461                              # our 70th and last hit; his counter keeps climbing
+measured_on   = "2026-09-20 combohunt (ComboHuntSlot=1, ComboHuntMovieRun=3000, ComboHuntRunS) on dojo7; video correlated the same day"
