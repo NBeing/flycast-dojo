@@ -238,3 +238,32 @@ delay       = 0
 combo_peak  = 3
 after_hash  = "F47533EF"
 measured_on = "2026-09-18 combohunt (mode=all) on [dhalsim_base] 5FC481A7 - the [combo] author's run; David's window: peak 2 (finding)"
+
+[david_ironman]
+# `[MEASURED 2026-09-20]` THE FIRST DAVID-NATIVE FIXTURE: his flycast-rr clip 2026-09-20T19_54_03Z
+# (zip + video, "state 1 is where the macro should start"), tag ironman98: Iron Man/Storm/Thanos
+# vs Storm/Magneto/Amingo, four V48 states (0 @ 13364 = macroBase, 1 @ 15325, 2 @ 15703,
+# 3 @ 16215), his macro (41787 rows, his newer dialect: blank = neutral, both players - the
+# dummy is SCRIPTED), the .flyr (55150 rows), the video (an 18-hit Proton Cannon at ~15962).
+# His V48 states LOAD on this V49 build (the verify probe reports the skew; the machine
+# advances; the cast reads 51/42/54 vs 42/44/21 = the video's health bars).
+# Measured through combohunt on OUR build:
+#   the recording's own rows from state 1/2/3 (mode=movie, run 3000-4000): peak 70 / 70 / 70
+#   the macro rows 1961..4500 at state 1+1+phase: phase 0 42, phase 1 13, phase 2 2, phase 3 71
+#   the same rows misaligned from slot 0: 29 / 8 / 27 / 3
+# = David's "connects 1 in 4" law, measured for the first time in this tree; his keystrokes
+# WITH their conditions (the state) land a 70-hit combo here. The tag says 98: not reached in
+# this movie from any state (state 3 sits at combo=26 mid-string and still tops at 70) - a
+# later take, or a counter difference; recorded, not claimed.
+clip          = "david/2026-09-20T19_54_03Z"     # MD5SUMS beside it pins every file; states/.flyr gitignored (source: the zip)
+tags          = "ironman98"
+macro_base    = 13364
+state_frames  = [13364, 15325, 15703, 16215]
+combo_state   = 1
+combo_rows    = "1961-4500"                        # macro rows, relative to macro_base
+movie_peak    = 70                                 # the recording replayed from state 1, 3000 frames
+movie_after   = "F4B1F6CE"
+phase_peaks   = [42, 13, 2, 71]                    # the macro window, phases 0..3 (t0 = 15326 + phase)
+best_phase    = 3
+best_after    = "DB2262C9"
+measured_on   = "2026-09-20 combohunt (ComboHuntSlot=1, ComboHuntMovieRun=3000, ComboHuntRunS) on dojo7"

@@ -1,0 +1,9 @@
+# David's 2026-09-20 clip: the states (4 x 9.8 MB, V48) and the .flyr (1.5 MB) are NOT committed -
+# the zip is the source (~/Downloads/2026-09-20T19_54_03Z.zip, or David); the RECIPE [david_ironman]
+# pins every file by md5 and the outcomes by hash. The macro, clip.json and sidecars are small and in.
+*/*.state
+*/*.flyr
+*/*.state.png
+*/*.state.wave
+*/audio.env
+*/skip.map

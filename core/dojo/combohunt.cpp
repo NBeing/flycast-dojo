@@ -106,10 +106,12 @@ void setSlot(int slot)
 }
 
 // The FST's bake ceremony: reload slot 0 around the user's slot.
+static int baseSlot() { return cfgLoadInt("dojo", "ComboHuntSlot", 0); }
+
 bool reloadBase()
 {
 	st.userSlot = (int)config::SavestateSlot;
-	setSlot(0);
+	setSlot(baseSlot());
 	gui_loadState();
 	setSlot(st.userSlot);
 	return gui_state == GuiState::Paused;
@@ -226,7 +228,7 @@ void buildCandidates()
 		Candidate c;
 		c.cls = "movie";
 		c.name = "movie";
-		c.run = 240;
+		c.run = (u32)cfgLoadInt("dojo", "ComboHuntMovieRun", 240);	// the recording's OWN rows from the base: how far to run them (a full combo needs ~3000; David's 2026-09-20 clip)
 		push(c);
 	}
 	if (every || st.mode == "macro")
@@ -332,7 +334,7 @@ bool bakeCandidate(const Candidate& c, fst::Movie& edited)
 bool ready()
 {
 	if (dojo.frame_number.load() < 120) { st.why = "frame < 120"; return false; }
-	if (!slotExists(0)) { st.why = "no slot 0"; return false; }
+	if (!slotExists(baseSlot())) { st.why = "no slot " + std::to_string(baseSlot()); return false; }
 	if (hostfs::savestateFolderOverride.empty()) { st.why = "no clip folder bound"; return false; }
 	return true;
 }
@@ -466,8 +468,8 @@ void tick()
 		u16 c1 = 0, c2 = 0;
 		tas_mvc2::peekCombo(c1, c2);
 		const float dist = readFloat(tas_mvc2::addrOf("X_Position_From_Enemy", 0, 0));
-		NOTICE_LOG(NETWORK, "COMBO HUNT: base slot0@%u hash=%08X p1=%s p2=%s dist=%.0f skip=%u/%u combo=%u/%u movie=%u rows mode=%s",
-				st.baseFrame, st.baseHash, pointChar(0).c_str(), pointChar(1).c_str(), dist,
+		NOTICE_LOG(NETWORK, "COMBO HUNT: base slot%d@%u hash=%08X p1=%s p2=%s dist=%.0f skip=%u/%u combo=%u/%u movie=%u rows mode=%s",
+				baseSlot(), 				st.baseFrame, st.baseHash, pointChar(0).c_str(), pointChar(1).c_str(), dist,
 				(unsigned)count, (unsigned)rate, (unsigned)c1, (unsigned)c2, (u32)st.original.size(), st.mode.c_str());
 		if (rate == 0)
 			NOTICE_LOG(NETWORK, "COMBO HUNT: the skip system reads 0/0 at the base - this base is NOT in a match; no candidate can connect here");
@@ -539,8 +541,8 @@ void tick()
 			else if (now - st.at > 2.0)
 				finish("the run did not start");
 		}
-		else if (now - st.at > 180.0)
-			finish("timeout");
+		else if (now - st.at > (double)cfgLoadInt("dojo", "ComboHuntRunS", 180))
+			finish("timeout");	// dojo:ComboHuntRunS: a 6000-row window under fast-forward needs ~5 min (David's 2026-09-20 clip)
 		return;
 	}
 	case 4:		// judge while stopped
