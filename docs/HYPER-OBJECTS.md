@@ -1,0 +1,70 @@
+# The Team Hyper that lands 94 on David's build and 70 on ours - located to a frame
+
+`[MEASURED 2026-09-20]` on David's own clip (RECIPE `[david_ironman]`: Iron Man/Storm/Thanos vs
+Storm/Magneto/Amingo, his V48 states loading on our V49 build), correlated with his video.
+
+## The correlation (his video's counter vs our per-frame combo series from his state 1)
+
+| movie frame | David's video | ours |
+|---|---|---|
+| 15750 | 2 HIT | 2 |
+| ~15951 | 18 HIT (Proton Cannon) | 18 |
+| 16358 | LK+HK -> TEAM HYPER, 40 HIT | 40 at 16370 |
+| 16395 (18.6 s) | 83 HIT, Storm still firing, sparks on Amingo | 53 |
+| 16419 (19.0 s) | 89 | 59; Storm leaves state 29 -> 3 (anim 142, her exit) |
+| 16443 (19.4 s) | **94 HIT -> MONSTER** | 65..70 at 16441..16461, then nothing; drop at 16544 |
+
+Hit-for-hit through 40, then his hyper adds ~54 hits in 90 frames and ours adds 17.
+
+## What the RAM says (tools/trace/*.sh, ctlserver reads per frame)
+
+Storm (P1 slot B) runs her Hail Storm loop normally: `Animation_Value` cycles 87..90,
+`Action_Flags` counts 1 -> 2 -> 3 -> 4 as her timer counts down each phase, and while the
+shards land the combo climbs ~1 hit per 2-3 frames (34 -> 58 over 16344..16409). Her super is
+not cut short by a timer.
+
+The live OBJECT list is (`0x2C287DDE` = P1's object count, `0x2C287AEC` the pointer list; David's
+`enumHitObjects` decode, HITBOX_OVERLAY.md):
+
+```
+frame  combo  p1objs      frame  combo  p1objs
+16344    30      3        16408    56     63
+16354    33      7        16410    58     60
+16383    45      9        16411    58     62
+16389    48     25        16412    58      3   <- EMPTY
+16393    50     36        16414    58     59
+16400    53     48        16415    58      3   <- EMPTY
+16405    55     59        16416    59     60
+16407    56     62        16417    59     59
+```
+
+From ~16410 the shard list reads EMPTY on alternate frames (62 / 3 / 59 / 3 / 60 ...) and the hit
+rate collapses at the same moment (58, 58, 58, 59, 59 - one hit in ten frames where there were
+five). At 16419 Storm exits. Thanos's Gauntlet (slot C, state 29 / attack 61) stays out to 16544
+landing nothing; Amingo recovers (state 32 -> 23) and the string ends at 70.
+
+`dump_objs.sh` at 16400 vs 16412: 48 shard objects (attack 90/95, spread over X/Y, facing 1) vs
+exactly the three characters. The shards are not destroyed one by one; the list alternates
+between populated and empty.
+
+## What it is not
+
+- Not timing: the movie replayed from state 1/2/3 is 70 each; the macro over four phases is
+  42/13/2/71 (David's 1-in-4, measured) - a phase changes WHICH hits land, never past 71.
+- Not the fixture: it is his state and his keystrokes, and the cast/health/stage match his video.
+- Not Storm's super ending early: her loop and flags run; the shards stop being SEEN.
+
+## What it probably is, and how to settle it
+
+An object list that is rebuilt or double-buffered per game tick, read on the wrong half on
+alternate frames from a point ~50 frames into a 60-object hyper - on our build only. Candidates:
+(a) the object-pool word restored wrong from a V48 state on a V49 build (the layouts differ by
+8 bytes; the verify probe reports the skew but cannot say which field); (b) an object-table
+capacity or allocator difference in the emulated game state (48/63 objects is far past a normal
+match's ~10); (c) the MvC2 skip cadence (rate 4) vs a per-frame rebuild - a frame-parity effect.
+
+Settle (a) first, cheaply: author the same Team Hyper on a V49-native base (the CSS tour can
+pick Storm; a Hail Storm from a fresh match) and trace the object count - if the list still
+alternates, the state's version is not the cause. Then bisect on the emulator side with
+`tools/trace/trace_objcount.sh 1 16340 16425` as the oracle (green = the count never reads 3 while
+Storm is in state 29).

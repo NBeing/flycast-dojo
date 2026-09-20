@@ -139,7 +139,7 @@ boot() {
 	[ -e "/tmp/.X11-unix/X$DN" ] || { kill "$XPID" 2>/dev/null; WHY="Xvfb did not come up on $D"; return 1; }
 	local armcfg=(); [ -n "$ARM" ] && armcfg=(-config "dojo:TourArm=$ARM")
 	XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
-		-config dojo:UiIni=no -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
+		-config dojo:UiIni=no -config audio:backend=null -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
 		-config dojo:AutoLoadNetState=no -config dojo:AutoLoadTrainingNetState=no -config dojo:Transmitting=no -config dojo:Receiving=no \
 		-config dojo:ControlServer=yes -config "dojo:CtlDir=$ctl" \
 		-config window:width=900 -config window:height=700 -config window:fullscreen=no \

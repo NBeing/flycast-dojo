@@ -163,7 +163,7 @@ fi
 MODE=yes; [ "$SELF" -eq 1 ] && MODE="sabotage:$ARM"
 CONSOLE=(-config dojo:NativeConsole=no); [ "$WATCH" -eq 1 ] && CONSOLE=()
 XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
-	-config dojo:UiIni=no "${CONSOLE[@]}" -config dojo:StartupPrompt=no \
+	-config dojo:UiIni=no -config audio:backend=null "${CONSOLE[@]}" -config dojo:StartupPrompt=no \
 	-config dojo:Replay=yes -config "dojo:ReplayFilename=$CLIPDIR/clip.flyr" \
 	-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no \
 	-config dojo:Transmitting=no -config dojo:Receiving=no \

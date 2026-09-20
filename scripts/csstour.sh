@@ -280,7 +280,7 @@ CONSOLE=(-config dojo:NativeConsole=no); [ "$WATCH" -eq 1 ] && CONSOLE=()
 # KEEPS READ-WRITE (a Record-Movie handoff drops to WRITE and the neutral pad clobbers
 # every row after it - gui.cpp's handoff stop), Training so a step lands frame-exact.
 XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
-	-config dojo:UiIni=no "${CONSOLE[@]}" -config dojo:StartupPrompt=no \
+	-config dojo:UiIni=no -config audio:backend=null "${CONSOLE[@]}" -config dojo:StartupPrompt=no \
 	-config dojo:Training=yes -config dojo:RecordMatches=yes -config dojo:MacroMode=yes -config dojo:Replay=no \
 	-config dojo:AutoLoadNetState=no -config dojo:AutoLoadTrainingNetState=no -config dojo:Transmitting=no -config dojo:Receiving=no \
 	-config "dojo:OnEnterFile=$SEED" -config "dojo:OnEnterHandoff=$HANDOFF" \

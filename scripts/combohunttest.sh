@@ -128,7 +128,7 @@ nohup Xvfb "$D" -screen 0 1280x900x24 >"$OUT/xvfb.log" 2>&1 & XPID=$!; sleep 2
 # class only (the RESULT then names THIS candidate, not the movie's own tail).
 # shellcheck disable=SC2086
 XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
-	-config dojo:UiIni=no -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
+	-config dojo:UiIni=no -config audio:backend=null -config dojo:NativeConsole=no -config dojo:StartupPrompt=no \
 	-config dojo:Replay=yes -config "dojo:ReplayFilename=$CLIPDIR/clip.flyr" \
 	-config dojo:AutoSeekState=0 -config dojo:AutoLoadNetState=no \
 	-config dojo:Transmitting=no -config dojo:Receiving=no \
