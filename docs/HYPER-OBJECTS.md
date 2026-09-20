@@ -68,3 +68,44 @@ pick Storm; a Hail Storm from a fresh match) and trace the object count - if the
 alternates, the state's version is not the cause. Then bisect on the emulator side with
 `tools/trace/trace_objcount.sh 1 16340 16425` as the oracle (green = the count never reads 3 while
 Storm is in state 29).
+
+## `[MEASURED 2026-09-20, later]` Closed to a 195-frame window of pure emulation
+
+The user: "David's TAS studio does nothing sub-frame. If you have the inputs parsed
+correctly and a save state, what could go wrong? Is this a dynarec issue?" - and: "can't you
+take a save state every frame and see if they are exactly the same?" Done, both ways.
+
+**Per-frame hashes from his state 1** (`reprotest --sweep` shape, 1300 frames, twice per core):
+the dynarec is deterministic against itself (identical), the interpreter against itself
+(identical), and the two cores diverge at frame **15331** - six frames after the load, before
+any hit, with identical input digests. So the cores differ, but which one is David's?
+
+**Fingerprints against HIS states** (`tools/trace/fingerprint.sh`: 24 game bytes - every
+character's state/attack/animation/health/position, both meters, both object counts, the timer,
+the skip rate/counter, the combo byte):
+
+| at frame | his state, loaded directly | our replay from his state 1 (dynarec) | (interpreter) |
+|---|---|---|---|
+| 15703 (state 2) | `14 469 2 … 71 130 … 2 5 58 1 1 59 4 2 0` | **identical, every byte** | anim 468/72, timer 61, skip counter 3 - one game tick behind |
+| 16215 (state 3) | `20 14 616 2 … 630 44 … 4 5 126 1 1 54 4 2 26` | **identical, every byte** | - |
+
+The dynarec reproduces David's machine byte-for-byte through 890 frames of his combo, into
+the Team Hyper, at his last checkpoint. The interpreter mis-counts frameskip ticks (David's
+hunch, true of the interpreter) - which is why it lands 2 hits - but it is not the 94-vs-70.
+
+**From his state 3** (provably his machine), our dynarec, `tools/trace/objtrace.sh 3 16395 16420`:
+```
+16408 56 63   16410 58 60   16411 58 62   16412 58 3   16413 58 3   16414 58 59
+16415 58 3    16416 59 60   16417 59 59   16418 59 3   16419 59 59  16420 59 3
+```
+The same alternation, 195 frames after an identical machine, under identical inputs (the
+four-button THC chord `ZXVB` at 16350..16357 is in the .flyr and the macro alike). Not the
+state, not the inputs, not the phase (the empty frames fall on skip counters 1,4,2,3,1).
+
+**Verdict: an emulation defect in this build on the code path a ~60-object super takes.** The
+oracle is exact and cheap: `objtrace.sh 3 16395 16420` is green iff `p1objs` never reads 3
+while Storm's state is 29. Candidates, in order: the dynarec's block cache / SMC detection
+(MvC2's sprite engine writes near code per object); an SH4 load-width or sign path on the
+object pointer list past ~48 entries; a flycast-dojo change since the dojo-7 fork point in
+core/hw/sh4 or rec-x64. Bisect over those with the oracle; a run that stays green through
+16420 while the combo keeps climbing past 70 is the fix.
