@@ -51,7 +51,7 @@
 namespace roll {
 
 namespace rollpanel { s64 blankRange(u32 lo, u32 hi); s64 strokeColumn(u32 lo, u32 hi, int player, const char *label, int gap); s64 brushStroke(u32 lo, u32 hi, int player, const char *labels, int gap); s64 tapCell(u32 f, int player, const char *label);
-                      void gesture(u32 lo, u32 hi, int player, const char *labels, double ms); void gestureEnd(); }
+                      void gesture(u32 lo, u32 hi, int player, const char *labels, double ms); void gestureEnd(); void gestureFollow(u32 row); }
 
 namespace surfacetour {
 
@@ -74,6 +74,8 @@ struct ModState
 	u16 want = 0;
 	u16 meterAtBase = 0;
 	int gestureMs = 0;			// dojo:HandGestureMs - the visible drag's travel time (0 = the tour's arm time, no override)
+	int tapeSlot = -1;			// dojo:HandTapeSlot - the combo's start on the tape, replayed whole at the end (-1 = skip)
+	u32 tapeFrame = 0;
 	std::string why;
 } ms;
 
@@ -85,6 +87,7 @@ bool loadStrokes()
 	ms.stop = (u32)cfgLoadInt("dojo", "HandStop", 0);
 	ms.want = (u16)cfgLoadInt("dojo", "HandPeak", 0);
 	ms.gestureMs = cfgLoadInt("dojo", "HandGestureMs", 0);
+	ms.tapeSlot = cfgLoadInt("dojo", "HandTapeSlot", -1);
 	if (path.empty()) { ms.why = "dojo:HandStrokes not set"; return false; }
 	std::ifstream in(path);
 	if (!in.good()) { ms.why = "cannot read " + path; return false; }
@@ -264,11 +267,27 @@ void addSteps(std::vector<Step>& out)
 				const Stroke& s = ms.strokes[i];
 				const std::vector<const Column *> cs = columnsOf(s.label);
 				if (cs.empty()) { why("no column %s in this profile", s.label.c_str()); return false; }
-				if (!rowsHold(s.lo, s.hi, cs, true)) { why("%s is not held on every row %u..%u", s.label.c_str(), s.lo, s.hi); return false; }
+				if (!rowsHold(s.lo, s.hi, cs, true)) { rollpanel::gestureEnd(); why("%s is not held on every row %u..%u", s.label.c_str(), s.lo, s.hi); return false; }
+				// THE FRAME ADVANCES WITH THE HAND (the user: "as you make the frames with the hand etc,
+				// you need to increment the frame you're inputting"): the stroke is written, then the
+				// game steps one frame per tick up to its last row - through any gap before it - with
+				// the pointer riding the playhead, the way a human draws a hold and then advances
+				// through it watching. READ-WRITE for the steps, so a released pad preserves the rows.
+				const u32 fr = dojo.frame_number.load();
+				if (fr < s.hi)
+				{
+					if (gui_state != GuiState::Paused) return false;		// the previous frame is still running
+					intent::armRoll();
+					rollpanel::gestureFollow(fr + 1);
+					gui_step_frames(1);
+					return false;
+				}
+				if (gui_state != GuiState::Paused) return false;		// the last frame settles before the gate reads the machine
 				rollpanel::gestureEnd();
-				why("%s held on %u..%u", s.label.c_str(), s.lo, s.hi);
+				why("%s held on %u..%u; the game stepped to %u with it", s.label.c_str(), s.lo, s.hi, fr);
 				return true;
 			}, i == 0);
+		sst.maxWaitMs = 60000;		// a 64-frame gap plus a 42-row hold, one frame per tick
 		// THE VISIBLE HAND: from begin the roll centres on the rows and a large pointer travels the
 		// stroke over the arm time (dojo:HandGestureMs when set - the --watch run's 1500 ms); the
 		// act at the end of that travel is the commit, and the cells fill under the pointer.
@@ -280,8 +299,28 @@ void addSteps(std::vector<Step>& out)
 		if (ms.gestureMs > 0) sst.armMs = ms.gestureMs;
 		out.push_back(sst);
 	}
+	out.push_back(reloadStep("hand intent: reload BASE (the hand's rows stay)"));
 	out.push_back(runStep("hand intent: run - the hand's combo lands (the video's number)",
 		[] { return ms.want; }, "the fighters did the thing the hand wrote"));
+	// THE TAPE, WHOLE (the user: "replay the whole combo from the tape manually after you're done"):
+	// load the combo's start (slot 1 on David's clip) and play the movie through to the stop in READ -
+	// the whole string, the recording's rows up to BASE and the hand's after it - the meter reads 94.
+	if (ms.tapeSlot >= 0)
+	{
+		Step l;
+		l.name = "hand intent: load the combo's start on the tape";
+		l.kind = Kind::Record;
+		l.maxWaitMs = 10000;
+		l.act = [] { why(""); if (!intent::loadSlot(ms.tapeSlot)) { why("%s", intent::lastWhy()); return false; } return true; };
+		l.verify = [] {
+			if (!intent::settled()) return false;
+			ms.tapeFrame = dojo.frame_number.load();
+			why("slot %d @%u, hash=%08X", ms.tapeSlot, ms.tapeFrame, intent::machineHash());
+			return ms.tapeFrame < intent::baseFrame();
+		};
+		out.push_back(l);
+		out.push_back(runStep("hand intent: replay the whole combo from the tape", [] { return ms.want; }, "the whole string, from the tape"));
+	}
 	out.push_back(click("hand intent: close the piano roll", [] { return injectKey(KEY_PIANOROLL); }, [] { return panelIs("pianoroll", false); }));
 	{
 		Step s;
@@ -310,9 +349,13 @@ const ExpectDecl EXPECTS[] = {
 	{ "hand intent: begin",                 2, 0, false, "any" },
 	{ "hand intent: blank",                 0, 1, false, "movie-mover" },
 	{ "hand intent: reload",                1, 0, true,  "mover/converge" },
-	{ "hand intent: drag",                  0, 1, false, "movie-mover" },
-	{ "hand intent: brush",                 0, 1, false, "movie-mover" },
-	{ "hand intent: tap",                   0, 1, false, "movie-mover" },
+	// a stroke writes the movie AND steps the game through its rows (machine "any": a stroke whose
+	// rows the playhead already passed - LP inside the v hold - writes without stepping)
+	{ "hand intent: drag",                  2, 1, false, "movie-mover (+steps)" },
+	{ "hand intent: brush",                 2, 1, false, "movie-mover (+steps)" },
+	{ "hand intent: tap",                   2, 1, false, "movie-mover (+steps)" },
+	{ "hand intent: load the combo",        1, 0, false, "mover" },
+	{ "hand intent: replay the whole",      1, 2, false, "mover" },
 	{ "hand intent: close",                 0, 0, false, "ui" },
 	{ "hand intent: end",                   2, 1, true,  "identity" },
 };

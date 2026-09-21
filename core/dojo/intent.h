@@ -55,6 +55,7 @@ u32  t0();							//!< first row of the placed combo (baseFrame + 1 + phase + d)
 u32  stopFrame();					//!< t0 + comboLen + 60 run-out
 
 bool runToStop();					//!< step to stopFrame() under fast-forward; poll settled()
+void armRoll();						//!< READ-WRITE for a step through authored rows (the run does this itself)
 bool runToFrame(u32 target);		//!< the same run to an explicit frame (the hand module's authored segment); poll settled()
 int  baseSlot();					//!< dojo:IntentSlot - the slot BASE lives in (0 = the harness base)
 u16  peak(int player);				//!< Combo_Meter_Value PEAK since the last runToStop (0 = P1)
@@ -62,6 +63,7 @@ u16  peak(int player);				//!< Combo_Meter_Value PEAK since the last runToStop (
 //! combo_peak). `[2026-09-18]` three TUs carried a literal 19 - the harness base's number - and the number
 //! sat in a dozen step NAMES the arm tables match on; a fixture change should be one config, not a rewrite.
 u16  pinnedPeak();
+bool loadSlot(int slot);			//!< gui_loadState(slot) around the user's slot (the tape replay's start); poll settled()
 bool reloadBase();					//!< gui_loadState(0) around the user's slot; poll settled()
 bool end();							//!< restore the snapshot roll through the funnel + reloadBase(); poll settled()
 const char *lastWhy();

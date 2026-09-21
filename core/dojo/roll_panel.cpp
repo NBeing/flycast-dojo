@@ -171,6 +171,7 @@ static struct Gesture
 	// cell rects recorded while the table draws (screen space): the anchor and the last cell
 	ImVec2 a0, a1, b0, b1;
 	bool haveA = false, haveB = false;
+	bool following = false; u32 followRow = 0;	// the pointer rides the playhead as the game steps through the stroke
 } g_gesture;
 
 void gesture(u32 lo, u32 hi, int player, const char *labels, double ms)
@@ -191,6 +192,8 @@ void gesture(u32 lo, u32 hi, int player, const char *labels, double ms)
 	}
 }
 void gestureEnd() { g_gesture.active = false; }
+//! The game is stepping through the stroke: the pointer sits on `row` and the view follows it.
+void gestureFollow(u32 row) { g_gesture.following = true; g_gesture.followRow = row; }
 bool gestureActive() { return g_gesture.active; }
 //! The row the roll centres on: the gesture's midpoint while one is shown, else the playhead.
 static u32 viewCentre(u32 playhead) { return g_gesture.active ? (g_gesture.lo + g_gesture.hi) / 2 : playhead; }
@@ -1150,8 +1153,8 @@ static void draw()
 		// area, so the drag runs downward in view. `[MEASURED 2026-09-20]` centring the drawn
 		// span was not enough - the panel shows ~17 of the 48 rows and the anchor sat below the
 		// fold, where its cell rect was never recorded and no pointer was drawn.
-		if (rollpanel::g_gesture.active && f == rollpanel::g_gesture.lo)
-			ImGui::SetScrollHereY(0.2f);
+		if (rollpanel::g_gesture.active && f == (rollpanel::g_gesture.following ? rollpanel::g_gesture.followRow : rollpanel::g_gesture.lo))
+			ImGui::SetScrollHereY(rollpanel::g_gesture.following ? 0.5f : 0.2f);
 		if (selection().has(f))
 			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
 					ImGui::GetColorU32(tasCol(TAS_P1_COL, 0.22f)));
@@ -1250,7 +1253,9 @@ static void draw()
 		rollpanel::Gesture& g = rollpanel::g_gesture;
 		if (!g.haveB) { g.b0 = g.a0; g.b1 = g.a1; }
 		const double el = (os_GetSeconds() - g.t0) * 1000.0;
-		const float prog = g.ms <= 0 ? 1.f : (float)std::min(1.0, std::max(0.0, el / g.ms));
+		float prog = g.ms <= 0 ? 1.f : (float)std::min(1.0, std::max(0.0, el / g.ms));
+		if (g.following)	// the drag is done; the pointer now marks the frame the game is on
+			prog = g.hi > g.lo ? std::min(1.f, std::max(0.f, (float)(((double)g.followRow - g.lo) / (double)(g.hi - g.lo)))) : 1.f;
 		ImDrawList *dl = ImGui::GetForegroundDrawList();
 		const float rowH = g.a1.y - g.a0.y;
 		const ImVec2 A((g.a0.x + g.a1.x) * 0.5f, (g.a0.y + g.a1.y) * 0.5f);
@@ -1271,7 +1276,7 @@ static void draw()
 		dl->AddConvexPolyFilled(pts, 7, IM_COL32(255, 255, 255, 235));
 		dl->AddPolyline(pts, 7, IM_COL32(0, 0, 0, 255), ImDrawFlags_Closed, 3.f);
 		// the press: a pulsing ring on the anchor while the drag begins
-		if (prog < 1.f)
+		if (prog < 1.f && !g.following)
 			dl->AddCircle(A, rowH * (0.8f + 0.4f * (float)std::fmod(el / 400.0, 1.0)), ImGui::GetColorU32(tasCol(TAS_P2_COL, 0.9f)), 0, 3.f);
 		g.haveA = g.haveB = false;		// re-recorded next frame (the table may scroll)
 	}
@@ -1290,7 +1295,9 @@ static void draw()
 	// already inconsistent - rows drawn AFTER the clicked one saw the new
 	// selection and rows before it did not - so this trades half a frame of
 	// disagreement for a whole frame of honest lag.
-	if (hoverAny)
+	// While the tour's hand is on the roll the real mouse is ignored: the view scrolls under a
+	// stationary cursor, so a held button would become a drag across every row that passed.
+	if (hoverAny && !rollpanel::g_gesture.active)
 	{
 		Selection& sel = selection();
 		const bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);

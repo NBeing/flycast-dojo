@@ -36,6 +36,7 @@ struct State
 	int userSlot = 0;
 	u32 runTarget = 0;			// the stop frame a runToStop() armed; 0 = none
 	bool running = false;
+	bool readRun = false;		// armRoll() put the machine in READ for a step/run; settled() restores WRITE
 	// the combo window
 	bool comboTried = false, comboOk = false;
 	std::string comboName;
@@ -217,6 +218,7 @@ bool settled()
 	}
 	if (!oracle::machineStopped())
 		return false;
+	if (st.readRun) { dojo.play_match = false; st.readRun = false; }	// WRITE-authoring again, paused
 	if (!st.factsRead)
 	{
 		st.baseFrame = dojo.frame_number.load();
@@ -276,14 +278,29 @@ bool clearCombo()
 	return install(edited, "intent: clear combo");
 }
 
+// READ-WRITE: the roll drives the guest and a released pad preserves every cell (overdub). The
+// hand module arms this before stepping through a stroke it just wrote - in WRITE the step would
+// record the neutral pad over it (dojo.h, macro_armed).
+void armRoll()
+{
+	// READ, not READ-WRITE `[2026-09-21]`: the user watched the hand tour on the real display and
+	// "it bugged out on multiple commands". In READ-WRITE a live pad signal STOMPS the cell it lands
+	// on - a drifting stick or a held key on the real machine rewrites authored rows as the game
+	// steps through them; headless there is no pad, so it never showed. READ is the tape driving
+	// the guest and nothing else writing (the replay path). Authoring stays WRITE while paused;
+	// settled() puts WRITE back when the stepping or the run is over.
+	dojo.stale_tail_from = ~0u;
+	dojo.play_match = true;
+	st.readRun = true;
+}
+
 bool runToFrame(u32 target)
 {
 	if (gui_state != GuiState::Paused) { st.why = "not paused before the run"; return false; }
 	// READ-WRITE for the run: the roll drives the guest (install()'s arm). `[MEASURED 2026-09-20]`
 	// without it the hand tour's run recorded the neutral pad over 26 authored strokes and read
 	// the meter at BASE - WRITE clobbers every frame it passes (dojo.h, macro_armed).
-	dojo.stale_tail_from = ~0u;
-	dojo.macro_armed = true;
+	armRoll();
 	tas_mvc2::comboPeakReset();
 	tas_mvc2::comboSeriesReset();
 	st.runTarget = target;
@@ -311,6 +328,16 @@ bool runToStop()
 
 u16 peak(int player) { return tas_mvc2::comboPeak(player); }
 u16 pinnedPeak() { return (u16)cfgLoadInt("dojo", "IntentPeak", 19); }
+
+bool loadSlot(int slot)
+{
+	st.userSlot = (int)config::SavestateSlot;
+	setSlot(slot);
+	gui_loadState();
+	setSlot(st.userSlot);
+	if (gui_state != GuiState::Paused) { st.why = "the slot did not load"; return false; }
+	return true;
+}
 
 bool reloadBase()
 {

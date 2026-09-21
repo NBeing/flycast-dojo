@@ -89,3 +89,30 @@ really fast speed" - and "make the hand gestures more obvious maybe with a large
 
 Captured on the sandbox display mid-stroke (four steps): the pointer and band on the roll, the game
 paused beside it. `scripts/handtour.sh --watch` is the run to watch.
+
+## The frame advances with the hand; READ for every step and run; the tape at the end `[2026-09-21]`
+
+The user: "as you make the frames with the hand etc, you need to increment the frame you're
+inputting" - then, watching: "whatever stepping you just added broke the combo, it bugged out on
+multiple commands, you don't need to make the drawing quite so slow; also replay the whole combo
+from the tape manually after you're done".
+
+- Each stroke now commits and then the game steps ONE FRAME PER TICK from the playhead to the
+  stroke's last row (through any gap before it), the pointer riding the playhead and the view
+  following - a human draws the hold, then advances through it watching. A stroke whose rows the
+  playhead already passed (LP inside the v hold) writes without stepping.
+- `intent::armRoll()` puts the machine in **READ** for the steps and the runs (the tape drives the
+  guest; nothing else writes) and `settled()` restores WRITE. READ-WRITE was the "bugged out":
+  on the real machine a live pad signal (a drifting stick, a held key) stomps the cell it lands on,
+  and headless there is no pad to show it. The roll also ignores the real mouse while the tour's
+  hand is on it: the view scrolls under a stationary cursor, so a held button was a drag.
+- The drag travels in 600 ms under `--watch` (was 1500).
+- Last: `load the combo's start on the tape` (slot 1, RECIPE `combo_state`) and `replay the whole
+  combo from the tape` to the stop, in READ at speed - the recording's rows up to BASE and the
+  hand's after it; the meter reads 94.
+
+```
+scripts/handtour.sh (watch timings on Xvfb)   PASS  38 steps, gate_ok=38 vacuous=0 leak=0
+  run - nothing lands on a blank roll   36     run - the hand's combo lands   94
+  load the combo's start on the tape    slot 1 @15325     replay the whole combo from the tape   94
+```

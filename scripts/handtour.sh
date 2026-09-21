@@ -23,7 +23,7 @@ get() { python3 -c "import tomllib,sys; d=tomllib.load(open(sys.argv[1],'rb')); 
 FLYR="$(ls "$D"/*.flyr 2>/dev/null | head -1)"
 [ -n "$FLYR" ] && [ -f "$D/NoBGM_VMU_3.state" ] || { echo "handtour: SKIP - David's clip is not unpacked in $D (the zip)"; exit $SKIP; }
 BASE="$(get david_ironman macro_base)"; PEAK="$(get david_ironman video_peak)"
-SLOT=3; STOP=16560; FROM=16216
+SLOT=3; STOP=16560; FROM=16216; TAPE="$(get david_ironman combo_state)"
 # the strokes: regenerated from the macro every run and compared to the pin - a stale pin is a finding
 GEN="$(mktemp)"; python3 "$ROOT/tools/hand_strokes.py" "$D"/*_macro.txt "$BASE" "$FROM" "$STOP" > "$GEN"
 if ! diff -q "$GEN" "$PIN" >/dev/null 2>&1; then echo "handtour: the pinned strokes differ from the macro's - regenerate $PIN"; diff "$GEN" "$PIN" | head; rm -f "$GEN"; exit 1; fi
@@ -33,5 +33,5 @@ WATCH=()
 if [ "${1:-}" = "--watch" ]; then WATCH=(--watch "$FLYR"); shift; fi
 echo "handtour: BASE = slot $SLOT (frame $(python3 -c "import struct;print(struct.unpack('<I',open('$D/NoBGM_VMU_3.state.frame','rb').read(4))[0])")), $(grep -c '^[^#]' "$PIN") strokes, stop $STOP, want $PEAK"
 FLYCAST_TEST_CLIP="$FLYR" TOUR_KEEP_SLOTS=yes TOUR_MODULES=hand TOUR_PREAMBLE=lite INTENT_SLOT=$SLOT \
-HAND_STROKES="$PIN" HAND_STOP=$STOP HAND_PEAK="$PEAK" TOUR_FLOOR="${TOUR_FLOOR:-30}" TOUR_WAIT_S="${TOUR_WAIT_S:-900}" \
+HAND_STROKES="$PIN" HAND_STOP=$STOP HAND_PEAK="$PEAK" HAND_TAPE_SLOT="$TAPE" TOUR_FLOOR="${TOUR_FLOOR:-30}" TOUR_WAIT_S="${TOUR_WAIT_S:-900}" \
 exec "$ROOT/scripts/surfacetourtest.sh" "${WATCH[@]}" "$@"
