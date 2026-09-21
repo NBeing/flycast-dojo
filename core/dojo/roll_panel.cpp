@@ -153,6 +153,48 @@ s64 brushStroke(u32 lo, u32 hi, int player, const char *labels, int gap)
 	return dojo.ApplyEdit(e, "roll: brush");
 }
 
+/*
+	THE VISIBLE HAND `[2026-09-20]`. The user, watching the hand tour: "i didnt see a lot of the
+	hand intent tour" - the strokes landed off-screen (the roll centres on the playhead) in a
+	blink. A gesture is what the roll SHOWS while a tour step is armed: the view centres on the
+	stroke's rows, the range is highlighted, and a large pointer travels from the anchor cell to
+	the last cell over `ms` - then the stroke commits (the step's act) and the cells fill. Draw-only:
+	nothing here touches the movie; the stroke body above is still the only writer.
+*/
+static struct Gesture
+{
+	bool active = false;
+	u32 lo = 0, hi = 0;
+	std::vector<int> cols;		// column indices; empty = the whole row (a blank / selection)
+	int player = 0;
+	double t0 = 0, ms = 0;
+	// cell rects recorded while the table draws (screen space): the anchor and the last cell
+	ImVec2 a0, a1, b0, b1;
+	bool haveA = false, haveB = false;
+} g_gesture;
+
+void gesture(u32 lo, u32 hi, int player, const char *labels, double ms)
+{
+	g_gesture = Gesture{};
+	g_gesture.active = true; g_gesture.lo = lo; g_gesture.hi = hi; g_gesture.player = player;
+	g_gesture.t0 = os_GetSeconds(); g_gesture.ms = ms;
+	const Profile& p = profile();
+	std::string rest = labels == nullptr ? "" : labels;
+	while (!rest.empty())
+	{
+		int hit = -1;
+		for (int i = 0; i < p.count; i++)
+			if (rest.rfind(p.cols[i].label, 0) == 0 && (hit < 0 || strlen(p.cols[i].label) > strlen(p.cols[hit].label))) hit = i;
+		if (hit < 0) break;
+		g_gesture.cols.push_back(hit);
+		rest = rest.substr(strlen(p.cols[hit].label));
+	}
+}
+void gestureEnd() { g_gesture.active = false; }
+bool gestureActive() { return g_gesture.active; }
+//! The row the roll centres on: the gesture's midpoint while one is shown, else the playhead.
+static u32 viewCentre(u32 playhead) { return g_gesture.active ? (g_gesture.lo + g_gesture.hi) / 2 : playhead; }
+
 //! A click on one cell (the single-row toggle the table's cell click performs).
 s64 tapCell(u32 f, int player, const char *label)
 {
@@ -1097,12 +1139,19 @@ static void draw()
 	u32   hoverRow = 0;
 	float hoverDist = 0.f;
 
-	const u32 lo = playhead > (u32)SPAN ? playhead - SPAN : 0;
-	const u32 hi = std::min(playhead + (u32)SPAN, movie::end());
+	const u32 centre = rollpanel::viewCentre(playhead);
+	const u32 lo = centre > (u32)SPAN ? centre - SPAN : 0;
+	const u32 hi = std::min(centre + (u32)SPAN, std::max(movie::end(), centre + (u32)SPAN));
 
 	for (u32 f = lo; f < hi; f++)
 	{
 		ImGui::TableNextRow();
+		// THE VISIBLE HAND: keep the gesture's anchor row a fifth of the way down the visible
+		// area, so the drag runs downward in view. `[MEASURED 2026-09-20]` centring the drawn
+		// span was not enough - the panel shows ~17 of the 48 rows and the anchor sat below the
+		// fold, where its cell rect was never recorded and no pointer was drawn.
+		if (rollpanel::g_gesture.active && f == rollpanel::g_gesture.lo)
+			ImGui::SetScrollHereY(0.2f);
 		if (selection().has(f))
 			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
 					ImGui::GetColorU32(tasCol(TAS_P1_COL, 0.22f)));
@@ -1169,6 +1218,14 @@ static void draw()
 		for (int c = 0; c < prof.count; c++)
 		{
 			ImGui::TableNextColumn();
+			// the gesture's anchor and last cell, for the pointer drawn after the table
+			if (rollpanel::g_gesture.active && (rollpanel::g_gesture.cols.empty() ? c == 0 : c == rollpanel::g_gesture.cols.front()))
+			{
+				const ImVec2 c0 = ImGui::GetCursorScreenPos();
+				const ImVec2 c1 = ImVec2(c0.x + ImGui::GetContentRegionAvail().x, c0.y + ImGui::GetTextLineHeight());
+				if (f == rollpanel::g_gesture.lo) { rollpanel::g_gesture.a0 = c0; rollpanel::g_gesture.a1 = c1; rollpanel::g_gesture.haveA = true; }
+				if (f == rollpanel::g_gesture.hi) { rollpanel::g_gesture.b0 = c0; rollpanel::g_gesture.b1 = c1; rollpanel::g_gesture.haveB = true; }
+			}
 			bool on = have && pressed(prof.cols[c], fi.kcode, fi.triggers.l,
 					fi.triggers.r, BTN_TRIGGER_LEFT, BTN_TRIGGER_RIGHT);
 			// LIVE PREVIEW, through the SAME predicate the commit uses. touches()
@@ -1186,6 +1243,38 @@ static void draw()
 		}
 	}
 	ImGui::EndTable();
+
+	// ---- THE VISIBLE HAND (rollpanel::gesture): the highlighted range and the big pointer ----
+	if (rollpanel::g_gesture.active && rollpanel::g_gesture.haveA)
+	{
+		rollpanel::Gesture& g = rollpanel::g_gesture;
+		if (!g.haveB) { g.b0 = g.a0; g.b1 = g.a1; }
+		const double el = (os_GetSeconds() - g.t0) * 1000.0;
+		const float prog = g.ms <= 0 ? 1.f : (float)std::min(1.0, std::max(0.0, el / g.ms));
+		ImDrawList *dl = ImGui::GetForegroundDrawList();
+		const float rowH = g.a1.y - g.a0.y;
+		const ImVec2 A((g.a0.x + g.a1.x) * 0.5f, (g.a0.y + g.a1.y) * 0.5f);
+		const ImVec2 B((g.b0.x + g.b1.x) * 0.5f, (g.b0.y + g.b1.y) * 0.5f);
+		// the range: a translucent band over the rows so far (whole row when the gesture names no column)
+		const float x0 = g.cols.empty() ? ImGui::GetWindowPos().x : g.a0.x - 2.f;
+		const float x1 = g.cols.empty() ? ImGui::GetWindowPos().x + ImGui::GetWindowSize().x : g.a1.x + 2.f;
+		const float yTop = std::min(g.a0.y, g.b0.y) - 1.f;
+		const float yCur = A.y + (B.y - A.y) * prog + rowH * 0.5f;
+		dl->AddRectFilled(ImVec2(x0, yTop), ImVec2(x1, std::max(yCur, yTop + rowH)), ImGui::GetColorU32(tasCol(TAS_FOCUS_RING, 0.35f)), 3.f);
+		dl->AddRect(ImVec2(x0, yTop), ImVec2(x1, std::max(g.a1.y, g.b1.y) + 1.f), ImGui::GetColorU32(tasCol(TAS_FOCUS_RING, 0.9f)), 3.f, 0, 2.f);
+		// the pointer: a classic arrow, 3x, black outline on white - "can you make the pointer bigger"
+		const ImVec2 P(A.x + (B.x - A.x) * prog, A.y + (B.y - A.y) * prog);
+		const float k = 3.6f;
+		const ImVec2 arrow[7] = { {0,0}, {0,16}, {4,12}, {7,19}, {10,17}, {7,10}, {12,10} };
+		ImVec2 pts[7];
+		for (int i = 0; i < 7; i++) pts[i] = ImVec2(P.x + arrow[i].x * k, P.y + arrow[i].y * k);
+		dl->AddConvexPolyFilled(pts, 7, IM_COL32(255, 255, 255, 235));
+		dl->AddPolyline(pts, 7, IM_COL32(0, 0, 0, 255), ImDrawFlags_Closed, 3.f);
+		// the press: a pulsing ring on the anchor while the drag begins
+		if (prog < 1.f)
+			dl->AddCircle(A, rowH * (0.8f + 0.4f * (float)std::fmod(el / 400.0, 1.0)), ImGui::GetColorU32(tasCol(TAS_P2_COL, 0.9f)), 0, 3.f);
+		g.haveA = g.haveB = false;		// re-recorded next frame (the table may scroll)
+	}
 
 	traceHover(hoveredCol, hoverAny, hoverRow);
 

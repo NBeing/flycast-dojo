@@ -1381,7 +1381,8 @@ void tick()
 	{
 		// A per-step override exists for exactly one arm (`rebind`: 0 ms, inside the
 		// engine's deaf window); every other step waits the clamped TourArmMs.
-		const int armMs = st.steps[st.cur].armMsOverride >= 0 ? st.steps[st.cur].armMsOverride : st.armMs;
+		const int armMs = st.steps[st.cur].armMsOverride >= 0 ? st.steps[st.cur].armMsOverride
+				: st.steps[st.cur].step.armMs >= 0 ? st.steps[st.cur].step.armMs : st.armMs;
 		if ((now - st.t0) * 1000.0 < armMs)
 			return;
 		// A focused text field makes gui_hotkey_allowed() refuse every key. Ask the

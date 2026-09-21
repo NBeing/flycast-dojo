@@ -41,6 +41,7 @@ struct Step
 	std::function<bool()> act;       //!< at t=TourArmMs - "the click"; false => FAIL now
 	std::function<bool()> verify;    //!< from t=dwell, polled each tick until true or maxWaitMs
 	int  maxWaitMs = 0;              //!< 0 = one verify call at dwell
+	int  armMs = -1;                 //!< per-step arm time (begin -> act), -1 = the tour's TourArmMs; the hand module's visible drag
 	bool optional = false;           //!< a missing precondition => SKIP, never FAIL
 	bool needsPrev = false;          //!< SKIP when the previous step did not PASS
 };

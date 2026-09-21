@@ -69,3 +69,23 @@ scripts/handtour.sh --sabotage hand-thc   the A1+A2 press skipped: the run reads
 ```
 
 `--watch` runs it on the real display with the roll filling in, stroke by stroke.
+
+## The visible hand `[2026-09-20, after the first --watch]`
+
+The user, watching: "i didnt see a lot of the hand intent tour and then the movie played at like
+really fast speed" - and "make the hand gestures more obvious maybe with a larger pointer".
+
+- `rollpanel::gesture(lo, hi, player, labels, ms)`: while a stroke step is armed the roll scrolls
+  its anchor row a fifth of the way down the view (`SetScrollHereY`), highlights the column band
+  from the anchor to wherever the pointer has reached, and draws a large arrow pointer (3.6x, white
+  on black, on the foreground draw list) travelling from the anchor cell to the last cell over
+  `ms`; a pulsing ring marks the press. Draw-only - the stroke body is still the only writer.
+  `[MEASURED]` centring the drawn span alone was not enough: the panel shows ~17 of 48 rows and
+  the anchor sat below the fold.
+- Each hand step's `begin` shows the gesture, its `act` (at `Step::armMs`, the new per-step arm
+  time) commits the stroke under the pointer, its verify ends it. `dojo:HandGestureMs` (the
+  harness sets 1500 under `--watch`) is the travel time; headless it stays at the tour's 300 ms.
+- `dojo:TourRealtime=yes` (set by `--watch`): the runs play at speed, not under fast-forward.
+
+Captured on the sandbox display mid-stroke (four steps): the pointer and band on the roll, the game
+paused beside it. `scripts/handtour.sh --watch` is the run to watch.

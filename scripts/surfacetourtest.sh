@@ -164,6 +164,10 @@ fi
 
 MODE=yes; [ "$SELF" -eq 1 ] && MODE="sabotage:$ARM"
 CONSOLE=(-config dojo:NativeConsole=no); [ "$WATCH" -eq 1 ] && CONSOLE=()
+# --watch is for the eye: the game runs at speed (no fast-forward) and the hand module's strokes
+# travel visibly (a 1500 ms drag under a large pointer) - `[2026-09-20]` "i didnt see a lot of the
+# hand intent tour and then the movie played at like really fast speed".
+WATCHCFG=(); [ "$WATCH" -eq 1 ] && WATCHCFG=(-config dojo:TourRealtime=yes -config "dojo:HandGestureMs=${HAND_GESTURE_MS:-1500}")
 XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	-config dojo:UiIni=no -config audio:backend=null "${CONSOLE[@]}" -config dojo:StartupPrompt=no \
 	-config dojo:Replay=yes -config "dojo:ReplayFilename=$CLIPDIR/clip.flyr" \
@@ -177,7 +181,7 @@ XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	-config "dojo:IntentPeak=${INTENT_PEAK:-3}" \
 	-config "dojo:TourModules=${TOUR_MODULES:-all}" \
 	-config "dojo:TourPreamble=${TOUR_PREAMBLE:-full}" -config "dojo:IntentSlot=${INTENT_SLOT:-0}" \
-	-config "dojo:HandStrokes=${HAND_STROKES:-}" -config "dojo:HandStop=${HAND_STOP:-0}" -config "dojo:HandPeak=${HAND_PEAK:-0}" \
+	-config "dojo:HandStrokes=${HAND_STROKES:-}" -config "dojo:HandStop=${HAND_STOP:-0}" -config "dojo:HandPeak=${HAND_PEAK:-0}" "${WATCHCFG[@]}" ${TOUR_EXTRA_CFG:-} \
 	-config window:width=1280 -config window:height=900 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 & FC=$!
 cleanup() { kill "$FC" 2>/dev/null; [ -n "$XPID" ] && kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; [ -n "$XPID" ] && kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }

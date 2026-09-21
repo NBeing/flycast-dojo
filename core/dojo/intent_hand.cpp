@@ -50,7 +50,8 @@
 
 namespace roll {
 
-namespace rollpanel { s64 blankRange(u32 lo, u32 hi); s64 strokeColumn(u32 lo, u32 hi, int player, const char *label, int gap); s64 brushStroke(u32 lo, u32 hi, int player, const char *labels, int gap); s64 tapCell(u32 f, int player, const char *label); }
+namespace rollpanel { s64 blankRange(u32 lo, u32 hi); s64 strokeColumn(u32 lo, u32 hi, int player, const char *label, int gap); s64 brushStroke(u32 lo, u32 hi, int player, const char *labels, int gap); s64 tapCell(u32 f, int player, const char *label);
+                      void gesture(u32 lo, u32 hi, int player, const char *labels, double ms); void gestureEnd(); }
 
 namespace surfacetour {
 
@@ -72,6 +73,7 @@ struct ModState
 	u32 stop = 0;
 	u16 want = 0;
 	u16 meterAtBase = 0;
+	int gestureMs = 0;			// dojo:HandGestureMs - the visible drag's travel time (0 = the tour's arm time, no override)
 	std::string why;
 } ms;
 
@@ -82,6 +84,7 @@ bool loadStrokes()
 	const std::string path = cfgLoadStr("dojo", "HandStrokes", "");
 	ms.stop = (u32)cfgLoadInt("dojo", "HandStop", 0);
 	ms.want = (u16)cfgLoadInt("dojo", "HandPeak", 0);
+	ms.gestureMs = cfgLoadInt("dojo", "HandGestureMs", 0);
 	if (path.empty()) { ms.why = "dojo:HandStrokes not set"; return false; }
 	std::ifstream in(path);
 	if (!in.good()) { ms.why = "cannot read " + path; return false; }
@@ -221,14 +224,20 @@ void addSteps(std::vector<Step>& out)
 		out.push_back(s);
 	}
 	// THE HONESTY BEAT: blank the recording's segment, run, nothing new lands.
-	out.push_back(click("hand intent: blank the segment after BASE (panel Blank)",
-		[] { const u32 lo = intent::baseFrame() + 1; return rollpanel::blankRange(lo, ms.stop) >= 0 || segmentBlank(lo, ms.stop); },
-		[] {
-			const u32 lo = intent::baseFrame() + 1;
-			if (!segmentBlank(lo, ms.stop)) { why("rows %u..%u still hold input", lo, ms.stop); return false; }
-			why("rows %u..%u blank through the Blank button's body", lo, ms.stop);
-			return true;
-		}, true));
+	{
+		Step b = click("hand intent: blank the segment after BASE (panel Blank)",
+			[] { const u32 lo = intent::baseFrame() + 1; return rollpanel::blankRange(lo, ms.stop) >= 0 || segmentBlank(lo, ms.stop); },
+			[] {
+				const u32 lo = intent::baseFrame() + 1;
+				rollpanel::gestureEnd();
+				if (!segmentBlank(lo, ms.stop)) { why("rows %u..%u still hold input", lo, ms.stop); return false; }
+				why("rows %u..%u blank through the Blank button's body", lo, ms.stop);
+				return true;
+			}, true);
+		b.begin = [] { rollpanel::gesture(intent::baseFrame() + 1, intent::baseFrame() + 48, 0, "", ms.gestureMs > 0 ? ms.gestureMs : 300); return true; };
+		if (ms.gestureMs > 0) b.armMs = ms.gestureMs;
+		out.push_back(b);
+	}
 	out.push_back(runStep("hand intent: run - nothing lands on a blank roll (the meter stays at BASE's)",
 		[] { return ms.meterAtBase; }, "the recording is out of it; what lands next is the hand's"));
 	out.push_back(reloadStep("hand intent: reload BASE"));
@@ -240,7 +249,7 @@ void addSteps(std::vector<Step>& out)
 		const bool thc = st.label.find("A2") != std::string::npos && st.lo == 16274;	// the arm's target: the Team Hyper press
 		std::string name = "hand intent: " + std::string(tap ? "tap " : columnsOf(st.label).size() > 1 ? "brush " : "drag ") + st.label + " " + std::to_string(st.lo)
 				+ (tap ? "" : ".." + std::to_string(st.hi)) + " (" + std::to_string(st.hi - st.lo + 1) + " row" + (tap ? "" : "s") + ")";
-		out.push_back(click(name,
+		Step sst = click(name,
 			[i, tap, thc] {
 				const Stroke& s = ms.strokes[i];
 				if (thc && sabotaged("hand-thc")) { why("hand-thc: the press is skipped"); return true; }
@@ -256,9 +265,20 @@ void addSteps(std::vector<Step>& out)
 				const std::vector<const Column *> cs = columnsOf(s.label);
 				if (cs.empty()) { why("no column %s in this profile", s.label.c_str()); return false; }
 				if (!rowsHold(s.lo, s.hi, cs, true)) { why("%s is not held on every row %u..%u", s.label.c_str(), s.lo, s.hi); return false; }
+				rollpanel::gestureEnd();
 				why("%s held on %u..%u", s.label.c_str(), s.lo, s.hi);
 				return true;
-			}, i == 0));
+			}, i == 0);
+		// THE VISIBLE HAND: from begin the roll centres on the rows and a large pointer travels the
+		// stroke over the arm time (dojo:HandGestureMs when set - the --watch run's 1500 ms); the
+		// act at the end of that travel is the commit, and the cells fill under the pointer.
+		sst.begin = [i] {
+			const Stroke& s = ms.strokes[i];
+			rollpanel::gesture(s.lo, s.hi, 0, s.label.c_str(), ms.gestureMs > 0 ? ms.gestureMs : 300);
+			return true;
+		};
+		if (ms.gestureMs > 0) sst.armMs = ms.gestureMs;
+		out.push_back(sst);
 	}
 	out.push_back(runStep("hand intent: run - the hand's combo lands (the video's number)",
 		[] { return ms.want; }, "the fighters did the thing the hand wrote"));

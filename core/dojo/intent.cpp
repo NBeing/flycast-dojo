@@ -289,7 +289,9 @@ bool runToFrame(u32 target)
 	st.runTarget = target;
 	const u32 fr = dojo.frame_number.load();
 	gui_step_frames(st.runTarget > fr ? (int)(st.runTarget - fr) : 1);
-	settings.input.fastForwardMode = true;
+	// dojo:TourRealtime=yes (the --watch run): the game plays at speed so the combo can be SEEN;
+	// headless it fast-forwards. The user, watching: "the movie played at like really fast speed".
+	settings.input.fastForwardMode = !cfgLoadBool("dojo", "TourRealtime", false);
 	st.running = true;
 	return true;
 }
