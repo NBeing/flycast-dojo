@@ -1561,3 +1561,11 @@ docs/PORT-DEFECT-CENSUS.md "Port, small", one commit each, each measured where a
 
 Rule kept: a claim that needs a surface the tree does not have is reported, not faked. selftest.sh 39 suites /
 658 claims / 0 failed; sendequivtest PASS after the Sender change; tour FLOOR 72 (74 steps).
+
+## 8. The hand tour `[MEASURED 2026-09-20]`
+
+David's ironman98 string authored by hand in the piano roll from his own state 3 - 26 drags,
+brushes and taps through the panel's own gestures - and run: the meter reads his video's 94
+(a blanked roll first, reading 36, so the 94 is the hand's). `scripts/handtour.sh`, module
+`hand`, arm `hand-thc`. docs/tour-hand.md has the table and the measured lines.
+

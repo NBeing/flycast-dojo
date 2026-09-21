@@ -55,6 +55,8 @@ u32  t0();							//!< first row of the placed combo (baseFrame + 1 + phase + d)
 u32  stopFrame();					//!< t0 + comboLen + 60 run-out
 
 bool runToStop();					//!< step to stopFrame() under fast-forward; poll settled()
+bool runToFrame(u32 target);		//!< the same run to an explicit frame (the hand module's authored segment); poll settled()
+int  baseSlot();					//!< dojo:IntentSlot - the slot BASE lives in (0 = the harness base)
 u16  peak(int player);				//!< Combo_Meter_Value PEAK since the last runToStop (0 = P1)
 //! The peak THE FIXTURE lands (dojo:IntentPeak, staged by the harness from RECIPE.toml's [combo]/[result]
 //! combo_peak). `[2026-09-18]` three TUs carried a literal 19 - the harness base's number - and the number

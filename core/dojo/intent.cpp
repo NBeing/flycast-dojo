@@ -57,11 +57,15 @@ void setSlot(int slot)
 	cfgSetVirtual("config", "Dreamcast.SavestateSlot", std::to_string(slot));
 }
 
-// combohunt.cpp: the FST's bake ceremony - reload slot 0 around the user's slot.
+// dojo:IntentSlot `[2026-09-20]`: which slot is BASE for the ceremony. 0 (the harness base) by
+// default; the hand module stands on David's ironman98 state 3 (slot 3, frame 16215).
+int intentSlot() { return cfgLoadInt("dojo", "IntentSlot", 0); }
+
+// combohunt.cpp: the FST's bake ceremony - reload BASE around the user's slot.
 bool reloadBaseRaw()
 {
 	st.userSlot = (int)config::SavestateSlot;
-	setSlot(0);
+	setSlot(intentSlot());
 	gui_loadState();
 	setSlot(st.userSlot);
 	return gui_state == GuiState::Paused;
@@ -174,7 +178,7 @@ bool install(const fst::Movie& edited, const char *who)
 bool ready(std::string& why)
 {
 	if (dojo.frame_number.load() < 120) { why = "frame < 120"; return false; }
-	if (!slotExists(0)) { why = "no slot 0"; return false; }
+	if (!slotExists(intentSlot())) { why = "no slot " + std::to_string(intentSlot()); return false; }
 	if (hostfs::savestateFolderOverride.empty()) { why = "no clip folder bound"; return false; }
 	return true;
 }
@@ -223,6 +227,7 @@ bool settled()
 	return true;
 }
 
+int baseSlot() { return intentSlot(); }
 u32 baseFrame() { return st.baseFrame; }
 u32 baseHash() { return st.baseHash; }
 u32 machineHash() { return oracle::machineHash(); }
@@ -269,6 +274,24 @@ bool clearCombo()
 	fst::Movie edited;
 	if (!bake(false, edited)) { st.why = "the bake failed"; return false; }
 	return install(edited, "intent: clear combo");
+}
+
+bool runToFrame(u32 target)
+{
+	if (gui_state != GuiState::Paused) { st.why = "not paused before the run"; return false; }
+	// READ-WRITE for the run: the roll drives the guest (install()'s arm). `[MEASURED 2026-09-20]`
+	// without it the hand tour's run recorded the neutral pad over 26 authored strokes and read
+	// the meter at BASE - WRITE clobbers every frame it passes (dojo.h, macro_armed).
+	dojo.stale_tail_from = ~0u;
+	dojo.macro_armed = true;
+	tas_mvc2::comboPeakReset();
+	tas_mvc2::comboSeriesReset();
+	st.runTarget = target;
+	const u32 fr = dojo.frame_number.load();
+	gui_step_frames(st.runTarget > fr ? (int)(st.runTarget - fr) : 1);
+	settings.input.fastForwardMode = true;
+	st.running = true;
+	return true;
 }
 
 bool runToStop()

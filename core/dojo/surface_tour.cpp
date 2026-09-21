@@ -615,25 +615,6 @@ static void buildSteps()
 		add(s);
 	};
 
-	// 1. load the harness base state
-	{
-		Step s;
-		s.name = "load slot 0 (the harness base)";
-		s.kind = Kind::Record;
-		s.act = [] { setSlot(0); gui_loadState(); return true; };
-		s.verify = [] {
-			if (gui_state != GuiState::Paused) { why("not paused after load"); return false; }
-			if (st.haveSlot0frame && dojo.frame_number.load() != st.slot0frame)
-			{
-				why("frame %u != slot0 frame %u", dojo.frame_number.load(), st.slot0frame);
-				return false;
-			}
-			why("frame %u", dojo.frame_number.load());
-			return true;
-		};
-		add(s);
-	}
-	show("show: the harness base state (1 frame)");
 
 	/*
 		3-44. PER WINDOW: rebind its key, open it WITH that key, close it.
@@ -722,6 +703,38 @@ static void buildSteps()
 		add(s);
 	};
 
+	// dojo:TourPreamble=lite `[2026-09-20]`: a module tour on a foreign clip (David's ironman98,
+	// the hand module) - ONLY the piano roll's rebind (the chord the module opens with), then the
+	// modules; no slot-0 load (the module's ceremony loads ITS base, dojo:IntentSlot, and a slot-0
+	// load here would be a converge mover nothing re-lands on), none of the 14 triplets, the studio
+	// blanket or the feature hooks, which assert the harness clip's own shape. "full" is the default.
+	if (strcmp(cfgLoadStr("dojo", "TourPreamble", "full").c_str(), "lite") == 0)
+	{
+		for (int i = 0; i < NKEYS; i++)
+			if (strcmp(KEYS[i].panel, "pianoroll") == 0) rebindStep(i);
+		addModules(add);
+		return;
+	}
+
+	// 1. load the harness base state
+	{
+		Step s;
+		s.name = "load slot 0 (the harness base)";
+		s.kind = Kind::Record;
+		s.act = [] { setSlot(0); gui_loadState(); return true; };
+		s.verify = [] {
+			if (gui_state != GuiState::Paused) { why("not paused after load"); return false; }
+			if (st.haveSlot0frame && dojo.frame_number.load() != st.slot0frame)
+			{
+				why("frame %u != slot0 frame %u", dojo.frame_number.load(), st.slot0frame);
+				return false;
+			}
+			why("frame %u", dojo.frame_number.load());
+			return true;
+		};
+		add(s);
+	}
+	show("show: the harness base state (1 frame)");
 	// the cheat sheet first, and it stays up
 	rebindStep(hotkeysIdx);
 	openStep(hotkeysIdx);

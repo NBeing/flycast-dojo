@@ -1321,6 +1321,7 @@ if(NOT LIBRETRO)
 	core/dojo/oracle.cpp
 	core/dojo/combohunt.cpp
 	core/dojo/intent.cpp
+	core/dojo/intent_hand.cpp
 	core/dojo/intent_roll.cpp
 	core/dojo/intent_clip.cpp
 	core/dojo/intent_send.cpp

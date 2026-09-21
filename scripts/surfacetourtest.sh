@@ -65,7 +65,7 @@ SELF=0; WATCH=0; WATCHCLIP=""; ARM=""
 # The classes this harness knows how to judge - MIRRORS surface_tour.h v2 and is checked
 # against the runner's own `SURFACE TOUR: arms known:` line on every armed run, so the
 # two lists cannot drift silently.
-KNOWN_ARMS="open+rebind+show+write-clobber+gate-can-pass+flip+label+save+branch+base+roll-clear+macro-window+branch-leak+gen-noop+capture-dup+send-noop+fst-phase+state-field"
+KNOWN_ARMS="open+rebind+show+write-clobber+gate-can-pass+flip+label+save+branch+base+roll-clear+macro-window+branch-leak+gen-noop+capture-dup+send-noop+fst-phase+state-field+hand-thc"
 usage() { echo "usage: $0 [--self-test | --sabotage <class> | --list-sabotage | --watch <clip.flyr>]   (exit 2: usage)"; exit 2; }
 case "${1:-}" in
 	"")               ;;
@@ -144,7 +144,9 @@ cp "$CLIP" "$CLIPDIR/clip.flyr"
 for sib in "$SRCDIR"/*.state "$SRCDIR"/*.state.* "$SRCDIR"/clip.json; do
 	{ [ -f "$sib" ] && cp "$sib" "$CLIPDIR/" 2>/dev/null; } || true
 done
-rm -f "$CLIPDIR"/*_[0-9].state "$CLIPDIR"/*_[0-9][0-9].state "$CLIPDIR"/results.json "$CLIPDIR"/*_macro.txt 2>/dev/null || true
+# TOUR_KEEP_SLOTS=yes `[2026-09-20]`: the hand tour's BASE is David's slot 3 - keep the numbered slots.
+if [ "${TOUR_KEEP_SLOTS:-no}" = yes ]; then rm -f "$CLIPDIR"/results.json "$CLIPDIR"/*_macro.txt 2>/dev/null || true
+else rm -f "$CLIPDIR"/*_[0-9].state "$CLIPDIR"/*_[0-9][0-9].state "$CLIPDIR"/results.json "$CLIPDIR"/*_macro.txt 2>/dev/null || true; fi
 
 XPID=""
 if [ "$WATCH" -eq 1 ]; then
@@ -174,6 +176,8 @@ XDG_CONFIG_HOME="$OUT/cfg" XDG_DATA_HOME="$OUT/data" DISPLAY="$D" "$EXE" \
 	-config "dojo:IntentMacro=${INTENT_MACRO:-$ROOT/scripts/fixtures/mvc2/combos/dhalsim_3hit.txt}" \
 	-config "dojo:IntentPeak=${INTENT_PEAK:-3}" \
 	-config "dojo:TourModules=${TOUR_MODULES:-all}" \
+	-config "dojo:TourPreamble=${TOUR_PREAMBLE:-full}" -config "dojo:IntentSlot=${INTENT_SLOT:-0}" \
+	-config "dojo:HandStrokes=${HAND_STROKES:-}" -config "dojo:HandStop=${HAND_STOP:-0}" -config "dojo:HandPeak=${HAND_PEAK:-0}" \
 	-config window:width=1280 -config window:height=900 -config window:fullscreen=no \
 	"$ROM" > "$OUT/out.log" 2>&1 & FC=$!
 cleanup() { kill "$FC" 2>/dev/null; [ -n "$XPID" ] && kill "$XPID" 2>/dev/null; sleep 2; kill -0 "$FC" 2>/dev/null && kill -9 "$FC" 2>/dev/null; [ -n "$XPID" ] && kill -0 "$XPID" 2>/dev/null && kill -9 "$XPID" 2>/dev/null; }
@@ -311,6 +315,7 @@ if [ "$SELF" -eq 1 ]; then
 		send-noop)     WHAT="the sender bakes nothing (the send skipped)" ;;
 		fst-phase)     WHAT="the sweep fed the wrong window (P at base+200)" ;;
 		state-field)   WHAT="Being_Hit evaluated with the wrong threshold (Knockdown_State==31)" ;;
+		hand-thc)      WHAT="the A1+A2 press skipped - the Team Hyper never fires (intent_hand.cpp)" ;;
 	esac
 	# SEEN = every step that RAN (PASS or FAIL); a SKIPped control did not run, and a
 	# control that did not run cannot be "left green" (arms.lua rule 3).
@@ -352,9 +357,10 @@ if [ "$SELF" -eq 1 ]; then
 	fi
 	# ---- the arm behaved; now the GATE must have read it the way the class predicts ------
 	if [ "$ARM" != rebind ]; then
-		G 2 "$([ "$rebindPass" -ge 14 ] && echo 1 || echo 0)" fail \
-			"the setup held: $rebindPass/14 rebinds still PASSED" \
-			"$rebindPass/14 rebinds PASSED - the sabotage reddened the SETUP, not the claim" </dev/null
+		NEEDREB=14; [ "${TOUR_PREAMBLE:-full}" = lite ] && NEEDREB=1	# the lite preamble rebinds one chord
+		G 2 "$([ "$rebindPass" -ge "$NEEDREB" ] && echo 1 || echo 0)" fail \
+			"the setup held: $rebindPass/$NEEDREB rebinds still PASSED" \
+			"$rebindPass/$NEEDREB rebinds PASSED - the sabotage reddened the SETUP, not the claim" </dev/null
 	fi
 	G 1 "$gatePresent" vac "the tour reported a gate (gate_ok=$gate_ok vacuous=$vacuous leak=$leak unmeasured=$unmeasured)" \
 		"RESULT carries no gate fields - the runner has no gate, so this arm cannot say what the gate made of the sabotage" </dev/null
@@ -377,7 +383,7 @@ if [ "$SELF" -eq 1 ]; then
 					"vacuous=$vacuous - the gate filed the skipped UNDO under 'moved nothing'" < <(printf '%s\n' "$LOG" | grep -a "SURFACE TOUR: gate .* -> VACUOUS" | sed "$STRIP")
 				G 5 "$([ "$leak" -ge 1 ] && echo 1 || echo 0)" fail "the skipped UNDO showed up as a movie leak (leak=$leak >= 1)" \
 					"leak=$leak - the movie hash did not move: the flipped row was undone after all, or the oracle is not looking at the movie" < <(printf '%s\n' "$LOG" | grep -a 'SURFACE TOUR: gate .* "roll: flip' | sed "$STRIP") ;;
-			roll-clear|macro-window|branch-leak|gen-noop|capture-dup|send-noop|fst-phase|state-field)
+			roll-clear|macro-window|branch-leak|gen-noop|capture-dup|send-noop|fst-phase|state-field|hand-thc)
 				# THE INTENT ARMS (§6.3): the target reddens by the fighter NOT doing the thing, and
 				# the steps chained on it (needsPrev) SKIP - after which the module's "reload BASE"
 				# movers find BASE already loaded and are honestly filed VACUOUS. `[MEASURED
@@ -428,7 +434,11 @@ if [ "$gatePresent" = 1 ]; then
 fi
 G 6 "$([ "${passed:-0}" -ge "$FLOOR" ] && echo 1 || echo 0)" vac "passed=$passed >= floor $FLOOR" \
 	"passed=$passed, floor is $FLOOR (skipped=$skipped) - the tour is not covering the surface" </dev/null
-G 8 "$([ "$opens" -ge 14 ] && [ "$rebinds" -ge 14 ] && [ "$loads" -ge 2 ] && echo 1 || echo 0)" vac \
-	"the engine's own traces back the tour: opens=$opens (>=14) rebinds=$rebinds (>=14) loads=$loads (>=2)" \
-	"engine traces short: opens=$opens (need 14) rebinds=$rebinds (need 14) loads=$loads (need 2) - the tour's PASSes are not backed by the engine's own lines" </dev/null
+# A LITE preamble (TOUR_PREAMBLE=lite: one rebind, the module's own opens) backs its PASSes with one
+# open, one rebind and the module's loads (the hand tour: begin, reload, end = 3).
+NEEDOPEN=14; NEEDREBIND=14; NEEDLOAD=2
+[ "${TOUR_PREAMBLE:-full}" = lite ] && { NEEDOPEN=1; NEEDREBIND=1; NEEDLOAD=2; }
+G 8 "$([ "$opens" -ge "$NEEDOPEN" ] && [ "$rebinds" -ge "$NEEDREBIND" ] && [ "$loads" -ge "$NEEDLOAD" ] && echo 1 || echo 0)" vac \
+	"the engine's own traces back the tour: opens=$opens (>=$NEEDOPEN) rebinds=$rebinds (>=$NEEDREBIND) loads=$loads (>=$NEEDLOAD)" \
+	"engine traces short: opens=$opens (need $NEEDOPEN) rebinds=$rebinds (need $NEEDREBIND) loads=$loads (need $NEEDLOAD) - the tour's PASSes are not backed by the engine's own lines" </dev/null
 summary "surfacetourtest - $passed steps walked the surface (14 rebinds, 14 windows opened+closed by hotkey, features exercised), failed=$failed, skipped=$skipped, gate vacuous=${vacuous:--} leak=${leak:--}"

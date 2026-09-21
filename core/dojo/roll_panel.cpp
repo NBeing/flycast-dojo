@@ -90,6 +90,88 @@ s64 blankRange(u32 lo, u32 hi)
 	return dojo.ApplyEdit(e, "roll: blank");
 }
 
+static int columnIndex(const char *label)
+{
+	const Profile& p = profile();
+	for (int i = 0; i < p.count; i++)
+		if (strcmp(p.cols[i].label, label) == 0) return i;
+	return -1;
+}
+
+//! THE DRAG `[2026-09-20]`: press a cell and drag to `hi` - the paint stroke's own
+//! begin/extendTo/build, the gesture a mouse drives (the stroke probe above uses the same
+//! three calls), committed through Dojo::ApplyEdit ("roll: paint"). A drag SETS: an anchor
+//! that already holds the column would erase (the stroke's own rule), so it is left alone
+//! and reported as 0 changed. `gap` 0 = every row, 1 = every other (a mash). Returns the
+//! first changed frame or -1. The hand module authors David's segment with 26 of these.
+s64 strokeColumn(u32 lo, u32 hi, int player, const char *label, int gap)
+{
+	if (gui_state != GuiState::Paused || session::netplay())
+		return -1;
+	const int col = columnIndex(label);
+	if (col < 0 || hi < lo)
+		return -1;
+	std::map<u32, Row> all;
+	for (const auto& kv : dojo.session_inputs) all[kv.first] = kv.second;
+	auto it = all.find(lo);
+	const bool wasOn = it != all.end() && rowHas(it->second, player, profile().cols[col]);
+	if (wasOn)
+		return 0;
+	paint().begin(lo, player, col, wasOn, /*forceErase*/ false, gap);
+	paint().extendTo(hi);
+	Edit e = paint().build(all);
+	paint().end();
+	return dojo.ApplyEdit(e, "roll: paint");
+}
+
+//! THE BRUSH DRAG: a compound label ("v>" = the down-right diagonal) stamped down lo..hi as ONE
+//! pattern step - the brush the panel arms ("ARM THE SAME PATTERN AS A BRUSH, so a drag stamps
+//! it"). Needed because a direction REPLACES the direction group on write (cellApply), so
+//! two single-column drags cannot lay a diagonal; one brush with both bits can (SOCD-clean
+//! keeps a diagonal, drops an opposed pair). Buttons in the label OR in, as they do on a pad.
+s64 brushStroke(u32 lo, u32 hi, int player, const char *labels, int gap)
+{
+	if (gui_state != GuiState::Paused || session::netplay())
+		return -1;
+	const Profile& p = profile();
+	Cell bits = 0;
+	std::string rest = labels;
+	while (!rest.empty())
+	{
+		int hit = -1;
+		for (int i = 0; i < p.count; i++)
+			if (rest.rfind(p.cols[i].label, 0) == 0 && (hit < 0 || strlen(p.cols[i].label) > strlen(p.cols[hit].label))) hit = i;
+		if (hit < 0) return -1;
+		bits |= p.cols[hit].canon;
+		rest = rest.substr(strlen(p.cols[hit].label));
+	}
+	if (bits == 0 || hi < lo)
+		return -1;
+	std::map<u32, Row> all;
+	for (const auto& kv : dojo.session_inputs) all[kv.first] = kv.second;
+	Edit e = applyPattern(all, lo, hi, Pattern::one(player, bits, bits), gap);
+	return dojo.ApplyEdit(e, "roll: brush");
+}
+
+//! A click on one cell (the single-row toggle the table's cell click performs).
+s64 tapCell(u32 f, int player, const char *label)
+{
+	if (gui_state != GuiState::Paused || session::netplay())
+		return -1;
+	const int col = columnIndex(label);
+	if (col < 0)
+		return -1;
+	std::map<u32, Row> all;
+	for (const auto& kv : dojo.session_inputs) all[kv.first] = kv.second;
+	std::map<u32, Row> src;
+	auto it = all.find(f);
+	const Row before = it == all.end() ? Row() : it->second;
+	src[f] = before;
+	const Column& c = profile().cols[col];
+	Edit e = mergeIntoMovie(all, setColumn(src, { f }, player, c, !rowHas(before, player, c)));
+	return dojo.ApplyEdit(e, "roll: cell");
+}
+
 }	// namespace rollpanel
 
 // How many frames either side of the playhead to draw. Small on purpose: a
