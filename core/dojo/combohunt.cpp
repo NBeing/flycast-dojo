@@ -348,8 +348,8 @@ void writeResults()
 	j["createdUtc"] = tas_clip::utcNowIso();
 	j["mode"] = st.mode;
 	j["base"] = { { "slot", 0 }, { "frame", st.baseFrame }, { "machineHash", st.baseHash } };
-	j["oracle"] = { { "field", "Combo_Meter_HitsToOpponent" },
-			{ "addrP1", tas_mvc2::addrOf("Combo_Meter_HitsToOpponent", 0, 0) },
+	j["oracle"] = { { "field", "Combo_Meter_Value" },
+			{ "addrP1", tas_mvc2::addrOf("Combo_Meter_Value", 0, 0) },
 			{ "dictionary", tas_mvc2::dictionaryPath() } };
 	nlohmann::json cands = nlohmann::json::array();
 	for (size_t i = 0; i < st.cands.size(); i++)
@@ -578,7 +578,7 @@ void tick()
 	case 5:
 		if (gui_state != GuiState::Paused)
 			return;
-		finish("no candidate raised Combo_Meter_HitsToOpponent above 0");
+		finish("no candidate raised Combo_Meter_Value above 0");
 		return;
 	}
 }

@@ -21,6 +21,7 @@ using namespace Xbyak::util;
 #include "xbyak_base.h"
 #include "oslib/unwind_info.h"
 #include "oslib/virtmem.h"
+#include "cfg/cfg.h"
 
 static void (*mainloop)();
 static void (*handleException)();
@@ -462,7 +463,9 @@ public:
 					// Disabling it costs a little speed and buys portability,
 					// which is the right trade for a movie meant to be replayed
 					// somewhere else.
-					if (cpu.has(Cpu::tFMA) && !determinism::isDeterministicRun())
+					// `[2026-09-20]` dojo:Fma=yes|no overrides the predicate - the ironman98 chase needed the
+					// fused path under replay to ask which rounding David's studio (FMA on, GGPO off) runs on.
+					if (cpu.has(Cpu::tFMA) && cfgLoadBool("dojo", "Fma", !determinism::isDeterministicRun()))
 						vfmadd231ss(rd, rs2, rs3);
 					else
 					{

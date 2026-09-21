@@ -60,12 +60,16 @@ if [ "$TARGET" -gt "$f" ]; then
   q; f=$QF; fp; echo "FP@$f paused=$QP from-slot=$SLOT:$FPV"
 fi
 if [ "$TO" -gt "$TARGET" ]; then
-  echo "frame combo p1objs p2objs stormState stormAnim stormFlags p2State timer skipCnt"
+  # OBJ_COLS / OBJ_HDR override the per-frame columns (addr[:width] list / header) - `[2026-09-20]` the
+  # game-code chase needed the registration accumulators and the freeze flag next to the published counts.
+  echo "frame ${OBJ_HDR:-combo p1objs p2objs stormState stormAnim stormFlags p2State timer skipCnt}"
   while :; do
     q; f=$QF; [ "$f" -gt "$TO" ] && break
-    line="$f"; for k in 0x2C2685A0 0x2C287DDE 0x2C287DDF 0x2C269058 0x2C268FCC:2 0x2C268E8E 0x2C268AB4 0x2C289630 0x2C289621; do a=${k%%:*}; w=${k##*:}; [ "$w" = "$k" ] && w=1; rd "$a" "$w"; line="$line $RDV"; done
+    line="$f"; for k in ${OBJ_COLS:-0x2C2685A0 0x2C287DDE 0x2C287DDF 0x2C269058 0x2C268FCC:2 0x2C268E8E 0x2C268AB4 0x2C289630 0x2C289621}; do a=${k%%:*}; w=${k##*:}; [ "$w" = "$k" ] && w=1; rd "$a" "$w"; line="$line $RDV"; done
     echo "$line"
     send $SEQ step '{"n":1}' >/dev/null; SEQ=$((SEQ+1)); for i in $(seq 1 30); do q; [ "$QP" = True ] && [ "$QF" -gt "$f" ] && break; sleep 0.1; done
   done
 fi
+# OBJ_SHOT=<file>: screenshot the sandbox display at the last frame (the picture David's video shows, for the eye)
+if [ -n "${OBJ_SHOT:-}" ]; then q; DISPLAY="$D" import -window root "$OBJ_SHOT" 2>/dev/null && echo "shot: $OBJ_SHOT @ $QF"; fi
 cleanup

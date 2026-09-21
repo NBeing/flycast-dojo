@@ -11,7 +11,7 @@
 	OPEN the window by its tour hotkey (the human sees it), ACT through the panel's
 	OWN edit path (rollpanel::blankRange/undo/redo, macros::placeFileWindowAt - the
 	buttons' bodies, never a hook that bypasses the panel), INTENT - the game is run
-	and the fighter does the thing, read as Combo_Meter_HitsToOpponent's peak - and
+	and the fighter does the thing, read as Combo_Meter_Value's peak - and
 	CLOSE.
 
 	THE FIXTURE: BASE = the tour clip's slot 0 (in-match), THE COMBO = David's

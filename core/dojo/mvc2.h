@@ -33,8 +33,10 @@ namespace tas_mvc2
 		u32 sceneFrame = 0;	// resets between scenes
 		u32 totalFrames = 0;	// since boot
 		u16 comboP1 = 0;	// GameState mirror of the hit meter (unused; the ORACLE is comboPoll/comboPeek)
-		u16 comboP2 = 0;	// `[CORRECTED 2026-09-15]` the real counter is per-point-char HitsToOpponent, a BYTE at
-							// 0x2685A0 / 0x268B44 (resets on a drop) - NOT the old 0x289642 running total. comboPoll reads it as u8
+		u16 comboP2 = 0;	// `[CORRECTED 2026-09-20]` the ORACLE is Combo_Meter_Value, u16 per player (P1 0x268B50 /
+							// P2 0x2685AC): the on-screen HIT number, measured hit for hit against David's video; it
+							// resets on a drop. The point character's HitsToOpponent byte (2026-09-15) excluded assist
+							// and partner hits - see the note in mvc2.cpp.
 	};
 
 	// True once the address map has proven itself on this session: skipRate read a legal value
@@ -88,7 +90,7 @@ namespace tas_mvc2
 	// fields as `Base + hexOffset` in six blocks (P1/P2 x A/B/C), per-player fields (P1_/P2_),
 	// and system addresses - Demul-mapped (0x2C......), which is +0x60000000 from flycast's
 	// 0x8C...... . Every address a probe asserts on should be resolved BY NAME here, so a
-	// test reads "Combo_Meter_HitsToOpponent" and not a constant nobody can check; the
+	// test reads "Combo_Meter_Value" and not a constant nobody can check; the
 	// constants above stay as the FALLBACK and as the selfTest's cross-check.
 	//
 	// Loaded at first use from, in order: dojo:Mvc2Data (a file path), the data dirs

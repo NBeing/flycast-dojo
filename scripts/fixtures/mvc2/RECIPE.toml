@@ -244,37 +244,30 @@ measured_on = "2026-09-18 combohunt (mode=all) on [dhalsim_base] 5FC481A7 - the 
 # (zip + video, "state 1 is where the macro should start"), tag ironman98: Iron Man/Storm/Thanos
 # vs Storm/Magneto/Amingo, four V48 states (0 @ 13364 = macroBase, 1 @ 15325, 2 @ 15703,
 # 3 @ 16215), his macro (41787 rows, his newer dialect: blank = neutral, both players - the
-# dummy is SCRIPTED), the .flyr (55150 rows), the video (an 18-hit Proton Cannon at ~15962).
-# His V48 states LOAD on this V49 build (the verify probe reports the skew; the machine
-# advances; the cast reads 51/42/54 vs 42/44/21 = the video's health bars).
-# Measured through combohunt on OUR build:
-#   the recording's own rows from state 1/2/3 (mode=movie, run 3000-4000): peak 70 / 70 / 70
-#   the macro rows 1961..4500 at state 1+1+phase: phase 0 42, phase 1 13, phase 2 2, phase 3 71
-#   the same rows misaligned from slot 0: 29 / 8 / 27 / 3
-# = David's "connects 1 in 4" law, measured for the first time in this tree; his keystrokes
-# WITH their conditions (the state) land a 70-hit combo here. The tag says 98: not reached in
-# this movie from any state (state 3 sits at combo=26 mid-string and still tops at 70) - a
-# later take, or a counter difference; recorded, not claimed.
+# dummy is SCRIPTED), the .flyr (55150 rows - byte-equal to the macro on every frame, the
+# THC/assist presses live in the trigger bytes), the video (a screen capture of his studio:
+# the piano roll's frame numbers make it a per-frame oracle).
+# `[CORRECTED 2026-09-20, late]` REPRODUCED IN FULL: the recording replayed from state 1
+# lands 94 - his video's number, hit for hit (18 -> 19..24 across Thanos's assist sphere at
+# 15977..16017, 36 at 16215, 40 at 16292, 94 at 16461, the string drops at 16544). The day's
+# "70 vs 94 divergence" was the ORACLE: tas_mvc2 read the point character's own
+# Combo_Meter_HitsToOpponent byte, which never counts an assist's or a THC partner's hits;
+# the on-screen counter is Combo_Meter_Value (u16, P1 0x2C268B50). The same run's after-hash
+# F4B1F6CE is unchanged across the correction - same machine, different byte read. The KO
+# slow-motion (header+60 = 0xAAAA from 16410: gameplay objects update on alternate frames)
+# is the game's own; P2's point character dies at 16409 and the hail keeps landing.
+# docs/HYPER-OBJECTS.md carries the chase.
 clip          = "david/2026-09-20T19_54_03Z"     # MD5SUMS beside it pins every file; states/.flyr gitignored (source: the zip)
 tags          = "ironman98"
 macro_base    = 13364
 state_frames  = [13364, 15325, 15703, 16215]
 combo_state   = 1
 combo_rows    = "1961-4500"                        # macro rows, relative to macro_base
-movie_peak    = 70                                 # the recording replayed from state 1, 3000 frames
+movie_peak    = 94                                 # the recording replayed from state 1, 3000 frames (Combo_Meter_Value)
 movie_after   = "F4B1F6CE"
-phase_peaks   = [42, 13, 2, 71]                    # the macro window, phases 0..3 (t0 = 15326 + phase)
-best_phase    = 3
+phase_peaks   = [59, -1, -1, -1]                   # phase 0 re-measured on Combo_Meter_Value; 1..3 were 13/2/71 on the OLD byte, unmeasured since
+best_phase    = 3                                  # the movie's own alignment (71 -> 94 on the old/new byte); phases 1..3 await a full sweep
 best_after    = "DB2262C9"
-# CORRELATED WITH HIS VIDEO (the user: "did you correlate the one with the video?"). The video's
-# piano roll gives movie frames per second; the counter in the video vs our per-frame combo series:
-#   frame 15750  video 2 HIT   ours 2       |  ~15951  18 HIT (Proton Cannon)  ours 18
-#   ~16358 LK+HK = TEAM HYPER, 40 HIT       |  ours 40 at 16370
-#   16419..16509 video 50 -> 67 -> 85 -> 94 |  ours 65..70 at 16441..16461, then DROP to 0 at 16544
-# = hit-for-hit through 40 and INTO the Team Hyper; the divergence is inside the hyper: his three
-# supers stack to 94, ours registers 70 and the string ends. Not timing (four phases measured), not
-# the fixture: a hyper-hit registration difference on this build - an EMULATOR finding, open.
-video         = "davidsoracle/flycast_Yx50OqmbyX.mp4 (untracked, 27 MB): 1391 frames, ends on 94 HIT then MONSTER"
+video         = "davidsoracle/flycast_Yx50OqmbyX.mp4 (untracked, 27 MB): 1391 frames at 60 fps, playhead = movie frame; ends on 94 HIT"
 video_peak    = 94
-diverges_at   = 16461                              # our 70th and last hit; his counter keeps climbing
-measured_on   = "2026-09-20 combohunt (ComboHuntSlot=1, ComboHuntMovieRun=3000, ComboHuntRunS) on dojo7; video correlated the same day"
+measured_on   = "2026-09-20 combohunt (ComboHuntSlot=1, ComboHuntMovieRun=3000) on dojo7 after the oracle correction; video correlated the same day"

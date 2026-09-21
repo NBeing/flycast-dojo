@@ -141,3 +141,55 @@ platform/compiler build of the dynarec (his MSYS2 MINGW64 x64 vs our Linux x64),
 his build enables that ours does not. The earliest measured split between our two CPU cores is
 frame 15331 (docs/HYPER-OBJECTS.md above) - six frames after the load, before any hit - which
 is where a cross-core, cross-platform investigation of the dynarec starts.
+
+## `[CLOSED 2026-09-20, late]` There was no emulator divergence. The oracle read the wrong byte.
+
+The user: "why not just look for the fix?" This section is the fix, and the order in which
+the evidence fell - every earlier section above stands as measurement, and every conclusion
+drawn from the word "combo" in them is wrong for one reason.
+
+**1. The alternation was the game's KO slow-motion.** The SH4 code around the count byte
+(disassembled from his state 3's RAM with `gdb-multiarch`, `set arch sh4`, after decompressing
+the RZIP savestate - `tools/trace/` has no disassembler, the scratchpad's `unrzip.py`/`mkelf.py`
+do it in forty lines): `0x8c045748` REGISTERS an object into a per-player list (94 slots, refused
+while the freeze byte at `*(0x8c2896b0)+6` is set), `0x8c045234` runs the O(n^2) collision pass
+over the list and LATCHES the count (`0x287ddc` -> `0x287dde`, then zero). A published "3" =
+only the three characters registered that frame. The gate is in the update pass at
+`0x8c045ce0`: the gameplay object groups (3,4,1,2) are skipped on a frame when bit
+`(header+59 & 15)` of the 16-bit mask at `header+60` is set. Measured: the mask reads `0xAAAA`
+from frame 16410 and every odd counter value is exactly a "3" frame from 16411 on. That is
+half-speed: the KO slow-motion. P2's point character's Health_Big goes 630 -> 3 by 16406 and
+the hail keeps landing at half rate. Nothing in the emulator; `LoadKeepBlockCache` shifting it
+one frame was the §1a two-cycle phase moving a knife-edge frame, nothing more.
+
+**2. The counter that undercounted.** The video's piano roll shows the movie frame under the
+playhead, so it is a per-frame oracle: at HIS frame 16215 the screen says 36 HIT; his own state
+3 at that frame, and every replay here from states 0, 1, 2 and 3, read 26 - on
+`0x2C2685A0`, the point character's `Combo_Meter_HitsToOpponent`. Same inputs (the `.flyr`
+equals the macro on every one of 41787 frames; the roll in the video matches the macro row for
+row across the segment he re-recorded 63 times); same picture (our frame 15961/15977/15984 are
+pixel-identical to his); his counter ticks 18 -> 19 at 15977 and ours does not. The sheet's
+OTHER counter, `Combo_Meter_Value` (Player1And2Addresses, 2 bytes, P1 `0x2C268B50`), read on
+the same run: 18, 19@15977, 20@15985, 21, 22, 23, 24@16017, 25@16031 - his video, hit for
+hit; 36 at 16215; 40 at 16292; **94 at 16461**; 0 at 16544 when the string drops. The byte
+the studio read never counts an assist's hits (Thanos's sphere: six) or the THC partners'
+(Storm's hail, the second half of the 94). The 2026-09-15 note that rejected
+"Combo_Meter_Value" had measured `0x289642` - a different field, a running total.
+
+**3. Eliminated on the way, each by measurement, none of them the cause:** frameskip cadence
+(his `skip.map` equals ours frame for frame), the disc (md5-equal), David's 09-08 -> 09-15
+changes outside the TAS layer (render-only), a one-frame row alignment (either direction
+kills the combo), fused FMA (`dojo:Fma=yes`, a diagnostic now in `rec_x64.cpp`: identical
+fingerprint), the interpreter (drops the combo; its in-game timer lags 3 s - its cycle model
+makes this game lag), hardware-timer reads in the game code (none in the literal pools),
+the `.flyr` vs the macro (equal), and the §1a block-cache phase (present, two cycles, no
+gameplay consequence in this clip: states 0/1/2/3 all reach his state 3 byte for byte).
+
+**The fix** (`core/dojo/mvc2.cpp`): the combo oracle resolves `Combo_Meter_Value` by name
+(fallback `0x2C268B50` / `0x2C2685AC`), reads it as u16; the selftest pins both and their
+identity with the opponent point slot's `HitsFromOpponent`. Re-measured through the hunt:
+the recording from state 1 lands **peak 94, after F4B1F6CE** - the same after-hash the RECIPE
+pinned beside its 70. Same machine, right byte.
+
+**For David:** his fork reads the same byte (`mvc2.cpp:36`, `comboPoll` at :707), so every
+Frame Skip Test peak he has recorded undercounts any string with an assist, DHC or THC.

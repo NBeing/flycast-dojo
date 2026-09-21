@@ -29,15 +29,20 @@ static constexpr u32 SKIP_COUNT    = BASE + 0x289621;
 static constexpr u32 SKIP_TOGGLE   = BASE + 0x289622;	// 255 on the reset/skip frame ("0 0 0 255")
 static constexpr u32 SCENE_FRAME   = BASE + 0x1F9D80;
 static constexpr u32 TOTAL_FRAMES  = BASE + 0x3496B0;
-// `[CORRECTED 2026-09-15, from dev's 0915 tree]` the DISPLAYED combo counter =
-// per-point-character "hits to opponent" (a BYTE), which RESETS when a combo
-// drops - the true HIT/FAIL signal. The old 0x289642 "Combo_Meter_Value" is a
-// running TOTAL: it keeps climbing across a reset (150 on a clip whose screen
-// showed 11->reset->15), so a peak of it could never express "k landed, k+1
-// dropped" and the FST oracle read as vacuous. Confirmed by his address sweep
-// 2026-09-12. P1_A / P2_A = the point character's slot; read as a BYTE.
-static constexpr u32 P1_COMBO      = BASE + 0x2685A0;	// P1_A_Combo_Meter_HitsToOpponent (trainer 0x2C2685A0)
-static constexpr u32 P2_COMBO      = BASE + 0x268B44;	// P2_A_Combo_Meter_HitsToOpponent (trainer 0x2C268B44)
+// `[CORRECTED 2026-09-20, MEASURED against David's own video]` the DISPLAYED combo
+// counter is Combo_Meter_Value (SPREADSHEET Player1And2Addresses, 2 bytes, "current
+// combo counter"): P1's at 0x2C268B50, P2's at 0x2C2685AC. On his ironman98 clip it
+// reads 18,19,20,...,24 across Thanos's assist sphere and 94 at frame 16461, hit for
+// hit what his screen shows, and it drops to 0 when the string ends (frame 16544) -
+// so it IS the HIT/FAIL signal. The byte this read before, the point character's
+// Combo_Meter_HitsToOpponent (0x2C2685A0), counts only THAT character's hits: the
+// assist's six and the THC partners' hits never enter it, which is why every peak
+// measured here undercounted (70 for a 94-hit string) and why a "divergence" was
+// chased through the emulator for a day. The 2026-09-15 note that rejected
+// "Combo_Meter_Value" had tested 0x289642, a running total that is a different
+// field; the sheet's Combo_Meter_Value was never measured. docs/HYPER-OBJECTS.md.
+static constexpr u32 P1_COMBO      = BASE + 0x268B50;	// P1_Combo_Meter_Value, u16 (trainer 0x2C268B50)
+static constexpr u32 P2_COMBO      = BASE + 0x2685AC;	// P2_Combo_Meter_Value, u16 (trainer 0x2C2685AC)
 
 static bool validated = false;
 static bool reported = false;
@@ -81,13 +86,13 @@ static const u32 *comboAddrs()
 	if (!resolved)
 	{
 		resolved = true;
-		const u32 a = addrOf("Combo_Meter_HitsToOpponent", 0, 0);
-		const u32 b = addrOf("Combo_Meter_HitsToOpponent", 1, 0);
+		const u32 a = addrOf("Combo_Meter_Value", 0, 0);
+		const u32 b = addrOf("Combo_Meter_Value", 1, 0);
 		if (a != 0 && b != 0)
 		{
 			addrs[0] = a;
 			addrs[1] = b;
-			NOTICE_LOG(NETWORK, "TAS MVC2: combo oracle by NAME - Combo_Meter_HitsToOpponent P1_A=0x%08X P2_A=0x%08X%s (%s)",
+			NOTICE_LOG(NETWORK, "TAS MVC2: combo oracle by NAME - Combo_Meter_Value P1=0x%08X P2=0x%08X%s (%s)",
 					a, b, (a == P1_COMBO && b == P2_COMBO) ? "" : " - DIFFERS FROM THE HARDCODED CONSTANTS",
 					dictionaryPath().c_str());
 		}
@@ -107,8 +112,8 @@ bool peekCombo(u16& p1, u16& p2)
 	if (settings.content.path.empty())
 		return false;
 	const u32 *c = comboAddrs();
-	p1 = ReadMem8_nommu(c[0]);	// a BYTE counter; a u16 read leaks the neighbour field
-	p2 = ReadMem8_nommu(c[1]);
+	p1 = ReadMem16_nommu(c[0]);	// a 2-byte counter (the sheet's Type) - see the address note above
+	p2 = ReadMem16_nommu(c[1]);
 	return true;
 }
 
@@ -116,8 +121,8 @@ static void statesSamplePoll(u16 comboP1Meter);
 void comboPoll()
 {
 	const u32 *c = comboAddrs();
-	const u16 a = ReadMem8_nommu(c[0]);	// BYTE - see the address note above
-	const u16 b = ReadMem8_nommu(c[1]);
+	const u16 a = ReadMem16_nommu(c[0]);	// u16 - see the address note above
+	const u16 b = ReadMem16_nommu(c[1]);
 	comboLast1.store(a, std::memory_order_relaxed);
 	comboLast2.store(b, std::memory_order_relaxed);
 	if (a > comboPeak1.load(std::memory_order_relaxed))
@@ -859,10 +864,19 @@ void selfTest()
 	claim("Combo_Meter_HitsToOpponent is a field", field("Combo_Meter_HitsToOpponent", f));
 	claim("...a Byte (width 1 - a u16 read leaks the neighbour)", f.width == 1 && f.type == "Byte");
 	claim("...at block offset 0x260", f.offset == 0x260);
-	claim("...P1_A resolves to the hardcoded 0x8C2685A0 (Demul 0x2C2685A0)",
-			addrOf("Combo_Meter_HitsToOpponent", 0, 0) == P1_COMBO && toDemul(P1_COMBO) == 0x2C2685A0u);
-	claim("...P2_A resolves to the hardcoded 0x8C268B44 (Demul 0x2C268B44)",
-			addrOf("Combo_Meter_HitsToOpponent", 1, 0) == P2_COMBO && toDemul(P2_COMBO) == 0x2C268B44u);
+	claim("...P1_A resolves to 0x8C2685A0 (Demul 0x2C2685A0) - the point character's OWN hits, not the oracle",
+			addrOf("Combo_Meter_HitsToOpponent", 0, 0) == 0x8C2685A0u);
+	// THE ORACLE `[2026-09-20]`: Combo_Meter_Value, per player, 2 bytes - the on-screen HIT number (measured
+	// hit for hit against David's ironman98 video: 94 at frame 16461, 0 when the string drops at 16544).
+	Field cv;
+	claim("Combo_Meter_Value is a field", field("Combo_Meter_Value", cv));
+	claim("...2 bytes (the width comboPoll reads)", cv.width == 2);
+	claim("...P1 resolves to the hardcoded 0x8C268B50 (Demul 0x2C268B50)",
+			addrOf("Combo_Meter_Value", 0, 0) == P1_COMBO && toDemul(P1_COMBO) == 0x2C268B50u);
+	claim("...P2 resolves to the hardcoded 0x8C2685AC (Demul 0x2C2685AC)",
+			addrOf("Combo_Meter_Value", 1, 0) == P2_COMBO && toDemul(P2_COMBO) == 0x2C2685ACu);
+	claim("...the two live where the sheet says: each is the OPPONENT point slot's HitsFromOpponent",
+			P1_COMBO == addrOf("Combo_Meter_HitsFromOpponent", 1, 0) && P2_COMBO == addrOf("Combo_Meter_HitsFromOpponent", 0, 0));
 	claim("Base + hexOffset == the flattened P1_A_ key (the sheet is self-consistent)",
 			charBase(0, 0) != 0 && charBase(0, 0) + f.offset == addrOf("Combo_Meter_HitsToOpponent", 0, 0));
 	claim("...and for P2_C", charBase(1, 2) != 0 && charBase(1, 2) + f.offset == addrOf("Combo_Meter_HitsToOpponent", 1, 2));

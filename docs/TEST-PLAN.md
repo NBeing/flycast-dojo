@@ -283,6 +283,12 @@ the top item rather than the re-record claims themselves.
 
 ### 1a. `[OPEN 2026-09-12]` `cycle_counter` is two cycles out after a restore
 
+> `[2026-09-20]` Scale, measured: on David's ironman98 clip every restore point (his states 0,
+> 1, 2, 3) reaches his state 3 byte for byte on the 24-byte fingerprint and lands his video's
+> 94 hits; the two-cycle phase moved a KO slow-motion frame by one under
+> `LoadKeepBlockCache` and changed no hit. Still a defect for a state hash, not for a combo.
+> docs/HYPER-OBJECTS.md, the closing section.
+
 The new blocker, and far sharper than the wedge it replaced.
 
     scripts/testrun.sh scripts/tests/open/replay_determinism.lua

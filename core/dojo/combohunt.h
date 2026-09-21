@@ -19,8 +19,8 @@
 	  candidates : David's marker-bracketed `Combo_Dhalsim97_OK` window first (a
 	               human-graded, PS2-converted macro - a CANDIDATE, never a fixture
 	               until observed here), then single buttons x delay
-	  oracle     : tas_mvc2::comboPeak / peekCombo (Combo_Meter_HitsToOpponent, the
-	               DC-verified byte), resolved BY NAME through SPREADSHEET.json
+	  oracle     : tas_mvc2::comboPeak / peekCombo (Combo_Meter_Value, the on-screen HIT
+	               number, u16), resolved BY NAME through SPREADSHEET.json
 	  phase      : MvC2 skips every 4th frame; a combo straddling a skip boundary
 	               connects on ONE of four phases (David measured "~1/4 of the
 	               time"). A fixture that does not pin its phase is ~75% flaky, so
