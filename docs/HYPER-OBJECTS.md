@@ -109,3 +109,35 @@ while Storm's state is 29. Candidates, in order: the dynarec's block cache / SMC
 object pointer list past ~48 entries; a flycast-dojo change since the dojo-7 fork point in
 core/hw/sh4 or rec-x64. Bisect over those with the oracle; a run that stays green through
 16420 while the combo keeps climbing past 70 is the fix.
+
+## `[MEASURED 2026-09-20, late]` Not the block cache; and David's OWN fork binary does it too
+
+Two runs of the oracle from his state 3 (a bisect agent's, its data recovered after it was
+stopped - it had burned its budget on a git bisect the user judged pointless: "much more likely
+this bug was latent"):
+
+| frame | default | `dojo:LoadKeepBlockCache=yes` |
+|---|---|---|
+| 16410 | 58 **60** | 58 63 |
+| 16411 | 58 62 | 58 60 |
+| 16412 | 58 **3** | 58 62 |
+| 16413 | 58 **3** | 58 **3** |
+| 16414 | 58 59 | 58 **3** |
+| 16415 | 58 **3** | 58 59 |
+| 16416 | 59 60 | 58 **3** |
+| 16419 | 59 59 (Storm exits) | 59 **3** |
+| 16420 | 59 3 | 59 59 (Storm exits) |
+
+Keeping the block cache across the load shifts the WHOLE pattern by exactly one frame (the §1a
+two-cycle phase, made visible) and does not remove it. The shard bug is NOT §1a's block-cache
+residue.
+
+**And the reference build of David's own fork (`/home/nbee/dev/flycast-rr-oracle`, `edca8915b`,
+the public strip) reproduces our oracle table byte for byte** (the agent's line: "David's own fork
+binary reproduces our result byte-for-byte"). So the defect is in the SHARED emulator - upstream
+flycast-dojo as both forks carry it - latent until a replayed 60-object super from a loaded
+state. David's Windows build lands 94 on the same code: the remaining difference is the
+platform/compiler build of the dynarec (his MSYS2 MINGW64 x64 vs our Linux x64), or something
+his build enables that ours does not. The earliest measured split between our two CPU cores is
+frame 15331 (docs/HYPER-OBJECTS.md above) - six frames after the load, before any hit - which
+is where a cross-core, cross-platform investigation of the dynarec starts.
